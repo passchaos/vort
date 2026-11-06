@@ -25,6 +25,8 @@ const bt_optimal = @import("deflate/bt_optimal.zig");
 const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
+const zlib_window = @import("deflate/zlib/window.zig");
+const zlib_frame_encoder = @import("deflate/zlib/frame_encoder.zig");
 const member_prefix = @import("deflate/incremental/decoder/member_prefix.zig");
 const sync = @import("deflate/sync.zig");
 const split_history = @import("deflate/encoder/split_history.zig");
@@ -73,6 +75,42 @@ const pngImageOutputLen = png.pngImageOutputLen;
 const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
+pub const ZlibEncodeError = Error || zlib_window.Error;
+pub const ZlibEncodeMode = zlib_frame_encoder.Mode;
+pub const ZlibEncodeOptions = zlib_frame_encoder.Options(@This());
+pub const ZlibFrameEncoder = zlib_frame_encoder.Encoder(@This());
+/// Internal contract surface shared with the WASI validation entrypoint.
+/// The package root does not re-export this independent test oracle.
+pub const ZlibWindowTestOracle = @import("deflate/zlib/frame_window_oracle.zig");
+
+pub fn zlibEncodeOptionsForLevel(level: u4, window_bits: u8) ZlibEncodeError!ZlibEncodeOptions {
+    try zlib_window.validate(window_bits);
+    const compression = if (level == 0) CompressionOptions{} else try optionsForZlibLevel(level);
+    return .{
+        .window_bits = window_bits,
+        .mode = if (level == 0) .stored else .best,
+        .compression = compression,
+        .split_options = compression.split_options,
+    };
+}
+
+pub fn encodeZlibFrameAlloc(allocator: std.mem.Allocator, input: []const u8, options: ZlibEncodeOptions) ![]u8 {
+    var frame = try ZlibFrameEncoder.init(allocator, options);
+    defer frame.deinit();
+    return frame.encodeAlloc(input);
+}
+
+pub fn encodeZlibFrameAppend(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: []const u8, options: ZlibEncodeOptions) !usize {
+    var frame = try ZlibFrameEncoder.init(allocator, options);
+    defer frame.deinit();
+    return frame.encodeAppend(output, input);
+}
+
+pub fn encodeZlibFrameInto(allocator: std.mem.Allocator, input: []const u8, output: []u8, options: ZlibEncodeOptions) !usize {
+    var frame = try ZlibFrameEncoder.init(allocator, options);
+    defer frame.deinit();
+    return frame.encodeInto(input, output);
+}
 pub const SyncError = Error || std.mem.Allocator.Error || error{DeflateSyncPointNotFound};
 pub const RawDeflateSyncPoint = sync.Point;
 pub const RawDeflateSyncScanner = sync.Scanner;
@@ -346,7 +384,7 @@ pub fn writeIncrementalBestPlannedBlock(
 }
 
 const IncrementalZlibFixedEncoderCodec = struct {
-    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const Error = deflate.ZlibEncodeError || std.mem.Allocator.Error;
     pub const ParamsError = deflate.ParamsError;
     pub const Params = deflate.DeflateParams;
     pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
@@ -355,10 +393,11 @@ const IncrementalZlibFixedEncoderCodec = struct {
 
     pub const resolveParams = deflate.resolveDeflateParams;
 
-    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8) IncrementalZlibFixedEncoderCodec.Error!void {
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8, window_bits: u8) IncrementalZlibFixedEncoderCodec.Error!void {
+        try zlib_window.validate(window_bits);
         const header_len: usize = if (dictionary.len == 0) 2 else 6;
         const header = try out.addManyAsSlice(allocator, header_len);
-        writeZlibHeader(header, if (dictionary.len == 0) null else dictionary);
+        try zlib_window.writeHeader(header, if (dictionary.len == 0) null else dictionary, window_bits);
     }
     pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32) IncrementalZlibFixedEncoderCodec.Error!void {
         var bytes: [4]u8 = undefined;
@@ -483,6 +522,65 @@ test {
     _ = incremental_tests;
     _ = @import("deflate/gzip/alloc_hint_tests.zig");
 }
+
+test "zlib explicit window header contracts" {
+    _ = zlib_window;
+}
+
+test "zlib explicit window frame contracts" {
+    try @import("deflate/zlib/frame_window_tests.zig").contracts(@This());
+}
+
+test "zlib explicit window candidate contracts" {
+    try @import("deflate/zlib/frame_window_tests.zig").candidateContracts(@This(), ZlibWindowCandidateAdapter);
+}
+
+test "incremental zlib encoder window contracts" {
+    try @import("deflate/zlib/incremental_window_tests.zig").contracts(@This());
+}
+
+// Private adapters let the independent window oracle inspect candidates that
+// a public best/adaptive call may discard. Production APIs retain their normal
+// selection policy and do not expose parser internals.
+const ZlibWindowCandidateAdapter = struct {
+    pub fn fallbacks(options: CompressionOptions) struct { items: [2]CompressionOptions, len: usize } {
+        const candidates = bestFallbackCandidates(options);
+        return .{ .items = candidates.items, .len = candidates.len };
+    }
+
+    pub fn refinedHistoryAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !?[]u8 {
+        return encodeRefinedHistoryChunksAlloc(allocator, input, refined_chunk_len, refined_history_cap, options);
+    }
+
+    pub fn refinedHistoryChunkAlloc(allocator: std.mem.Allocator, input: []const u8, start: usize, length: usize, history_cap: usize, options: CompressionOptions) ![]u8 {
+        const tokens = try planRefinedHistoryChunkAlloc(allocator, input, start, length, history_cap, options);
+        defer allocator.free(tokens);
+        return fixedTokensAlloc(allocator, tokens);
+    }
+
+    pub fn refinedCandidatesAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !struct { seed: []u8, candidate: ?[]u8 } {
+        var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
+        defer plans.deinit(allocator);
+        const seed = try fixedTokensAlloc(allocator, plans.seed.tokens);
+        errdefer allocator.free(seed);
+        const candidate = if (plans.candidate) |plan| try fixedTokensAlloc(allocator, plan.tokens) else null;
+        return .{ .seed = seed, .candidate = candidate };
+    }
+
+    pub fn adaptiveRawAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        var writer = bitstream.BitWriter{};
+        errdefer writer.deinit(allocator);
+        try writeBestAdaptiveSplitBlocks(allocator, &writer, input, dictionary, options, split_options);
+        return writer.toOwnedSlice(allocator);
+    }
+
+    fn fixedTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+        var writer = bitstream.BitWriter{};
+        errdefer writer.deinit(allocator);
+        try writeFixedTokens(allocator, &writer, tokens, true);
+        return writer.toOwnedSlice(allocator);
+    }
+};
 
 pub const RawDeflateProbeResult = struct {
     ok: bool,
@@ -963,7 +1061,9 @@ fn bestFallbackCandidates(options: CompressionOptions) BestFallbackCandidates {
     const normalized = normalizeOptionsForStrategy(options);
     var candidates = BestFallbackCandidates{};
     if (normalized.strategy == .default and normalized.parser == .optimal) {
-        candidates.append(optionsForLevel(.default));
+        var fallback = optionsForLevel(.default);
+        fallback.lz77_options.window_len = @min(fallback.lz77_options.window_len, normalized.lz77_options.window_len);
+        candidates.append(fallback);
         var filtered = options;
         filtered.strategy = .filtered;
         candidates.append(filtered);
@@ -5321,9 +5421,23 @@ pub fn rawStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
     return rawStoredEncodedSize(try chunksTotalLen(chunks));
 }
 
-pub fn encodeRawStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+pub fn rawStoredChunksEncodedSizeWithBlockLen(chunks: []const []const u8, block_len: usize) Error!usize {
+    if (block_len == 0) return error.InvalidBlockPlan;
     const total_len = try chunksTotalLen(chunks);
-    const required = try rawStoredEncodedSize(total_len);
+    const effective = @min(block_len, max_stored_block_len);
+    const blocks_count = if (total_len == 0) 1 else (total_len - 1) / effective + 1;
+    const overhead = std.math.mul(usize, blocks_count, 5) catch return error.IntegerOverflow;
+    return std.math.add(usize, total_len, overhead) catch error.IntegerOverflow;
+}
+
+pub fn encodeRawStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    return encodeRawStoredChunksWithBlockLen(chunks, output, max_stored_block_len);
+}
+
+pub fn encodeRawStoredChunksWithBlockLen(chunks: []const []const u8, output: []u8, block_len: usize) Error!usize {
+    const total_len = try chunksTotalLen(chunks);
+    const required = try rawStoredChunksEncodedSizeWithBlockLen(chunks, block_len);
+    const effective_block_len = @min(block_len, max_stored_block_len);
     if (output.len < required) return error.OutputTooSmall;
     if (total_len == 0) {
         writeStoredHeader(true, 0, output[0..5]);
@@ -5334,13 +5448,13 @@ pub fn encodeRawStoredChunks(chunks: []const []const u8, output: []u8) Error!usi
     var remaining = total_len;
     var out_offset: usize = 0;
     while (remaining != 0) {
-        const block_len = @min(max_stored_block_len, remaining);
-        const final = block_len == remaining;
-        writeStoredHeader(final, @intCast(block_len), output[out_offset..][0..5]);
+        const take = @min(effective_block_len, remaining);
+        const final = take == remaining;
+        writeStoredHeader(final, @intCast(take), output[out_offset..][0..5]);
         out_offset += 5;
-        try cursor.copyTo(output[out_offset..][0..block_len]);
-        out_offset += block_len;
-        remaining -= block_len;
+        try cursor.copyTo(output[out_offset..][0..take]);
+        out_offset += take;
+        remaining -= take;
     }
     return out_offset;
 }
@@ -5370,7 +5484,7 @@ pub fn encodeRawStoredChunksAppend(allocator: std.mem.Allocator, out: *std.Array
     return written;
 }
 
-fn encodeRawStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+pub fn encodeRawStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -7447,11 +7561,11 @@ pub fn encodeZlibDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, 
     return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
-fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+pub fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     return encodeZlibStoredSplitDirectAlloc(allocator, input, null, block_len);
 }
 
-fn encodeZlibStoredSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize) ![]u8 {
+pub fn encodeZlibStoredSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize) ![]u8 {
     return encodeZlibStoredSplitDirectAlloc(allocator, input, dictionary, block_len);
 }
 
@@ -7751,14 +7865,7 @@ fn finishZlibFrame(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, i
 }
 
 fn writeZlibHeader(output: []u8, dictionary: ?[]const u8) void {
-    output[0] = 0x78; // deflate, 32 KiB window
-    if (dictionary) |dict| {
-        // FDICT set, FLEVEL=0, FCHECK chosen so CMF*256+FLG is divisible by 31.
-        output[1] = 0x20;
-        std.mem.writeInt(u32, output[2..][0..4], checksum.adler32(dict), .big);
-    } else {
-        output[1] = 0x01; // fastest/no compression, valid FCHECK
-    }
+    zlib_window.writeHeader(output, dictionary, zlib_window.default_bits) catch unreachable;
 }
 
 fn validateZlibFooter(input: []const u8, footer_offset: usize, actual: u32) Error!void {

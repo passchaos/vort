@@ -3496,6 +3496,19 @@ pub const probeRawDeflateChunksExactSize = deflate.probeRawChunksExactSize;
 pub const probeRawDeflateChunksWithDictionaryExactSize = deflate.probeRawChunksWithDictionaryExactSize;
 pub const decodeRawDynamicAlloc = deflate.decodeRawDynamicAllocStrict;
 pub const decodeRawDynamicAllocPartial = deflate.decodeRawDynamicAlloc;
+pub const ZlibEncodeError = deflate.ZlibEncodeError;
+pub const ZlibEncodeMode = deflate.ZlibEncodeMode;
+pub const ZlibEncodeOptions = deflate.ZlibEncodeOptions;
+pub const ZlibFrameEncoder = deflate.ZlibFrameEncoder;
+pub const zlibEncodeOptionsForLevel = deflate.zlibEncodeOptionsForLevel;
+pub const encodeZlibFrameAlloc = deflate.encodeZlibFrameAlloc;
+pub const encodeZlibFrameAppend = deflate.encodeZlibFrameAppend;
+pub const encodeZlibFrameInto = deflate.encodeZlibFrameInto;
+
+test "root codec format controls public contracts" {
+    try @import("tests/codec_controls_root.zig").contracts(@This());
+}
+
 pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const zlibStoredEncodedSize = deflate.zlibStoredEncodedSize;
 pub const zlibStoredWithDictionaryEncodedSize = deflate.zlibStoredWithDictionaryEncodedSize;

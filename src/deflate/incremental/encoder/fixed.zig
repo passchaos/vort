@@ -2,7 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const rolling_hash = @import("match_finder/rolling_hash.zig");
 
-/// Incremental block-planned raw-DEFLATE encoder. Blocks share retained 32 KiB
+/// Incremental block-planned raw-DEFLATE encoder. Blocks share up to 32 KiB of
 /// history and hash-parser levels additionally share a persistent match index;
 /// bit packing stays continuous until finish writes BFINAL. The codec adapter
 /// chooses fixed-only or stored/fixed/dynamic best emission. Block flush ends
@@ -31,6 +31,10 @@ pub fn Encoder(comptime Codec: type) type {
         expected_input_len: ?core.StreamCount = null,
         dictionary: []const u8 = &.{},
         dictionary_available: bool = true,
+        /// Format-owned distance cap, independent of a compression preset's
+        /// search window. Wrappers rebind this without replacing preset state.
+        window_limit: usize = Codec.history_len,
+        retained_window_limit: usize = Codec.history_len,
         active_params: ?Codec.ResolvedParams = null,
         requested_params: ?Codec.ResolvedParams = null,
         params_boundary_pending: bool = false,
@@ -93,6 +97,12 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Options, expected_input_len: core.StreamCount, dictionary: []const u8) Self {
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary = dictionary };
         }
+        /// Bind a format's distance cap after its side-effect-free admission
+        /// checks. Reset and public compression-option changes retain this cap.
+        pub fn bindWindowLimit(self: *Self, limit: usize) void {
+            self.window_limit = limit;
+            self.trimHistoryToWindowLimit();
+        }
         /// Validate all block-buffer controls without consuming input or
         /// allocating. Adapters that publish an outer header before calling
         /// `step` use this to reject deterministic configuration errors first.
@@ -102,7 +112,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         /// Maximum caller input retained for one planned block, excluding the
-        /// fixed 32 KiB match history and encoded pending output.
+        /// format-bounded match history and encoded pending output.
         pub fn maxBufferedInput(options: Options) Error!usize {
             const base = try baseBlockTarget(options);
             const active = if (!options.adaptive_blocks and options.low_entropy_block_len != 0)
@@ -140,6 +150,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_output = 0;
             self.expected_input_len = expected;
             self.dictionary_available = true;
+            self.retained_window_limit = self.effectiveWindowLimit();
             self.requested_params = null;
             self.params_boundary_pending = false;
             self.params_change_count = 0;
@@ -281,6 +292,12 @@ pub fn Encoder(comptime Codec: type) type {
         /// Side-effect-free admission for outer wrappers that must reject
         /// invalid input before publishing their header or pending bytes.
         pub fn validateInput(self: *const Self, input_len: usize) Error!void {
+            return self.validateInputWithWindowLimit(input_len, self.window_limit);
+        }
+
+        /// Validate a wrapper's proposed cap before binding it, so a Count or
+        /// configuration error cannot trim owned history or invalidate indexes.
+        pub fn validateInputWithWindowLimit(self: *const Self, input_len: usize, limit: usize) Error!void {
             if (self.done) {
                 if (input_len != 0) return error.TrailingData;
                 return;
@@ -299,23 +316,17 @@ pub fn Encoder(comptime Codec: type) type {
             }
             if (boundary_pending)
                 _ = try core.stream_count.addLocal(self.params_change_count, 1);
-            try self.validateMatchInput(input_len);
+            try self.validateMatchInput(input_len, limit);
         }
 
-        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            self.syncExternallyModifiedCompression();
-            if (self.done) {
-                if (input.len != 0) return error.TrailingData;
-                return .{ .status = .done };
-            }
-            try self.validateInput(input.len);
-            const base_block_target = try self.blockTarget();
+        /// Side-effect-free output admission for wrappers that must validate
+        /// their raw scratch drain before rebinding history or publishing bytes.
+        pub fn validateOutput(self: *const Self, input_len: usize, output_len: usize) Error!void {
             // Bound all drains together, so a later block cannot overflow
             // after earlier bytes or input have already been committed.
-            const output_limit = core.stream_count.bounded(std.math.maxInt(core.StreamCount) - self.total_output, output.len);
-            if (output.len != 0 and output_limit == 0) {
-                const will_publish = input.len != 0 or (self.finishing and !self.final_written) or
-                    (self.params_boundary_pending and self.plain.items.len != 0) or
+            if (output_len != 0 and self.total_output == std.math.maxInt(core.StreamCount)) {
+                const will_publish = input_len != 0 or (self.finishing and !self.final_written) or
+                    (self.managedParamsValid() and self.params_boundary_pending and self.plain.items.len != 0) or
                     (self.flush_mode != .none and
                         (self.plain.items.len != 0 or
                             (self.flush_mode == .partial and self.flush_boundary == .none) or
@@ -323,6 +334,19 @@ pub fn Encoder(comptime Codec: type) type {
                 if (self.pending_offset != self.pending.items.len or will_publish)
                     return error.IntegerOverflow;
             }
+        }
+
+        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            if (self.done) {
+                if (input.len != 0) return error.TrailingData;
+                return .{ .status = .done };
+            }
+            try self.validateInput(input.len);
+            const base_block_target = try self.blockTarget();
+            try self.validateOutput(input.len, output.len);
+            const output_limit = core.stream_count.bounded(std.math.maxInt(core.StreamCount) - self.total_output, output.len);
+            self.syncExternallyModifiedCompression();
+            self.trimHistoryToWindowLimit();
 
             var input_read: usize = 0;
             var output_written: usize = 0;
@@ -446,7 +470,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (self.stored_only)
                 try Codec.writeStoredOnlyBlock(self.allocator, &self.pending, &self.state, &self.match_finder, block, self.history.items, false)
             else
-                try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, false, self.options.compression);
+                try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, false, self.effectiveCompression());
             self.retainHistory(block);
         }
 
@@ -461,10 +485,10 @@ pub fn Encoder(comptime Codec: type) type {
                     self.plain.items,
                     self.history.items,
                     self.plain.items.len - self.options.lookahead_len,
-                    self.options.compression,
+                    self.effectiveCompression(),
                 )
             else if (self.options.adaptive_blocks and !final and self.flush_mode == .none and !self.params_boundary_pending)
-                try Codec.chooseBlockLen(self.allocator, self.plain.items, self.options.compression)
+                try Codec.chooseBlockLen(self.allocator, self.plain.items, self.effectiveCompression())
             else
                 self.plain.items.len;
             if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
@@ -472,7 +496,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (self.stored_only)
                 try Codec.writeStoredOnlyBlock(self.allocator, &self.pending, &self.state, &self.match_finder, block, self.history.items, final)
             else
-                try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.options.compression);
+                try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.effectiveCompression());
             self.retainHistory(block);
             self.low_entropy_expanded = false;
             if (selected_len == self.plain.items.len) {
@@ -483,24 +507,51 @@ pub fn Encoder(comptime Codec: type) type {
             }
         }
         fn prepareHistory(self: *Self) Error!void {
-            try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
+            const limit = self.effectiveWindowLimit();
+            try self.history.ensureTotalCapacity(self.allocator, limit);
             if (self.history.items.len == 0 and self.dictionary_available and self.dictionary.len != 0) {
-                const keep = @min(self.dictionary.len, Codec.history_len);
+                const keep = @min(self.dictionary.len, limit);
                 self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
             }
         }
         fn effectiveHistoryLen(self: *const Self) usize {
-            if (self.history.items.len == 0 and self.dictionary_available)
-                return @min(self.dictionary.len, Codec.history_len);
-            return self.history.items.len;
+            return self.effectiveHistoryLenWithWindowLimit(self.window_limit);
         }
-        fn validateMatchInput(self: *const Self, input_len: usize) Error!void {
+        fn effectiveHistoryLenWithWindowLimit(self: *const Self, limit: usize) usize {
+            const cap = @min(limit, Codec.history_len);
+            if (self.history.items.len == 0 and self.dictionary_available)
+                return @min(self.dictionary.len, cap);
+            return @min(self.history.items.len, cap);
+        }
+        fn effectiveWindowLimit(self: *const Self) usize {
+            return @min(self.window_limit, Codec.history_len);
+        }
+        fn effectiveCompression(self: *const Self) Codec.CompressionOptions {
+            var options = self.options.compression;
+            options.lz77_options.window_len = @min(options.lz77_options.window_len, self.effectiveWindowLimit());
+            return options;
+        }
+        fn trimHistoryToWindowLimit(self: *Self) void {
+            const limit = self.effectiveWindowLimit();
+            if (self.history.items.len > limit) {
+                const start = self.history.items.len - limit;
+                std.mem.copyForwards(u8, self.history.items[0..limit], self.history.items[start..]);
+                self.history.items.len = limit;
+            }
+            if (limit < self.retained_window_limit) {
+                // The next indexed parse reseeds from the retained suffix,
+                // preserving its absolute stream position across the resize.
+                self.match_finder.observeUnindexedBlock(0, self.history.items.len) catch unreachable;
+            }
+            self.retained_window_limit = limit;
+        }
+        fn validateMatchInput(self: *const Self, input_len: usize, limit: usize) Error!void {
             // Input accepted into `plain` still needs an absolute match
             // position when its block is published. Include the initial
             // dictionary prefix before accepting it, keeping this logical sum
             // wide even when caller input and retained bytes exceed usize
             // together.
-            const base = @max(self.match_finder.absolute_position, core.stream_count.fromLocal(self.effectiveHistoryLen()));
+            const base = @max(self.match_finder.absolute_position, core.stream_count.fromLocal(self.effectiveHistoryLenWithWindowLimit(limit)));
             const buffered_end = try core.stream_count.addLocal(base, self.plain.items.len);
             _ = try core.stream_count.addLocal(buffered_end, input_len);
         }
@@ -510,11 +561,12 @@ pub fn Encoder(comptime Codec: type) type {
             self.dictionary_available = false;
         }
         fn retainHistory(self: *Self, block: []const u8) void {
-            if (block.len >= Codec.history_len) {
+            const limit = self.effectiveWindowLimit();
+            if (block.len >= limit) {
                 self.history.clearRetainingCapacity();
-                self.history.appendSliceAssumeCapacity(block[block.len - Codec.history_len ..]);
+                self.history.appendSliceAssumeCapacity(block[block.len - limit ..]);
             } else {
-                const keep = @min(self.history.items.len, Codec.history_len - block.len);
+                const keep = @min(self.history.items.len, limit - block.len);
                 const start = self.history.items.len - keep;
                 std.mem.copyForwards(u8, self.history.items[0..keep], self.history.items[start..]);
                 self.history.items.len = keep;

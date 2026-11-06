@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const counts = core.stream_count;
 const Count = core.StreamCount;
+const window = @import("../../zlib/window.zig");
 
 /// Incremental zlib wrapper around the fixed-Huffman raw-DEFLATE stream core.
 /// Header, optional DICTID, Adler-32 footer, flush and caller I/O accounting are
@@ -15,6 +16,7 @@ pub fn Encoder(comptime Codec: type) type {
         pending_offset: usize = 0,
         adler: Codec.Adler32 = Codec.Adler32.init(),
         header_written: bool = false,
+        published_window_bits: ?u8 = null,
         footer_written: bool = false,
         finishing: bool = false,
         done: bool = false,
@@ -26,10 +28,15 @@ pub fn Encoder(comptime Codec: type) type {
         dictionary: []const u8 = &.{},
 
         const Self = @This();
-        pub const Error = Codec.Error;
-        pub const ParamsError = Codec.ParamsError;
+        pub const Error = Codec.Error || window.Error;
+        pub const ParamsError = Codec.ParamsError || window.Error;
         pub const supports_runtime_params = Codec.RawEncoder.supports_runtime_params;
-        pub const Options = struct { raw: Codec.RawOptions = .{} };
+        pub const Options = struct {
+            raw: Codec.RawOptions = .{},
+            /// RFC 1950 window declaration, from 9 through 15. Header publication
+            /// locks it until reset or the next independently wrapped stream.
+            window_bits: u8 = window.default_bits,
+        };
         pub const Snapshot = struct {
             input_read: Count,
             output_written: Count,
@@ -82,6 +89,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.pending_offset = 0;
             self.adler = Codec.Adler32.init();
             self.header_written = false;
+            self.published_window_bits = null;
             self.footer_written = false;
             self.finishing = false;
             self.done = false;
@@ -93,21 +101,27 @@ pub fn Encoder(comptime Codec: type) type {
         /// convention (not an RFC 1950 single-stream feature), matching the
         /// library's concatenated zlib decoders.
         pub fn nextStream(self: *Self, options: Options, dictionary: []const u8) Error!void {
+            const limit = try window.windowLen(options.window_bits);
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.stream_count, 1);
+            try Codec.RawEncoder.validateOptions(options.raw);
             self.options = options;
             self.dictionary = dictionary;
             self.raw.resetWithOptions(options.raw);
             self.raw.resetDictionary(dictionary);
+            self.raw.bindWindowLimit(limit);
             self.resetWrapper();
         }
         pub fn nextStreamExactSize(self: *Self, options: Options, dictionary: []const u8, expected_input_len: Count) Error!void {
+            const limit = try window.windowLen(options.window_bits);
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.stream_count, 1);
+            try Codec.RawEncoder.validateOptions(options.raw);
             self.options = options;
             self.dictionary = dictionary;
             self.raw.resetWithOptions(options.raw);
             self.raw.resetExactSizeDictionary(expected_input_len, dictionary);
+            self.raw.bindWindowLimit(limit);
             self.resetWrapper();
         }
         pub fn snapshot(self: *const Self) Snapshot {
@@ -134,7 +148,9 @@ pub fn Encoder(comptime Codec: type) type {
         /// Request zlib-compatible compression parameters for subsequent raw
         /// DEFLATE blocks without resetting the wrapper checksum or history.
         pub fn requestParams(self: *Self, params: Codec.Params) ParamsError!void {
+            const limit = try self.validateWindow();
             try self.raw.requestParams(params);
+            self.raw.bindWindowLimit(limit);
         }
         /// End and publish the accepted input as a non-final DEFLATE block
         /// without byte alignment. The zlib checksum and dictionary history
@@ -162,6 +178,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, caller_output: []u8) Error!core.StepResult {
+            const limit = try self.validateWindow();
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -170,7 +187,8 @@ pub fn Encoder(comptime Codec: type) type {
             // Check the whole offered input before a header, checksum, history,
             // or pending output can change. Per-step progress stays local.
             _ = try counts.addLocal(self.total_input, input.len);
-            try self.raw.validateInput(input.len);
+            try self.raw.validateInputWithWindowLimit(input.len, limit);
+            try self.raw.validateOutput(input.len, 4096);
             _ = try counts.addLocal(self.stream_input, input.len);
             const completed_count = try counts.addLocal(self.stream_count, 1);
             const output_room = @min(std.math.maxInt(Count) - self.total_output, std.math.maxInt(Count) - self.stream_output);
@@ -178,6 +196,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (caller_output.len != 0 and output.len == 0 and
                 (self.pending_offset != self.pending.items.len or !self.header_written or !self.footer_written))
                 return error.IntegerOverflow;
+            self.raw.bindWindowLimit(limit);
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -198,8 +217,9 @@ pub fn Encoder(comptime Codec: type) type {
                 }
                 if (!self.header_written) {
                     try Codec.RawEncoder.validateOptions(self.raw.options);
-                    try Codec.writeHeader(self.allocator, &self.pending, self.dictionary);
+                    try Codec.writeHeader(self.allocator, &self.pending, self.dictionary, self.options.window_bits);
                     self.header_written = true;
+                    self.published_window_bits = self.options.window_bits;
                     continue;
                 }
 
@@ -229,6 +249,14 @@ pub fn Encoder(comptime Codec: type) type {
                 }
                 return result(input_read, output_written, .need_input);
             }
+        }
+
+        fn validateWindow(self: *const Self) window.Error!usize {
+            const limit = try window.windowLen(self.options.window_bits);
+            if (self.published_window_bits) |bits| {
+                if (bits != self.options.window_bits) return error.InvalidZlibWindow;
+            }
+            return limit;
         }
 
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
