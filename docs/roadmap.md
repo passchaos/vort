@@ -10,6 +10,14 @@ priorities. Full-file, dictionary, streaming, memory and platform comparisons
 must accompany narrower wins. Preserve malformed-input safety, candidate
 ordering, incremental progress and allocator ownership throughout this work.
 
+The [codec format controls](formats/codec-format-controls.md) expose zlib
+encoder windows from 9 to 15 bits through one-shot, reusable and incremental
+APIs, with candidate fallback and runtime parameters respecting the declared
+history limit. Zstd decoding now offers explicit content-checksum ignoring
+while preserving footer consumption, structure, sizes, dictionaries and memory
+limits. Native, x86 and WASI contracts and independent reference tooling cover
+these options before the next performance increment.
+
 The [default-window far-copy reach](performance/br/command-model-lifetime.md#default-window-far-copy-reach-2026-11-06)
 adds bounded far-match candidates to default q6-q11 one-shot streams up to the
 16 MiB meta-block limit, advertising only the window each winning plan uses

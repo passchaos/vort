@@ -7,6 +7,14 @@ strategies, binary-tree matching, entropy costs and two-pass training are now
 implemented. The comparisons below retain their dated measurement scope and
 do not establish current all-corpus performance parity.
 
+The [codec format control increment](formats/codec-format-controls.md) adds
+`ignore_content_checksum` to the complete options-based decode family,
+including source and incremental adapters. It defaults to strict checking;
+opting in skips only the checksum comparison and still requires a complete
+footer and valid structure, sizes, dictionaries and memory limits. Reference
+tooling selects a library with `ZSTD_d_forceIgnoreChecksum` support and records
+its actual version and hashes.
+
 `zig build run-zstd-compare` reports zstd CLI size beside Vort's current raw
 fixed-deflate output, a single-frame native best stream, a blocked native stream
 without the embedded index, and a native embedded-index stream on sample project
