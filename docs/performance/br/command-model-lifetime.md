@@ -1390,7 +1390,10 @@ do not win (mozilla 680 -> 1,254 ms). Enabling it as the default also changes
 every q10/q11 binary wire and the exact requested-heap contracts, so the full
 suite needs a dedicated re-freeze epoch (dozens of frozen-wire and memory
 assertions). The quality-first tradeoff therefore remains a caller decision
-rather than a silent default change. It runs only the wide beam, always encodes its complete wire, and still
+rather than a silent default change. Lowering the command-state parser's
+minimum match from four to three was also tried and rejected: the candidate
+returned `InvalidBlockPlan`, so the current plan/writer path does not yet
+accept that shape. It runs only the wide beam, always encodes its complete wire, and still
 arbitrates against every other candidate, so the selected stream can never
 grow. In the chunked/incremental path the option also extends the default
 8 KiB command-state ceiling to 64 KiB per block; an explicit caller ceiling
