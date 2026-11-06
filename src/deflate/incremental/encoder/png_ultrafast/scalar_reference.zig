@@ -40,7 +40,10 @@ pub const Encoder = struct {
     done: bool = false,
 
     pub const Error = core.Error;
-    pub const Options = struct { max_input_len: usize = std.math.maxInt(usize) };
+    pub const Options = struct {
+        max_input_len: usize = std.math.maxInt(usize),
+        oneshot_framing: bool = false,
+    };
     pub const pending_capacity: usize = 128;
     pub const input_carry_bytes: usize = 8;
     pub const heap_workspace_bytes: usize = 0;
@@ -80,6 +83,7 @@ pub const Encoder = struct {
     /// RFC sync flush: finish accepted data at a byte boundary, keep zlib open.
     /// Call step with empty input until need_input before offering more input.
     pub fn flush(self: *Encoder) void {
+        if (self.options.oneshot_framing) return;
         if (!self.finishing and !self.done) self.flush_requested = true;
     }
     pub fn finish(self: *Encoder) void {
@@ -170,6 +174,11 @@ pub const Encoder = struct {
                     self.stage = .block_end;
                 },
                 .block_end => {
+                    if (self.options.oneshot_framing) {
+                        if (self.bit_count != 0) self.writeBits(0, @intCast(8 - @as(u7, self.bit_count)));
+                        self.stage = .footer;
+                        continue;
+                    }
                     self.writeBits(@intFromBool(self.finishing), 3); // BTYPE=stored.
                     if (self.bit_count != 0) self.writeBits(0, @intCast(8 - @as(u7, self.bit_count)));
                     self.byte(0);
@@ -234,7 +243,11 @@ pub const Encoder = struct {
         }
     }
     fn dynamicHeader(self: *Encoder) void {
-        self.writeBits(syntax.header[2] & 0xfe, 8);
+        const first = if (self.options.oneshot_framing)
+            syntax.header[2]
+        else
+            syntax.header[2] & 0xfe;
+        self.writeBits(first, 8);
         for (syntax.header[3..53]) |value| self.writeBits(value, 8);
         self.writeBits(syntax.header[53] & 0x1f, 5);
     }

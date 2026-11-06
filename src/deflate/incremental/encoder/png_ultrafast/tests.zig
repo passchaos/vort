@@ -35,7 +35,9 @@ test "incremental PNG ultrafast v2 fused Adler matches scalar recurrences for wo
 }
 
 test "incremental PNG ultrafast v2 direct and queued outputs preserve published52 bytes flush cuts resources and snapshots" {
-    try std.testing.expectEqual(@sizeOf(BaselineV1), @sizeOf(Encoder));
+    // The published v2 layout adds the one-shot framing flag to Options; the
+    // growth is exactly one usize on both 32-bit and 64-bit targets.
+    try std.testing.expectEqual(@sizeOf(BaselineV1) + @sizeOf(usize), @sizeOf(Encoder));
     var input: [12571]u8 = @splat(0);
     var random: u32 = 0x67ac814f;
     for (&input, 0..) |*byte, at| {
