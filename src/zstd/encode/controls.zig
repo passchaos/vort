@@ -300,6 +300,8 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
         .fast_acceleration = options.fast_acceleration,
         .control_profile = options.control_profile,
     };
+    if (@hasField(NativeOptions, "include_dictionary_id"))
+        native.include_dictionary_id = if (@hasField(@TypeOf(options), "include_dictionary_id")) options.include_dictionary_id else true;
     if (@hasField(NativeOptions, "fast_long_matches"))
         native.fast_long_matches = if (@hasField(@TypeOf(options), "fast_long_matches")) options.fast_long_matches else false;
     if (@hasField(NativeOptions, "max_total_working_memory"))

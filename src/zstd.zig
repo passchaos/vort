@@ -54,8 +54,13 @@ test "Zstd decoded counts physical consumers narrow before heap admission" {
 test "Zstd ignore content checksum public contracts" {
     try @import("tests/zstd_ignore_checksum/main.zig").contracts(@This());
 }
+
+test "Zstd dictionary ID control public contracts" {
+    try @import("tests/zstd_dictionary_id_control/main.zig").contracts(@This());
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
+const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
 const formatted_decode = @import("zstd/frame/formatted_decode.zig");
 const decode_budget = @import("zstd/decode/budget.zig");
 const decode_operation = @import("zstd/decode/operation.zig");
@@ -587,6 +592,9 @@ extern fn vortZstdHuffmanWideX2Decode(request: *const huffman_x2_abi.Request) ca
 pub const FrameOptions = struct {
     format: FrameFormat = .standard,
     include_content_size: bool = true,
+    /// Write Dictionary_ID in the frame header. Disabling this leaves the
+    /// selected dictionary, its history and standard entropy state unchanged.
+    include_dictionary_id: bool = true,
     content_checksum: bool = false,
     /// Optional standard Zstd Window_Log (10...41). When known content is
     /// larger than this window, emit a non-single-segment frame that carries
@@ -625,6 +633,9 @@ pub const NativeFrameOptions = struct {
     format: FrameFormat = .standard,
     content_checksum: bool = true,
     include_content_size: bool = true,
+    /// Control only the wire Dictionary_ID; dictionary_id continues to name
+    /// the selected dictionary even when its header field is omitted.
+    include_dictionary_id: bool = true,
     /// Optional standard Zstd Window_Log (10...41). It caps block size,
     /// cross-block matches, and visible preset history in addition to changing
     /// the frame header. Explicit logs 24+ enable sparse-LDM history; null
@@ -721,17 +732,19 @@ const IncrementalEncoderCodec = struct {
     }
     pub fn rebindStateAllocator(_: *State, _: std.mem.Allocator) void {}
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?Count, dictionary_id: ?u32) zstd.Error!void {
+        std.debug.assert(options.dictionary_id == (dictionary_id orelse 0));
         const original_len = out.items.len;
         errdefer out.items.len = original_len;
         if (expected_input_len) |len| return emitFrameHeader(allocator, out, @intCast(len), options);
         if (options.format == .standard) try out.appendSlice(allocator, &frame_magic);
         const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
-        try out.append(allocator, checksum_flag | nativeDictionaryIdFlag(dictionary_id orelse 0));
+        const wire_id = frame_dictionary_id.wireId(options);
+        try out.append(allocator, checksum_flag | nativeDictionaryIdFlag(wire_id));
         // A no-size stream cannot tighten the window from content length. Use
         // the configured descriptor, or retain the library's legacy native
         // dictionary window when the caller did not select one explicitly.
         try emitConfiguredWindowDescriptor(allocator, out, options, native_dictionary_window_len);
-        try emitDictionaryId(allocator, out, dictionary_id orelse 0);
+        try emitDictionaryId(allocator, out, wire_id);
     }
     pub fn writeRawOrRle(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
         try emitBlock(allocator, out, block, last);
@@ -3727,7 +3740,7 @@ fn nativeFrameHeaderLen(content_len: u64, options: NativeFrameOptions) Error!usi
         // when the known content is larger than that advertised window.
         len = std.math.add(usize, len, 1) catch return error.IntegerOverflow;
     }
-    len = std.math.add(usize, len, nativeDictionaryIdFieldLen(options.dictionary_id)) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, nativeDictionaryIdFieldLen(frame_dictionary_id.wireId(options))) catch return error.IntegerOverflow;
     if (options.include_content_size) {
         len = std.math.add(usize, len, nativeContentSizeFieldLen(content_len)) catch return error.IntegerOverflow;
     }
@@ -4206,38 +4219,9 @@ fn nativeMatchSearchBudget(options: NativeFrameOptions) Error!usize {
     return options.match_search_budget;
 }
 
-fn nativeDictionaryIdFlag(dictionary_id: u32) u2 {
-    if (dictionary_id == 0) return 0;
-    if (dictionary_id <= std.math.maxInt(u8)) return 1;
-    if (dictionary_id <= std.math.maxInt(u16)) return 2;
-    return 3;
-}
-
-fn nativeDictionaryIdFieldLen(dictionary_id: u32) usize {
-    return switch (nativeDictionaryIdFlag(dictionary_id)) {
-        0 => 0,
-        1 => 1,
-        2 => 2,
-        3 => 4,
-    };
-}
-
-fn emitDictionaryId(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary_id: u32) Error!void {
-    switch (nativeDictionaryIdFlag(dictionary_id)) {
-        0 => {},
-        1 => try out.append(allocator, @intCast(dictionary_id)),
-        2 => {
-            var bytes: [2]u8 = undefined;
-            std.mem.writeInt(u16, &bytes, @intCast(dictionary_id), .little);
-            try out.appendSlice(allocator, &bytes);
-        },
-        3 => {
-            var bytes: [4]u8 = undefined;
-            std.mem.writeInt(u32, &bytes, dictionary_id, .little);
-            try out.appendSlice(allocator, &bytes);
-        },
-    }
-}
+const nativeDictionaryIdFlag = frame_dictionary_id.flag;
+const nativeDictionaryIdFieldLen = frame_dictionary_id.fieldLen;
+const emitDictionaryId = frame_dictionary_id.write;
 
 fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
     return if (max_output_len) |limit|
@@ -9870,12 +9854,13 @@ fn emitFrameHeader(
     const single_segment = try nativeFrameUsesSingleSegment(content_len, options);
     if (options.format == .standard) try out.appendSlice(allocator, &frame_magic);
     const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
-    const dictionary_flag: u8 = nativeDictionaryIdFlag(options.dictionary_id);
+    const wire_id = frame_dictionary_id.wireId(options);
+    const dictionary_flag: u8 = nativeDictionaryIdFlag(wire_id);
 
     if (!options.include_content_size) {
         try out.append(allocator, checksum_flag | dictionary_flag);
         try emitConfiguredWindowDescriptor(allocator, out, options, content_len);
-        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitDictionaryId(allocator, out, wire_id);
         return;
     }
 
@@ -9894,31 +9879,31 @@ fn emitFrameHeader(
         };
         try out.append(allocator, (content_size_flag << 6) | checksum_flag | dictionary_flag);
         try emitConfiguredWindowDescriptor(allocator, out, options, content_len);
-        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitDictionaryId(allocator, out, wire_id);
         try emitContentSizeField(allocator, out, content_len, field_size);
     } else if (content_len <= 255) {
         std.debug.assert(field_size == 1);
         try out.append(allocator, 0x20 | checksum_flag | dictionary_flag); // fcs=1 byte, single segment
-        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitDictionaryId(allocator, out, wire_id);
         try out.append(allocator, @intCast(content_len));
     } else if (content_len <= 256 + std.math.maxInt(u16)) {
         std.debug.assert(field_size == 2);
         try out.append(allocator, 0x60 | checksum_flag | dictionary_flag); // fcs=2 bytes (+256), single segment
-        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitDictionaryId(allocator, out, wire_id);
         var size_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else if (content_len <= std.math.maxInt(u32)) {
         std.debug.assert(field_size == 4);
         try out.append(allocator, 0xa0 | checksum_flag | dictionary_flag); // fcs=4 bytes, single segment
-        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitDictionaryId(allocator, out, wire_id);
         var size_bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else {
         std.debug.assert(field_size == 8);
         try out.append(allocator, 0xe0 | checksum_flag | dictionary_flag); // fcs=8 bytes, single segment
-        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitDictionaryId(allocator, out, wire_id);
         var size_bytes: [8]u8 = undefined;
         std.mem.writeInt(u64, &size_bytes, content_len, .little);
         try out.appendSlice(allocator, &size_bytes);
