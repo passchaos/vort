@@ -19,7 +19,7 @@ fn familyModule(b: *std.Build, family: []const u8, target: std.Build.ResolvedTar
     return module;
 }
 
-fn publicModule(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Module {
+pub fn publicModule(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Module {
     const dependency = b.dependency("vail_archive_crypto", .{ .target = target, .optimize = .ReleaseFast });
     const module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),

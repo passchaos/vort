@@ -76,9 +76,14 @@ Deflate/Zstd writer also preserves wide pledges and input caps, with real native
 and x86 ZIP64 round trips. Empty transformed dictionary references at absolute
 distance <=120 now fail consistently with experimental Brotli 1.2.0, preventing
 zero-bit and zero-output loops while retaining valid larger-distance references.
-Next functional gaps include ZIP one-shot metadata's decoded-length narrowing
-and the Deflate64 encoder's cumulative input domain; broader throughput work
-follows the compatibility and resource-boundary audit.
+The [ZIP wide-domain increment](formats/zip-wide-domain.md) now closes those
+metadata and Deflate64 writer gaps as well as actual entry/source readers and
+multi-part normalization. Logical sizes and positions stay wide; complete
+plaintext materialization retains checked local limits. Native/x86 real ZIP64
+read flows decode 4,294,967,313 bytes, including Stored input above 4 GiB and
+Deflate64 output independently validated by Info-ZIP. CLI output uses bounded
+buffers and atomic publication. Continue the compatibility/API/resource audit
+against the baseline libraries before broader throughput work.
 
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated

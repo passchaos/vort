@@ -47,7 +47,8 @@ full source encoding. The long oracle below performs the complete encoding.
 The ZIP streaming writer preserves Deflate/Zstd pledges and codec input caps
 in the same logical domain. A ZIP64 entry's input no longer has to fit `usize`
 before codec initialization or at the next input offer. Codecs with local input
-caps retain their established limits, including the Deflate64 writer.
+caps retain their established limits. The subsequent
+[ZIP wide-domain increment](zip-wide-domain.md) also widens the Deflate64 writer.
 
 Public writer contracts cover the ZIP32 sentinel, large known pledges, codec
 and archive limits, bounded prefixes and caller guards. A real four-case
@@ -56,7 +57,8 @@ Deflate/Zstd member. Both targets produce identical archive hashes and CRC32
 473974062: the Deflate ZIP is 5,103,883 bytes and the Zstd ZIP is 262,428 bytes.
 The probe reads only 82 bytes of its fixed central record; Python checks the
 whole record structure and streamed payload with libz/libzstd. This avoids the
-one-shot ZIP parser's existing 32-bit materialization restriction.
+one-shot ZIP parser's then-existing 32-bit metadata restriction; the subsequent
+wide-domain increment now permits these public metadata queries directly.
 
 ```sh
 zig build -j8 test-zip-wide-codec-input test-zip-wide-codec-input-x86
@@ -113,3 +115,9 @@ accept and independently decode the same full source length; encoded wire is
 830,605,084 bytes, peak encoder requests are at most 847,123,606 bytes, and
 live requested bytes return to zero. The complete-output API necessarily retains
 that wire; source and reference sink buffers remain bounded to 1 MiB/64 KiB.
+
+Complete prior-increment regression gates finish with native Brotli 1555 passes
+and one platform-specific skip, x86 Brotli 1556 passes, and native/x86 Zstd 1302
+passes each. The complete library/tool compilation gate passes 219 steps.
+Permanent ZIP wide-input gates load the owning discovery suite and execute 53
+tests per native/x86 target, including every new public input contract.

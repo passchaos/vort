@@ -774,6 +774,7 @@ pub fn build(b: *std.Build) void {
     zstd_tests_mod.addObject(zstd_huffman_x2_obj);
     @import("build/wide_sizes.zig").register(b, target, optimize, vort_mod_releasefast, br_tests_mod, zstd_tests_mod);
     @import("build/zip_wide_input.zig").register(b, target, optimize);
+    @import("build/zip_wide_read.zig").register(b, target, optimize, vort_mod_releasefast);
     const zstd_test_filter = b.option(
         []const u8,
         "zstd-test-filter",

@@ -1,11 +1,12 @@
 const std = @import("std");
 
-fn module(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+pub fn module(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
     const dependency = b.dependency("vail_archive_crypto", .{ .target = target, .optimize = optimize });
     const codec = b.createModule(.{
         .root_source_file = b.path("src/zip.zig"),
         .target = target,
         .optimize = optimize,
+        .single_threaded = target.result.cpu.arch == .wasm32,
         .imports = &.{.{ .name = "vail_archive_crypto", .module = dependency.module("vail_archive_crypto") }},
     });
     const object = b.addObject(.{
