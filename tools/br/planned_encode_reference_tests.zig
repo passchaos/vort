@@ -63,6 +63,56 @@ pub fn actualWires() !void {
     }
     try (libbrotli.Runtime.OneShotOptions{ .quality = 8, .lgwin = 30 }).validate();
 
+    // Keep this matrix Vort-only: the q8 loop below already covers
+    // libbrotli's option-bearing encoder without multiplying the reference
+    // encode cases by every lower planned quality.
+    for ([_]u4{ 0, 1, 2, 3, 4, 5 }) |quality| {
+        for ([_]br.PlannedMode{ .generic, .text, .font }) |mode| {
+            for ([_]u5{ 17, 18, 22, 24 }) |window_bits| {
+                const vort_wire = try br.encodePlannedStreamWithOptionsAlloc(allocator, input, .{
+                    .quality = quality,
+                    .mode = mode,
+                    .window_bits = window_bits,
+                });
+                defer allocator.free(vort_wire);
+                const summary = try br.summarizeStreamAlloc(allocator, vort_wire);
+                try std.testing.expectEqual(window_bits, summary.window_bits);
+
+                const vort_decoded = try br.decodeStreamAllocExactSize(allocator, vort_wire, input.len);
+                defer allocator.free(vort_decoded);
+                try std.testing.expectEqualSlices(u8, input, vort_decoded);
+
+                var reference_decoded: [input.len]u8 = undefined;
+                try runtime.decode(vort_wire, &reference_decoded);
+                try std.testing.expectEqualSlices(u8, input, &reference_decoded);
+            }
+        }
+    }
+
+    const far_block_len = 64 * 1024;
+    const far_repeated_len = 8 * 1024;
+    const far_input = try allocator.alloc(u8, far_block_len + far_repeated_len);
+    defer allocator.free(far_input);
+    var far_state: u32 = 0x17fa_cade;
+    for (far_input[0..far_block_len]) |*byte| {
+        far_state = far_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(far_state >> 24);
+    }
+    @memcpy(far_input[far_block_len..], far_input[0..far_repeated_len]);
+    const far_reference_output = try allocator.alloc(u8, far_input.len);
+    defer allocator.free(far_reference_output);
+    for ([_]u4{ 2, 3, 4, 5 }) |quality| {
+        const wire = try br.encodePlannedStreamWithOptionsAlloc(allocator, far_input, .{
+            .quality = quality,
+            .window_bits = 17,
+        });
+        defer allocator.free(wire);
+        const summary = try br.summarizeStreamAlloc(allocator, wire);
+        try std.testing.expectEqual(@as(usize, far_block_len), summary.max_lz77_distance);
+        try runtime.decode(wire, far_reference_output);
+        try std.testing.expectEqualSlices(u8, far_input, far_reference_output);
+    }
+
     for ([_]br.PlannedMode{ .generic, .text, .font }) |mode| {
         const vort_wire = try br.encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .quality = 8, .mode = mode });
         defer allocator.free(vort_wire);

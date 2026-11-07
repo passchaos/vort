@@ -161,6 +161,43 @@ export fn brWasmCompleteLengthsSmoke() callconv(.c) u32 {
     return completeLengthsRoundtrip(11, "abcdEfgh" ** 8);
 }
 
+export fn brWasmStandardWindowSmoke() callconv(.c) u32 {
+    const allocator = std.heap.page_allocator;
+    const block_len = 64 * 1024;
+    const repeated_len = 1024;
+    const input = allocator.alloc(u8, block_len + repeated_len) catch return 201;
+    defer allocator.free(input);
+    var random: u32 = 0x17fa_cade;
+    for (input[0..block_len]) |*byte| {
+        random = random *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random >> 24);
+    }
+    @memcpy(input[block_len..], input[0..repeated_len]);
+    const wide = vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, .{
+        .quality = 2,
+        .window_bits = 17,
+    }) catch return 202;
+    defer allocator.free(wide);
+    const summary = vort.brSummarizeStream(wide) catch return 203;
+    if (summary.window_bits != 17 or summary.large_window or
+        summary.max_lz77_distance != block_len) return 204;
+    const decoded = vort.brDecodeStreamAllocExactSize(allocator, wide, input.len) catch return 205;
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, input, decoded)) return 206;
+
+    const local = "fragment local Brotli standard window" ** 8;
+    const q0 = vort.brEncodePlannedStreamWithOptionsAlloc(allocator, local, .{
+        .quality = 0,
+        .mode = .font,
+        .window_bits = 24,
+    }) catch return 207;
+    defer allocator.free(q0);
+    const q0_summary = vort.brSummarizeStream(q0) catch return 208;
+    if (q0_summary.window_bits != 24 or q0_summary.large_window or
+        q0_summary.max_lz77_distance > 65_520) return 209;
+    return 0;
+}
+
 test "Brotli wasm public consumer instantiates both HQ qualities and decode" {
     try std.testing.expectEqual(@as(u32, 0), brWasmHqSmoke());
 }

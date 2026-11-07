@@ -631,7 +631,7 @@ test "planned stream quality options reject invalid chunked combinations before 
         br.encodePlannedStreamChunksWithOptionsAlloc(
             std.testing.allocator,
             &chunks,
-            .{ .quality = 4, .window_bits = 24 },
+            .{ .quality = 4, .window_bits = 25 },
         ),
     );
     try std.testing.expectError(

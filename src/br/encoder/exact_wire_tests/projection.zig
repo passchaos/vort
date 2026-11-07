@@ -55,7 +55,9 @@ pub fn selectors(comptime Br: type) !void {
     const canonical = try S.project(ordinary, true, .{}, cache);
     try check(canonical.command.command.distance_code == 0 and canonical.distance == null and std.mem.eql(usize, &canonical.repeats, &cache));
     ordinary.distance = 32;
-    const canonical_regular = try S.project(ordinary, false, .{}, cache);
+    // The copy starts at absolute output position 32, so distance 32 is a
+    // valid regular reference rather than an out-of-window synthetic value.
+    const canonical_regular = try S.project(ordinary, false, .{ .initial_output_pos = 28 }, cache);
     const expected_encoding = enc.forLengths(4, 8, false).?;
     try check(canonical_regular.command.symbol == expected_encoding.symbol and std.meta.eql(canonical_regular.distance.?, distance.encodeWithFormat(32, params, .standard).?));
 }

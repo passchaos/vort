@@ -33,13 +33,14 @@ const instance = new WebAssembly.Instance(moduleObject, hostImports);
 if (wasi && typeof instance.exports._initialize === "function") {
     wasi.initialize(instance);
 }
-for (const name of ["brWasmHq10", "brWasmHq11", "brWasmHqSmoke", "brWasmTotalMemorySmoke", "brWasmWholeBlockSmoke", "brWasmCompleteLengthsSmoke"]) {
+for (const name of ["brWasmHq10", "brWasmHq11", "brWasmHqSmoke", "brWasmTotalMemorySmoke", "brWasmWholeBlockSmoke", "brWasmCompleteLengthsSmoke", "brWasmStandardWindowSmoke"]) {
     assert.equal(typeof instance.exports[name], "function");
 }
 assert.equal(instance.exports.brWasmHqSmoke(), 0);
 assert.equal(instance.exports.brWasmTotalMemorySmoke(), 0);
 assert.equal(instance.exports.brWasmWholeBlockSmoke(), 0);
 assert.equal(instance.exports.brWasmCompleteLengthsSmoke(), 0);
+assert.equal(instance.exports.brWasmStandardWindowSmoke(), 0);
 console.log(JSON.stringify({
     node_version: process.version,
     wasm_sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
@@ -60,4 +61,8 @@ console.log(JSON.stringify({
     complete_lengths_exact_plan_budget_wire_checked: true,
     complete_lengths_zero_and_below_search_limits_checked: true,
     complete_lengths_memory_live_zero_checked: true,
+    standard_window_cases: [
+        { quality: 2, window_bits: 17, max_lz77_distance: 65536 },
+        { quality: 0, mode: "font", window_bits: 24, fragment_local: true },
+    ],
 }));

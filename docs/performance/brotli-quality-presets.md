@@ -1,6 +1,6 @@
 # Brotli quality and mode preset status
 
-Date: 2026-10-20.
+Date: 2026-11-07.
 
 ## Scope
 
@@ -46,16 +46,17 @@ and exact first-pass histograms. q2 uses its static-tree fast path through 128
 commands and bounded dynamic trees above it; q3 uses a trivial single-block
 dynamic three-tree writer. q4...q11 retain the general command writer. All
 qualities keep exact
-compressed-versus-stored comparison. The default
-advertised window is 16 bits. q0...q5 accept 10...16-bit windows; q6...q11
-accept RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
-`lz77.max_window_len`, currently 65,535 bytes. q6...q11 with an explicit
+compressed-versus-stored comparison. The default advertised window is 16 bits,
+and every quality accepts RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
+`lz77.max_window_len`, currently 65,535 bytes. q2...q11 with an explicit
 17...24-bit window now layer the Brotli sparse long-distance matcher over its
 literal runs, so the emitted command plan can use the complete advertised
 distance range instead of merely writing a wider header. The stream core's
 ordinary dictionary matcher also consumes the complete 16-bit retained
 history, rather than truncating cross-meta-block search to the generic 32 KiB
-default.
+default. q0/q1 also accept every RFC width from 10 through 24, but their
+latency-oriented parser stays fragment-local and caps matches at distance
+65,520; a wider q0/q1 header does not claim wider search.
 
 General q2...q11 and legacy planned paths now admit entropy-coded insertion-only
 plans when a deterministic whole-input one-tree Huffman estimate pays for the
@@ -105,7 +106,7 @@ strictly more conservative than the search's four-segment limit.
 | 3 | balanced | Lazy chain 8, nice length 48, recent-distance selection, and a dedicated trivial single-meta-block writer with exact dynamic literal/command/distance trees but no block split. The same short-input dictionary candidate remains available through the general writer. |
 | 4 | balanced | Lazy chain 16 and nice length 64; enables existing literal/command/distance split candidates and distance-parameter search. Font additionally compares its first mode-specific distance-shape candidate. |
 | 5 | balanced | Lazy chain 32 and nice length 96; every mode enables the fixed two-tree UTF-8 literal-context candidate. |
-| 6 | ratio | Lazy chain 64 and nice length 128; adds a bounded 64-chain/16-candidate optimal search for 4--32 KiB inputs. The advertised window range expands to 10...24 bits. |
+| 6 | ratio | Lazy chain 64 and nice length 128; adds a bounded 64-chain/16-candidate optimal search for 4--32 KiB inputs. |
 | 7 | ratio | Lazy chain 96 and nice length 160; adds clustered contexts, adaptive distance splitting, and extended static-dictionary probing through 4 KiB in every mode. |
 | 8 | ratio | Lazy chain 128 and nice length 192; expands the optimal-input ceiling to 64 KiB with a 128-chain/64-candidate budget and enables adaptive literal splitting. |
 | 9 | ratio | Lazy chain 256 and nice length 258; uses a 192-chain/128-candidate optimal search through 64 KiB and enables adaptive command splitting in addition to the q8 candidates. |
@@ -274,8 +275,8 @@ omitting it on the next stream restores the 8 KiB default. A 12,992-byte
 opt-in chunked fixture encodes to 65 bytes and independently decodes through
 Node/libbrotli.
 
-Wide-window ratio-family streams use the same exact-wire arbitration. The
-one-shot q6...q11 path augments its ordinary command plan directly; chunked and
+Wide-window q2...q11 streams use the same exact-wire arbitration. The
+one-shot path augments its ordinary command plan directly; chunked and
 incremental paths augment each block against the retained suffix immediately
 preceding it. The matcher ignores history older than `2^WBITS-16`, preserves
 static/compound command sources, and handles a source match that crosses the

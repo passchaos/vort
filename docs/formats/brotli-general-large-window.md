@@ -21,8 +21,11 @@ test-only adaptive verification are recorded there. The encoder
 retains accepted history for non-HQ q2+ and legacy non-fragment paths up to the
 advertised distance, growing with actual data rather than preallocating the
 complete window30 buffer. q0/q1 remain fragment-local, with no cross-block match
-history and a normal distance bound no larger than 65520. Standard-format policy
-and its existing ratio augmentation are unchanged.
+history and a normal distance bound no larger than 65520. Independently of the
+extension, every quality accepts standard RFC window bits 10...24: q0/q1 only
+advertise the requested decoder window, while explicit q2+ widths above 16 use
+the bounded standard long-distance augmenter. Legacy fast/balanced level APIs
+retain their 10...16 policy, and legacy ratio retains 10...24.
 
 The shared near matcher keeps its original 65,535-byte suffix and u16 tokens.
 A separate history augmenter uses three-byte anchors, matches of 3...258 bytes,

@@ -94,6 +94,7 @@ const incremental_stored = @import("br/incremental/stored/decoder.zig");
 const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
 const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
+const standard_window_quality_tests = @import("br/encoder/standard_window_quality_tests.zig");
 const fast_bit_reader = @import("br/fast_bit_reader.zig");
 const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
 const code_sections = @import("br/format/code_sections.zig");
@@ -335,9 +336,10 @@ pub const PlannedEncodeOptions = struct {
     /// non-generic mode requires `quality` so legacy level calls remain stable.
     mode: PlannedMode = .generic,
     /// Explicit Brotli window for one-shot planned encoding. The current
-    /// planned matcher can fully honor RFC window bits 10...16 at every level
-    /// and 17...24 in ratio mode; leaving this null preserves the established level
-    /// policy, including ratio mode's automatic 17-bit long-distance candidate.
+    /// quality-scheduled matcher accepts every RFC window width 10...24.
+    /// q0/q1 remain fragment-local; q2+ add bounded far-match candidates for
+    /// explicit widths above 16. Leaving this null preserves the established
+    /// policy, including ratio mode's automatic 17-bit candidate.
     window_bits: ?u5 = null,
     /// Optional metadata emitted before the payload meta-block.
     metadata: []const u8 = "",
@@ -2299,6 +2301,7 @@ test {
     _ = incremental_rle;
     _ = incremental_stored;
     _ = incremental_planned_encoder_tests;
+    _ = standard_window_quality_tests;
     _ = fast_bit_reader;
     _ = paired_literal_lookup;
     _ = pattern;
@@ -4700,7 +4703,12 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     if (!commandPlanHasCopy(base_commands) and !try literal_entropy_policy.shouldTry(allocator, input)) {
         var has_serialized_match = false;
         for (serialized_plans) |plan| has_serialized_match = has_serialized_match or plan != null;
-        if (!has_serialized_match and !largeWindowInputSearchEnabled(options, window_bits, input.len)) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+        if (!has_serialized_match and
+            !largeWindowInputSearchEnabled(options, window_bits, input.len) and
+            !standardQualityLongDistanceSearchEnabled(options, window_bits, input.len))
+        {
+            return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+        }
     }
 
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -4894,7 +4902,9 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     );
 
     const use_long_distance = if (schedule) |active|
-        active.family == .ratio
+        active.family == .ratio or
+            (active.family == .balanced and
+                standardQualityLongDistanceSearchEnabled(options, window_bits, input.len))
     else
         options.level == .ratio;
     const long_distance_window = if (schedule != null)
@@ -5134,6 +5144,18 @@ fn largeWindowInputSearchEnabled(options: PlannedEncodeOptions, window_bits: u5,
         input_len >= long_distance.min_distance + 3;
 }
 
+fn standardQualityLongDistanceSearchEnabled(
+    options: PlannedEncodeOptions,
+    window_bits: u5,
+    input_len: usize,
+) bool {
+    if (options.large_window or window_bits < 17 or
+        input_len <= long_distance.min_distance) return false;
+    const quality = options.quality orelse return false;
+    const schedule = quality_schedule.getInt(quality, options.mode) catch return false;
+    return schedule.family != .fast;
+}
+
 /// Add wide-history candidates without removing any existing one-shot planner
 /// or format-specific proposal. The same all-literal alternate admits far
 /// copies even when the bounded near parser found no match.
@@ -5338,15 +5360,18 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         &best,
     );
 
-    // Ratio presets already search far matches when the caller advertises a
-    // wider window. A default 16-bit one-shot stream also considers bounded
+    // q2+ presets search far matches when the caller advertises a wider
+    // window. A default 16-bit ratio stream also considers bounded
     // far-match candidates: the wire advertises only the smallest window the
     // winning plan actually uses, and complete-wire arbitration keeps the
     // original 16-bit stream whenever the far pass does not pay for itself.
     // The search window is capped at libbrotli's default 22 bits.
-    const auto_long_window = window_bits == 16 and options.window_bits == null and
+    const auto_long_window = schedule.family == .ratio and
+        window_bits == 16 and options.window_bits == null and
         !options.large_window and input.len > long_distance.min_distance;
-    if (schedule.family == .ratio and
+    const explicit_balanced_standard_window = schedule.family == .balanced and
+        !options.large_window and window_bits >= 17;
+    if ((schedule.family == .ratio or explicit_balanced_standard_window) and
         (window_bits >= 17 or auto_long_window) and
         input.len > long_distance.min_distance)
     {
@@ -8810,6 +8835,8 @@ fn considerPlannedMetaBlockCommands(
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
         .initial_previous = state.context_previous,
+        .initial_output_pos = wire_state.output_pos,
+        .starting_last_distances = wire_state.last_distances,
     };
     if (encodePlannedMetaBlockCandidate(
         allocator,
@@ -8909,6 +8936,8 @@ fn considerPlannedMetaBlockCommands(
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
         .initial_previous = state.context_previous,
+        .initial_output_pos = wire_state.output_pos,
+        .starting_last_distances = wire_state.last_distances,
     };
     if (encodePlannedMetaBlockCandidate(
         allocator,
@@ -8975,6 +9004,11 @@ fn considerPlannedMetaBlockCommands(
     }
 }
 
+fn plannedPolicySupportsStandardLongDistance(policy: PlannedMetaBlockPolicy) bool {
+    return policy.family == .ratio or
+        (policy.quality != null and policy.family == .balanced);
+}
+
 fn considerPlannedLongDistanceMetaBlockCommands(
     allocator: std.mem.Allocator,
     state: *IncrementalPlannedEncoderCodec.State,
@@ -8985,10 +9019,10 @@ fn considerPlannedLongDistanceMetaBlockCommands(
     start_bit_index: u3,
     best: *?PlannedMetaBlockCandidate,
 ) Error!void {
-    if (state.large_window) {
-        if (policy.fragment_variant != null or state.window_bits < 17) return;
-    } else if (policy.family != .ratio or state.window_bits < 17 or
-        state.history.items.len == 0) return;
+    if (policy.fragment_variant != null or state.window_bits < 17) return;
+    if (!state.large_window and
+        (!plannedPolicySupportsStandardLongDistance(policy) or
+            state.history.items.len == 0)) return;
     const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
     const literal_commands = [_]command_plan.Command{.{
         .insert_start = 0,
@@ -9261,7 +9295,9 @@ fn considerPlannedMetaBlockPolicy(
     // Far-only matches remain eligible when the near parser has no copy and
     // the literal-only proposal cannot improve the stored block.
     const long_distance_search = policy.fragment_variant == null and state.window_bits >= 17 and
-        (state.large_window or (policy.family == .ratio and state.history.items.len != 0));
+        (state.large_window or
+            (plannedPolicySupportsStandardLongDistance(policy) and
+                state.history.items.len != 0));
     if (match_count != 0 or state.compound_dictionary_size != 0 or
         has_serialized_static or policy.dictionary.static_dictionary or q0_one_pass or
         literal_entropy or long_distance_search)
@@ -28894,10 +28930,10 @@ test "br planned quality options validate selector mode level and window contrac
         payload,
         .{ .level = .balanced, .quality = 4 },
     ));
-    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
         payload.len,
         .{ .quality = 5, .window_bits = 17 },
-    ));
+    )) >= payload.len);
     try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
         payload.len,
         .{ .quality = 6, .window_bits = 24 },

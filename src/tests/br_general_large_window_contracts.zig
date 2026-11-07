@@ -13,6 +13,15 @@ test "Brotli general large window false preserves archived q mode legacy and sto
             try br.encodePlannedStreamWithOptionsAlloc(a, h.plain, .{ .quality = golden.quality, .mode = golden.mode, .level = golden.level, .large_window = false });
         defer a.free(actual);
         try std.testing.expectEqualSlices(u8, expected, actual);
+        if (golden.quality) |quality| {
+            const explicit = try br.encodePlannedStreamWithOptionsAlloc(a, h.plain, .{
+                .quality = quality,
+                .mode = golden.mode,
+                .window_bits = 16,
+            });
+            defer a.free(explicit);
+            try std.testing.expectEqualSlices(u8, expected, explicit);
+        }
     }
 }
 

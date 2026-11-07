@@ -562,9 +562,9 @@ major gaps before Vort can claim broad industry-best parity:
   (`1.0167x`), while seven default controls remain neutral at `0.9993x`. This is
   retained as a bounded hot-loop improvement, not evidence for raising the
   default ceiling.
-  Wide-window quality encoding is no longer header-only. q6...q11 one-shot
+  Wide-window quality encoding is no longer header-only. q2...q11 one-shot
   streams with explicit 17...24-bit windows now add the existing bounded sparse
-  long-distance candidate, while the shared chunked/incremental ratio-family
+  long-distance candidate, while the shared chunked/incremental quality
   core searches retained history beyond 64 KiB. The ordinary history-backed
   planner also uses the complete standard 16-bit distance range instead of the
   generic 32 KiB dictionary default. Locked 48 KiB and 65,536-byte-distance

@@ -139,8 +139,6 @@ pub const Schedule = struct {
         {
             return error.InvalidSchedule;
         }
-        if (self.family != .ratio and self.window.max_bits > 16)
-            return error.InvalidSchedule;
         if (self.lazy.max_chain == 0 or self.lazy.nice_len == 0 or
             self.lazy.nice_len > 258 or self.lazy.min_gain == 0)
         {
@@ -320,7 +318,7 @@ fn makeSchedule(quality: Quality, mode: Mode) Schedule {
         .window = .{
             .default_bits = 16,
             .min_bits = 10,
-            .max_bits = if (family == .ratio) 24 else 16,
+            .max_bits = 24,
         },
         .lazy = row.lazy,
         .optimal = row.optimal,
@@ -479,18 +477,17 @@ test "quality ten and eleven use distinct bounded optimal searches" {
     }
 }
 
-test "quality window policy preserves current planned limits" {
+test "quality window policy accepts every standard Brotli width" {
     inline for (std.meta.tags(Mode)) |mode| {
-        const balanced = get(.q5, mode);
-        try std.testing.expectEqual(@as(u5, 16), try balanced.window.resolve(null));
-        try std.testing.expectEqual(@as(u5, 10), try balanced.window.resolve(10));
-        try std.testing.expectEqual(@as(u5, 16), try balanced.window.resolve(16));
-        try std.testing.expectError(error.InvalidWindowBits, balanced.window.resolve(9));
-        try std.testing.expectError(error.InvalidWindowBits, balanced.window.resolve(17));
-
-        const ratio = get(.q6, mode);
-        try std.testing.expectEqual(@as(u5, 24), try ratio.window.resolve(24));
-        try std.testing.expectError(error.InvalidWindowBits, ratio.window.resolve(25));
+        inline for (std.meta.tags(Quality)) |quality| {
+            const schedule = get(quality, mode);
+            try std.testing.expectEqual(@as(u5, 16), try schedule.window.resolve(null));
+            try std.testing.expectEqual(@as(u5, 10), try schedule.window.resolve(10));
+            try std.testing.expectEqual(@as(u5, 16), try schedule.window.resolve(16));
+            try std.testing.expectEqual(@as(u5, 24), try schedule.window.resolve(24));
+            try std.testing.expectError(error.InvalidWindowBits, schedule.window.resolve(9));
+            try std.testing.expectError(error.InvalidWindowBits, schedule.window.resolve(25));
+        }
     }
 }
 

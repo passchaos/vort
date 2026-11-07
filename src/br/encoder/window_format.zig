@@ -35,7 +35,9 @@ pub fn advertisedDistance(bits: u5, large_window: bool) Error!usize {
 
 pub fn fragmentDistance(bits: u5, large_window: bool) Error!usize {
     const advertised = try advertisedDistance(bits, large_window);
-    return if (large_window) @min(advertised, fragment_max_distance) else advertised;
+    // q0/q1 deliberately keep their fixed-hash matcher fragment-local. The
+    // wider header controls decoder history, not this latency-oriented parser.
+    return @min(advertised, fragment_max_distance);
 }
 
 pub fn retainedHistory(bits: u5, large_window: bool) Error!usize {
@@ -78,7 +80,10 @@ test "Br general large window distinguishes advertised distance from bounded mat
         const advertised = (@as(usize, 1) << bits) - 16;
         try std.testing.expectEqual(@min(advertised, fragment_max_distance), try fragmentDistance(bits, true));
         try std.testing.expectEqual(advertised, try retainedHistory(bits, true));
-        if (bits <= 24) try std.testing.expectEqual(advertised, try retainedHistory(bits, false));
+        if (bits <= 24) {
+            try std.testing.expectEqual(@min(advertised, fragment_max_distance), try fragmentDistance(bits, false));
+            try std.testing.expectEqual(advertised, try retainedHistory(bits, false));
+        }
     }
     for ([_]u5{ 0, 9, 31 }) |bits|
         try std.testing.expectError(error.InvalidBlockPlan, prefixBitLen(bits, true));

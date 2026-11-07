@@ -22,7 +22,7 @@ pub fn wireDistance(
     compound_size: usize,
 ) Error!usize {
     return switch (source) {
-        .lz77 => if (logical_value == 0)
+        .lz77 => if (logical_value == 0 or logical_value > max_history)
             error.InvalidBlockPlan
         else
             logical_value,
@@ -77,6 +77,10 @@ test "compound wire distances map every command source" {
     try std.testing.expectEqual(
         @as(usize, 7),
         try wireDistance(.lz77, 7, 10, 5),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        wireDistance(.lz77, 11, 10, 5),
     );
 
     // The closest compound distance addresses the final dictionary byte.
