@@ -1922,6 +1922,21 @@ const gzip_cat_chunks = [_][]const u8{ gzip_bytes[0..4], gzip_bytes[4..] };
 const gzip_cat_chunked_written = try vort.decodeGzipConcatenatedChunks(&gzip_cat_chunks, &gzip_join_scratch, &gzip_out);
 _ = gzip_cat_chunked_written;
 
+// Auto detection accepts only a complete gzip magic or valid zlib CMF/FLG;
+// raw DEFLATE remains explicit. Prefix APIs mirror inflateInit2(47) by
+// returning the first wrapper boundary without consuming a second member.
+const auto_joined = try std.mem.concat(allocator, u8, &.{ gzip_bytes, zlib_bytes });
+defer allocator.free(auto_joined);
+const auto_result = try vort.decodeZlibOrGzipPrefix(auto_joined, &gzip_out);
+_ = auto_result.format; // .gzip
+const auto_tail = auto_joined[auto_result.input_read..];
+_ = auto_tail;
+var auto_history: [65_536]u8 = undefined;
+var auto_decoder = try vort.ZlibOrGzipIncrementalDecoder.init(.{
+    .allow_trailing_data = true,
+}, &auto_history);
+_ = try auto_decoder.step(auto_joined, &gzip_out);
+
 // Limited decode APIs return error.OutputLimitExceeded before allocating or
 // appending beyond the caller's declared uncompressed-size budget. Dictionary
 // variants are available for raw deflate and zlib streams that need preset

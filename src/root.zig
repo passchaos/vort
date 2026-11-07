@@ -3166,6 +3166,10 @@ test "root gzip direct chunk consumers" {
     try @import("tests/gzip_direct_chunks_root.zig").contracts(@This());
 }
 
+test "root zlib or gzip auto wrapper consumers" {
+    try @import("tests/zlib_or_gzip_auto_root.zig").contracts(@This());
+}
+
 test "root Brotli literal context control" {
     try @import("tests/codec_state_controls_root.zig").brotliContracts(@This());
 }
@@ -3480,6 +3484,13 @@ pub const ZlibIncrementalDecoder = deflate.ZlibIncrementalDecoder;
 pub const ZlibDictionaryEntry = deflate.ZlibDictionaryEntry;
 pub const ZlibDictionarySet = deflate.ZlibDictionarySet;
 pub const GzipIncrementalDecoder = deflate.GzipIncrementalDecoder;
+pub const ZlibOrGzipIncrementalDecoder = deflate.ZlibOrGzipIncrementalDecoder;
+pub const ZlibOrGzipIncrementalDecoderOptions = deflate.ZlibOrGzipIncrementalDecoder.Options;
+pub const ZlibOrGzipIncrementalDecoderPhase = deflate.ZlibOrGzipIncrementalDecoder.Phase;
+pub const ZlibOrGzipFormat = deflate.ZlibOrGzipFormat;
+pub const ZlibOrGzipDecodeOptions = deflate.ZlibOrGzipDecodeOptions;
+pub const ZlibOrGzipDecodeResult = deflate.ZlibOrGzipDecodeResult;
+pub const DecodedZlibOrGzip = deflate.DecodedZlibOrGzip;
 pub const zlibIncrementalBestOptionsForLevel = deflate.zlibIncrementalBestOptionsForLevel;
 pub const gzipIncrementalBestOptionsForLevel = deflate.gzipIncrementalBestOptionsForLevel;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
@@ -3658,6 +3669,39 @@ pub const encodeZlibFixedWithOptionsAppend = deflate.encodeZlibFixedWithOptionsA
 pub const ZlibHeaderInfo = deflate.ZlibHeaderInfo;
 pub const ZlibStreamInfo = deflate.ZlibStreamInfo;
 pub const ZlibDecodeOptions = deflate.ZlibDecodeOptions;
+pub const detectZlibOrGzip = deflate.detectZlibOrGzip;
+pub const decodeZlibOrGzip = deflate.decodeZlibOrGzip;
+pub const decodeZlibOrGzipWithOptions = deflate.decodeZlibOrGzipWithOptions;
+pub const decodeZlibOrGzipWithDictionary = deflate.decodeZlibOrGzipWithDictionary;
+pub const decodeZlibOrGzipWithDictionaryAndOptions = deflate.decodeZlibOrGzipWithDictionaryAndOptions;
+pub const decodeZlibOrGzipPrefix = deflate.decodeZlibOrGzipPrefix;
+pub const decodeZlibOrGzipPrefixWithOptions = deflate.decodeZlibOrGzipPrefixWithOptions;
+pub const decodeZlibOrGzipPrefixWithDictionary = deflate.decodeZlibOrGzipPrefixWithDictionary;
+pub const decodeZlibOrGzipPrefixWithDictionaryAndOptions = deflate.decodeZlibOrGzipPrefixWithDictionaryAndOptions;
+pub const decodeZlibOrGzipAlloc = deflate.decodeZlibOrGzipAlloc;
+pub const decodeZlibOrGzipAllocWithOptions = deflate.decodeZlibOrGzipAllocWithOptions;
+pub const decodeZlibOrGzipAllocWithDictionary = deflate.decodeZlibOrGzipAllocWithDictionary;
+pub const decodeZlibOrGzipAllocWithDictionaryAndOptions = deflate.decodeZlibOrGzipAllocWithDictionaryAndOptions;
+pub const decodeZlibOrGzipAllocLimited = deflate.decodeZlibOrGzipAllocLimited;
+pub const decodeZlibOrGzipAllocWithOptionsLimited = deflate.decodeZlibOrGzipAllocWithOptionsLimited;
+pub const decodeZlibOrGzipAllocWithDictionaryLimited = deflate.decodeZlibOrGzipAllocWithDictionaryLimited;
+pub const decodeZlibOrGzipAllocWithDictionaryAndOptionsLimited = deflate.decodeZlibOrGzipAllocWithDictionaryAndOptionsLimited;
+pub const decodeZlibOrGzipAllocExactSize = deflate.decodeZlibOrGzipAllocExactSize;
+pub const decodeZlibOrGzipAllocWithOptionsExactSize = deflate.decodeZlibOrGzipAllocWithOptionsExactSize;
+pub const decodeZlibOrGzipAllocWithDictionaryExactSize = deflate.decodeZlibOrGzipAllocWithDictionaryExactSize;
+pub const decodeZlibOrGzipAllocWithDictionaryAndOptionsExactSize = deflate.decodeZlibOrGzipAllocWithDictionaryAndOptionsExactSize;
+pub const decodeZlibOrGzipPrefixAlloc = deflate.decodeZlibOrGzipPrefixAlloc;
+pub const decodeZlibOrGzipPrefixAllocWithOptions = deflate.decodeZlibOrGzipPrefixAllocWithOptions;
+pub const decodeZlibOrGzipPrefixAllocWithDictionary = deflate.decodeZlibOrGzipPrefixAllocWithDictionary;
+pub const decodeZlibOrGzipPrefixAllocWithDictionaryAndOptions = deflate.decodeZlibOrGzipPrefixAllocWithDictionaryAndOptions;
+pub const decodeZlibOrGzipPrefixAllocLimited = deflate.decodeZlibOrGzipPrefixAllocLimited;
+pub const decodeZlibOrGzipPrefixAllocWithOptionsLimited = deflate.decodeZlibOrGzipPrefixAllocWithOptionsLimited;
+pub const decodeZlibOrGzipPrefixAllocWithDictionaryLimited = deflate.decodeZlibOrGzipPrefixAllocWithDictionaryLimited;
+pub const decodeZlibOrGzipPrefixAllocWithDictionaryAndOptionsLimited = deflate.decodeZlibOrGzipPrefixAllocWithDictionaryAndOptionsLimited;
+pub const decodeZlibOrGzipPrefixAllocExactSize = deflate.decodeZlibOrGzipPrefixAllocExactSize;
+pub const decodeZlibOrGzipPrefixAllocWithOptionsExactSize = deflate.decodeZlibOrGzipPrefixAllocWithOptionsExactSize;
+pub const decodeZlibOrGzipPrefixAllocWithDictionaryExactSize = deflate.decodeZlibOrGzipPrefixAllocWithDictionaryExactSize;
+pub const decodeZlibOrGzipPrefixAllocWithDictionaryAndOptionsExactSize = deflate.decodeZlibOrGzipPrefixAllocWithDictionaryAndOptionsExactSize;
 pub const parseZlibHeaderInfo = deflate.parseZlibHeaderInfo;
 pub const parseZlibHeaderInfoFromChunks = deflate.parseZlibHeaderInfoFromChunks;
 pub const inspectZlibStreamAlloc = deflate.inspectZlibStreamAlloc;

@@ -40,6 +40,7 @@ const incremental_stored_decoder = @import("deflate/incremental/decoder/stored.z
 const incremental_fixed_literal_decoder = @import("deflate/incremental/decoder/fixed_literals.zig");
 const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig");
 const incremental_gzip_decoder = @import("deflate/incremental/decoder/gzip.zig");
+const incremental_auto_wrapper_decoder = @import("deflate/incremental/decoder/auto_wrapper.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const incompressible_classifier_text_section = switch (builtin.object_format) {
@@ -494,6 +495,16 @@ const IncrementalGzipDecoderCodec = struct {
 
 pub const GzipIncrementalDecoder = incremental_gzip_decoder.Decoder(IncrementalGzipDecoderCodec);
 
+const ZlibOrGzipIncrementalDecoderCodec = struct {
+    pub const Error = deflate.Error;
+    pub const Format = deflate.ZlibOrGzipFormat;
+    pub const ZlibDecoder = deflate.ZlibIncrementalDecoder;
+    pub const GzipDecoder = deflate.GzipIncrementalDecoder;
+    pub const DictionarySet = deflate.ZlibDictionarySet;
+};
+
+pub const ZlibOrGzipIncrementalDecoder = incremental_auto_wrapper_decoder.Decoder(ZlibOrGzipIncrementalDecoderCodec);
+
 test "zlib incremental relaxed footer and member boundary contracts" {
     try @import("deflate/incremental/tests/relaxed/zlib_contracts.zig").contracts(@This());
 }
@@ -520,6 +531,10 @@ test "Deflate clone safe copy contracts" {
 
 test "gzip direct chunk consumer contracts" {
     try @import("deflate/tests/gzip_chunks_direct.zig").contracts(@This());
+}
+
+test "zlib or gzip auto wrapper contracts" {
+    try @import("deflate/tests/zlib_or_gzip_auto.zig").contracts(@This());
 }
 
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
@@ -995,6 +1010,240 @@ pub const GzipDecodeOptions = struct {
     /// Header, payload and required-footer errors remain errors afterward.
     allow_trailing_data: bool = false,
 };
+
+pub const ZlibOrGzipFormat = enum { zlib, gzip };
+
+pub const ZlibOrGzipDecodeResult = struct {
+    format: ZlibOrGzipFormat,
+    input_read: usize,
+    output_written: usize,
+};
+
+pub const DecodedZlibOrGzip = struct {
+    format: ZlibOrGzipFormat,
+    bytes: []u8,
+    input_read: usize,
+    output_written: usize,
+
+    pub fn deinit(self: DecodedZlibOrGzip, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+};
+
+pub const ZlibOrGzipDecodeOptions = struct {
+    zlib: ZlibDecodeOptions = .{},
+    gzip: GzipDecodeOptions = .{},
+};
+
+pub fn detectZlibOrGzip(input: []const u8) Error!ZlibOrGzipFormat {
+    if (input.len < 2) return error.TruncatedFrame;
+    if (input[0] == 0x1f and input[1] == 0x8b) return .gzip;
+    const cmf = input[0];
+    const flg = input[1];
+    const combined = (@as(u16, cmf) << 8) | flg;
+    if (cmf & 0x0f == 8 and cmf >> 4 <= 7 and combined % 31 == 0) return .zlib;
+    return error.InvalidMagic;
+}
+
+pub fn decodeZlibOrGzip(input: []const u8, output: []u8) Error!usize {
+    return decodeZlibOrGzipWithOptionalDictionaryAndOptions(input, output, null, .{});
+}
+
+pub fn decodeZlibOrGzipWithOptions(input: []const u8, output: []u8, options: ZlibOrGzipDecodeOptions) Error!usize {
+    return decodeZlibOrGzipWithOptionalDictionaryAndOptions(input, output, null, options);
+}
+
+pub fn decodeZlibOrGzipWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    return decodeZlibOrGzipWithOptionalDictionaryAndOptions(input, output, dictionary, .{});
+}
+
+pub fn decodeZlibOrGzipWithDictionaryAndOptions(input: []const u8, output: []u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions) Error!usize {
+    return decodeZlibOrGzipWithOptionalDictionaryAndOptions(input, output, dictionary, options);
+}
+
+fn decodeZlibOrGzipWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibOrGzipDecodeOptions) Error!usize {
+    return switch (try detectZlibOrGzip(input)) {
+        .zlib => if (dictionary) |bytes| decodeZlibWithDictionaryAndOptions(input, output, bytes, options.zlib) else decodeZlibWithOptions(input, output, options.zlib),
+        .gzip => decodeGzipWithOptions(input, output, options.gzip),
+    };
+}
+
+pub fn decodeZlibOrGzipPrefix(input: []const u8, output: []u8) Error!ZlibOrGzipDecodeResult {
+    return decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input, output, null, .{});
+}
+
+pub fn decodeZlibOrGzipPrefixWithOptions(input: []const u8, output: []u8, options: ZlibOrGzipDecodeOptions) Error!ZlibOrGzipDecodeResult {
+    return decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input, output, null, options);
+}
+
+pub fn decodeZlibOrGzipPrefixWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!ZlibOrGzipDecodeResult {
+    return decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input, output, dictionary, .{});
+}
+
+pub fn decodeZlibOrGzipPrefixWithDictionaryAndOptions(input: []const u8, output: []u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions) Error!ZlibOrGzipDecodeResult {
+    return decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input, output, dictionary, options);
+}
+
+fn decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibOrGzipDecodeOptions) Error!ZlibOrGzipDecodeResult {
+    const format = try detectZlibOrGzip(input);
+    const decoded = switch (format) {
+        .zlib => try decodeZlibPrefixWithOptionalDictionaryAndOptions(input, output, dictionary, options.zlib),
+        .gzip => try decodeGzipPrefixWithOptions(input, output, options.gzip),
+    };
+    return .{ .format = format, .input_read = decoded.input_read, .output_written = decoded.output_written };
+}
+
+pub fn decodeZlibOrGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, .{}, null);
+}
+
+pub fn decodeZlibOrGzipAllocWithOptions(allocator: std.mem.Allocator, input: []const u8, options: ZlibOrGzipDecodeOptions) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, options, null);
+}
+
+pub fn decodeZlibOrGzipAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, .{}, null);
+}
+
+pub fn decodeZlibOrGzipAllocWithDictionaryAndOptions(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, null);
+}
+
+pub fn decodeZlibOrGzipAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibOrGzipAllocWithOptionsLimited(allocator: std.mem.Allocator, input: []const u8, options: ZlibOrGzipDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, options, max_output_len);
+}
+
+pub fn decodeZlibOrGzipAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibOrGzipAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, max_output_len);
+}
+
+fn decodeZlibOrGzipAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibOrGzipDecodeOptions, max_output_len: ?usize) ![]u8 {
+    return switch (try detectZlibOrGzip(input)) {
+        .zlib => if (max_output_len) |limit|
+            if (dictionary) |bytes| decodeZlibAllocWithDictionaryAndOptionsLimited(allocator, input, bytes, options.zlib, limit) else decodeZlibAllocWithOptionsLimited(allocator, input, options.zlib, limit)
+        else if (dictionary) |bytes|
+            decodeZlibAllocWithDictionaryAndOptions(allocator, input, bytes, options.zlib)
+        else
+            decodeZlibAllocWithOptions(allocator, input, options.zlib),
+        .gzip => if (max_output_len) |limit| decodeGzipAllocWithOptionsLimited(allocator, input, options.gzip, limit) else decodeGzipAllocWithOptions(allocator, input, options.gzip),
+    };
+}
+
+pub fn decodeZlibOrGzipPrefixAlloc(allocator: std.mem.Allocator, input: []const u8) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, .{}, null);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithOptions(allocator: std.mem.Allocator, input: []const u8, options: ZlibOrGzipDecodeOptions) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, options, null);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, .{}, null);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithDictionaryAndOptions(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, null);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithOptionsLimited(allocator: std.mem.Allocator, input: []const u8, options: ZlibOrGzipDecodeOptions, max_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, options, max_output_len);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions, max_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, max_output_len);
+}
+
+fn decodeZlibOrGzipPrefixAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibOrGzipDecodeOptions, max_output_len: ?usize) !DecodedZlibOrGzip {
+    const format = try detectZlibOrGzip(input);
+    var zlib_options = options.zlib;
+    zlib_options.allow_trailing_data = true;
+    var gzip_options = options.gzip;
+    gzip_options.allow_trailing_data = true;
+    const bytes = switch (format) {
+        .zlib => if (max_output_len) |limit|
+            if (dictionary) |dict| try decodeZlibAllocWithDictionaryAndOptionsLimited(allocator, input, dict, zlib_options, limit) else try decodeZlibAllocWithOptionsLimited(allocator, input, zlib_options, limit)
+        else if (dictionary) |dict|
+            try decodeZlibAllocWithDictionaryAndOptions(allocator, input, dict, zlib_options)
+        else
+            try decodeZlibAllocWithOptions(allocator, input, zlib_options),
+        .gzip => if (max_output_len) |limit| try decodeGzipAllocWithOptionsLimited(allocator, input, gzip_options, limit) else try decodeGzipAllocWithOptions(allocator, input, gzip_options),
+    };
+    errdefer allocator.free(bytes);
+    const progress = try decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input, bytes, dictionary, options);
+    if (progress.output_written != bytes.len or progress.format != format) return error.SizeMismatch;
+    return .{ .format = format, .bytes = bytes, .input_read = progress.input_read, .output_written = progress.output_written };
+}
+
+pub fn decodeZlibOrGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibOrGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: ZlibOrGzipDecodeOptions, expected_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, null, options, expected_output_len);
+}
+
+pub fn decodeZlibOrGzipAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibOrGzipAllocWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions, expected_output_len: usize) ![]u8 {
+    return decodeZlibOrGzipAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, dictionary, options, expected_output_len);
+}
+
+fn decodeZlibOrGzipAllocExactSizeWithOptionalDictionaryAndOptions(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibOrGzipDecodeOptions, expected_output_len: usize) ![]u8 {
+    return switch (try detectZlibOrGzip(input)) {
+        .zlib => if (dictionary) |bytes| decodeZlibAllocWithDictionaryAndOptionsExactSize(allocator, input, bytes, options.zlib, expected_output_len) else decodeZlibAllocWithOptionsExactSize(allocator, input, options.zlib, expected_output_len),
+        .gzip => decodeGzipAllocWithOptionsExactSize(allocator, input, options.gzip, expected_output_len),
+    };
+}
+
+pub fn decodeZlibOrGzipPrefixAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: ZlibOrGzipDecodeOptions, expected_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, null, options, expected_output_len);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibOrGzipPrefixAllocWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibOrGzipDecodeOptions, expected_output_len: usize) !DecodedZlibOrGzip {
+    return decodeZlibOrGzipPrefixAllocExactSizeWithOptionalDictionaryAndOptions(allocator, input, dictionary, options, expected_output_len);
+}
+
+fn decodeZlibOrGzipPrefixAllocExactSizeWithOptionalDictionaryAndOptions(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibOrGzipDecodeOptions, expected_output_len: usize) !DecodedZlibOrGzip {
+    const format = try detectZlibOrGzip(input);
+    var zlib_options = options.zlib;
+    zlib_options.allow_trailing_data = true;
+    var gzip_options = options.gzip;
+    gzip_options.allow_trailing_data = true;
+    const bytes = switch (format) {
+        .zlib => if (dictionary) |dict| try decodeZlibAllocWithDictionaryAndOptionsExactSize(allocator, input, dict, zlib_options, expected_output_len) else try decodeZlibAllocWithOptionsExactSize(allocator, input, zlib_options, expected_output_len),
+        .gzip => try decodeGzipAllocWithOptionsExactSize(allocator, input, gzip_options, expected_output_len),
+    };
+    errdefer allocator.free(bytes);
+    const progress = try decodeZlibOrGzipPrefixWithOptionalDictionaryAndOptions(input, bytes, dictionary, options);
+    if (progress.output_written != bytes.len or progress.format != format) return error.SizeMismatch;
+    return .{ .format = format, .bytes = bytes, .input_read = progress.input_read, .output_written = progress.output_written };
+}
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
@@ -15319,20 +15568,26 @@ fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary:
 }
 
 fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
+    const decoded = try decodeZlibPrefixWithOptionalDictionaryAndOptions(input, output, dictionary, options);
+    if (!options.allow_trailing_data and decoded.input_read != input.len) return error.TrailingData;
+    return decoded.output_written;
+}
+
+fn decodeZlibPrefixWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!DecodeResult {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
     if (options.ignore_adler) {
         if (try decodeRawStoredOnlyIntoMaybe(input[header.data_offset..], output)) |stored| {
             const footer_offset = header.data_offset + stored.input_read;
-            try validateZlibFooterWithOptions(input, footer_offset, 0, options);
-            return stored.output_written;
+            try validateZlibFooterPartialWithOptions(input, footer_offset, 0, options);
+            return .{ .input_read = footer_offset + 4, .output_written = stored.output_written };
         }
     } else {
         if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) |stored| {
             const footer_offset = header.data_offset + stored.result.input_read;
-            try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
-            return stored.result.output_written;
+            try validateZlibFooterPartialWithOptions(input, footer_offset, stored.digest, options);
+            return .{ .input_read = footer_offset + 4, .output_written = stored.result.output_written };
         }
     }
 
@@ -15340,8 +15595,8 @@ fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, d
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, 0, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
     const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(output[0..raw.output_written]);
-    try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
-    return raw.output_written;
+    try validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options);
+    return .{ .input_read = footer_offset + 4, .output_written = raw.output_written };
 }
 
 pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -16845,19 +17100,25 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoded = try decodeGzipPrefixWithOptions(input, output, options);
+    if (!options.allow_trailing_data and decoded.input_read != input.len) return error.TrailingData;
+    return decoded.output_written;
+}
+
+fn decodeGzipPrefixWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!DecodeResult {
     const data_offset = try parseGzipHeader(input);
 
     if (options.ignore_crc32) {
         if (try decodeRawStoredOnlyIntoMaybe(input[data_offset..], output)) |stored| {
             const footer_offset = data_offset + stored.input_read;
-            try validateGzipFooterWithOptions(input, footer_offset, 0, stored.output_written, options);
-            return stored.output_written;
+            try validateGzipFooterPartialWithOptions(input, footer_offset, 0, stored.output_written, options);
+            return .{ .input_read = footer_offset + 8, .output_written = stored.output_written };
         }
     } else {
         if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Best, input[data_offset..], output)) |stored| {
             const footer_offset = data_offset + stored.result.input_read;
-            try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
-            return stored.result.output_written;
+            try validateGzipFooterPartialWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
+            return .{ .input_read = footer_offset + 8, .output_written = stored.result.output_written };
         }
     }
 
@@ -16866,8 +17127,8 @@ pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecod
     const footer_offset = data_offset + raw.input_read;
     const payload = output[0..raw.output_written];
     const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(payload);
-    try validateGzipFooterWithOptions(input, footer_offset, actual_crc, raw.output_written, options);
-    return raw.output_written;
+    try validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, raw.output_written, options);
+    return .{ .input_read = footer_offset + 8, .output_written = raw.output_written };
 }
 
 fn parseGzipHeaderFromChunksKnownTotal(chunks: []const []const u8, total_len: usize) Error!usize {

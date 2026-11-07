@@ -41,6 +41,11 @@ suffix. Caller-buffer, owned, append, size-preflight and chunked APIs share the
 same options and Limited/ExactSize contracts, while strict APIs continue to
 reject any tail as `TrailingData`.
 
+The [zlib/gzip auto wrapper](formats/zlib-gzip-auto-detect.md) adds a two-byte
+detector and a resumable facade over the existing wrapper state machines. Its
+prefix one-shot APIs match `inflateInit2(47)` first-stream boundaries, retain
+FDICT recovery and exact progress, and leave raw DEFLATE explicitly selected.
+
 The [default-window far-copy reach](performance/br/command-model-lifetime.md#default-window-far-copy-reach-2026-11-06)
 adds bounded far-match candidates to default q6-q11 one-shot streams up to the
 16 MiB meta-block limit, advertising only the window each winning plan uses
