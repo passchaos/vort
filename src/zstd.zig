@@ -5306,10 +5306,9 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub const Phase = enum { frame, output, direct_output, done };
 
-    /// Bytes required to retain any legal compressed block. Frame and block
-    /// headers are consumed before payload collection, so no header allowance
-    /// is included in this caller-owned block workspace.
-    pub const compressed_block_workspace_len = compressed_workspace.required_len;
+    /// Legacy format-maximum workspace size. The window-scoped query below can
+    /// return less while retaining a small framing/control floor.
+    pub const compressed_block_workspace_len = compressed_workspace.maximum_len;
 
     const InternalPhase = enum { frame, output, direct_output, block_stream, skippable_stream, done };
     const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_literals, compressed_sequences, checksum, finished };
@@ -5333,7 +5332,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         max_working_memory: usize = std.math.maxInt(usize),
         /// Reject a frame as soon as its complete header advertises a larger
         /// decode window. This window plus the largest configured dictionary
-        /// content determines the caller history workspace requirement.
+        /// content determines the caller history workspace requirement; the
+        /// window alone bounds caller compressed-block storage.
         max_window_size: Count = std.math.maxInt(Count),
         /// Maximum compressed bytes retained while waiting for validation.
         /// Data frames may exceed this value because consumed input prefixes are
@@ -5399,16 +5399,23 @@ pub const NativeIncrementalFrameDecoder = struct {
         return compressed_block_workspace_len;
     }
 
-    /// Borrow exactly one maximum compressed-block buffer. The binding is
-    /// available only for block-stream input and must remain alive and
-    /// unmodified and exclusive to this decoder until cleared or deinitialized.
-    /// The backing allocator must not return memory inside this slice. Reset
-    /// keeps the binding; resetWithOptions keeps it only for another block
-    /// stream.
+    /// Return the caller storage needed for every compressed block admitted by
+    /// `max_window_size`. The legacy no-argument query remains the 128 KiB
+    /// format maximum.
+    pub fn requiredCompressedBlockWorkspaceLenForWindow(max_window_size: Count) usize {
+        return compressed_workspace.requiredLenForWindow(max_window_size);
+    }
+
+    /// Borrow storage for every compressed block admitted by the configured
+    /// `max_window_size`. The binding is available only for block-stream input
+    /// and must remain alive, unmodified and exclusive to this decoder until
+    /// cleared or deinitialized. The backing allocator must not return memory
+    /// inside this slice. Reset keeps the binding; resetWithOptions keeps it
+    /// only when the new window policy fits the existing capacity.
     pub fn bindCompressedBlockWorkspace(self: *NativeIncrementalFrameDecoder, workspace: []u8) Error!void {
         if (!prefix_decode_stream.setterEligible(self) or self.frame_scratch.items.len != 0)
             return error.InvalidStreamState;
-        const binding = try compressed_workspace.Binding.init(workspace);
+        const binding = try compressed_workspace.Binding.initForWindow(workspace, self.options.max_window_size);
         try self.validateCompressedBlockWorkspace(binding, self.options);
         try binding.validateSlice(self.direct_history.allocatedSlice());
         try binding.validateSlice(self.decoded_scratch.allocatedSlice());
@@ -5431,6 +5438,10 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub fn usesCompressedBlockWorkspace(self: *const NativeIncrementalFrameDecoder) bool {
         return self.compressed_workspace_binding.active();
+    }
+
+    pub fn compressedBlockWorkspaceCapacity(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.compressed_workspace_binding.capacity();
     }
 
     pub fn requiredHistoryWorkspaceLen(max_window_size: Count, dictionary_len: usize) Error!usize {
@@ -5481,6 +5492,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     ) Error!void {
         if (!binding.active()) return;
         if (options.input_policy != .block_stream) return error.InvalidBlockPlan;
+        if (binding.capacity() < requiredCompressedBlockWorkspaceLenForWindow(options.max_window_size))
+            return error.OutputTooSmall;
         try binding.validateSlice(options.skippable_output);
         try binding.validateSlice(std.mem.sliceAsBytes(options.skippable_events));
         if (self.stable_binding.buffer) |output| try binding.validateSlice(output);

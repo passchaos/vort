@@ -8,18 +8,39 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const stable = @import("stable_output.zig");
 
-pub const required_len: usize = std.compress.zstd.block_size_max;
+const Count = core.StreamCount;
+
+/// Standard framing can precede a payload smaller than the largest frame
+/// header. Keep enough caller storage for magic, descriptor, window,
+/// Dictionary_ID and content-size fields even when the admitted window is
+/// tiny. Skippable and block headers are shorter.
+pub const control_len: usize = 18;
+pub const maximum_len: usize = std.compress.zstd.block_size_max;
+pub const required_len: usize = maximum_len;
+
+pub fn requiredLenForWindow(max_window_size: Count) usize {
+    const payload_len: usize = @intCast(@min(
+        max_window_size,
+        @as(Count, maximum_len),
+    ));
+    return @max(control_len, payload_len);
+}
 
 pub const Binding = struct {
     bytes: []u8 = &.{},
 
-    pub fn init(storage: []u8) core.Error!Binding {
-        if (storage.len < required_len) return error.OutputTooSmall;
-        return .{ .bytes = storage[0..required_len] };
+    pub fn initForWindow(storage: []u8, max_window_size: Count) core.Error!Binding {
+        const required = requiredLenForWindow(max_window_size);
+        if (storage.len < required) return error.OutputTooSmall;
+        return .{ .bytes = storage[0..required] };
     }
 
     pub fn active(self: Binding) bool {
         return self.bytes.len != 0;
+    }
+
+    pub fn capacity(self: Binding) usize {
+        return self.bytes.len;
     }
 
     pub fn clear(self: *Binding) void {
@@ -43,11 +64,23 @@ pub const Binding = struct {
     }
 };
 
-test "Zstd compressed workspace requires exactly one maximum block" {
+test "Zstd compressed workspace follows the admitted window" {
+    try std.testing.expectEqual(@as(usize, control_len), requiredLenForWindow(0));
+    try std.testing.expectEqual(@as(usize, 1024), requiredLenForWindow(1024));
+    try std.testing.expectEqual(maximum_len, requiredLenForWindow(maximum_len));
+    try std.testing.expectEqual(maximum_len, requiredLenForWindow(std.math.maxInt(Count)));
     var storage: [required_len]u8 = undefined;
-    const binding = try Binding.init(&storage);
+    const binding = try Binding.initForWindow(&storage, std.math.maxInt(Count));
     try std.testing.expect(binding.active());
     try std.testing.expectEqual(required_len, binding.bytes.len);
-    try std.testing.expectError(error.OutputTooSmall, Binding.init(storage[0 .. required_len - 1]));
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        Binding.initForWindow(storage[0 .. required_len - 1], std.math.maxInt(Count)),
+    );
     try std.testing.expectError(error.InvalidBlockPlan, binding.validateSlice(storage[1..2]));
+
+    const small = try Binding.initForWindow(storage[1..][0..1024], 1024);
+    try std.testing.expectEqual(@as(usize, 1024), small.capacity());
+    try std.testing.expectError(error.InvalidBlockPlan, small.validateSlice(storage[2..3]));
+    try small.validateSlice(storage[1025..1026]);
 }

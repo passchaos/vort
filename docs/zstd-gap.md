@@ -1015,19 +1015,20 @@ Recommended next comparison steps:
   and blocks with up to 43,690
   sequences; its streamed decoded-scratch length and capacity peaks are both
   zero.
-  The same block-stream path now accepts a fixed caller-owned 128 KiB
-  compressed-block workspace. It excludes that storage from the requested-heap
-  ledger, preserves the binding across reset/continuation, rejects every input,
-  output, dictionary and capture alias, and remains explicitly block-atomic for
-  reverse bitstreams. Paired stable output makes the 500-frame upstream
-  compressed decodecorpus campaign allocation-free inside the decoder while
-  covering all 64 LL/OF/ML mode tuples.
+  The same block-stream path now accepts a caller-owned compressed-block
+  workspace sized as `max(control-prefix minimum, min(max_window_size, 128
+  KiB))`; the legacy/default requirement remains 128 KiB. It excludes that
+  storage from the requested-heap ledger, preserves compatible bindings across
+  reset/continuation, rejects window growth transactionally, rejects every
+  input, output, dictionary and capture alias, and remains explicitly
+  block-atomic for reverse bitstreams. Paired compressed/history workspaces make
+  the 500-frame upstream compressed decodecorpus campaign allocation-free inside
+  the decoder while covering all 64 LL/OF/ML mode tuples.
   Ordinary tiny-output callers can now bind a separate circular history
   workspace and cap advertised windows at header time. The ring commits only
   published step output, keeps the current caller slice as the transactional
   match suffix, and preserves dictionary/output coordinates without copying
-  dictionary bytes. Paired compressed/history workspaces replace the stable
-  whole-output requirement in the same upstream corpus campaign.
+  dictionary bytes. This replaces the earlier stable whole-output requirement.
   Complete frames that were prevalidated for direct output now switch in place
   to the same cursor when caller output cannot hold the next compressed block.
   The switch preserves earlier block history, sequence tables, checksum state,

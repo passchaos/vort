@@ -2853,6 +2853,7 @@ test "root Zstd incremental encoder continues frames" {
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const zstdNativeIncrementalCompressedBlockWorkspaceLen = zstd.NativeIncrementalFrameDecoder.compressed_block_workspace_len;
+pub const zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen = zstd.NativeIncrementalFrameDecoder.requiredCompressedBlockWorkspaceLenForWindow;
 pub const zstdNativeIncrementalHistoryWorkspaceRequiredLen = zstd.NativeIncrementalFrameDecoder.requiredHistoryWorkspaceLen;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
 pub const ZstdPreparedDecodeDictionary = zstd.PreparedDecodeDictionary;
@@ -5357,6 +5358,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeFrameDecoder;
     _ = ZstdNativeIncrementalFrameDecoder;
     _ = zstdNativeIncrementalCompressedBlockWorkspaceLen;
+    _ = zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen;
     _ = zstdNativeIncrementalHistoryWorkspaceRequiredLen;
     _ = ZstdNativeDictionary;
     _ = ZstdNativeDictionaryTrainOptions;

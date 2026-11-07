@@ -14,14 +14,26 @@ pub fn contracts(comptime V: type) !void {
         std.compress.zstd.block_size_max,
         V.zstdNativeIncrementalCompressedBlockWorkspaceLen,
     );
-    var workspace: [V.zstdNativeIncrementalCompressedBlockWorkspaceLen]u8 = undefined;
+    try std.testing.expectEqual(
+        @as(usize, 18),
+        V.zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen(0),
+    );
+    const workspace_len = comptime V.zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen(1024);
+    try std.testing.expectEqual(@as(usize, 1024), workspace_len);
+    try std.testing.expectEqual(
+        V.zstdNativeIncrementalCompressedBlockWorkspaceLen,
+        V.zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen(std.math.maxInt(V.StreamCount)),
+    );
+    var workspace: [workspace_len]u8 = undefined;
     var output: [payload.len]u8 = undefined;
     var decoder = V.ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .max_window_size = 1024,
         .max_working_memory = 0,
         .expected_output_len = payload.len,
     });
     defer decoder.deinit();
     try decoder.bindCompressedBlockWorkspace(&workspace);
+    try std.testing.expectEqual(workspace_len, decoder.compressedBlockWorkspaceCapacity());
     try decoder.bindStableOutput(&output);
     var input_offset: usize = 0;
     while (decoder.snapshot().phase != .done) {

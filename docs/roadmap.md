@@ -29,11 +29,14 @@ incremental, parallel and seekable encoders/decoders, plus bounded caller-owned
 decode history with explicit bind/rebind/clear transitions. Native, x86, WASI
 and libzstd differential gates preserve those lifecycle boundaries.
 The [caller-owned compressed-block workspace](formats/zstd-compressed-workspace.md)
-now moves the remaining unavoidable 128 KiB reverse-bitstream retention out of
-the decoder allocator in block-stream mode. Reset/continuation, aliases,
-logical input caps and requested-heap accounting stay independent; native, x86,
-WASI and a 500-frame zstd 1.6.0 campaign cover every sequence-table mode. This
-is a bounded ownership contract, not a false sub-block progressive claim.
+now moves the remaining unavoidable reverse-bitstream retention out of the
+decoder allocator in block-stream mode. Finite maximum-window policies size it
+as `max(control-prefix minimum, min(max_window_size, 128 KiB))`; legacy and
+default queries remain 128 KiB. Reset/continuation, transactional window
+growth, aliases, logical input caps and requested-heap accounting stay
+independent; native, x86, WASI and a 500-frame zstd 1.6.0 campaign cover every
+sequence-table mode. This is a bounded ownership contract, not a false
+sub-block progressive claim.
 The [caller-owned Zstd rolling history](formats/zstd-history-workspace.md)
 completes the ordinary tiny-output ownership path: header admission enforces an
 explicit maximum window, committed output lives in a circular caller buffer,

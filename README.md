@@ -1456,7 +1456,9 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
     .max_window_size = 64 * 1024,
 });
 defer zstd_bounded_incremental.deinit();
-var zstd_compressed_workspace: [vort.zstdNativeIncrementalCompressedBlockWorkspaceLen]u8 = undefined;
+const zstd_compressed_workspace_len =
+    vort.zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen(64 * 1024);
+var zstd_compressed_workspace: [zstd_compressed_workspace_len]u8 = undefined;
 try zstd_bounded_incremental.bindCompressedBlockWorkspace(&zstd_compressed_workspace);
 var zstd_history_workspace: [64 * 1024]u8 = undefined;
 try zstd_bounded_incremental.bindHistoryWorkspace(&zstd_history_workspace);
@@ -1465,7 +1467,8 @@ try zstd_bounded_incremental.bindHistoryWorkspace(&zstd_history_workspace);
 // RLE keeps one byte, and compressed input retains one block. isBlockStreaming()
 // exposes that path. compressedBufferedBytes()/compressedBufferCapacity()
 // report logical bytes and physical capacity. A caller workspace reports its
-// fixed 128 KiB capacity; max_compressed_buffer_len still caps accepted bytes.
+// window-bounded capacity (64 KiB here); max_compressed_buffer_len still caps
+// accepted bytes.
 // Sequence-bearing blocks retain their FSE/Huffman cursors and pending
 // literal/match progress across calls without allocating decoded-block scratch,
 // including when an explicit .prevalidated_frame direct path meets a tiny
@@ -2837,7 +2840,7 @@ selected descriptor without a content size.
 | --- | --- | --- | --- | --- |
 | LZ4/Zstd incremental | `Options.input_policy` / `core.CompressedInputPolicy` | `.block_stream`; opt-in `.prevalidated_frame` | You need bounded incremental input or the existing complete-frame preflight/direct path. | Default retention follows blocks and history; explicit preflight preserves its established fallback and checksum timing. |
 | LZ4/Zstd incremental | `Options.max_compressed_buffer_len` | unlimited cap by default | You need an encoded-input retention limit. | Zstd compressed blocks and checksummed LZ4 raw/compressed blocks must fit; default raw/skippable and unchecked LZ4 token input stream directly. |
-| Zstd incremental | `bindCompressedBlockWorkspace` / `requiredCompressedBlockWorkspaceLen` | unbound; required workspace is 128 KiB | You want the unavoidable reverse-bitstream block retention in caller-owned storage. | Block-stream only; reset preserves the binding, the logical compressed cap remains independent, and stable caller output can also remove decoder-owned history for zero requested heap. See [the ownership contract](docs/formats/zstd-compressed-workspace.md). |
+| Zstd incremental | `bindCompressedBlockWorkspace` / `requiredCompressedBlockWorkspaceLenForWindow` | unbound; legacy/default requirement is 128 KiB | You want the unavoidable reverse-bitstream block retention in caller-owned storage. | With finite `max_window_size`, required capacity is `max(control-prefix minimum, min(max_window_size, 128 KiB))`; the root query is `zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen`. Block-stream only; reset preserves compatible bindings, the logical compressed cap remains independent, and stable output or caller history can remove decoder-owned history for zero requested heap. This does not promise output before a reverse payload's block tail. See [the ownership contract](docs/formats/zstd-compressed-workspace.md). |
 | Zstd incremental | `Options.max_window_size` / `bindHistoryWorkspace` / `requiredHistoryWorkspaceLen` | unlimited header cap; history unbound | You need ordinary tiny-output decoding with caller-owned rolling history. | No dictionary: N is max window. Dictionary/set: add the largest content length. Stable output is mutually exclusive. See [the rolling-history contract](docs/formats/zstd-history-workspace.md). |
 | LZ4/Zstd incremental | `Options.max_decoded_buffer_len` / `max_output_len` / `max_working_memory` / `expected_output_len` | unlimited per-frame, cumulative-output and live-allocation caps / optional exact count | A container provides resource bounds or a precise concatenated-stream length. | Per-frame and cumulative caps include emitted bytes. Working memory counts decoder-owned requested heap bytes, including retained capacities and temporary scratch. The exact count applies across members and is checked at `finish()`. |
 | LZ4 native | `Lz4NativeFrameOptions.block_mode` | `.independent` or `.linked` | Consecutive frame blocks share recent history and ratio matters. | `.linked` can improve ratio across block boundaries; `.independent` is simpler for random block handling. |

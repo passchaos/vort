@@ -192,6 +192,8 @@ def validate_campaign_summary(
         max_block_stream_decoded_capacity = int(fields["decodecorpus_max_block_stream_decoded_capacity"], 0)
         workspace_cases = int(fields["decodecorpus_workspace_cases"], 0)
         workspace_required = int(fields["decodecorpus_workspace_required"], 0)
+        workspace_min_capacity = int(fields["decodecorpus_workspace_min_capacity"], 0)
+        workspace_max_capacity = int(fields["decodecorpus_workspace_max_capacity"], 0)
         workspace_peak_working = int(fields["decodecorpus_workspace_peak_working"], 0)
         history_workspace_cases = int(fields["decodecorpus_history_workspace_cases"], 0)
         history_workspace_max = int(fields["decodecorpus_history_workspace_max"], 0)
@@ -224,6 +226,12 @@ def validate_campaign_summary(
             f"{campaign.name} reported workspace requirement {workspace_required}; "
             f"expected {COMPRESSED_BLOCK_WORKSPACE_LEN}"
         )
+    if not 0 < workspace_min_capacity <= workspace_max_capacity <= workspace_required:
+        raise RuntimeError(
+            f"{campaign.name} reported invalid window-bounded workspace capacities: "
+            f"min={workspace_min_capacity} max={workspace_max_capacity} "
+            f"format_max={workspace_required}"
+        )
     if workspace_peak_working != 0:
         raise RuntimeError(
             f"{campaign.name} allocated {workspace_peak_working} decoder-owned bytes "
@@ -251,10 +259,10 @@ def validate_campaign_summary(
             f"{campaign.name} retained {max_compressed_buffered} compressed bytes; "
             f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
         )
-    if max_compressed_capacity != workspace_required:
+    if max_compressed_capacity != workspace_max_capacity:
         raise RuntimeError(
             f"{campaign.name} reported compressed-buffer capacity {max_compressed_capacity}; "
-            f"caller workspace capacity is {workspace_required}"
+            f"maximum caller workspace capacity is {workspace_max_capacity}"
         )
     if max_compressed_buffered > max_compressed_capacity:
         raise RuntimeError(f"{campaign.name} retained bytes beyond compressed-buffer capacity")
@@ -353,6 +361,8 @@ def run_campaign(
         sequence_count_tiers = int(fields["decodecorpus_sequence_count_tiers"], 0)
         workspace_cases = int(fields["decodecorpus_workspace_cases"], 0)
         workspace_required = int(fields["decodecorpus_workspace_required"], 0)
+        workspace_min_capacity = int(fields["decodecorpus_workspace_min_capacity"], 0)
+        workspace_max_capacity = int(fields["decodecorpus_workspace_max_capacity"], 0)
         workspace_peak_working = int(fields["decodecorpus_workspace_peak_working"], 0)
         history_workspace_cases = int(fields["decodecorpus_history_workspace_cases"], 0)
         history_workspace_max = int(fields["decodecorpus_history_workspace_max"], 0)
@@ -369,6 +379,8 @@ def run_campaign(
             f"max_block_stream_decoded_buffered={max_decoded_buffered} "
             f"max_block_stream_decoded_capacity={max_decoded_capacity} "
             f"workspace_cases={workspace_cases} workspace_required={workspace_required} "
+            f"workspace_min_capacity={workspace_min_capacity} "
+            f"workspace_max_capacity={workspace_max_capacity} "
             f"workspace_peak_working={workspace_peak_working} "
             f"history_workspace_cases={history_workspace_cases} "
             f"history_workspace_max={history_workspace_max} "

@@ -65,6 +65,8 @@ print(
     f'decodecorpus_max_block_stream_decoded_capacity=0 '
     f'decodecorpus_workspace_cases={count} '
     f'decodecorpus_workspace_required=131072 '
+    f'decodecorpus_workspace_min_capacity=1024 '
+    f'decodecorpus_workspace_max_capacity=131072 '
     f'decodecorpus_workspace_peak_working=0 '
     f'decodecorpus_history_workspace_cases={count} '
     f'decodecorpus_history_workspace_max=131072 '
@@ -167,6 +169,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_max_block_stream_decoded_capacity": "0",
             "decodecorpus_workspace_cases": "200",
             "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_min_capacity": "1024",
+            "decodecorpus_workspace_max_capacity": "131072",
             "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_history_workspace_cases": "200",
             "decodecorpus_history_workspace_max": "1024",
@@ -199,6 +203,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_max_block_stream_decoded_capacity": "8",
             "decodecorpus_workspace_cases": "200",
             "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_min_capacity": "1024",
+            "decodecorpus_workspace_max_capacity": "131072",
             "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_history_workspace_cases": "200",
             "decodecorpus_history_workspace_max": "1024",
@@ -231,6 +237,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_max_block_stream_decoded_capacity": "0",
             "decodecorpus_workspace_cases": "500",
             "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_min_capacity": "1024",
+            "decodecorpus_workspace_max_capacity": "131072",
             "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_history_workspace_cases": "500",
             "decodecorpus_history_workspace_max": "1024",
@@ -316,6 +324,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_streamed_sequence_blocks": "0", "decodecorpus_max_block_stream_decoded_buffered": "0",
             "decodecorpus_max_block_stream_decoded_capacity": "0", "decodecorpus_max_sequence_count": "0",
             "decodecorpus_workspace_cases": "2000", "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_min_capacity": "1024", "decodecorpus_workspace_max_capacity": "131072",
             "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_history_workspace_cases": "2000", "decodecorpus_history_workspace_max": "1024",
             "decodecorpus_max_block_count": "2", "decodecorpus_sequence_count_tiers": "0",

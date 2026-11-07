@@ -129,6 +129,109 @@ test "Zstd compressed workspace validates size mode and aliases transactionally"
     try std.testing.expect(decoder.compressedBufferCapacity() != 0);
 }
 
+test "Zstd compressed workspace requirement follows configured window" {
+    const control_required = comptime Decoder.requiredCompressedBlockWorkspaceLenForWindow(0);
+    const small_required = comptime Decoder.requiredCompressedBlockWorkspaceLenForWindow(1024);
+    try std.testing.expectEqual(@as(usize, 18), control_required);
+    try std.testing.expectEqual(@as(usize, 1024), small_required);
+    try std.testing.expectEqual(required_len, Decoder.requiredCompressedBlockWorkspaceLenForWindow(required_len));
+    try std.testing.expectEqual(required_len, Decoder.requiredCompressedBlockWorkspaceLenForWindow(required_len + 1));
+    try std.testing.expectEqual(required_len, Decoder.requiredCompressedBlockWorkspaceLenForWindow(std.math.maxInt(core.StreamCount)));
+    try std.testing.expectEqual(required_len, Decoder.requiredCompressedBlockWorkspaceLen());
+
+    var storage: [small_required + 1]u8 = @splat(0xa5);
+    var decoder = Decoder.initWithOptions(std.testing.allocator, .{ .max_window_size = 1024 });
+    defer decoder.deinit();
+    try std.testing.expectError(error.OutputTooSmall, decoder.bindCompressedBlockWorkspace(storage[0 .. small_required - 1]));
+    try std.testing.expect(!decoder.usesCompressedBlockWorkspace());
+    try std.testing.expectEqual(@as(usize, 0), decoder.compressedBlockWorkspaceCapacity());
+    try decoder.bindCompressedBlockWorkspace(storage[0..small_required]);
+    try std.testing.expect(decoder.usesCompressedBlockWorkspace());
+    try std.testing.expectEqual(small_required, decoder.compressedBlockWorkspaceCapacity());
+    try std.testing.expectEqual(small_required, decoder.compressedBufferCapacity());
+    try std.testing.expectEqual(@as(u8, 0xa5), storage[small_required]);
+}
+
+test "Zstd compressed workspace window growth reset is transactional" {
+    const window = 1024;
+    const small_required = comptime Decoder.requiredCompressedBlockWorkspaceLenForWindow(window);
+    const payload = "compressed workspace transactional window growth " ** 64;
+    const frame = try compressedFrame(std.testing.allocator, payload);
+    defer std.testing.allocator.free(frame);
+    var workspace: [small_required]u8 = undefined;
+    var output: [payload.len]u8 = undefined;
+    var decoder = Decoder.initWithOptions(std.testing.allocator, .{ .max_window_size = window });
+    defer decoder.deinit();
+    try decoder.bindCompressedBlockWorkspace(&workspace);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        decoder.resetWithOptions(.{ .max_window_size = window * 2 }),
+    );
+    try std.testing.expectEqual(@as(core.StreamCount, window), decoder.options.max_window_size);
+    try std.testing.expect(decoder.usesCompressedBlockWorkspace());
+    try std.testing.expectEqual(small_required, decoder.compressedBlockWorkspaceCapacity());
+    try drive(&decoder, frame, &output, 3, 5);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "Zstd compressed workspace with caller history makes tiny IO heap free" {
+    const window = 1024;
+    const small_required = comptime Decoder.requiredCompressedBlockWorkspaceLenForWindow(window);
+    const payload = "window-sized compressed workspace with caller history " ** 192;
+    const frame = try compressedFrame(std.testing.allocator, payload);
+    defer std.testing.allocator.free(frame);
+    const first = try zstd.inspectNativeFrameFirstBlock(frame);
+    const modes = try zstd.inspectNativeFrameBlockSequenceModes(frame, first);
+    try std.testing.expect(modes.sequence_count > 0);
+    var workspace: [small_required]u8 = undefined;
+    var history: [window]u8 = undefined;
+    var output: [payload.len]u8 = undefined;
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    var decoder = Decoder.initWithOptions(failing.allocator(), .{
+        .max_window_size = window,
+        .max_working_memory = 0,
+        .expected_output_len = payload.len,
+    });
+    defer decoder.deinit();
+    try decoder.bindCompressedBlockWorkspace(&workspace);
+    try decoder.bindHistoryWorkspace(&history);
+    try drive(&decoder, frame, &output, 1, 1);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expect(!failing.has_induced_failure);
+    try std.testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
+    try std.testing.expectEqual(@as(usize, 0), decoder.peakWorkingMemoryBytes());
+    try std.testing.expectEqual(small_required, decoder.compressedBlockWorkspaceCapacity());
+    try std.testing.expect(decoder.streamedSequenceBlockCount() > 0);
+}
+
+test "Zstd compressed workspace reverse payload waits for its final byte" {
+    const window = 1024;
+    const small_required = comptime Decoder.requiredCompressedBlockWorkspaceLenForWindow(window);
+    const payload = "reverse payload tail is required before sequence output " ** 96;
+    const frame = try compressedFrame(std.testing.allocator, payload);
+    defer std.testing.allocator.free(frame);
+    const first = try zstd.inspectNativeFrameFirstBlock(frame);
+    const modes = try zstd.inspectNativeFrameBlockSequenceModes(frame, first);
+    try std.testing.expectEqual(zstd.NativeBlockType.compressed, first.block_type);
+    try std.testing.expect(modes.sequence_count > 0);
+    try std.testing.expect(first.payload_len > 1);
+
+    var workspace: [small_required]u8 = undefined;
+    var output: [payload.len]u8 = @splat(0xa5);
+    var decoder = Decoder.initWithOptions(std.testing.allocator, .{ .max_window_size = window });
+    defer decoder.deinit();
+    try decoder.bindCompressedBlockWorkspace(&workspace);
+    const before_tail = first.next_header_offset - 1;
+    const result = try decoder.step(frame[0..before_tail], &output);
+    try std.testing.expectEqual(before_tail, result.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
+    try std.testing.expectEqual(@as(core.StreamCount, 0), decoder.snapshot().output_written);
+    for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+
+    try drive(&decoder, frame[before_tail..], &output, 1, 1);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
 test "Zstd compressed workspace and stable output decode sequences with zero owned memory" {
     const payload = "caller-owned compressed block and stable history " ** 128;
     const frame = try compressedFrame(std.testing.allocator, payload);
