@@ -57,12 +57,15 @@ reusable_hits = int(bool(reusable_cases))
 print(
     f'zstd_compat_probe checked={count} unsupported=0 decodecorpus_cases={count} '
     f'decodecorpus_incremental_cases={count} decodecorpus_reusable_cases={reusable_cases} decodecorpus_reusable_hits={reusable_hits} decodecorpus_block_stream_cases={count // 2} '
-    f'decodecorpus_max_compressed_buffered=131104 '
-    f'decodecorpus_max_compressed_capacity=131104 '
+    f'decodecorpus_max_compressed_buffered=131072 '
+    f'decodecorpus_max_compressed_capacity=131072 '
     f'decodecorpus_streamed_literal_blocks=3 '
     f'decodecorpus_streamed_sequence_blocks=7 '
     f'decodecorpus_max_block_stream_decoded_buffered=0 '
     f'decodecorpus_max_block_stream_decoded_capacity=0 '
+    f'decodecorpus_workspace_cases={count} '
+    f'decodecorpus_workspace_required=131072 '
+    f'decodecorpus_workspace_peak_working=0 '
     f'decodecorpus_max_sequence_count=5 '
     f'decodecorpus_max_block_count=3 '
     f'decodecorpus_sequence_count_tiers=0x1 '
@@ -155,11 +158,14 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_reusable_hits": "1",
             "decodecorpus_block_stream_cases": "0",
             "decodecorpus_max_compressed_buffered": "64",
-            "decodecorpus_max_compressed_capacity": "64",
+            "decodecorpus_max_compressed_capacity": "131072",
             "decodecorpus_streamed_literal_blocks": "1",
             "decodecorpus_streamed_sequence_blocks": "1",
             "decodecorpus_max_block_stream_decoded_buffered": "0",
             "decodecorpus_max_block_stream_decoded_capacity": "0",
+            "decodecorpus_workspace_cases": "200",
+            "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_max_sequence_count": "1",
             "decodecorpus_max_block_count": "2",
             "decodecorpus_sequence_count_tiers": "0x1",
@@ -182,11 +188,14 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_reusable_hits": "1",
             "decodecorpus_block_stream_cases": "1",
             "decodecorpus_max_compressed_buffered": "64",
-            "decodecorpus_max_compressed_capacity": "64",
+            "decodecorpus_max_compressed_capacity": "131072",
             "decodecorpus_streamed_literal_blocks": "1",
             "decodecorpus_streamed_sequence_blocks": "1",
             "decodecorpus_max_block_stream_decoded_buffered": "1",
             "decodecorpus_max_block_stream_decoded_capacity": "8",
+            "decodecorpus_workspace_cases": "200",
+            "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_max_sequence_count": "1",
             "decodecorpus_max_block_count": "2",
             "decodecorpus_sequence_count_tiers": "0x1",
@@ -209,11 +218,14 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_reusable_hits": "1",
             "decodecorpus_block_stream_cases": "0",
             "decodecorpus_max_compressed_buffered": "32",
-            "decodecorpus_max_compressed_capacity": "64",
-            "decodecorpus_streamed_literal_blocks": "0",
-            "decodecorpus_streamed_sequence_blocks": "0",
+            "decodecorpus_max_compressed_capacity": "131072",
+            "decodecorpus_streamed_literal_blocks": "3",
+            "decodecorpus_streamed_sequence_blocks": "7",
             "decodecorpus_max_block_stream_decoded_buffered": "0",
             "decodecorpus_max_block_stream_decoded_capacity": "0",
+            "decodecorpus_workspace_cases": "500",
+            "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_max_sequence_count": "5",
             "decodecorpus_max_block_count": "3",
             "decodecorpus_sequence_count_tiers": "0x1",
@@ -259,6 +271,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_reusable_cases": "0",
             "decodecorpus_reusable_hits": "0",
             "decodecorpus_block_stream_cases": "1",
+            "decodecorpus_workspace_cases": "200",
         }
         gate.validate_campaign_summary(dictionary_fields, dictionary_campaign, 0)
         for changed, message in (
@@ -278,6 +291,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_sequence_mode_combinations": "0",
             "decodecorpus_combined_mode_mask": "0",
             "decodecorpus_combined_mode_combinations": "0",
+            "decodecorpus_workspace_cases": "2000",
         }
         gate.validate_campaign_summary(raw_fields, raw_campaign, 0)
         with self.assertRaisesRegex(RuntimeError, "invalid reusable cache hits"):
@@ -288,9 +302,11 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_cases": "2000", "decodecorpus_incremental_cases": "2000",
             "decodecorpus_reusable_cases": "2000", "decodecorpus_reusable_hits": "0",
             "decodecorpus_block_stream_cases": "0", "decodecorpus_max_compressed_buffered": "0",
-            "decodecorpus_max_compressed_capacity": "0", "decodecorpus_streamed_literal_blocks": "0",
+            "decodecorpus_max_compressed_capacity": "131072", "decodecorpus_streamed_literal_blocks": "0",
             "decodecorpus_streamed_sequence_blocks": "0", "decodecorpus_max_block_stream_decoded_buffered": "0",
             "decodecorpus_max_block_stream_decoded_capacity": "0", "decodecorpus_max_sequence_count": "0",
+            "decodecorpus_workspace_cases": "2000", "decodecorpus_workspace_required": "131072",
+            "decodecorpus_workspace_peak_working": "0",
             "decodecorpus_max_block_count": "2", "decodecorpus_sequence_count_tiers": "0",
             "decodecorpus_sequence_mode_combinations": "0", "decodecorpus_sequence_mode_mask": "0",
             "decodecorpus_combined_mode_combinations": "0", "decodecorpus_combined_mode_mask": "0",
@@ -303,7 +319,6 @@ class DecodeCorpusGateTests(unittest.TestCase):
                 for delta in (
                     {"decodecorpus_max_compressed_buffered": "-1"},
                     {"decodecorpus_max_compressed_capacity": "-1"},
-                    {"decodecorpus_max_compressed_buffered": "1"},
                     {"decodecorpus_max_compressed_capacity": str(gate.BLOCK_STREAM_COMPRESSED_LIMIT + 1)},
                 ):
                     with self.subTest(invalid=delta), self.assertRaises(RuntimeError):
@@ -342,7 +357,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             self.assertEqual(success.returncode, 0, success.stdout + success.stderr)
             self.assertIn("zstd_decodecorpus_gate=ok campaigns=2 cases=400", success.stdout)
             self.assertIn("block_stream_cases=200", success.stdout)
-            self.assertIn("max_compressed_buffered=131104", success.stdout)
+            self.assertIn("max_compressed_buffered=131072", success.stdout)
             self.assertIn("streamed_sequence_blocks=14", success.stdout)
             self.assertIn("max_block_stream_decoded_buffered=0", success.stdout)
             self.assertIn("max_block_stream_decoded_capacity=0", success.stdout)

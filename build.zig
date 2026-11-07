@@ -785,6 +785,8 @@ pub fn build(b: *std.Build) void {
     wasm_check_step.dependOn(gzip_direct_chunk_gates.compile_wasm);
     const zstd_prefix_stable_gates = @import("build/zstd_prefix_stable.zig").register(b, target, optimize, vort_mod_releasefast);
     wasm_check_step.dependOn(zstd_prefix_stable_gates.compile_wasm);
+    const zstd_compressed_workspace_gates = @import("build/zstd_compressed_workspace.zig").register(b, target, optimize, vort_mod_releasefast);
+    wasm_check_step.dependOn(zstd_compressed_workspace_gates.compile_wasm);
     const zstd_test_filter = b.option(
         []const u8,
         "zstd-test-filter",
@@ -7844,6 +7846,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(zlib_or_gzip_auto_gates.compile_all);
     check_step.dependOn(gzip_direct_chunk_gates.compile_all);
     check_step.dependOn(zstd_prefix_stable_gates.compile_all);
+    check_step.dependOn(zstd_compressed_workspace_gates.compile_all);
     check_step.dependOn(&zstd_parallel_frame_tests.step);
     check_step.dependOn(&zstd_parallel_frame_root_tests.step);
     check_step.dependOn(&zstd_parallel_frame_single_tests.step);

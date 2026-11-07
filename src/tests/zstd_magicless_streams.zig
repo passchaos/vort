@@ -32,9 +32,11 @@ fn Suite(comptime Z: type) type {
                 try std.testing.expectEqual(@as(core.StreamCount, wire.len), encoder.snapshot().output_written);
                 try std.testing.expectEqual(encoder.snapshot().output_written + 4, normal_encoder.snapshot().output_written);
                 try std.testing.expectEqual(if (exact) @as(?u64, payload.len) else null, (try h.header(wire, true)).content_size);
+                var workspace: [Z.NativeIncrementalFrameDecoder.compressed_block_workspace_len]u8 = undefined;
                 for (policies) |policy| {
                     var decoder = Z.NativeIncrementalFrameDecoder.initWithOptions(a, .{ .format = .magicless, .input_policy = policy, .expected_output_len = payload.len, .max_compressed_buffer_len = wire.len });
                     defer decoder.deinit();
+                    if (policy == .block_stream) try decoder.bindCompressedBlockWorkspace(&workspace);
                     const idle = try decoder.step("", &.{});
                     try std.testing.expectEqual(core.Progress{}, idle.progress);
                     try std.testing.expectEqual(.need_input, idle.status);

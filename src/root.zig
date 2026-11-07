@@ -2852,6 +2852,7 @@ test "root Zstd incremental encoder continues frames" {
 }
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
+pub const zstdNativeIncrementalCompressedBlockWorkspaceLen = zstd.NativeIncrementalFrameDecoder.compressed_block_workspace_len;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
 pub const ZstdPreparedDecodeDictionary = zstd.PreparedDecodeDictionary;
 pub const ZstdNativeDictionaryTrainOptions = zstd.NativeDictionaryTrainOptions;
@@ -2870,6 +2871,10 @@ pub const ZstdNativeStreamSummary = zstd.NativeStreamSummary;
 pub const ZstdNativeStreamSummaryErrorDiagnostics = zstd.NativeStreamSummaryErrorDiagnostics;
 pub const ZstdNativeStreamSummaryErrorPhase = zstd.NativeStreamSummaryErrorPhase;
 pub const ZstdNativeSkippableFrameHeader = zstd.NativeSkippableFrameHeader;
+
+test "root Zstd compressed workspace consumers" {
+    try @import("tests/zstd_compressed_workspace_consumers.zig").contracts(@This());
+}
 pub const ZstdNativeSeekTable = zstd.NativeSeekTable;
 pub const ZstdNativeSeekTableEntry = zstd.NativeSeekTableEntry;
 pub const ZstdNativeSeekTableIterator = zstd.NativeSeekTableIterator;
@@ -5346,6 +5351,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdLevelFrameEncoder;
     _ = ZstdNativeFrameDecoder;
     _ = ZstdNativeIncrementalFrameDecoder;
+    _ = zstdNativeIncrementalCompressedBlockWorkspaceLen;
     _ = ZstdNativeDictionary;
     _ = ZstdNativeDictionaryTrainOptions;
     _ = ZstdOwnedNativeDictionary;

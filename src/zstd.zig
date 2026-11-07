@@ -135,6 +135,8 @@ const incremental_tests = @import("zstd/incremental/tests.zig");
 const incremental_decoder_tests = @import("zstd/incremental/decoder_tests.zig");
 const incremental_limits_tests = @import("zstd/incremental/limits_tests.zig");
 const dictionary_resume_tests = @import("zstd/incremental/dictionary_resume_tests.zig");
+const compressed_workspace = @import("zstd/decode/compressed_workspace.zig");
+const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const working_allocator = @import("io/working_allocator.zig");
 const decode_policy_tests = if (builtin.is_test) @import("zstd/sequence/decode_policy_test.zig") else struct {};
 const huffman = @import("huffman.zig");
@@ -1362,6 +1364,7 @@ test {
     _ = @import("zstd/incremental/decoder_counter_tests.zig");
     _ = incremental_limits_tests;
     _ = dictionary_resume_tests;
+    _ = compressed_workspace_tests;
     _ = incremental_history;
     _ = incremental_history_index;
     _ = incremental_history_match;
@@ -5230,6 +5233,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     stable_staged_len: usize = 0,
     stable_staged_read: usize = 0,
     phase: InternalPhase = .frame,
+    compressed_workspace_binding: compressed_workspace.Binding = .{},
     frame_scratch: std.ArrayList(u8) = .empty,
     decoded_scratch: std.ArrayList(u8) = .empty,
     decoded_offset: usize = 0,
@@ -5296,6 +5300,11 @@ pub const NativeIncrementalFrameDecoder = struct {
     last_step_progress: core.Progress = .{},
 
     pub const Phase = enum { frame, output, direct_output, done };
+
+    /// Bytes required to retain any legal compressed block. Frame and block
+    /// headers are consumed before payload collection, so no header allowance
+    /// is included in this caller-owned block workspace.
+    pub const compressed_block_workspace_len = compressed_workspace.required_len;
 
     const InternalPhase = enum { frame, output, direct_output, block_stream, skippable_stream, done };
     const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_literals, compressed_sequences, checksum, finished };
@@ -5377,6 +5386,69 @@ pub const NativeIncrementalFrameDecoder = struct {
         return .{ .allocator = allocator, .budget = working_allocator.WorkingAllocator.init(allocator, options.max_working_memory), .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
     }
 
+    pub fn requiredCompressedBlockWorkspaceLen() usize {
+        return compressed_block_workspace_len;
+    }
+
+    /// Borrow exactly one maximum compressed-block buffer. The binding is
+    /// available only for block-stream input and must remain alive and
+    /// unmodified and exclusive to this decoder until cleared or deinitialized.
+    /// The backing allocator must not return memory inside this slice. Reset
+    /// keeps the binding; resetWithOptions keeps it only for another block
+    /// stream.
+    pub fn bindCompressedBlockWorkspace(self: *NativeIncrementalFrameDecoder, workspace: []u8) Error!void {
+        if (!prefix_decode_stream.setterEligible(self) or self.frame_scratch.items.len != 0)
+            return error.InvalidStreamState;
+        const binding = try compressed_workspace.Binding.init(workspace);
+        try self.validateCompressedBlockWorkspace(binding, self.options);
+        try binding.validateSlice(self.direct_history.allocatedSlice());
+        try binding.validateSlice(self.decoded_scratch.allocatedSlice());
+        if (!self.compressed_workspace_binding.active()) {
+            try binding.validateSlice(self.frame_scratch.allocatedSlice());
+            self.frame_scratch.deinit(self.budget.allocator());
+        }
+        self.installCompressedBlockWorkspace(binding);
+    }
+
+    /// Return to decoder-owned compressed buffering. This does not release or
+    /// modify caller bytes and is allowed only before accepting a new header.
+    pub fn clearCompressedBlockWorkspace(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!prefix_decode_stream.setterEligible(self) or self.frame_scratch.items.len != 0)
+            return error.InvalidStreamState;
+        if (!self.compressed_workspace_binding.active()) return;
+        self.frame_scratch = .empty;
+        self.compressed_workspace_binding.clear();
+    }
+
+    pub fn usesCompressedBlockWorkspace(self: *const NativeIncrementalFrameDecoder) bool {
+        return self.compressed_workspace_binding.active();
+    }
+
+    fn installCompressedBlockWorkspace(self: *NativeIncrementalFrameDecoder, binding: compressed_workspace.Binding) void {
+        if (!binding.active()) return;
+        self.compressed_workspace_binding = binding;
+        self.frame_scratch = .{ .items = binding.bytes[0..0], .capacity = binding.bytes.len };
+    }
+
+    fn validateCompressedBlockWorkspace(
+        self: *const NativeIncrementalFrameDecoder,
+        binding: compressed_workspace.Binding,
+        options: Options,
+    ) Error!void {
+        if (!binding.active()) return;
+        if (options.input_policy != .block_stream) return error.InvalidBlockPlan;
+        try binding.validateSlice(options.skippable_output);
+        try binding.validateSlice(std.mem.sliceAsBytes(options.skippable_events));
+        if (self.stable_binding.buffer) |output| try binding.validateSlice(output);
+        if (self.dictionary) |dictionary| try binding.validateDictionary(dictionary);
+        if (self.frame_dictionary) |dictionary| try binding.validateDictionary(dictionary);
+        if (self.dictionary_set) |dictionary_set| {
+            try binding.validateSlice(std.mem.sliceAsBytes(dictionary_set.dictionaries));
+            for (dictionary_set.dictionaries) |dictionary|
+                try binding.validateDictionary(dictionary);
+        }
+    }
+
     pub fn initWithDictionary(allocator: std.mem.Allocator, dictionary: NativeDictionary) NativeIncrementalFrameDecoder {
         return initWithDictionaryAndOptions(allocator, dictionary, .{});
     }
@@ -5422,14 +5494,17 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
     pub fn nextStreamWithStableOutput(self: *NativeIncrementalFrameDecoder, output: []u8) Error!void {
         if (self.failure != null or !self.options.stop_after_first_frame or self.phase != .done) return error.InvalidStreamState;
-        if (self.dictionary) |dictionary| try stable_driver.validateDictionary(output, dictionary);
-        try stable_output.validateAlias(output, self.direct_history.allocatedSlice());
-        try self.nextStream();
+        // Bind while `.done` is still setter-eligible. This validates the new
+        // output against retained suffix bytes and caller compressed storage
+        // before the irreversible phase transition, and also supports a
+        // stopped member whose next header is already buffered.
         try self.bindStableOutput(output);
+        try self.nextStream();
     }
 
     pub fn setDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
         if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        try self.compressed_workspace_binding.validateDictionary(dictionary);
         if (self.stable_binding.buffer) |output| try stable_driver.validateDictionary(output, dictionary);
         try prefix_decode_stream.setDictionary(self, dictionary, validatePrefixDictionary);
     }
@@ -5440,6 +5515,7 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub fn setPrefixWithDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
         if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        try self.compressed_workspace_binding.validateDictionary(dictionary);
         if (self.stable_binding.buffer) |output| try stable_driver.validateDictionary(output, dictionary);
         try prefix_decode_stream.setPrefix(self, dictionary, validatePrefixDictionary);
     }
@@ -5486,7 +5562,10 @@ pub const NativeIncrementalFrameDecoder = struct {
     fn deinitBuffers(self: *NativeIncrementalFrameDecoder) void {
         self.direct_history.deinit(self.budget.allocator());
         self.decoded_scratch.deinit(self.budget.allocator());
-        self.frame_scratch.deinit(self.budget.allocator());
+        if (self.compressed_workspace_binding.active())
+            self.frame_scratch = .empty
+        else
+            self.frame_scratch.deinit(self.budget.allocator());
         std.debug.assert(self.budget.live == 0);
     }
 
@@ -5529,6 +5608,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     /// options leave the existing decoder and its allocations intact.
     pub fn resetWithOptions(self: *NativeIncrementalFrameDecoder, options: Options) Error!void {
         try options.validate();
+        const compressed_binding = self.compressed_workspace_binding;
+        try self.validateCompressedBlockWorkspace(compressed_binding, options);
         const allocator = self.allocator;
         const dictionary = if (self.prefix_state.phase == .none) self.dictionary else null;
         const dictionary_set = if (self.prefix_state.phase == .none) self.dictionary_set else null;
@@ -5538,6 +5619,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.dictionary = dictionary;
         self.dictionary_set = dictionary_set;
         self.prefix_state.configured = configured;
+        self.installCompressedBlockWorkspace(compressed_binding);
     }
 
     /// Resume after a stopped member without resetting cumulative output,
@@ -5577,6 +5659,10 @@ pub const NativeIncrementalFrameDecoder = struct {
             return error.DictionaryMismatch;
         }
         _ = dictionary.standardView() catch |err| {
+            self.recordError(.frame, err);
+            return err;
+        };
+        self.compressed_workspace_binding.validateDictionary(dictionary) catch |err| {
             self.recordError(.frame, err);
             return err;
         };
@@ -5676,8 +5762,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         return self.frame_scratch.items.len;
     }
 
-    /// Allocated capacity backing retained compressed input. With a finite
-    /// `max_compressed_buffer_len`, this never grows past that configured cap.
+    /// Capacity available for retained compressed input. Decoder-owned storage
+    /// never grows past `max_compressed_buffer_len`; a bound caller workspace
+    /// reports its fixed 128 KiB capacity while the policy cap still limits how
+    /// many of those bytes may be accepted.
     pub fn compressedBufferCapacity(self: *const NativeIncrementalFrameDecoder) usize {
         return self.frame_scratch.capacity;
     }
@@ -5817,6 +5905,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.recordError(.frame, error.NeedDictionary);
             return error.NeedDictionary;
         }
+        try self.compressed_workspace_binding.validateIo(input, output);
         self.last_error_name = "";
         self.last_error_phase = null;
         self.error_input_offset = null;
@@ -7044,8 +7133,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.input_received = next_received;
     }
 
-    fn ensureCompressedScratchCapacity(self: *NativeIncrementalFrameDecoder, needed: usize) std.mem.Allocator.Error!void {
+    fn ensureCompressedScratchCapacity(self: *NativeIncrementalFrameDecoder, needed: usize) Error!void {
         if (needed <= self.frame_scratch.capacity) return;
+        if (self.compressed_workspace_binding.active()) return error.OutputTooSmall;
         const doubled = std.math.mul(usize, @max(self.frame_scratch.capacity, 8), 2) catch self.options.max_compressed_buffer_len;
         const policy_limit = if (self.options.input_policy == .block_stream)
             @min(self.options.max_compressed_buffer_len, std.compress.zstd.block_size_max)

@@ -1015,6 +1015,13 @@ Recommended next comparison steps:
   and blocks with up to 43,690
   sequences; its streamed decoded-scratch length and capacity peaks are both
   zero.
+  The same block-stream path now accepts a fixed caller-owned 128 KiB
+  compressed-block workspace. It excludes that storage from the requested-heap
+  ledger, preserves the binding across reset/continuation, rejects every input,
+  output, dictionary and capture alias, and remains explicitly block-atomic for
+  reverse bitstreams. Paired stable output makes the 500-frame upstream
+  compressed decodecorpus campaign allocation-free inside the decoder while
+  covering all 64 LL/OF/ML mode tuples.
   Complete frames that were prevalidated for direct output now switch in place
   to the same cursor when caller output cannot hold the next compressed block.
   The switch preserves earlier block history, sequence tables, checksum state,

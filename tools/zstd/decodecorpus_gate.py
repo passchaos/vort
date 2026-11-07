@@ -16,6 +16,7 @@ from pathlib import Path
 SUMMARY_PREFIX = "zstd_compat_probe "
 COMPLETE_MODE_MASK = (1 << 64) - 1
 BLOCK_STREAM_COMPRESSED_LIMIT = 128 * 1024 + 32
+COMPRESSED_BLOCK_WORKSPACE_LEN = 128 * 1024
 
 
 @dataclass(frozen=True)
@@ -189,6 +190,9 @@ def validate_campaign_summary(
         streamed_sequence_blocks = int(fields["decodecorpus_streamed_sequence_blocks"], 0)
         max_block_stream_decoded_buffered = int(fields["decodecorpus_max_block_stream_decoded_buffered"], 0)
         max_block_stream_decoded_capacity = int(fields["decodecorpus_max_block_stream_decoded_capacity"], 0)
+        workspace_cases = int(fields["decodecorpus_workspace_cases"], 0)
+        workspace_required = int(fields["decodecorpus_workspace_required"], 0)
+        workspace_peak_working = int(fields["decodecorpus_workspace_peak_working"], 0)
         unsupported = int(fields["unsupported"], 0)
         max_sequence_count = int(fields["decodecorpus_max_sequence_count"], 0)
         max_block_count = int(fields["decodecorpus_max_block_count"], 0)
@@ -208,6 +212,21 @@ def validate_campaign_summary(
             f"{campaign.name} incrementally decoded {incremental_cases} generated cases; "
             f"expected {campaign.count}"
         )
+    if workspace_cases != campaign.count:
+        raise RuntimeError(
+            f"{campaign.name} caller-workspace decoded {workspace_cases} generated cases; "
+            f"expected {campaign.count}"
+        )
+    if workspace_required != COMPRESSED_BLOCK_WORKSPACE_LEN:
+        raise RuntimeError(
+            f"{campaign.name} reported workspace requirement {workspace_required}; "
+            f"expected {COMPRESSED_BLOCK_WORKSPACE_LEN}"
+        )
+    if workspace_peak_working != 0:
+        raise RuntimeError(
+            f"{campaign.name} allocated {workspace_peak_working} decoder-owned bytes "
+            "with caller workspace and stable output"
+        )
     expected_reusable_cases = campaign.count if campaign.dictionary_size is None else 0
     if reusable_cases != expected_reusable_cases:
         raise RuntimeError(
@@ -225,10 +244,10 @@ def validate_campaign_summary(
             f"{campaign.name} retained {max_compressed_buffered} compressed bytes; "
             f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
         )
-    if not 0 <= max_compressed_capacity <= BLOCK_STREAM_COMPRESSED_LIMIT:
+    if max_compressed_capacity != workspace_required:
         raise RuntimeError(
-            f"{campaign.name} allocated {max_compressed_capacity} compressed-buffer bytes; "
-            f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
+            f"{campaign.name} reported compressed-buffer capacity {max_compressed_capacity}; "
+            f"caller workspace capacity is {workspace_required}"
         )
     if max_compressed_buffered > max_compressed_capacity:
         raise RuntimeError(f"{campaign.name} retained bytes beyond compressed-buffer capacity")
@@ -256,6 +275,14 @@ def validate_campaign_summary(
         )
     if mode_mask != 0 and (max_sequence_count == 0 or sequence_count_tiers == 0):
         raise RuntimeError(f"{campaign.name} reported sequence modes without sequence coverage")
+    if mode_mask != 0 and (max_compressed_buffered == 0 or streamed_sequence_blocks == 0):
+        raise RuntimeError(
+            f"{campaign.name} reported sequence modes without caller-workspace sequence execution"
+        )
+    if mode_mask == COMPLETE_MODE_MASK and streamed_literal_blocks == 0:
+        raise RuntimeError(
+            f"{campaign.name} complete mode campaign did not exercise sequence-free compressed blocks"
+        )
     if max_block_stream_decoded_buffered != 0 or max_block_stream_decoded_capacity != 0:
         raise RuntimeError(
             f"{campaign.name} retained decoded block scratch while block streaming: "
@@ -317,6 +344,9 @@ def run_campaign(
         max_block_count = int(fields["decodecorpus_max_block_count"], 0)
         max_sequence_count = int(fields["decodecorpus_max_sequence_count"], 0)
         sequence_count_tiers = int(fields["decodecorpus_sequence_count_tiers"], 0)
+        workspace_cases = int(fields["decodecorpus_workspace_cases"], 0)
+        workspace_required = int(fields["decodecorpus_workspace_required"], 0)
+        workspace_peak_working = int(fields["decodecorpus_workspace_peak_working"], 0)
         reference_version = fields["version"]
         if not reference_version:
             raise RuntimeError(f"{campaign.name} reported an empty reference version")
@@ -329,6 +359,8 @@ def run_campaign(
             f"streamed_sequence_blocks={streamed_sequence_blocks} "
             f"max_block_stream_decoded_buffered={max_decoded_buffered} "
             f"max_block_stream_decoded_capacity={max_decoded_capacity} "
+            f"workspace_cases={workspace_cases} workspace_required={workspace_required} "
+            f"workspace_peak_working={workspace_peak_working} "
             f"max_sequence_count={max_sequence_count} max_block_count={max_block_count} "
             f"sequence_count_tiers={sequence_count_tiers:#x} "
             f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x} "

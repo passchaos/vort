@@ -28,6 +28,12 @@ adds single-use RAW/full-dictionary bindings across one-shot, reusable,
 incremental, parallel and seekable encoders/decoders, plus bounded caller-owned
 decode history with explicit bind/rebind/clear transitions. Native, x86, WASI
 and libzstd differential gates preserve those lifecycle boundaries.
+The [caller-owned compressed-block workspace](formats/zstd-compressed-workspace.md)
+now moves the remaining unavoidable 128 KiB reverse-bitstream retention out of
+the decoder allocator in block-stream mode. Reset/continuation, aliases,
+logical input caps and requested-heap accounting stay independent; native, x86,
+WASI and a 500-frame zstd 1.6.0 campaign cover every sequence-table mode. This
+is a bounded ownership contract, not a false sub-block progressive claim.
 
 The [gzip direct-chunk decoder](formats/gzip-direct-chunks.md) now parses a
 single RFC 1952 member directly across discontiguous caller spans, including
