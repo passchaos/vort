@@ -5,6 +5,7 @@ const types = @import("types.zig");
 const settings = @import("options.zig");
 const owners = @import("owner.zig");
 const memory = @import("../../io/threaded_working_memory.zig");
+const prefix = @import("../prefix/binding.zig");
 
 pub fn Encoder(comptime Codec: type) type {
     return struct {
@@ -14,6 +15,8 @@ pub fn Encoder(comptime Codec: type) type {
         pub const Count = core.StreamCount;
         pub const Options = types.EncoderOptions(Codec.Options);
         pub const Snapshot = Owner.Snapshot;
+        pub const PrefixSnapshot = prefix.Snapshot;
+        pub const Directive = prefix.Directive;
         pub const MemorySnapshot = memory.Snapshot;
         pub const ParallelOptions = types.ParallelOptions;
         pub const ParallelProfile = types.Profile;
@@ -50,13 +53,52 @@ pub fn Encoder(comptime Codec: type) type {
             return create(allocator, options, expected_input_len, null, dictionary_id);
         }
 
-        /// Borrow raw or full preset bytes until deinit or successful nextFrame.
+        /// Borrow preset bytes until deinit or successful nextFrame. Setting
+        /// frame.dictionary_usage=.prefix limits the borrow to one active frame.
         pub fn initWithPresetDictionary(allocator: std.mem.Allocator, options: Options, dictionary: Codec.Dictionary) Error!Self {
             return create(allocator, options, null, dictionary, null);
         }
 
         pub fn initExactSizeWithPresetDictionary(allocator: std.mem.Allocator, options: Options, expected_input_len: Count, dictionary: Codec.Dictionary) Error!Self {
             return create(allocator, options, expected_input_len, dictionary, null);
+        }
+
+        pub fn initWithPrefix(allocator: std.mem.Allocator, options: Options, bytes: []const u8) Error!Self {
+            var configured = options;
+            configured.frame.dictionary_usage = .prefix;
+            configured.frame.dictionary_id = 0;
+            return create(allocator, configured, null, Codec.rawPrefix(bytes), null);
+        }
+
+        pub fn initExactSizeWithPrefix(allocator: std.mem.Allocator, options: Options, expected_input_len: Count, bytes: []const u8) Error!Self {
+            var configured = options;
+            configured.frame.dictionary_usage = .prefix;
+            configured.frame.dictionary_id = 0;
+            return create(allocator, configured, expected_input_len, Codec.rawPrefix(bytes), null);
+        }
+
+        pub fn setPrefix(self: *Self, bytes: []const u8) Error!void {
+            try self.owner.setPrefix(bytes);
+            self.options = self.owner.options;
+        }
+
+        pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
+            try self.owner.setPrefixWithDictionary(dictionary);
+            self.options = self.owner.options;
+        }
+
+        pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
+            try self.owner.setDictionary(dictionary);
+            self.options = self.owner.options;
+        }
+
+        pub fn clearDictionary(self: *Self) Error!void {
+            try self.owner.clearDictionary();
+            self.options = self.owner.options;
+        }
+
+        pub fn prefixSnapshot(self: *const Self) prefix.Snapshot {
+            return self.owner.prefixSnapshot();
         }
 
         pub fn initWithDictionarySet(allocator: std.mem.Allocator, options: Options, dictionary_set: Codec.DictionarySet, dictionary_id: u32) Error!Self {
@@ -80,16 +122,30 @@ pub fn Encoder(comptime Codec: type) type {
         /// Discard the current frame while retaining allocated capacity. Frame
         /// and parallel configuration stay captured; legal stream limits persist.
         pub fn reset(self: *Self) void {
-            self.owner.reset(settings.limits(Codec, self.options));
+            self.resetSession();
+        }
+
+        pub fn resetSession(self: *Self) void {
+            self.owner.resetSession(settings.limits(Codec, self.options));
+            self.options = self.owner.options;
+        }
+
+        pub fn resetParameters(self: *Self) Error!void {
+            try self.owner.resetParameters();
+            self.options = self.owner.options;
+        }
+
+        pub fn resetAll(self: *Self) void {
+            self.owner.resetAll(settings.limits(Codec, self.options));
             self.options = self.owner.options;
         }
 
         pub fn nextFrame(self: *Self, options: Options) Error!void {
-            try self.next(options, null, null, null);
+            try self.nextRetainingPrefix(options, null);
         }
 
         pub fn nextFrameExactSize(self: *Self, options: Options, expected_input_len: Count) Error!void {
-            try self.next(options, expected_input_len, null, null);
+            try self.nextRetainingPrefix(options, expected_input_len);
         }
 
         pub fn nextFrameWithDictionary(self: *Self, options: Options, dictionary_id: u32) Error!void {
@@ -117,7 +173,12 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         fn next(self: *Self, options: Options, expected: ?Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32) Error!void {
-            try self.owner.nextFrame(options, expected, dictionary, metadata_id);
+            try self.owner.nextFrame(options, expected, dictionary, metadata_id, true);
+            self.options = self.owner.options;
+        }
+
+        fn nextRetainingPrefix(self: *Self, options: Options, expected: ?Count) Error!void {
+            try self.owner.nextFrame(options, expected, null, null, false);
             self.options = self.owner.options;
         }
 
@@ -128,7 +189,13 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            defer self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
             return self.owner.step(input, output, settings.limits(Codec, self.options));
+        }
+
+        pub fn stepWithDirective(self: *Self, input: []const u8, output: []u8, directive: prefix.Directive) Error!core.StepResult {
+            defer self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+            return self.owner.stepWithDirective(input, output, settings.limits(Codec, self.options), directive);
         }
 
         pub fn flush(self: *Self) void {
@@ -142,6 +209,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn writeSkippable(self: *Self, skippable_id: u4, payload: []const u8) Error!void {
+            defer self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
             try self.owner.writeSkippable(skippable_id, payload, settings.limits(Codec, self.options));
         }
 

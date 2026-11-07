@@ -1,6 +1,7 @@
 //! Allocation-free normalization shared by initialization and consumer preflight.
 const std = @import("std");
 const types = @import("types.zig");
+const prefix = @import("../prefix/binding.zig");
 
 pub fn Prepared(comptime Codec: type) type {
     return struct { options: types.EncoderOptions(Codec.Options), config: types.Config(Codec) };
@@ -29,19 +30,22 @@ pub fn applyLimits(comptime Codec: type, options: *types.EncoderOptions(Codec.Op
 
 pub fn prepare(comptime Codec: type, original: types.EncoderOptions(Codec.Options), expected: ?types.Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32) Codec.Error!Prepared(Codec) {
     var options = original;
+    const is_prefix = if (@hasField(Codec.Options, "dictionary_usage")) options.frame.dictionary_usage == .prefix else false;
+    const selected = if (is_prefix and dictionary != null and !prefix.hasBytes(dictionary.?)) null else dictionary;
     var dictionary_id: ?u32 = null;
     if (metadata_id) |id| {
         if (id == 0) return error.NeedDictionary;
         if (dictionary != null or options.frame.selection != .raw_or_rle) return error.InvalidBlockPlan;
         dictionary_id = id;
-    } else if (dictionary) |preset| {
+    } else if (selected) |preset| {
         dictionary_id = preset.id;
-    } else if (options.frame.dictionary_id != 0) return error.NeedDictionary;
+    } else if (options.frame.dictionary_id != 0 and !is_prefix) return error.NeedDictionary;
+    if (is_prefix) options.frame.dictionary_id = dictionary_id orelse 0;
     if (dictionary_id) |id| {
         if (options.frame.dictionary_id != 0 and options.frame.dictionary_id != id) return error.DictionaryMismatch;
         options.frame.dictionary_id = id;
     }
-    try Codec.validateDictionaryMetadata(dictionary);
+    if (!is_prefix) try Codec.validateDictionaryMetadata(selected);
     const frame = Codec.stripProfiles(options.frame);
     try Codec.validateStream(frame, expected, dictionary_id);
     const window = try Codec.streamWindowLimit(frame, expected);
@@ -53,7 +57,7 @@ pub fn prepare(comptime Codec: type, original: types.EncoderOptions(Codec.Option
         .history_window_len = @min(window, try Codec.historyLen(frame)),
         .expected_input_len = expected,
         .dictionary_id = dictionary_id,
-        .dictionary = dictionary,
+        .dictionary = selected,
         .max_job_count = options.max_job_count,
     } };
 }

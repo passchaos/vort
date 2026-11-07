@@ -10,6 +10,7 @@ pub const IncrementalCodec = struct {
     pub const Options = zstd.NativeFrameOptions;
     pub const Dictionary = zstd.NativeDictionary;
     pub const DictionarySet = zstd.NativeDictionarySet;
+    pub const rawPrefix = Dictionary.initRawContent;
     pub const Profile = zstd.EncoderControlProfile;
     pub const State = base.State;
     pub const Count = core.StreamCount;
@@ -40,6 +41,10 @@ pub const IncrementalCodec = struct {
 
     pub fn validateDictionaryMetadata(dictionary: ?Dictionary) Error!void {
         _ = try support.initialDecodeState(dictionary);
+    }
+
+    pub fn validatePrefixMetadata(dictionary: Dictionary) Error!void {
+        try validateDictionaryMetadata(dictionary);
     }
 
     pub fn historyLen(options: Options) Error!usize {

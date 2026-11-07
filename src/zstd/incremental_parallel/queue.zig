@@ -409,6 +409,16 @@ pub fn Queue(comptime Codec: type) type {
         pub fn checkConfig(_: *Self, config: Config) Error!void {
             try configuration.validate(Codec, config);
         }
+        /// Called only at an idle boundary after all workers have joined.
+        /// Keep observations and owned job capacities while removing borrowed
+        /// dictionary references from the worker configuration.
+        pub fn replaceDictionaryBinding(self: *Self, options: Codec.Options, dictionary: ?Codec.Dictionary, dictionary_id: ?u32) void {
+            std.debug.assert(self.joined);
+            self.config.frame_options = options;
+            self.config.dictionary = dictionary;
+            self.config.dictionary_id = dictionary_id;
+            self.config = configuration.capture(Codec, self.config);
+        }
         pub fn resetRetainingCapacity(self: *Self, config: Config) Error!void {
             try configuration.validate(Codec, config);
             self.control.coordinator.clearFailure();

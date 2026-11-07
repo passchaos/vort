@@ -58,9 +58,42 @@ test "Zstd ignore content checksum public contracts" {
 test "Zstd dictionary ID control public contracts" {
     try @import("tests/zstd_dictionary_id_control/main.zig").contracts(@This());
 }
+test "Zstd prefix lifecycle public contracts" {
+    try @import("tests/zstd_prefix_lifecycle/main.zig").contracts(@This());
+}
+test "Zstd stable output public contracts" {
+    try @import("tests/zstd_stable_output/main.zig").contracts(@This());
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
+const prefix_binding = @import("zstd/prefix/binding.zig");
+const prefix_decode_call = @import("zstd/prefix/decode_call.zig");
+const prefix_decode_reusable = @import("zstd/prefix/decode_reusable.zig");
+const prefix_decode_stream = @import("zstd/prefix/decode_stream.zig");
+const prefix_encode_call = @import("zstd/prefix/encode_call.zig");
+const stable_output = @import("zstd/decode/stable_output.zig");
+const stable_driver = @import("zstd/decode/stable_driver.zig");
+pub const DictionaryUsage = prefix_binding.Usage;
+pub const PrefixSnapshot = prefix_binding.Snapshot;
+pub const PrefixPhase = prefix_binding.Phase;
+pub const PrefixResetMode = prefix_binding.ResetMode;
+pub const FrameEncodeDirective = prefix_binding.Directive;
+const prefix_facade = @import("zstd/prefix/facade.zig").Facade(@This());
+pub const decodeFrameAllocWithPrefix = prefix_facade.decodeAlloc;
+pub const decodeFrameIntoWithPrefix = prefix_facade.decodeInto;
+pub const decodeFrameAppendWithPrefix = prefix_facade.decodeAppend;
+pub const decodedFrameSizeWithPrefix = prefix_facade.decodedSize;
+pub const encodeNativeFrameWithPrefixAlloc = prefix_facade.nativeAlloc;
+pub const encodeNativeFrameAppendWithPrefix = prefix_facade.nativeAppend;
+pub const encodeNativeFrameIntoSliceWithPrefix = prefix_facade.nativeInto;
+pub const encodedNativeFrameBoundWithPrefix = prefix_facade.nativeBound;
+pub const encodeFrameWithPrefixAlloc = prefix_facade.alloc;
+pub const encodeFrameWithOptionsAndPrefixAlloc = prefix_facade.optionsAlloc;
+pub const encodeFrameWithLevelAndOptionsAndPrefixAlloc = prefix_facade.levelAlloc;
+pub const encodedFrameBoundWithLevelAndOptionsAndPrefix = prefix_facade.levelBound;
+pub const encodeFrameAppendWithLevelAndOptionsAndPrefix = prefix_facade.levelAppend;
+pub const encodeFrameIntoSliceWithLevelAndOptionsAndPrefix = prefix_facade.levelInto;
 const formatted_decode = @import("zstd/frame/formatted_decode.zig");
 const decode_budget = @import("zstd/decode/budget.zig");
 const decode_operation = @import("zstd/decode/operation.zig");
@@ -158,6 +191,7 @@ pub const FrameDecodeOptions = struct {
     format: FrameFormat = .standard,
     dictionary: ?NativeDictionary = null,
     dictionary_set: ?NativeDictionarySet = null,
+    dictionary_usage: DictionaryUsage = .persistent,
     /// Logical decoded-byte limit, independent of a single physical buffer
     /// and the heap quota. StreamCount remains usize on 64-bit targets.
     max_output_len: Count = std.math.maxInt(Count),
@@ -176,6 +210,7 @@ pub const FrameDecodeOptions = struct {
 
     pub fn validate(self: FrameDecodeOptions) Error!void {
         if (self.dictionary != null and self.dictionary_set != null) return error.InvalidBlockPlan;
+        if (self.dictionary_usage == .prefix and self.dictionary_set != null) return error.InvalidBlockPlan;
         if (self.expected_output_len) |expected|
             if (expected > self.max_output_len) return error.InvalidBlockPlan;
     }
@@ -183,7 +218,7 @@ pub const FrameDecodeOptions = struct {
     fn isDefault(self: FrameDecodeOptions) bool {
         return self.format == .standard and self.dictionary == null and self.dictionary_set == null and
             self.max_output_len == std.math.maxInt(Count) and self.expected_output_len == null and
-            self.max_total_working_memory == null and self.memory_profile == null and !self.ignore_content_checksum;
+            self.max_total_working_memory == null and self.memory_profile == null and !self.ignore_content_checksum and self.dictionary_usage == .persistent;
     }
 };
 
@@ -595,6 +630,7 @@ pub const FrameOptions = struct {
     /// Write Dictionary_ID in the frame header. Disabling this leaves the
     /// selected dictionary, its history and standard entropy state unchanged.
     include_dictionary_id: bool = true,
+    dictionary_usage: DictionaryUsage = .persistent,
     content_checksum: bool = false,
     /// Optional standard Zstd Window_Log (10...41). When known content is
     /// larger than this window, emit a non-single-segment frame that carries
@@ -636,6 +672,7 @@ pub const NativeFrameOptions = struct {
     /// Control only the wire Dictionary_ID; dictionary_id continues to name
     /// the selected dictionary even when its header field is omitted.
     include_dictionary_id: bool = true,
+    dictionary_usage: DictionaryUsage = .persistent,
     /// Optional standard Zstd Window_Log (10...41). It caps block size,
     /// cross-block matches, and visible preset history in addition to changing
     /// the frame header. Explicit logs 24+ enable sparse-LDM history; null
@@ -708,6 +745,10 @@ const IncrementalEncoderCodec = struct {
     pub const Error = zstd.Error;
     pub const Options = zstd.NativeFrameOptions;
     pub const Dictionary = zstd.NativeDictionary;
+    pub const rawPrefix = zstd.NativeDictionary.initRawContent;
+    pub fn validatePrefixMetadata(dictionary: zstd.NativeDictionary) zstd.Error!void {
+        _ = try initialSequenceFrameState(dictionary);
+    }
     pub const State = LiteralOnlyEncoderState;
     pub const HistoryView = incremental_history.View;
     pub const allow_zero_dictionary_id = true;
@@ -5180,6 +5221,13 @@ pub const NativeIncrementalFrameDecoder = struct {
     required_dictionary_id: ?u32 = null,
     frame_dictionary: ?NativeDictionary = null,
     options: Options = .{},
+    prefix_state: prefix_binding.State = .{},
+    prefix_header_selected: bool = false,
+    stable_binding: stable_output.Binding = .{},
+    stable_origin: Count = 0,
+    stable_step_active: bool = false,
+    stable_staged_len: usize = 0,
+    stable_staged_read: usize = 0,
     phase: InternalPhase = .frame,
     frame_scratch: std.ArrayList(u8) = .empty,
     decoded_scratch: std.ArrayList(u8) = .empty,
@@ -5253,6 +5301,7 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub const Options = struct {
         format: FrameFormat = .standard,
+        dictionary_usage: DictionaryUsage = .persistent,
         /// Skip only content-checksum comparison; a complete checksum footer
         /// remains required for each checksummed frame.
         ignore_content_checksum: bool = false,
@@ -5334,7 +5383,78 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn initWithDictionaryAndOptions(allocator: std.mem.Allocator, dictionary: NativeDictionary, options: Options) NativeIncrementalFrameDecoder {
         var decoder = initWithOptions(allocator, options);
         decoder.dictionary = dictionary;
+        prefix_decode_stream.initialize(&decoder);
         return decoder;
+    }
+
+    pub fn initWithPrefix(allocator: std.mem.Allocator, bytes: []const u8) NativeIncrementalFrameDecoder {
+        return initWithPrefixAndOptions(allocator, bytes, .{});
+    }
+
+    pub fn initWithPrefixAndOptions(allocator: std.mem.Allocator, bytes: []const u8, options: Options) NativeIncrementalFrameDecoder {
+        var selected = options;
+        selected.dictionary_usage = .prefix;
+        return initWithDictionaryAndOptions(allocator, NativeDictionary.initRawContent(bytes), selected);
+    }
+
+    pub fn bindStableOutput(self: *NativeIncrementalFrameDecoder, output: []u8) Error!void {
+        try stable_driver.bind(self, output);
+    }
+    pub fn stepStable(self: *NativeIncrementalFrameDecoder, input: []const u8) Error!core.StepResult {
+        return self.stepStableLimited(input, std.math.maxInt(usize));
+    }
+    pub fn stepStableLimited(self: *NativeIncrementalFrameDecoder, input: []const u8, maximum: usize) Error!core.StepResult {
+        return stable_driver.step(self, input, maximum);
+    }
+    pub fn stableOutput(self: *const NativeIncrementalFrameDecoder) []const u8 {
+        return self.stable_binding.published();
+    }
+    pub fn nextStreamWithStableOutput(self: *NativeIncrementalFrameDecoder, output: []u8) Error!void {
+        if (self.failure != null or !self.options.stop_after_first_frame or self.phase != .done) return error.InvalidStreamState;
+        if (self.dictionary) |dictionary| try stable_driver.validateDictionary(output, dictionary);
+        try stable_output.validateAlias(output, self.direct_history.allocatedSlice());
+        try self.nextStream();
+        try self.bindStableOutput(output);
+    }
+
+    pub fn setDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        if (self.stable_binding.buffer) |output| try stable_driver.validateDictionary(output, dictionary);
+        try prefix_decode_stream.setDictionary(self, dictionary, validatePrefixDictionary);
+    }
+
+    pub fn setPrefix(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
+        try self.setPrefixWithDictionary(NativeDictionary.initRawContent(bytes));
+    }
+
+    pub fn setPrefixWithDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        if (self.stable_binding.buffer) |output| try stable_driver.validateDictionary(output, dictionary);
+        try prefix_decode_stream.setPrefix(self, dictionary, validatePrefixDictionary);
+    }
+
+    pub fn clearDictionary(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        prefix_decode_stream.clear(self);
+    }
+
+    pub fn prefixSnapshot(self: *const NativeIncrementalFrameDecoder) PrefixSnapshot {
+        var observed = self.prefix_state.snapshot();
+        observed.setter_eligible = prefix_decode_stream.setterEligible(self);
+        return observed;
+    }
+
+    pub fn resetSession(self: *NativeIncrementalFrameDecoder) void {
+        self.reset();
+    }
+
+    pub fn resetParameters(self: *NativeIncrementalFrameDecoder) Error!void {
+        try self.clearDictionary();
+    }
+
+    pub fn resetAll(self: *NativeIncrementalFrameDecoder) void {
+        self.reset();
+        prefix_decode_stream.clear(self);
     }
 
     pub fn initWithDictionarySet(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet) NativeIncrementalFrameDecoder {
@@ -5360,6 +5480,13 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn reset(self: *NativeIncrementalFrameDecoder) void {
+        self.stable_binding.reset();
+        self.stable_origin = 0;
+        self.stable_staged_len = 0;
+        self.stable_staged_read = 0;
+        self.prefix_state.resetSession(&self.dictionary);
+        if (self.prefix_state.phase == .none and self.options.dictionary_usage == .prefix) self.options.dictionary_usage = .persistent;
+        self.prefix_header_selected = false;
         self.clearDictionaryRequest();
         self.phase = .frame;
         self.frame_scratch.clearRetainingCapacity();
@@ -5392,12 +5519,14 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn resetWithOptions(self: *NativeIncrementalFrameDecoder, options: Options) Error!void {
         try options.validate();
         const allocator = self.allocator;
-        const dictionary = self.dictionary;
-        const dictionary_set = self.dictionary_set;
+        const dictionary = if (self.prefix_state.phase == .none) self.dictionary else null;
+        const dictionary_set = if (self.prefix_state.phase == .none) self.dictionary_set else null;
+        const configured = self.prefix_state.phase == .none and self.prefix_state.configured;
         self.deinitBuffers();
         self.* = initWithOptions(allocator, options);
         self.dictionary = dictionary;
         self.dictionary_set = dictionary_set;
+        self.prefix_state.configured = configured;
     }
 
     /// Resume after a stopped member without resetting cumulative output,
@@ -5603,13 +5732,18 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (err != error.OutputTooSmall and err != error.TruncatedFrame and !short_pledge) {
                 self.clearDictionaryRequest();
                 self.failure = err;
+                prefix_decode_stream.complete(self);
+                self.stable_binding.clearFramePrefix();
             }
             return err;
         };
+        prefix_decode_stream.complete(self);
+        self.stable_binding.clearFramePrefix();
     }
 
     fn finishInternal(self: *NativeIncrementalFrameDecoder) Error!void {
         try self.options.validate();
+        if (self.phase == .output and self.stable_binding.buffer != null and self.stable_staged_read != self.stable_staged_len) return error.OutputTooSmall;
         if (self.phase == .done and self.options.stop_after_first_frame) {
             if (self.options.expected_output_len) |expected| {
                 if (self.output_written != expected) {
@@ -5665,6 +5799,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn step(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.stable_binding.buffer != null and !self.stable_step_active) return error.InvalidStreamState;
         self.last_step_progress = .{};
         if (self.failure) |err| return err;
         if (self.required_dictionary_id != null) {
@@ -5691,6 +5826,8 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (err != error.NeedDictionary or self.required_dictionary_id == null) {
                 self.clearDictionaryRequest();
                 self.failure = err;
+                prefix_decode_stream.complete(self);
+                self.stable_binding.clearFramePrefix();
             }
             return err;
         };
@@ -5700,6 +5837,7 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     fn stepInternal(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
         try self.options.validate();
+        if (self.options.dictionary_usage == .prefix and self.dictionary_set != null and self.dictionary == null) return error.InvalidBlockPlan;
         self.budget.limit = self.options.max_working_memory;
         if (self.budget.live > self.budget.limit) return error.WorkingMemoryLimitExceeded;
         if (self.phase == .done) {
@@ -5812,6 +5950,31 @@ pub const NativeIncrementalFrameDecoder = struct {
                     }
                 },
                 .output => {
+                    if (self.stable_binding.buffer != null) {
+                        if (self.stable_staged_read == self.stable_staged_len) {
+                            if (try self.stopAfterDataFrame()) return .{ .progress = .{ .input_read = input_read, .output_written = output_written_step }, .status = .done };
+                            if (self.frame_scratch.items.len != 0 or input_read < input.len) {
+                                self.phase = .frame;
+                                continue;
+                            }
+                            if (try self.needMoreInputForExpectedOutput()) {
+                                self.phase = .frame;
+                                return .{ .progress = .{ .input_read = input_read, .output_written = output_written_step }, .status = .need_input };
+                            }
+                            self.phase = .done;
+                            return .{ .progress = .{ .input_read = input_read, .output_written = output_written_step }, .status = .done };
+                        }
+                        if (output_written_step == output.len) return .{ .progress = .{ .input_read = input_read, .output_written = output_written_step }, .status = .need_output };
+                        const n = @min(self.stable_staged_len - self.stable_staged_read, output.len - output_written_step);
+                        try self.ensureCumulativeOutputFits(n);
+                        // This region was decoded and validated before drain.
+                        try self.stable_binding.advanceProduced(n);
+                        self.stable_staged_read += n;
+                        self.output_written += n;
+                        output_written_step += n;
+                        continue;
+                    }
+
                     if (self.decoded_offset == self.decoded_scratch.items.len) {
                         if (try self.stopAfterDataFrame()) {
                             return .{
@@ -6073,7 +6236,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 continue;
                             }
                             var preflight_state = self.direct_sequence_state;
-                            const initial_history_len = self.direct_history.items.len;
+                            const initial_history_len: Count = if (self.stable_binding.buffer != null) (try self.stable_binding.historyBackend()).len else self.direct_history.items.len;
                             const decoded_len = compressedLiteralOnlyBlockDecodedSize(
                                 block,
                                 self.block_stream_block_size_max,
@@ -6238,6 +6401,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     .compressed, .treeless => unreachable,
                                 }
                                 if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(dest);
+                                if (self.stable_binding.buffer != null) try self.rememberDirectOutput(dest);
                                 self.block_stream_literal_offset += n;
                                 self.block_stream_sequence_literal_remaining -= n;
                                 self.block_stream_frame_decoded_len += n;
@@ -6258,7 +6422,12 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 try self.ensureBlockStreamOutputFits(n);
                                 const match_start = output_written_step;
                                 var match_end = match_start;
-                                copyMatchFromHistory(
+                                if (self.stable_binding.buffer != null) {
+                                    const history = try self.stable_binding.historyBackend();
+                                    try history.copyMatch(self.block_stream_sequence_match_offset, output[match_start..][0..n]);
+                                    match_end += n;
+                                    try self.rememberDirectOutput(output[match_start..match_end]);
+                                } else copyMatchFromHistory(
                                     output,
                                     &match_end,
                                     sequence_output_start.?,
@@ -6442,6 +6611,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn stopAfterDataFrame(self: *NativeIncrementalFrameDecoder) Error!bool {
+        self.stable_binding.clearFramePrefix();
+        prefix_decode_stream.complete(self);
         self.clearDictionaryRequest();
         self.data_frame_count = std.math.add(Count, self.data_frame_count, 1) catch {
             self.recordError(.frame, error.IntegerOverflow);
@@ -6525,6 +6696,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.frame_scratch.items.len < 8) return false;
         const magic = std.mem.readInt(u32, self.frame_scratch.items[0..4], .little);
         if (magic < skippable_magic_min or magic > skippable_magic_max) return false;
+        _ = self.prefix_state.activate(.skippable);
+        self.prefix_state.busy = true;
         const payload_len: usize = @intCast(std.mem.readInt(u32, self.frame_scratch.items[4..8], .little));
         _ = std.math.add(Count, self.skippable_total, payload_len) catch return error.IntegerOverflow;
         _ = std.math.add(Count, self.skippable_event_count, 1) catch return error.IntegerOverflow;
@@ -6547,6 +6720,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn finishSkippableStream(self: *NativeIncrementalFrameDecoder) Error!void {
+        prefix_decode_stream.complete(self);
         self.skippable_written = std.math.add(usize, self.skippable_written, self.skippable_stream_captured) catch return error.IntegerOverflow;
         self.skippable_total = std.math.add(Count, self.skippable_total, self.skippable_stream_payload_len) catch return error.IntegerOverflow;
         if (self.skippable_event_count < self.skippable_events.len) {
@@ -6584,6 +6758,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 if (self.output_written > stream_expected or expected > stream_expected - self.output_written)
                     return error.SizeMismatch;
             }
+            if (self.stable_binding.buffer != null) _ = try self.stable_binding.destination(try stream_count.toLocal(expected));
         }
 
         self.decoded_scratch.clearRetainingCapacity();
@@ -6595,9 +6770,13 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_history_window_len = try incremental_counts.historyLength(std.math.maxInt(Count), dictionary_history.len, header.window_size);
         self.direct_dictionary_history = dictionary_history;
         self.direct_sequence_state = initial_sequence_state;
-        self.direct_history.clearRetainingCapacity();
-        try self.reserveDirectOutputHistory(dictionary_history.len);
-        try self.rememberDirectOutput(dictionary_history);
+        if (self.stable_binding.buffer != null) {
+            if (!self.stable_binding.frame_active) try self.stable_binding.beginFrame(dictionary_history, self.direct_history_window_len);
+        } else {
+            self.direct_history.clearRetainingCapacity();
+            try self.reserveDirectOutputHistory(dictionary_history.len);
+            try self.rememberDirectOutput(dictionary_history);
+        }
         self.block_stream_input_offset = header.payload_offset;
         return true;
     }
@@ -6731,6 +6910,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn reserveDirectOutputHistory(self: *NativeIncrementalFrameDecoder, additional: usize) Error!void {
+        if (self.stable_binding.buffer != null) return;
         if (additional == 0 or self.direct_history_window_len == 0) return;
         const combined = try stream_count.addLocal(self.direct_history.items.len, additional);
         const needed = try stream_count.toLocal(@min(self.direct_history_window_len, combined));
@@ -6743,6 +6923,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn rememberDirectOutput(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
+        if (self.stable_binding.buffer != null) return stable_driver.remember(self, bytes);
         if (bytes.len == 0 or self.direct_history_window_len == 0) return;
         if (bytes.len >= self.direct_history_window_len) {
             const window_len = try stream_count.toLocal(self.direct_history_window_len);
@@ -6891,6 +7072,23 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn decodeCompleteFrame(self: *NativeIncrementalFrameDecoder, frame: []const u8) Error!void {
+        if (self.stable_binding.buffer != null) {
+            const selected: FrameDecodeOptions = .{
+                .format = self.options.format,
+                .dictionary = if (self.frame_dictionary) |dictionary| dictionary else if (self.dictionary_set == null) self.dictionary else null,
+                .dictionary_set = if (self.frame_dictionary == null) self.dictionary_set else null,
+                .max_output_len = @min(self.options.max_decoded_buffer_len, self.options.max_output_len -| self.output_written),
+                .ignore_content_checksum = self.options.ignore_content_checksum,
+            };
+            const len = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, selected));
+            const stage = try self.stable_binding.destination(len);
+            const written = try decodeRawOrRleFrameIntoWithOptionsInternal(frame, stage, selected);
+            if (written != len) return error.SizeMismatch;
+            self.stable_staged_len = len;
+            self.stable_staged_read = 0;
+            return;
+        }
+
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
         const remaining_output = self.options.max_output_len -| self.output_written;
@@ -7049,6 +7247,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (frame_expected_len) |len| {
             if (total != len) return error.SizeMismatch;
         }
+        if (self.stable_binding.buffer != null) _ = try self.stable_binding.destination(try stream_count.toLocal(total));
 
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
@@ -7062,9 +7261,13 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_decoded_len = first_block_decoded_len;
         self.direct_block_size_max = header.block_size_max;
         self.direct_history_window_len = try incremental_counts.historyLength(total, dictionary_history.len, header.window_size);
-        self.direct_history.clearRetainingCapacity();
-        try self.reserveDirectOutputHistory(dictionary_history.len);
-        try self.rememberDirectOutput(dictionary_history);
+        if (self.stable_binding.buffer != null) {
+            if (!self.stable_binding.frame_active) try self.stable_binding.beginFrame(dictionary_history, self.direct_history_window_len);
+        } else {
+            self.direct_history.clearRetainingCapacity();
+            try self.reserveDirectOutputHistory(dictionary_history.len);
+            try self.rememberDirectOutput(dictionary_history);
+        }
         self.direct_frame_output_start = self.output_written;
         self.direct_dictionary_history = dictionary_history;
         self.direct_sequence_state = initial_sequence_state;
@@ -7106,6 +7309,14 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.TruncatedFrame => return,
             else => return err,
         };
+        if (!self.prefix_header_selected) {
+            if (self.stable_binding.buffer) |output| {
+                if (self.resolveDirectDictionary(header)) |dictionary| try stable_driver.validateDictionary(output, dictionary);
+            }
+            self.prefix_header_selected = true;
+            self.prefix_state.busy = true;
+            _ = self.prefix_state.activate(.frame);
+        }
         _ = try stream_count.add(self.data_frame_count, 1);
         _ = try self.resolveDirectDictionaryHistory(header);
     }
@@ -7139,7 +7350,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             break :blk try compressedLiteralOnlyBlockDecodedSize(
                 self.frame_scratch.items[offset..][0..block_len],
                 self.direct_block_size_max,
-                self.direct_history.items.len,
+                if (self.stable_binding.buffer != null) (try self.stable_binding.historyBackend()).len else self.direct_history.items.len,
                 &preflight_state,
             );
         } else block_len;
@@ -7193,13 +7404,61 @@ pub const NativeFrameDecoder = struct {
     /// Activated lazily by an explicit memory limit or profile. Retained
     /// payload is freed through this owner's allocator after activation.
     memory_owner: ?*decode_budget.Owner = null,
+    prefix_state: prefix_binding.State = .{},
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameDecoder {
         return .{ .allocator = allocator };
     }
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: FrameDecodeOptions) NativeFrameDecoder {
-        return .{ .allocator = allocator, .options = options };
+        var decoder: NativeFrameDecoder = .{ .allocator = allocator, .options = options };
+        prefix_decode_reusable.initialize(&decoder);
+        return decoder;
+    }
+
+    pub fn initWithPrefix(allocator: std.mem.Allocator, bytes: []const u8) NativeFrameDecoder {
+        return initWithPrefixAndOptions(allocator, bytes, .{});
+    }
+
+    pub fn initWithPrefixAndOptions(allocator: std.mem.Allocator, bytes: []const u8, options: FrameDecodeOptions) NativeFrameDecoder {
+        var selected = options;
+        selected.dictionary = NativeDictionary.initRawContent(bytes);
+        selected.dictionary_set = null;
+        selected.dictionary_usage = .prefix;
+        return initWithOptions(allocator, selected);
+    }
+
+    pub fn setDictionary(self: *NativeFrameDecoder, dictionary: NativeDictionary) Error!void {
+        try prefix_decode_reusable.setDictionary(self, dictionary, validatePrefixDictionary);
+    }
+
+    pub fn setPrefix(self: *NativeFrameDecoder, bytes: []const u8) Error!void {
+        try self.setPrefixWithDictionary(NativeDictionary.initRawContent(bytes));
+    }
+
+    pub fn setPrefixWithDictionary(self: *NativeFrameDecoder, dictionary: NativeDictionary) Error!void {
+        try prefix_decode_reusable.setPrefix(self, dictionary, validatePrefixDictionary);
+    }
+
+    pub fn clearDictionary(self: *NativeFrameDecoder) Error!void {
+        if (self.prefix_state.busy) return error.InvalidStreamState;
+        prefix_decode_reusable.clear(self);
+    }
+
+    pub fn prefixSnapshot(self: *const NativeFrameDecoder) PrefixSnapshot {
+        return self.prefix_state.snapshot();
+    }
+
+    pub fn resetSession(self: *NativeFrameDecoder) void {
+        prefix_decode_reusable.resetSession(self);
+    }
+
+    pub fn resetParameters(self: *NativeFrameDecoder) Error!void {
+        try self.clearDictionary();
+    }
+
+    pub fn resetAll(self: *NativeFrameDecoder) void {
+        if (!self.prefix_state.busy) prefix_decode_reusable.clear(self);
     }
 
     const DecodeOverrides = struct {
@@ -7225,10 +7484,13 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeAllocWithOptions(self: *NativeFrameDecoder, frame: []const u8, options: FrameDecodeOptions) Error![]u8 {
-        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, options));
-        var operation = try self.beginMemory(options, 0);
+        try options.validate();
+        const selected = try prefix_decode_call.begin(&self.options, &self.prefix_state, options);
+        defer prefix_decode_call.end(&self.prefix_state);
+        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, selected));
+        var operation = try self.beginMemory(selected, 0);
         defer operation.end();
-        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(options), size) catch |err|
+        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(selected), size) catch |err|
             return @errorCast(operation.mapError(err));
         errdefer operation.allocator().free(decoded);
         try operation.releaseOwned(decoded.len);
@@ -7236,12 +7498,15 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeAppendWithOptions(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, options: FrameDecodeOptions) Error!usize {
-        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, options));
-        var operation = try self.beginMemory(options, out.capacity);
+        try options.validate();
+        const selected = try prefix_decode_call.begin(&self.options, &self.prefix_state, options);
+        defer prefix_decode_call.end(&self.prefix_state);
+        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, selected));
+        var operation = try self.beginMemory(selected, out.capacity);
         defer operation.end();
         var publication = try operation.appendScope(out);
         defer publication.deinit();
-        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(options), size) catch |err|
+        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(selected), size) catch |err|
             return @errorCast(operation.mapError(err));
         defer operation.allocator().free(decoded);
         publication.append(decoded) catch |err| return @errorCast(operation.mapError(err));
@@ -7249,11 +7514,14 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeIntoSliceWithOptions(self: *NativeFrameDecoder, frame: []const u8, output: []u8, options: FrameDecodeOptions) Error!usize {
-        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, options));
+        try options.validate();
+        const selected = try prefix_decode_call.begin(&self.options, &self.prefix_state, options);
+        defer prefix_decode_call.end(&self.prefix_state);
+        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, selected));
         if (output.len < size) return error.OutputTooSmall;
-        var operation = try self.beginMemory(options, 0);
+        var operation = try self.beginMemory(selected, 0);
         defer operation.end();
-        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(options), size) catch |err|
+        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(selected), size) catch |err|
             return @errorCast(operation.mapError(err));
         defer operation.allocator().free(decoded);
         @memcpy(output[0..decoded.len], decoded);
@@ -7261,10 +7529,13 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeScratchWithOptions(self: *NativeFrameDecoder, frame: []const u8, options: FrameDecodeOptions) Error![]const u8 {
-        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, options));
-        var operation = try self.beginMemory(options, 0);
+        try options.validate();
+        const selected = try prefix_decode_call.begin(&self.options, &self.prefix_state, options);
+        defer prefix_decode_call.end(&self.prefix_state);
+        const size = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, selected));
+        var operation = try self.beginMemory(selected, 0);
         defer operation.end();
-        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(options), size) catch |err|
+        const decoded = formatted_decode.ownedSized(FormattedFrameDecoder, operation.allocator(), frame, operation.forward(selected), size) catch |err|
             return @errorCast(operation.mapError(err));
         defer operation.allocator().free(decoded);
         self.scratch.ensureTotalCapacity(operation.allocator(), decoded.len) catch |err|
@@ -7275,12 +7546,12 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodedSizeWithOptions(self: *NativeFrameDecoder, frame: []const u8, options: FrameDecodeOptions) Error!Count {
-        _ = self;
-        return decodedFrameSizeWithOptions(frame, options);
+        const selected = prefix_decode_call.effective(&self.options, &self.prefix_state, options);
+        return decodedFrameSizeWithOptions(frame, selected);
     }
 
     fn hasDecodePolicy(self: *const NativeFrameDecoder) bool {
-        return !self.options.isDefault() or self.memory_owner != null;
+        return !self.options.isDefault() or self.memory_owner != null or self.prefix_state.configured;
     }
 
     fn beginMemory(self: *NativeFrameDecoder, options: FrameDecodeOptions, caller_capacity: usize) Error!decode_operation.Operation {
@@ -8190,6 +8461,32 @@ pub const LevelFrameEncoder = struct {
     primary: NativeFrameEncoder,
     output_scratch: std.ArrayList(u8) = .empty,
 
+    dictionary_binding: prefix_binding.Slot(NativeDictionary) = .{},
+
+    pub fn setDictionary(self: *LevelFrameEncoder, dictionary: NativeDictionary) Error!void {
+        try prefix_encode_call.setDictionary(&self.dictionary_binding, dictionary);
+    }
+    pub fn setPrefix(self: *LevelFrameEncoder, bytes: []const u8) Error!void {
+        try self.setPrefixWithDictionary(NativeDictionary.initRawContent(bytes));
+    }
+    pub fn setPrefixWithDictionary(self: *LevelFrameEncoder, dictionary: NativeDictionary) Error!void {
+        try prefix_encode_call.setPrefix(&self.dictionary_binding, dictionary);
+    }
+    pub fn clearDictionary(self: *LevelFrameEncoder) Error!void {
+        try prefix_encode_call.clear(&self.dictionary_binding);
+    }
+    pub fn prefixSnapshot(self: *const LevelFrameEncoder) PrefixSnapshot {
+        return self.dictionary_binding.state.snapshot();
+    }
+    pub fn resetSession(self: *LevelFrameEncoder) void {
+        if (!self.dictionary_binding.state.busy) self.dictionary_binding.resetSession();
+    }
+    pub fn resetParameters(self: *LevelFrameEncoder) Error!void {
+        try self.clearDictionary();
+    }
+    pub fn resetAll(self: *LevelFrameEncoder) void {
+        if (!self.dictionary_binding.state.busy) self.dictionary_binding.clear();
+    }
     pub fn init(allocator: std.mem.Allocator) LevelFrameEncoder {
         return .{ .allocator = allocator, .primary = NativeFrameEncoder.init(allocator) };
     }
@@ -8231,12 +8528,20 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeScratchWithOptions(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]const u8 {
+        _ = try nativeFrameOptionsForLevel(level, options);
+        const bound_dictionary = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, null);
+        defer self.dictionary_binding.complete();
         const inner = try self.beginMemory(level, options);
         defer self.endMemory();
-        return self.encodeScratchUnbudgeted(input, level, inner) catch |err| return self.mapMemoryError(err);
+        return self.encodeScratchUnbudgeted(input, level, inner, bound_dictionary) catch |err| return self.mapMemoryError(err);
     }
 
-    fn encodeScratchUnbudgeted(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]const u8 {
+    fn encodeScratchUnbudgeted(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions, bound_dictionary: ?NativeDictionary) Error![]const u8 {
+        if (bound_dictionary) |dictionary| {
+            const native = try nativeFrameOptionsForLevel(level, options);
+            return (try self.primary.encodeScratchWithDictionary(input, native, dictionary)).frame;
+        }
+
         const primary_options = try nativeFrameOptionsForLevel(level, options);
         if (encode_controls.active(primary_options)) return (try self.primary.encodeScratch(input, primary_options)).frame;
         if (level <= 0 or input.len <= 8 * 1024)
@@ -8273,11 +8578,14 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeWithOptionsAlloc(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]u8 {
+        _ = try nativeFrameOptionsForLevel(level, options);
+        const bound_dictionary = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, null);
+        defer self.dictionary_binding.complete();
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
         const inner = try self.beginMemory(level, options);
         defer self.endMemory();
-        const frame = self.encodeScratchUnbudgeted(input, level, inner) catch |err| return self.mapMemoryError(err);
+        const frame = self.encodeScratchUnbudgeted(input, level, inner, bound_dictionary) catch |err| return self.mapMemoryError(err);
         return self.memory.?.duplicateOwned(self.memory.?.base, frame) catch |err| return self.mapMemoryError(err);
     }
 
@@ -8299,11 +8607,14 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeAppendWithOptions(self: *LevelFrameEncoder, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
+        _ = try nativeFrameOptionsForLevel(level, options);
+        const bound_dictionary = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, null);
+        defer self.dictionary_binding.complete();
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
         const inner = try self.beginMemory(level, options);
         defer self.endMemory();
-        const frame = self.encodeScratchUnbudgeted(input, level, inner) catch |err| return self.mapMemoryError(err);
+        const frame = self.encodeScratchUnbudgeted(input, level, inner, bound_dictionary) catch |err| return self.mapMemoryError(err);
         if (self.memory.?.lease) |lease| {
             const view: total_budget.Entry = .{ .caller = self.memory.?.base, .lease = lease };
             @import("zstd/encode/frame_publication.zig").appendFrame(&view, out, frame) catch |err| return self.mapMemoryError(err);
@@ -9435,6 +9746,32 @@ pub const NativeFrameEncoder = struct {
     block_scratch: NativeBlockEncodeScratch = .{},
     controlled_records: std.ArrayList(controlled_source.Record) = .empty,
 
+    dictionary_binding: prefix_binding.Slot(NativeDictionary) = .{},
+
+    pub fn setDictionary(self: *NativeFrameEncoder, dictionary: NativeDictionary) Error!void {
+        try prefix_encode_call.setDictionary(&self.dictionary_binding, dictionary);
+    }
+    pub fn setPrefix(self: *NativeFrameEncoder, bytes: []const u8) Error!void {
+        try self.setPrefixWithDictionary(NativeDictionary.initRawContent(bytes));
+    }
+    pub fn setPrefixWithDictionary(self: *NativeFrameEncoder, dictionary: NativeDictionary) Error!void {
+        try prefix_encode_call.setPrefix(&self.dictionary_binding, dictionary);
+    }
+    pub fn clearDictionary(self: *NativeFrameEncoder) Error!void {
+        try prefix_encode_call.clear(&self.dictionary_binding);
+    }
+    pub fn prefixSnapshot(self: *const NativeFrameEncoder) PrefixSnapshot {
+        return self.dictionary_binding.state.snapshot();
+    }
+    pub fn resetSession(self: *NativeFrameEncoder) void {
+        if (!self.dictionary_binding.state.busy) self.dictionary_binding.resetSession();
+    }
+    pub fn resetParameters(self: *NativeFrameEncoder) Error!void {
+        try self.clearDictionary();
+    }
+    pub fn resetAll(self: *NativeFrameEncoder) void {
+        if (!self.dictionary_binding.state.busy) self.dictionary_binding.clear();
+    }
     pub fn init(allocator: std.mem.Allocator) NativeFrameEncoder {
         return .{ .allocator = allocator };
     }
@@ -9503,13 +9840,16 @@ pub const NativeFrameEncoder = struct {
         input: []const u8,
         options: NativeFrameOptions,
     ) Error!NativeFrameEncodeResult {
+        try options.validate();
+        const selected = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, null);
+        defer self.dictionary_binding.complete();
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
-        const inner = try self.beginMemory(options);
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, selected));
         defer self.endMemory();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        const mode = self.encodeAppendUnbudgeted(&out, input, inner, null) catch |err| return self.mapMemoryError(err);
+        const mode = self.encodeAppendUnbudgeted(&out, input, inner, selected) catch |err| return self.mapMemoryError(err);
         const frame = out.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
         errdefer self.allocator.free(frame);
         try self.memory.?.releaseOwned(self.memory.?.base, frame.len);
@@ -9525,13 +9865,16 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: NativeDictionary,
     ) Error!NativeFrameEncodeResult {
+        try options.validate();
+        const selected = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, dictionary);
+        defer self.dictionary_binding.complete();
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
-        const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, selected));
         defer self.endMemory();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        const mode = self.encodeAppendUnbudgeted(&out, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        const mode = self.encodeAppendUnbudgeted(&out, input, inner, selected) catch |err| return self.mapMemoryError(err);
         const frame = out.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
         errdefer self.allocator.free(frame);
         try self.memory.?.releaseOwned(self.memory.?.base, frame.len);
@@ -9551,11 +9894,14 @@ pub const NativeFrameEncoder = struct {
         input: []const u8,
         options: NativeFrameOptions,
     ) Error!NativeFrameEncodeScratchResult {
-        const inner = try self.beginMemory(options);
+        try options.validate();
+        const selected = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, null);
+        defer self.dictionary_binding.complete();
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, selected));
         defer self.endMemory();
-        if (self.memoryActive() or hq_safeguard.needsTransactionalPublication(inner)) return self.encodeScratchTransactional(input, inner, null);
+        if (self.memoryActive() or hq_safeguard.needsTransactionalPublication(inner)) return self.encodeScratchTransactional(input, inner, selected);
         self.output_scratch.clearRetainingCapacity();
-        const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, null) catch |err| {
+        const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, selected) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -9571,11 +9917,14 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: NativeDictionary,
     ) Error!NativeFrameEncodeScratchResult {
-        const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
+        try options.validate();
+        const selected = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, dictionary);
+        defer self.dictionary_binding.complete();
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, selected));
         defer self.endMemory();
-        if (self.memoryActive() or hq_safeguard.needsTransactionalPublication(inner)) return self.encodeScratchTransactional(input, inner, dictionary);
+        if (self.memoryActive() or hq_safeguard.needsTransactionalPublication(inner)) return self.encodeScratchTransactional(input, inner, selected);
         self.output_scratch.clearRetainingCapacity();
-        const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, dictionary) catch |err| {
+        const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, selected) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -9668,14 +10017,17 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: ?NativeDictionary,
     ) Error!NativeFrameMode {
+        try options.validate();
+        const selected = try prefix_encode_call.begin(&self.dictionary_binding, options.dictionary_usage, dictionary);
+        defer self.dictionary_binding.complete();
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
-        const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, selected));
         defer self.endMemory();
-        if (!self.memoryActive()) return self.encodeAppendUnbudgeted(out, input, inner, dictionary);
+        if (!self.memoryActive()) return self.encodeAppendUnbudgeted(out, input, inner, selected);
         var frame: std.ArrayList(u8) = .empty;
         defer frame.deinit(self.allocator);
-        const mode = self.encodeAppendUnbudgeted(&frame, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        const mode = self.encodeAppendUnbudgeted(&frame, input, inner, selected) catch |err| return self.mapMemoryError(err);
         try self.appendTrackedFrame(out, frame.items);
         return mode;
     }
@@ -10368,6 +10720,10 @@ fn validateNativeDictionary(header: NativeFrameHeader, dictionary: ?NativeDictio
     // this explicit validation path lets callers enforce Dictionary_ID policy
     // without hidden global state.
     return dict.content;
+}
+
+pub fn validatePrefixDictionary(dictionary: NativeDictionary) Error!void {
+    _ = try initialSequenceFrameState(dictionary);
 }
 
 fn initialSequenceFrameState(dictionary: ?NativeDictionary) Error!SequenceFrameState {
@@ -12520,7 +12876,7 @@ const SequenceDecodeWorkspace = struct {
 comptime {
     const option_fields = @sizeOf(FrameFormat) + @sizeOf(?NativeDictionary) +
         @sizeOf(?NativeDictionarySet) + @sizeOf(Count) + @sizeOf(?Count) +
-        @sizeOf(?usize) + @sizeOf(?*DecodeMemoryProfile) + @sizeOf(bool);
+        @sizeOf(?usize) + @sizeOf(?*DecodeMemoryProfile) + @sizeOf(bool) + @sizeOf(DictionaryUsage);
     std.debug.assert(@sizeOf(FrameDecodeOptions) <= std.mem.alignForward(usize, option_fields, @alignOf(FrameDecodeOptions)));
     // Keep the original 64-byte handle budget, plus only the actual inline
     // public options size on this target. Large coding tables remain external.
@@ -12530,7 +12886,7 @@ comptime {
 
 test "Zstd decoder handle layout contains inline options and an external entropy pointer" {
     const field_bytes = @sizeOf(std.mem.Allocator) + @sizeOf(FrameDecodeOptions) +
-        @sizeOf(std.ArrayList(u8)) + @sizeOf(?*SequenceDecodeWorkspace) + @sizeOf(?*decode_budget.Owner);
+        @sizeOf(std.ArrayList(u8)) + @sizeOf(?*SequenceDecodeWorkspace) + @sizeOf(?*decode_budget.Owner) + @sizeOf(prefix_binding.State);
     const expected_handle_bytes = std.mem.alignForward(usize, field_bytes, @alignOf(NativeFrameDecoder));
     try std.testing.expectEqual(expected_handle_bytes, @sizeOf(NativeFrameDecoder));
     try std.testing.expectEqual(@sizeOf(FrameDecodeOptions), @sizeOf(@FieldType(NativeFrameDecoder, "options")));
@@ -17925,7 +18281,7 @@ fn encodeNativeSeekableStreamParallelUnbudgeted(
             .allocator = parallel_allocator,
             .input = input[start..end],
             .options = options.frame_options,
-            .dictionary = dictionary,
+            .dictionary = if (options.frame_options.dictionary_usage == .prefix and frame_index != 0) null else dictionary,
             .seek_checksums = options.seek_checksums,
             .entry = &entries[frame_index],
         };
@@ -18233,7 +18589,8 @@ pub const NativeSeekableStreamEncoder = struct {
             const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
             const chunk = input[start..end];
             const compressed_start = out.items.len;
-            if (dictionary) |dict|
+            const frame_dictionary = if (options.frame_options.dictionary_usage == .prefix and frame_index != 0) null else dictionary;
+            if (frame_dictionary) |dict|
                 _ = try self.frame_encoder.encodeAppendWithDictionary(out, chunk, options.frame_options, dict)
             else
                 _ = try self.frame_encoder.encodeAppend(out, chunk, options.frame_options);
@@ -18268,7 +18625,8 @@ pub const NativeSeekableStreamEncoder = struct {
             const start = if (input.len == 0) 0 else frame_index * options.frame_size;
             const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
             const chunk = input[start..end];
-            const encoded = if (dictionary) |dict|
+            const frame_dictionary = if (options.frame_options.dictionary_usage == .prefix and frame_index != 0) null else dictionary;
+            const encoded = if (frame_dictionary) |dict|
                 try self.frame_encoder.encodeScratchWithDictionary(chunk, options.frame_options, dict)
             else
                 try self.frame_encoder.encodeScratch(chunk, options.frame_options);

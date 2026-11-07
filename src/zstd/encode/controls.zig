@@ -302,6 +302,8 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
     };
     if (@hasField(NativeOptions, "include_dictionary_id"))
         native.include_dictionary_id = if (@hasField(@TypeOf(options), "include_dictionary_id")) options.include_dictionary_id else true;
+    if (@hasField(NativeOptions, "dictionary_usage"))
+        native.dictionary_usage = if (@hasField(@TypeOf(options), "dictionary_usage")) options.dictionary_usage else .persistent;
     if (@hasField(NativeOptions, "fast_long_matches"))
         native.fast_long_matches = if (@hasField(@TypeOf(options), "fast_long_matches")) options.fast_long_matches else false;
     if (@hasField(NativeOptions, "max_total_working_memory"))
