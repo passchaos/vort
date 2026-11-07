@@ -2423,6 +2423,12 @@ pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 pub const ZstdError = zstd.Error;
 pub const ZstdFrameFormat = zstd.FrameFormat;
 pub const ZstdFrameDecodeOptions = zstd.FrameDecodeOptions;
+pub const ZstdDictionaryUsage = zstd.DictionaryUsage;
+pub const ZstdPrefixPhase = zstd.PrefixPhase;
+pub const ZstdPrefixSnapshot = zstd.PrefixSnapshot;
+pub const ZstdPrefixPurpose = zstd.PrefixPurpose;
+pub const ZstdPrefixContentType = zstd.PrefixContentType;
+pub const ZstdFrameEncodeDirective = zstd.FrameEncodeDirective;
 pub const ZstdDecodeMemoryProfile = zstd.DecodeMemoryProfile;
 pub const ZstdDecodeMemorySnapshot = zstd.DecodeMemorySnapshot;
 
@@ -2433,12 +2439,34 @@ pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;
 pub const zstdDecodedFrameSizeWithOptions = zstd.decodedFrameSizeWithOptions;
+pub const zstdDecodeFrameAllocWithPrefix = zstd.decodeFrameAllocWithPrefix;
+pub const zstdDecodeFrameIntoWithPrefix = zstd.decodeFrameIntoWithPrefix;
+pub const zstdDecodeFrameAppendWithPrefix = zstd.decodeFrameAppendWithPrefix;
+pub const zstdDecodedFrameSizeWithPrefix = zstd.decodedFrameSizeWithPrefix;
+pub const zstdEncodeNativeFrameWithPrefixAlloc = zstd.encodeNativeFrameWithPrefixAlloc;
+pub const zstdEncodeNativeFrameAppendWithPrefix = zstd.encodeNativeFrameAppendWithPrefix;
+pub const zstdEncodeNativeFrameIntoSliceWithPrefix = zstd.encodeNativeFrameIntoSliceWithPrefix;
+pub const zstdEncodedNativeFrameBoundWithPrefix = zstd.encodedNativeFrameBoundWithPrefix;
+pub const zstdEncodeFrameWithPrefixAlloc = zstd.encodeFrameWithPrefixAlloc;
+pub const zstdEncodeFrameWithOptionsAndPrefixAlloc = zstd.encodeFrameWithOptionsAndPrefixAlloc;
+pub const zstdEncodeFrameWithLevelAndOptionsAndPrefixAlloc = zstd.encodeFrameWithLevelAndOptionsAndPrefixAlloc;
+pub const zstdEncodedFrameBoundWithLevelAndOptionsAndPrefix = zstd.encodedFrameBoundWithLevelAndOptionsAndPrefix;
+pub const zstdEncodeFrameAppendWithLevelAndOptionsAndPrefix = zstd.encodeFrameAppendWithLevelAndOptionsAndPrefix;
+pub const zstdEncodeFrameIntoSliceWithLevelAndOptionsAndPrefix = zstd.encodeFrameIntoSliceWithLevelAndOptionsAndPrefix;
 pub const zstdInspectNativeFrameHeaderWithFormat = zstd.inspectNativeFrameHeaderWithFormat;
 pub const zstdInspectNativeFrameBlockAtWithFormat = zstd.inspectNativeFrameBlockAtWithFormat;
 pub const zstdInspectNativeFrameFirstBlockWithFormat = zstd.inspectNativeFrameFirstBlockWithFormat;
 
 test "root Zstd magicless consumer contracts" {
     try @import("tests/zstd_magicless_consumers.zig").contracts(@This());
+}
+
+test "root Zstd prefix lifecycle consumer contracts" {
+    try @import("tests/zstd_prefix_stable_root.zig").prefixContracts(@This());
+}
+
+test "root Zstd stable output consumer contracts" {
+    try @import("tests/zstd_prefix_stable_root.zig").stableContracts(@This());
 }
 
 test "root XZ parallel consumer contracts" {

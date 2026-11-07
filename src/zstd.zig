@@ -77,7 +77,8 @@ const stable_driver = @import("zstd/decode/stable_driver.zig");
 pub const DictionaryUsage = prefix_binding.Usage;
 pub const PrefixSnapshot = prefix_binding.Snapshot;
 pub const PrefixPhase = prefix_binding.Phase;
-pub const PrefixResetMode = prefix_binding.ResetMode;
+pub const PrefixPurpose = prefix_binding.Purpose;
+pub const PrefixContentType = prefix_binding.ContentType;
 pub const FrameEncodeDirective = prefix_binding.Directive;
 const prefix_facade = @import("zstd/prefix/facade.zig").Facade(@This());
 pub const decodeFrameAllocWithPrefix = prefix_facade.decodeAlloc;
@@ -5399,6 +5400,16 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub fn bindStableOutput(self: *NativeIncrementalFrameDecoder, output: []u8) Error!void {
         try stable_driver.bind(self, output);
+    }
+    /// Release an idle stable-output binding so ordinary `step` calls can use
+    /// caller-selected output slices again. Published bytes remain owned by
+    /// the caller and cumulative stream accounting is unchanged.
+    pub fn clearStableOutput(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        self.stable_binding.clear();
+        self.stable_origin = self.output_written;
+        self.stable_staged_len = 0;
+        self.stable_staged_read = 0;
     }
     pub fn stepStable(self: *NativeIncrementalFrameDecoder, input: []const u8) Error!core.StepResult {
         return self.stepStableLimited(input, std.math.maxInt(usize));

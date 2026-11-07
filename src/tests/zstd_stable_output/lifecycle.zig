@@ -5,6 +5,7 @@ const f = @import("fixtures.zig");
 pub fn contracts(comptime Z: type) !void {
     inline for (.{ .block_stream, .prevalidated_frame }) |policy| try stoppedMembers(Z, policy);
     try bindingState(Z);
+    try modeSwitch(Z);
     try dictionaryRequest(Z);
     try singleUsePrefix(Z);
 }
@@ -60,6 +61,34 @@ fn bindingState(comptime Z: type) !void {
     try decoder.bindStableOutput(&replacement);
     count = 0;
     _ = try h.drive(&decoder, frame[4..], &replacement, &count, plain, 7);
+}
+
+fn modeSwitch(comptime Z: type) !void {
+    const plain = "stable output can return to ordinary caller slices";
+    const frame = try f.rawBlocks(plain, true, false, 9);
+    defer h.a.free(frame);
+    var stable_buffer: [plain.len + 7]u8 = @splat(0xa5);
+    var ordinary_buffer: [plain.len]u8 = undefined;
+    var decoder = Z.NativeIncrementalFrameDecoder.initWithOptions(h.a, .{ .stop_after_first_frame = true });
+    defer decoder.deinit();
+
+    try decoder.bindStableOutput(&stable_buffer);
+    var count: usize = 0;
+    _ = try h.drive(&decoder, frame, &stable_buffer, &count, plain, 3);
+    try decoder.clearStableOutput();
+    try std.testing.expectEqual(@as(usize, 0), decoder.stableOutput().len);
+    try decoder.nextStream();
+    const ordinary = try decoder.step(frame, &ordinary_buffer);
+    try std.testing.expectEqual(frame.len, ordinary.progress.input_read);
+    try std.testing.expectEqual(plain.len, ordinary.progress.output_written);
+    try std.testing.expectEqualStrings(plain, &ordinary_buffer);
+    try decoder.finish();
+
+    decoder.reset();
+    try decoder.bindStableOutput(&stable_buffer);
+    const blocked = try decoder.stepStableLimited(frame, 0);
+    try std.testing.expect(blocked.progress.input_read != 0);
+    try std.testing.expectError(error.InvalidStreamState, decoder.clearStableOutput());
 }
 
 fn dictionaryRequest(comptime Z: type) !void {

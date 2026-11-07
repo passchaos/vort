@@ -23,8 +23,11 @@ add independent Deflate stream copies with caller-owned decoder storage,
 Brotli's explicit literal context policy and Zstd's optional frame dictionary
 ID. These close practical state-management and format-control gaps while
 preserving matching, dictionary entropy/history and default output policies.
-One-frame prefix lifetime and caller-owned stable-output decoding remain
-separate Zstd functional targets.
+The subsequent [Zstd prefix and stable-output work](formats/zstd-prefix-stable-output.md)
+adds single-use RAW/full-dictionary bindings across one-shot, reusable,
+incremental, parallel and seekable encoders/decoders, plus bounded caller-owned
+decode history with explicit bind/rebind/clear transitions. Native, x86, WASI
+and libzstd differential gates preserve those lifecycle boundaries.
 
 The [default-window far-copy reach](performance/br/command-model-lifetime.md#default-window-far-copy-reach-2026-11-06)
 adds bounded far-match candidates to default q6-q11 one-shot streams up to the

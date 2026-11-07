@@ -5,7 +5,6 @@ pub const Usage = enum(u1) { persistent, prefix };
 pub const Phase = enum(u2) { none, pending, active };
 pub const Purpose = enum(u2) { none, call, frame, skippable };
 pub const ContentType = enum(u1) { raw, full };
-pub const ResetMode = enum { session, parameters, both };
 pub const Directive = enum(c_int) { @"continue" = 0, flush = 1, end = 2, _ };
 
 pub const Snapshot = struct {

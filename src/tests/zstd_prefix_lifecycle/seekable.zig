@@ -9,6 +9,9 @@ pub fn contracts(comptime Z: type) !void {
     const dictionary = Z.NativeDictionary.initRawContent(h.prefix);
     const stream = try Z.encodeNativeSeekableStreamWithDictionaryAlloc(a, input, options, dictionary);
     defer a.free(stream);
+    const parallel = try Z.encodeNativeSeekableStreamParallelWithDictionaryAlloc(a, input, options, dictionary, 2);
+    defer a.free(parallel);
+    try std.testing.expectEqualSlices(u8, stream, parallel);
     var members = Z.iterateNativeStream(stream);
     const first = (try members.next()).?.frame;
     const second = (try members.next()).?.frame;
