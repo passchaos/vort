@@ -193,6 +193,8 @@ def validate_campaign_summary(
         workspace_cases = int(fields["decodecorpus_workspace_cases"], 0)
         workspace_required = int(fields["decodecorpus_workspace_required"], 0)
         workspace_peak_working = int(fields["decodecorpus_workspace_peak_working"], 0)
+        history_workspace_cases = int(fields["decodecorpus_history_workspace_cases"], 0)
+        history_workspace_max = int(fields["decodecorpus_history_workspace_max"], 0)
         unsupported = int(fields["unsupported"], 0)
         max_sequence_count = int(fields["decodecorpus_max_sequence_count"], 0)
         max_block_count = int(fields["decodecorpus_max_block_count"], 0)
@@ -226,6 +228,11 @@ def validate_campaign_summary(
         raise RuntimeError(
             f"{campaign.name} allocated {workspace_peak_working} decoder-owned bytes "
             "with caller workspace and stable output"
+        )
+    if history_workspace_cases != campaign.count or history_workspace_max <= 0:
+        raise RuntimeError(
+            f"{campaign.name} did not use caller history for every frame: "
+            f"cases={history_workspace_cases} max={history_workspace_max}"
         )
     expected_reusable_cases = campaign.count if campaign.dictionary_size is None else 0
     if reusable_cases != expected_reusable_cases:
@@ -347,6 +354,8 @@ def run_campaign(
         workspace_cases = int(fields["decodecorpus_workspace_cases"], 0)
         workspace_required = int(fields["decodecorpus_workspace_required"], 0)
         workspace_peak_working = int(fields["decodecorpus_workspace_peak_working"], 0)
+        history_workspace_cases = int(fields["decodecorpus_history_workspace_cases"], 0)
+        history_workspace_max = int(fields["decodecorpus_history_workspace_max"], 0)
         reference_version = fields["version"]
         if not reference_version:
             raise RuntimeError(f"{campaign.name} reported an empty reference version")
@@ -361,6 +370,8 @@ def run_campaign(
             f"max_block_stream_decoded_capacity={max_decoded_capacity} "
             f"workspace_cases={workspace_cases} workspace_required={workspace_required} "
             f"workspace_peak_working={workspace_peak_working} "
+            f"history_workspace_cases={history_workspace_cases} "
+            f"history_workspace_max={history_workspace_max} "
             f"max_sequence_count={max_sequence_count} max_block_count={max_block_count} "
             f"sequence_count_tiers={sequence_count_tiers:#x} "
             f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x} "

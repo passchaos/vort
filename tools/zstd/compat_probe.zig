@@ -72,6 +72,8 @@ pub fn main(init: std.process.Init) !void {
     var decodecorpus_max_block_stream_decoded_capacity: usize = 0;
     var decodecorpus_workspace_cases: usize = 0;
     var decodecorpus_workspace_peak_working: usize = 0;
+    var decodecorpus_history_workspace_cases: usize = 0;
+    var decodecorpus_history_workspace_max: usize = 0;
     var coverage = Coverage{};
     var decodecorpus_coverage = Coverage{};
     for (std.meta.tags(Shape)) |shape| {
@@ -564,6 +566,8 @@ pub fn main(init: std.process.Init) !void {
             decodecorpus_max_block_stream_decoded_capacity = @max(decodecorpus_max_block_stream_decoded_capacity, incremental.max_block_stream_decoded_capacity);
             decodecorpus_workspace_cases += @intFromBool(incremental.used_caller_workspace);
             decodecorpus_workspace_peak_working = @max(decodecorpus_workspace_peak_working, incremental.peak_working_memory);
+            decodecorpus_history_workspace_cases += @intFromBool(incremental.used_history_workspace);
+            decodecorpus_history_workspace_max = @max(decodecorpus_history_workspace_max, incremental.history_workspace_capacity);
             checked += 1;
             decodecorpus_cases += 1;
         }
@@ -578,8 +582,8 @@ pub fn main(init: std.process.Init) !void {
         return error.ReferenceEncodeFailed;
     const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} far_window_encode_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} decodecorpus_workspace_cases={d} decodecorpus_workspace_required={d} decodecorpus_workspace_peak_working={d} ",
-        .{ checked, unsupported, advanced_cases, far_window_encode_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity, decodecorpus_workspace_cases, vort.ZstdNativeIncrementalFrameDecoder.compressed_block_workspace_len, decodecorpus_workspace_peak_working },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} far_window_encode_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} decodecorpus_workspace_cases={d} decodecorpus_workspace_required={d} decodecorpus_workspace_peak_working={d} decodecorpus_history_workspace_cases={d} decodecorpus_history_workspace_max={d} ",
+        .{ checked, unsupported, advanced_cases, far_window_encode_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity, decodecorpus_workspace_cases, vort.ZstdNativeIncrementalFrameDecoder.compressed_block_workspace_len, decodecorpus_workspace_peak_working, decodecorpus_history_workspace_cases, decodecorpus_history_workspace_max },
     );
     std.debug.print(
         "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
@@ -647,7 +651,9 @@ fn mergeCoverage(target: *Coverage, source: Coverage) void {
 const IncrementalCorpusResult = struct {
     used_block_stream: bool,
     used_caller_workspace: bool,
+    used_history_workspace: bool,
     peak_working_memory: usize,
+    history_workspace_capacity: usize,
     max_compressed_buffered: usize,
     max_compressed_capacity: usize,
     streamed_literal_blocks: usize,
@@ -660,6 +666,13 @@ fn incrementalDecodeCorpusCase(allocator: std.mem.Allocator, encoded: []const u8
     const compressed_limit = std.compress.zstd.block_size_max + 32;
     const workspace = try allocator.alloc(u8, vort.ZstdNativeIncrementalFrameDecoder.requiredCompressedBlockWorkspaceLen());
     defer allocator.free(workspace);
+    const header = try vort.zstdInspectNativeFrameHeader(encoded);
+    const history_len = try vort.ZstdNativeIncrementalFrameDecoder.requiredHistoryWorkspaceLen(
+        header.window_size,
+        if (dictionary) |dict| dict.content.len else 0,
+    );
+    const history = try allocator.alloc(u8, history_len);
+    defer allocator.free(history);
     const output = try allocator.alloc(u8, expected.len);
     defer allocator.free(output);
     var failing = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 0 });
@@ -669,6 +682,7 @@ fn incrementalDecodeCorpusCase(allocator: std.mem.Allocator, encoded: []const u8
             .max_compressed_buffer_len = compressed_limit,
             .max_decoded_buffer_len = expected.len,
             .max_working_memory = 0,
+            .max_window_size = header.window_size,
         })
     else
         vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(failing.allocator(), .{
@@ -676,10 +690,11 @@ fn incrementalDecodeCorpusCase(allocator: std.mem.Allocator, encoded: []const u8
             .max_compressed_buffer_len = compressed_limit,
             .max_decoded_buffer_len = expected.len,
             .max_working_memory = 0,
+            .max_window_size = header.window_size,
         });
     defer decoder.deinit();
     try decoder.bindCompressedBlockWorkspace(workspace);
-    try decoder.bindStableOutput(output);
+    try decoder.bindHistoryWorkspace(history);
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     var used_block_stream = false;
@@ -690,7 +705,7 @@ fn incrementalDecodeCorpusCase(allocator: std.mem.Allocator, encoded: []const u8
     while (decoder.snapshot().phase != .done) {
         const input_end = @min(encoded.len, input_offset + 4093);
         const output_end = @min(expected.len, output_offset + 2039);
-        const result = try decoder.stepStableLimited(encoded[input_offset..input_end], output_end - output_offset);
+        const result = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
         used_block_stream = used_block_stream or decoder.isBlockStreaming();
@@ -708,13 +723,14 @@ fn incrementalDecodeCorpusCase(allocator: std.mem.Allocator, encoded: []const u8
     try decoder.finish();
     if (failing.has_induced_failure or decoder.workingMemoryBytes() != 0 or decoder.peakWorkingMemoryBytes() != 0)
         return error.OutOfMemory;
-    if (input_offset != encoded.len or output_offset != expected.len or
-        !std.mem.eql(u8, expected, decoder.stableOutput()))
+    if (input_offset != encoded.len or output_offset != expected.len or !std.mem.eql(u8, expected, output))
         return error.SizeMismatch;
     return .{
         .used_block_stream = used_block_stream,
         .used_caller_workspace = decoder.usesCompressedBlockWorkspace(),
+        .used_history_workspace = decoder.usesHistoryWorkspace(),
         .peak_working_memory = decoder.peakWorkingMemoryBytes(),
+        .history_workspace_capacity = decoder.historyWorkspaceCapacity(),
         .max_compressed_buffered = max_compressed_buffered,
         .max_compressed_capacity = max_compressed_capacity,
         .streamed_literal_blocks = decoder.streamedLiteralBlockCount(),

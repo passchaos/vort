@@ -50,8 +50,9 @@ stream counters or publish output.
 With caller-owned stable output, frames whose remaining decode state is fixed
 size can run with `max_working_memory = 0`: caller output supplies match history
 and the compressed workspace supplies reverse-bitstream retention. Ordinary
-chunked output may still require decoder-owned rolling history, and its exact
-requested-heap boundary remains enforced independently.
+chunked output can instead bind the separate
+[caller-owned rolling history](zstd-history-workspace.md); otherwise its exact
+decoder-owned requested-heap boundary remains enforced independently.
 
 ## Validation
 

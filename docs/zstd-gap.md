@@ -1022,6 +1022,12 @@ Recommended next comparison steps:
   reverse bitstreams. Paired stable output makes the 500-frame upstream
   compressed decodecorpus campaign allocation-free inside the decoder while
   covering all 64 LL/OF/ML mode tuples.
+  Ordinary tiny-output callers can now bind a separate circular history
+  workspace and cap advertised windows at header time. The ring commits only
+  published step output, keeps the current caller slice as the transactional
+  match suffix, and preserves dictionary/output coordinates without copying
+  dictionary bytes. Paired compressed/history workspaces replace the stable
+  whole-output requirement in the same upstream corpus campaign.
   Complete frames that were prevalidated for direct output now switch in place
   to the same cursor when caller output cannot hold the next compressed block.
   The switch preserves earlier block history, sequence tables, checksum state,

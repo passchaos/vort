@@ -66,6 +66,8 @@ print(
     f'decodecorpus_workspace_cases={count} '
     f'decodecorpus_workspace_required=131072 '
     f'decodecorpus_workspace_peak_working=0 '
+    f'decodecorpus_history_workspace_cases={count} '
+    f'decodecorpus_history_workspace_max=131072 '
     f'decodecorpus_max_sequence_count=5 '
     f'decodecorpus_max_block_count=3 '
     f'decodecorpus_sequence_count_tiers=0x1 '
@@ -166,6 +168,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_workspace_cases": "200",
             "decodecorpus_workspace_required": "131072",
             "decodecorpus_workspace_peak_working": "0",
+            "decodecorpus_history_workspace_cases": "200",
+            "decodecorpus_history_workspace_max": "1024",
             "decodecorpus_max_sequence_count": "1",
             "decodecorpus_max_block_count": "2",
             "decodecorpus_sequence_count_tiers": "0x1",
@@ -196,6 +200,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_workspace_cases": "200",
             "decodecorpus_workspace_required": "131072",
             "decodecorpus_workspace_peak_working": "0",
+            "decodecorpus_history_workspace_cases": "200",
+            "decodecorpus_history_workspace_max": "1024",
             "decodecorpus_max_sequence_count": "1",
             "decodecorpus_max_block_count": "2",
             "decodecorpus_sequence_count_tiers": "0x1",
@@ -226,6 +232,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_workspace_cases": "500",
             "decodecorpus_workspace_required": "131072",
             "decodecorpus_workspace_peak_working": "0",
+            "decodecorpus_history_workspace_cases": "500",
+            "decodecorpus_history_workspace_max": "1024",
             "decodecorpus_max_sequence_count": "5",
             "decodecorpus_max_block_count": "3",
             "decodecorpus_sequence_count_tiers": "0x1",
@@ -272,6 +280,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_reusable_hits": "0",
             "decodecorpus_block_stream_cases": "1",
             "decodecorpus_workspace_cases": "200",
+            "decodecorpus_history_workspace_cases": "200",
         }
         gate.validate_campaign_summary(dictionary_fields, dictionary_campaign, 0)
         for changed, message in (
@@ -292,6 +301,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_combined_mode_mask": "0",
             "decodecorpus_combined_mode_combinations": "0",
             "decodecorpus_workspace_cases": "2000",
+            "decodecorpus_history_workspace_cases": "2000",
         }
         gate.validate_campaign_summary(raw_fields, raw_campaign, 0)
         with self.assertRaisesRegex(RuntimeError, "invalid reusable cache hits"):
@@ -307,6 +317,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_max_block_stream_decoded_capacity": "0", "decodecorpus_max_sequence_count": "0",
             "decodecorpus_workspace_cases": "2000", "decodecorpus_workspace_required": "131072",
             "decodecorpus_workspace_peak_working": "0",
+            "decodecorpus_history_workspace_cases": "2000", "decodecorpus_history_workspace_max": "1024",
             "decodecorpus_max_block_count": "2", "decodecorpus_sequence_count_tiers": "0",
             "decodecorpus_sequence_mode_combinations": "0", "decodecorpus_sequence_mode_mask": "0",
             "decodecorpus_combined_mode_combinations": "0", "decodecorpus_combined_mode_mask": "0",

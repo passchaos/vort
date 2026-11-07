@@ -34,6 +34,12 @@ the decoder allocator in block-stream mode. Reset/continuation, aliases,
 logical input caps and requested-heap accounting stay independent; native, x86,
 WASI and a 500-frame zstd 1.6.0 campaign cover every sequence-table mode. This
 is a bounded ownership contract, not a false sub-block progressive claim.
+The [caller-owned Zstd rolling history](formats/zstd-history-workspace.md)
+completes the ordinary tiny-output ownership path: header admission enforces an
+explicit maximum window, committed output lives in a circular caller buffer,
+and dictionary bytes remain borrowed while their coordinate interval phases
+into frame output. Combined compressed/history workspaces decode with zero
+requested heap across native, x86, WASI and upstream libzstd corpora.
 
 The [gzip direct-chunk decoder](formats/gzip-direct-chunks.md) now parses a
 single RFC 1952 member directly across discontiguous caller spans, including

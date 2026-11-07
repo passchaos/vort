@@ -136,7 +136,9 @@ const incremental_decoder_tests = @import("zstd/incremental/decoder_tests.zig");
 const incremental_limits_tests = @import("zstd/incremental/limits_tests.zig");
 const dictionary_resume_tests = @import("zstd/incremental/dictionary_resume_tests.zig");
 const compressed_workspace = @import("zstd/decode/compressed_workspace.zig");
+const history_workspace = @import("zstd/decode/history_workspace.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
+const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
 const working_allocator = @import("io/working_allocator.zig");
 const decode_policy_tests = if (builtin.is_test) @import("zstd/sequence/decode_policy_test.zig") else struct {};
 const huffman = @import("huffman.zig");
@@ -1365,6 +1367,7 @@ test {
     _ = incremental_limits_tests;
     _ = dictionary_resume_tests;
     _ = compressed_workspace_tests;
+    _ = history_workspace_tests;
     _ = incremental_history;
     _ = incremental_history_index;
     _ = incremental_history_match;
@@ -5234,6 +5237,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     stable_staged_read: usize = 0,
     phase: InternalPhase = .frame,
     compressed_workspace_binding: compressed_workspace.Binding = .{},
+    history_workspace_binding: history_workspace.Binding = .{},
     frame_scratch: std.ArrayList(u8) = .empty,
     decoded_scratch: std.ArrayList(u8) = .empty,
     decoded_offset: usize = 0,
@@ -5278,6 +5282,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     block_stream_sequence_literal_remaining: usize = 0,
     block_stream_sequence_match_remaining: usize = 0,
     block_stream_sequence_match_offset: usize = 0,
+    block_stream_sequence_history_position: Count = 0,
     streamed_literal_block_count: Count = 0,
     streamed_sequence_block_count: Count = 0,
     skippable_stream_id: u4 = 0,
@@ -5326,6 +5331,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// and allocator-backed temporary decode storage share this budget.
         /// Caller buffers, borrowed dictionaries and fixed state are excluded.
         max_working_memory: usize = std.math.maxInt(usize),
+        /// Reject a frame as soon as its complete header advertises a larger
+        /// decode window. This window plus the largest configured dictionary
+        /// content determines the caller history workspace requirement.
+        max_window_size: Count = std.math.maxInt(Count),
         /// Maximum compressed bytes retained while waiting for validation.
         /// Data frames may exceed this value because consumed input prefixes are
         /// released block-by-block; each compressed block must still fit. A
@@ -5424,6 +5433,41 @@ pub const NativeIncrementalFrameDecoder = struct {
         return self.compressed_workspace_binding.active();
     }
 
+    pub fn requiredHistoryWorkspaceLen(max_window_size: Count, dictionary_len: usize) Error!usize {
+        return history_workspace.requiredLen(max_window_size, dictionary_len);
+    }
+
+    /// Borrow a circular frame-output history for ordinary `step` calls. The
+    /// configured `max_window_size` plus the largest configured dictionary
+    /// content is the required capacity. Dictionary bytes remain borrowed
+    /// separately and phase out as frame output fills the advertised window.
+    pub fn bindHistoryWorkspace(self: *NativeIncrementalFrameDecoder, storage: []u8) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        if (self.stable_binding.buffer != null) return error.InvalidBlockPlan;
+        const required = try requiredHistoryWorkspaceLen(self.options.max_window_size, self.configuredHistoryDictionaryLen());
+        if (storage.len < required) return error.OutputTooSmall;
+        var binding = try history_workspace.Binding.init(storage);
+        try self.validateHistoryWorkspace(binding, self.options);
+        try binding.validateSlice(self.direct_history.allocatedSlice());
+        self.direct_history.deinit(self.budget.allocator());
+        self.direct_history = .empty;
+        binding.resetFrame();
+        self.history_workspace_binding = binding;
+    }
+
+    pub fn clearHistoryWorkspace(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        self.history_workspace_binding.clear();
+    }
+
+    pub fn usesHistoryWorkspace(self: *const NativeIncrementalFrameDecoder) bool {
+        return self.history_workspace_binding.active();
+    }
+
+    pub fn historyWorkspaceCapacity(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.history_workspace_binding.capacity();
+    }
+
     fn installCompressedBlockWorkspace(self: *NativeIncrementalFrameDecoder, binding: compressed_workspace.Binding) void {
         if (!binding.active()) return;
         self.compressed_workspace_binding = binding;
@@ -5446,6 +5490,48 @@ pub const NativeIncrementalFrameDecoder = struct {
             try binding.validateSlice(std.mem.sliceAsBytes(dictionary_set.dictionaries));
             for (dictionary_set.dictionaries) |dictionary|
                 try binding.validateDictionary(dictionary);
+        }
+        try binding.validateSlice(self.history_workspace_binding.storage);
+    }
+
+    fn validateHistoryWorkspace(
+        self: *const NativeIncrementalFrameDecoder,
+        binding: history_workspace.Binding,
+        options: Options,
+    ) Error!void {
+        if (!binding.active()) return;
+        const required = try requiredHistoryWorkspaceLen(options.max_window_size, self.configuredHistoryDictionaryLen());
+        if (binding.storage.len < required) return error.OutputTooSmall;
+        try binding.validateSlice(options.skippable_output);
+        try binding.validateSlice(std.mem.sliceAsBytes(options.skippable_events));
+        try binding.validateSlice(self.frame_scratch.allocatedSlice());
+        try binding.validateSlice(self.decoded_scratch.allocatedSlice());
+        try binding.validateSlice(self.compressed_workspace_binding.bytes);
+        if (self.stable_binding.buffer) |output| try binding.validateSlice(output);
+        if (self.dictionary) |dictionary| try binding.validateDictionary(dictionary);
+        if (self.frame_dictionary) |dictionary| try binding.validateDictionary(dictionary);
+        if (self.dictionary_set) |dictionary_set| {
+            try binding.validateSlice(std.mem.sliceAsBytes(dictionary_set.dictionaries));
+            for (dictionary_set.dictionaries) |dictionary|
+                try binding.validateDictionary(dictionary);
+        }
+    }
+
+    fn configuredHistoryDictionaryLen(self: *const NativeIncrementalFrameDecoder) usize {
+        var maximum: usize = if (self.dictionary) |dictionary| dictionary.content.len else 0;
+        if (self.frame_dictionary) |dictionary| maximum = @max(maximum, dictionary.content.len);
+        if (self.dictionary_set) |dictionary_set| {
+            for (dictionary_set.dictionaries) |dictionary|
+                maximum = @max(maximum, dictionary.content.len);
+        }
+        return maximum;
+    }
+
+    fn validateHistoryDictionary(self: *const NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
+        try self.history_workspace_binding.validateDictionary(dictionary);
+        if (self.history_workspace_binding.active()) {
+            const required = try requiredHistoryWorkspaceLen(self.options.max_window_size, dictionary.content.len);
+            if (self.history_workspace_binding.storage.len < required) return error.OutputTooSmall;
         }
     }
 
@@ -5471,6 +5557,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn bindStableOutput(self: *NativeIncrementalFrameDecoder, output: []u8) Error!void {
+        if (self.history_workspace_binding.active()) return error.InvalidBlockPlan;
         try stable_driver.bind(self, output);
     }
     /// Release an idle stable-output binding so ordinary `step` calls can use
@@ -5505,6 +5592,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn setDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
         if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
         try self.compressed_workspace_binding.validateDictionary(dictionary);
+        try self.validateHistoryDictionary(dictionary);
         if (self.stable_binding.buffer) |output| try stable_driver.validateDictionary(output, dictionary);
         try prefix_decode_stream.setDictionary(self, dictionary, validatePrefixDictionary);
     }
@@ -5516,6 +5604,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn setPrefixWithDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
         if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
         try self.compressed_workspace_binding.validateDictionary(dictionary);
+        try self.validateHistoryDictionary(dictionary);
         if (self.stable_binding.buffer) |output| try stable_driver.validateDictionary(output, dictionary);
         try prefix_decode_stream.setPrefix(self, dictionary, validatePrefixDictionary);
     }
@@ -5609,7 +5698,9 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn resetWithOptions(self: *NativeIncrementalFrameDecoder, options: Options) Error!void {
         try options.validate();
         const compressed_binding = self.compressed_workspace_binding;
+        const history_binding = self.history_workspace_binding;
         try self.validateCompressedBlockWorkspace(compressed_binding, options);
+        try self.validateHistoryWorkspace(history_binding, options);
         const allocator = self.allocator;
         const dictionary = if (self.prefix_state.phase == .none) self.dictionary else null;
         const dictionary_set = if (self.prefix_state.phase == .none) self.dictionary_set else null;
@@ -5620,6 +5711,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.dictionary_set = dictionary_set;
         self.prefix_state.configured = configured;
         self.installCompressedBlockWorkspace(compressed_binding);
+        self.history_workspace_binding = history_binding;
+        self.history_workspace_binding.resetFrame();
     }
 
     /// Resume after a stopped member without resetting cumulative output,
@@ -5663,6 +5756,10 @@ pub const NativeIncrementalFrameDecoder = struct {
             return err;
         };
         self.compressed_workspace_binding.validateDictionary(dictionary) catch |err| {
+            self.recordError(.frame, err);
+            return err;
+        };
+        self.validateHistoryDictionary(dictionary) catch |err| {
             self.recordError(.frame, err);
             return err;
         };
@@ -5906,6 +6003,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             return error.NeedDictionary;
         }
         try self.compressed_workspace_binding.validateIo(input, output);
+        try self.history_workspace_binding.validateIo(input, output);
         self.last_error_name = "";
         self.last_error_phase = null;
         self.error_input_offset = null;
@@ -6336,7 +6434,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 continue;
                             }
                             var preflight_state = self.direct_sequence_state;
-                            const initial_history_len: Count = if (self.stable_binding.buffer != null) (try self.stable_binding.historyBackend()).len else self.direct_history.items.len;
+                            const initial_history_len = try self.visibleIncrementalHistoryLen(self.block_stream_frame_decoded_len);
                             const decoded_len = compressedLiteralOnlyBlockDecodedSize(
                                 block,
                                 self.block_stream_block_size_max,
@@ -6460,6 +6558,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                             if (sequence_output_start == null) {
                                 try self.reserveDirectOutputHistory(@min(output.len - output_written_step, self.block_stream_decoded_block_remaining));
                                 sequence_output_start = output_written_step;
+                                self.block_stream_sequence_history_position = self.block_stream_frame_decoded_len;
                             }
                             const section = self.block_stream_literal_section orelse {
                                 self.recordError(.block_stream, error.CorruptFrame);
@@ -6527,17 +6626,31 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     try history.copyMatch(self.block_stream_sequence_match_offset, output[match_start..][0..n]);
                                     match_end += n;
                                     try self.rememberDirectOutput(output[match_start..match_end]);
-                                } else copyMatchFromHistory(
-                                    output,
-                                    &match_end,
-                                    sequence_output_start.?,
-                                    self.direct_history.items,
-                                    self.block_stream_sequence_match_offset,
-                                    n,
-                                ) catch |err| {
-                                    self.recordError(.block_stream, err);
-                                    return err;
-                                };
+                                } else if (self.history_workspace_binding.active())
+                                    self.history_workspace_binding.copyMatch(
+                                        self.direct_dictionary_history,
+                                        output,
+                                        &match_end,
+                                        sequence_output_start.?,
+                                        self.block_stream_sequence_history_position,
+                                        self.block_stream_sequence_match_offset,
+                                        n,
+                                    ) catch |err| {
+                                        self.recordError(.block_stream, err);
+                                        return err;
+                                    }
+                                else
+                                    copyMatchFromHistory(
+                                        output,
+                                        &match_end,
+                                        sequence_output_start.?,
+                                        self.direct_history.items,
+                                        self.block_stream_sequence_match_offset,
+                                        n,
+                                    ) catch |err| {
+                                        self.recordError(.block_stream, err);
+                                        return err;
+                                    };
                                 if (match_end != match_start + n) {
                                     self.recordError(.block_stream, error.SizeMismatch);
                                     return error.SizeMismatch;
@@ -6752,6 +6865,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_frame_output_start = 0;
         self.direct_dictionary_history = &.{};
         self.direct_history.clearRetainingCapacity();
+        self.history_workspace_binding.resetFrame();
         self.direct_sequence_state = .{};
         self.direct_next_block_header_offset = 0;
         self.direct_decoded_len = 0;
@@ -6782,6 +6896,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.block_stream_sequence_literal_remaining = 0;
         self.block_stream_sequence_match_remaining = 0;
         self.block_stream_sequence_match_offset = 0;
+        self.block_stream_sequence_history_position = 0;
     }
 
     fn resetSkippableStream(self: *NativeIncrementalFrameDecoder) void {
@@ -6839,6 +6954,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.TruncatedFrame => return false,
             else => return err,
         };
+        try self.validateIncrementalWindow(header);
         const dictionary_history = try self.resolveDirectDictionaryHistory(header);
         const dictionary = self.resolveDirectDictionary(header);
         const initial_sequence_state = try initialSequenceFrameState(dictionary);
@@ -6874,8 +6990,12 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (!self.stable_binding.frame_active) try self.stable_binding.beginFrame(dictionary_history, self.direct_history_window_len);
         } else {
             self.direct_history.clearRetainingCapacity();
-            try self.reserveDirectOutputHistory(dictionary_history.len);
-            try self.rememberDirectOutput(dictionary_history);
+            if (self.history_workspace_binding.active())
+                try self.history_workspace_binding.beginFrame(@intCast(header.window_size), dictionary_history.len)
+            else {
+                try self.reserveDirectOutputHistory(dictionary_history.len);
+                try self.rememberDirectOutput(dictionary_history);
+            }
         }
         self.block_stream_input_offset = header.payload_offset;
         return true;
@@ -7010,7 +7130,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn reserveDirectOutputHistory(self: *NativeIncrementalFrameDecoder, additional: usize) Error!void {
-        if (self.stable_binding.buffer != null) return;
+        if (self.stable_binding.buffer != null or self.history_workspace_binding.active()) return;
         if (additional == 0 or self.direct_history_window_len == 0) return;
         const combined = try stream_count.addLocal(self.direct_history.items.len, additional);
         const needed = try stream_count.toLocal(@min(self.direct_history_window_len, combined));
@@ -7024,6 +7144,10 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     fn rememberDirectOutput(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
         if (self.stable_binding.buffer != null) return stable_driver.remember(self, bytes);
+        if (self.history_workspace_binding.active()) {
+            self.history_workspace_binding.append(bytes);
+            return;
+        }
         if (bytes.len == 0 or self.direct_history_window_len == 0) return;
         if (bytes.len >= self.direct_history_window_len) {
             const window_len = try stream_count.toLocal(self.direct_history_window_len);
@@ -7040,6 +7164,13 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.direct_history.shrinkRetainingCapacity(keep_len);
         }
         self.direct_history.appendSliceAssumeCapacity(bytes);
+    }
+
+    fn visibleIncrementalHistoryLen(self: *NativeIncrementalFrameDecoder, produced: Count) Error!Count {
+        if (self.stable_binding.buffer != null) return (try self.stable_binding.historyBackend()).len;
+        if (self.history_workspace_binding.active())
+            return @intCast(try self.history_workspace_binding.availableLen(self.direct_dictionary_history.len, produced));
+        return @intCast(self.direct_history.items.len);
     }
 
     fn ensureDirectOutputFitsExpected(self: *NativeIncrementalFrameDecoder) Error!void {
@@ -7240,6 +7371,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
         const frame = self.frame_scratch.items[0..frame_end];
         const header = try inspectNativeFrameHeaderWithFormat(frame, self.options.format);
+        try self.validateIncrementalWindow(header);
         const dictionary_history = try self.resolveDirectDictionaryHistory(header);
         const dictionary = self.resolveDirectDictionary(header);
         const initial_sequence_state = initialSequenceFrameState(dictionary) catch return false;
@@ -7366,8 +7498,12 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (!self.stable_binding.frame_active) try self.stable_binding.beginFrame(dictionary_history, self.direct_history_window_len);
         } else {
             self.direct_history.clearRetainingCapacity();
-            try self.reserveDirectOutputHistory(dictionary_history.len);
-            try self.rememberDirectOutput(dictionary_history);
+            if (self.history_workspace_binding.active())
+                try self.history_workspace_binding.beginFrame(@intCast(header.window_size), dictionary_history.len)
+            else {
+                try self.reserveDirectOutputHistory(dictionary_history.len);
+                try self.rememberDirectOutput(dictionary_history);
+            }
         }
         self.direct_frame_output_start = self.output_written;
         self.direct_dictionary_history = dictionary_history;
@@ -7410,6 +7546,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.TruncatedFrame => return,
             else => return err,
         };
+        try self.validateIncrementalWindow(header);
         if (!self.prefix_header_selected) {
             if (self.stable_binding.buffer) |output| {
                 if (self.resolveDirectDictionary(header)) |dictionary| try stable_driver.validateDictionary(output, dictionary);
@@ -7420,6 +7557,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
         _ = try stream_count.add(self.data_frame_count, 1);
         _ = try self.resolveDirectDictionaryHistory(header);
+    }
+
+    fn validateIncrementalWindow(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error!void {
+        if (header.window_size > self.options.max_window_size)
+            return error.OutputLimitExceeded;
     }
 
     fn advanceDirectOutputBlock(self: *NativeIncrementalFrameDecoder) Error!void {
@@ -7451,7 +7593,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             break :blk try compressedLiteralOnlyBlockDecodedSize(
                 self.frame_scratch.items[offset..][0..block_len],
                 self.direct_block_size_max,
-                if (self.stable_binding.buffer != null) (try self.stable_binding.historyBackend()).len else self.direct_history.items.len,
+                try self.visibleIncrementalHistoryLen(self.direct_decoded_read),
                 &preflight_state,
             );
         } else block_len;
