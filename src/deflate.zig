@@ -518,6 +518,10 @@ test "Deflate clone safe copy contracts" {
     try CloneTestOracle.contracts(@This(), std.testing.allocator);
 }
 
+test "gzip direct chunk consumer contracts" {
+    try @import("deflate/tests/gzip_chunks_direct.zig").contracts(@This());
+}
+
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
     return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
 }
@@ -8175,6 +8179,12 @@ const ChunkCursor = struct {
         const lo = try self.readByte();
         const hi = try self.readByte();
         return @as(u16, lo) | (@as(u16, hi) << 8);
+    }
+
+    fn readLittleU32(self: *ChunkCursor) Error!u32 {
+        var value: u32 = 0;
+        for (0..4) |shift| value |= @as(u32, try self.readByte()) << @intCast(shift * 8);
+        return value;
     }
 
     fn readBigU32(self: *ChunkCursor) Error!u32 {
@@ -16749,6 +16759,16 @@ fn validateGzipFooterWithOptions(input: []const u8, footer_offset: usize, actual
     if (!options.allow_trailing_data and footer_offset + 8 != input.len) return error.TrailingData;
 }
 
+fn validateGzipFooterChunksWithKnownTotal(chunks: []const []const u8, total_len: usize, footer_offset: usize, actual_crc: u32, output_len: usize, options: GzipDecodeOptions) Error!void {
+    if (footer_offset > total_len or total_len - footer_offset < 8) return error.TruncatedFrame;
+    var cursor = try ChunkCursor.init(chunks, total_len, footer_offset);
+    const expected_crc = try cursor.readLittleU32();
+    const expected_size = try cursor.readLittleU32();
+    if (!options.ignore_crc32 and actual_crc != expected_crc) return error.ChecksumMismatch;
+    if (!options.ignore_isize and @as(u32, @truncate(output_len)) != expected_size) return error.SizeMismatch;
+    if (!options.allow_trailing_data and cursor.absolute != total_len) return error.TrailingData;
+}
+
 pub fn inspectGzipMemberAlloc(allocator: std.mem.Allocator, input: []const u8, member_index: usize) !GzipMemberInfo {
     return inspectGzipMemberAllocLimited(allocator, input, member_index, 128 * 1024 * 1024);
 }
@@ -16850,6 +16870,53 @@ pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecod
     return raw.output_written;
 }
 
+fn parseGzipHeaderFromChunksKnownTotal(chunks: []const []const u8, total_len: usize) Error!usize {
+    // Match the contiguous parser's priority: an incomplete fixed header is
+    // truncated even when its available prefix already has invalid bytes.
+    if (total_len < gzip_header.len) return error.TruncatedFrame;
+    var cursor = try ChunkCursor.init(chunks, total_len, 0);
+    if (try cursor.readByte() != 0x1f or try cursor.readByte() != 0x8b) return error.BadGzipHeader;
+    if (try cursor.readByte() != 8) return error.BadGzipHeader;
+    const flags = try cursor.readByte();
+    if ((flags & 0xe0) != 0) return error.BadGzipHeader;
+    try cursor.skip(6); // MTIME, XFL and OS.
+
+    if ((flags & 0x04) != 0) {
+        const extra_len = try cursor.readLittleU16();
+        try cursor.skip(extra_len);
+    }
+    if ((flags & 0x08) != 0) try skipGzipChunkZeroTerminated(&cursor);
+    if ((flags & 0x10) != 0) try skipGzipChunkZeroTerminated(&cursor);
+    if ((flags & 0x02) != 0) {
+        const crc_offset = cursor.absolute;
+        const expected = try cursor.readLittleU16();
+        var crc = checksum.Crc32Best.init();
+        var crc_cursor = try ChunkCursor.init(chunks, total_len, 0);
+        try crc_cursor.updateHash(checksum.Crc32Best, &crc, crc_offset);
+        if (@as(u16, @truncate(crc.digest())) != expected) return error.BadGzipHeader;
+    }
+    return cursor.absolute;
+}
+
+fn skipGzipChunkZeroTerminated(cursor: *ChunkCursor) Error!void {
+    while (try cursor.readByte() != 0) {}
+}
+
+pub fn decodeGzipChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
+    return decodeGzipChunksIntoWithOptions(chunks, output, .{});
+}
+
+pub fn decodeGzipChunksIntoWithOptions(chunks: []const []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
+    const total_len = try chunksTotalLen(chunks);
+    const data_offset = try parseGzipHeaderFromChunksKnownTotal(chunks, total_len);
+    var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, data_offset, total_len);
+    const raw = try decodeRawAutoWithDictionaryFromReader(&reader, data_offset, "", output);
+    const footer_offset = data_offset + raw.input_read;
+    const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(output[0..raw.output_written]);
+    try validateGzipFooterChunksWithKnownTotal(chunks, total_len, footer_offset, actual_crc, raw.output_written, options);
+    return raw.output_written;
+}
+
 pub fn decodeGzipChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
     return decodeGzipChunksWithOptions(chunks, compressed_scratch, output, .{});
 }
@@ -16924,9 +16991,9 @@ fn decodeGzipChunksAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator,
 /// This mirrors `ZlibDecoder` for gzip members: callers provide all compressed
 /// input up front, the decoder validates the gzip header/footer and DEFLATE
 /// payload into caller-owned decoded scratch, and `step` drains that scratch in
-/// bounded output chunks. Chunked initializers only concatenate gzip bytes into
-/// caller scratch before validation; they do not represent true incremental
-/// parsing yet.
+/// bounded output chunks. `*FromChunksDirect` initializers parse discontiguous
+/// gzip bytes in place; legacy chunked initializers retain their compressed
+/// scratch contract.
 pub const GzipDecoder = struct {
     decoded: []const u8 = &.{},
     frame_len: usize = 0,
@@ -16996,6 +17063,30 @@ pub const GzipDecoder = struct {
     pub fn initFromChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!GzipDecoder {
         var self = GzipDecoder{};
         try self.resetFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, options, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksDirect(chunks: []const []const u8, output_scratch: []u8) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksDirect(chunks, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSizeDirect(chunks: []const []const u8, output_scratch: []u8, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksExactSizeDirect(chunks, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithOptionsDirect(chunks: []const []const u8, output_scratch: []u8, options: GzipDecodeOptions) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksWithOptionsDirect(chunks, output_scratch, options);
+        return self;
+    }
+
+    pub fn initFromChunksWithOptionsExactSizeDirect(chunks: []const []const u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksWithOptionsExactSizeDirect(chunks, output_scratch, options, expected_output_len);
         return self;
     }
 
@@ -17087,6 +17178,34 @@ pub const GzipDecoder = struct {
     pub fn resetFromChunksWithOptionsExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
         return self.resetWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
+    }
+
+    pub fn resetFromChunksDirect(self: *GzipDecoder, chunks: []const []const u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithOptionsDirect(chunks, output_scratch, .{});
+    }
+
+    pub fn resetFromChunksExactSizeDirect(self: *GzipDecoder, chunks: []const []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksWithOptionsExactSizeDirect(chunks, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithOptionsDirect(self: *GzipDecoder, chunks: []const []const u8, output_scratch: []u8, options: GzipDecodeOptions) Error!void {
+        const total_len = chunksTotalLen(chunks) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        const written = decodeGzipChunksIntoWithOptions(chunks, output_scratch, options) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.installDecoded(total_len, output_scratch, written);
+    }
+
+    pub fn resetFromChunksWithOptionsExactSizeDirect(self: *GzipDecoder, chunks: []const []const u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
+        try self.resetFromChunksWithOptionsDirect(chunks, output_scratch, options);
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
     }
 
     pub fn resetConcatenated(self: *GzipDecoder, input: []const u8, scratch: []u8) Error!void {

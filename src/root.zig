@@ -3115,6 +3115,10 @@ test "root Deflate clone public controls" {
     try @import("tests/codec_state_controls_root.zig").deflateContracts(@This());
 }
 
+test "root gzip direct chunk consumers" {
+    try @import("tests/gzip_direct_chunks_root.zig").contracts(@This());
+}
+
 test "root Brotli literal context control" {
     try @import("tests/codec_state_controls_root.zig").brotliContracts(@This());
 }
@@ -3925,6 +3929,8 @@ pub const decodeGzipAppendLimited = deflate.decodeGzipAppendLimited;
 pub const decodeGzipAppendWithOptionsLimited = deflate.decodeGzipAppendWithOptionsLimited;
 pub const decodeGzipChunks = deflate.decodeGzipChunks;
 pub const decodeGzipChunksWithOptions = deflate.decodeGzipChunksWithOptions;
+pub const decodeGzipChunksInto = deflate.decodeGzipChunksInto;
+pub const decodeGzipChunksIntoWithOptions = deflate.decodeGzipChunksIntoWithOptions;
 pub const decodeGzipChunksAlloc = deflate.decodeGzipChunksAlloc;
 pub const decodeGzipChunksAllocExactSize = deflate.decodeGzipChunksAllocExactSize;
 pub const decodeGzipChunksAllocLimited = deflate.decodeGzipChunksAllocLimited;
@@ -9917,6 +9923,16 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodedGzipConcatenatedChunksSizeWithOptions;
     _ = decodeGzipChunks;
     _ = decodeGzipChunksWithOptions;
+    _ = decodeGzipChunksInto;
+    _ = decodeGzipChunksIntoWithOptions;
+    _ = GzipDecoder.initFromChunksDirect;
+    _ = GzipDecoder.initFromChunksExactSizeDirect;
+    _ = GzipDecoder.initFromChunksWithOptionsDirect;
+    _ = GzipDecoder.initFromChunksWithOptionsExactSizeDirect;
+    _ = GzipDecoder.resetFromChunksDirect;
+    _ = GzipDecoder.resetFromChunksExactSizeDirect;
+    _ = GzipDecoder.resetFromChunksWithOptionsDirect;
+    _ = GzipDecoder.resetFromChunksWithOptionsExactSizeDirect;
     _ = decodeGzipChunksAlloc;
     _ = decodeGzipChunksAllocExactSize;
     _ = decodeGzipChunksAllocLimited;

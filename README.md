@@ -1890,6 +1890,16 @@ const gzip_member_from_chunks = try vort.inspectGzipMemberFromChunksAlloc(alloca
 _ = gzip_member_from_chunks.deflate_bytes;
 const gzip_chunked_written = try vort.decodeGzipChunks(&gzip_chunks, &gzip_join_scratch, &gzip_out);
 _ = gzip_chunked_written;
+// Direct chunk decoding borrows each compressed span for this synchronous call
+// and needs no full compressed join buffer.
+const gzip_direct_written = try vort.decodeGzipChunksInto(&gzip_chunks, &gzip_out);
+_ = gzip_direct_written;
+var gzip_direct_decoder = try vort.GzipDecoder.initFromChunksExactSizeDirect(
+    &gzip_chunks,
+    &gzip_out,
+    "payload".len,
+);
+_ = gzip_direct_decoder.snapshot();
 const gzip_chunked_exact = try vort.decodeGzipChunksAllocExactSize(
     allocator,
     &gzip_chunks,

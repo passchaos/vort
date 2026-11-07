@@ -29,6 +29,12 @@ incremental, parallel and seekable encoders/decoders, plus bounded caller-owned
 decode history with explicit bind/rebind/clear transitions. Native, x86, WASI
 and libzstd differential gates preserve those lifecycle boundaries.
 
+The [gzip direct-chunk decoder](formats/gzip-direct-chunks.md) now parses a
+single RFC 1952 member directly across discontiguous caller spans, including
+optional headers, FHCRC, DEFLATE payload bits and the CRC32/ISIZE footer. It
+removes the full compressed join buffer from caller-output and reusable-decoder
+paths while preserving the legacy scratch APIs and their observable errors.
+
 The [default-window far-copy reach](performance/br/command-model-lifetime.md#default-window-far-copy-reach-2026-11-06)
 adds bounded far-match candidates to default q6-q11 one-shot streams up to the
 16 MiB meta-block limit, advertising only the window each winning plan uses
