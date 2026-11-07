@@ -777,6 +777,8 @@ pub fn build(b: *std.Build) void {
     @import("build/zip_wide_read.zig").register(b, target, optimize, vort_mod_releasefast);
     @import("build/codec_controls.zig").register(b, target, optimize, vort_mod_releasefast);
     @import("build/codec_state_controls.zig").register(b, target, optimize, vort_mod_releasefast);
+    const br_prefix_decode_gates = @import("build/br_prefix_decode.zig").register(b, target, optimize, vort_mod_releasefast);
+    wasm_check_step.dependOn(br_prefix_decode_gates.compile_wasm);
     const gzip_direct_chunk_gates = @import("build/gzip_direct_chunks.zig").register(b, target, optimize, vort_mod_releasefast);
     wasm_check_step.dependOn(gzip_direct_chunk_gates.compile_wasm);
     const zstd_prefix_stable_gates = @import("build/zstd_prefix_stable.zig").register(b, target, optimize, vort_mod_releasefast);
@@ -7836,6 +7838,7 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(br_prefix_decode_gates.compile_all);
     check_step.dependOn(gzip_direct_chunk_gates.compile_all);
     check_step.dependOn(zstd_prefix_stable_gates.compile_all);
     check_step.dependOn(&zstd_parallel_frame_tests.step);

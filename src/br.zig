@@ -1285,6 +1285,34 @@ pub const DecodeOptions = struct {
     shared_dictionary: SharedDictionary = .{},
 };
 
+/// Progress for decoding exactly the first Brotli stream in a larger byte
+/// sequence. `input_read` ends after the stream's validated zero padding;
+/// `output_written` is the decoded byte count published to caller storage.
+pub const DecodePrefixResult = struct {
+    input_read: usize,
+    output_written: usize,
+};
+
+pub const DecodedPrefixSize = struct {
+    input_read: usize,
+    decoded_bytes: Counter,
+};
+
+/// Owned counterpart of `DecodePrefixResult`. `bytes` belongs to the caller.
+pub const DecodedPrefix = struct {
+    bytes: []u8,
+    input_read: usize,
+    output_written: usize,
+
+    pub fn deinit(self: DecodedPrefix, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+};
+
+test "Brotli prefix decode contracts" {
+    try @import("br/prefix_decode_tests.zig").contracts(@This());
+}
+
 const DecodeSharedDictionary = struct {
     dictionary: SharedDictionary,
     total_size: usize,
@@ -14958,6 +14986,17 @@ pub fn decodeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error
 }
 
 pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error![]u8 {
+    const decoded = try decodeStreamPrefixAllocLimited(allocator, stream, max_output_len);
+    errdefer decoded.deinit(allocator);
+    if (decoded.input_read != stream.len) return error.TrailingData;
+    return decoded.bytes;
+}
+
+pub fn decodeStreamPrefixAlloc(allocator: std.mem.Allocator, stream: []const u8) Error!DecodedPrefix {
+    return decodeStreamPrefixAllocLimited(allocator, stream, std.math.maxInt(usize));
+}
+
+pub fn decodeStreamPrefixAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!DecodedPrefix {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -14968,9 +15007,10 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
     while (true) {
         switch (try readStreamMetaBlockHeader(&reader)) {
             .end => {
-                try ensureZeroPaddingAndEnd(reader);
+                const input_read = try finishStreamPrefix(reader);
                 std.debug.assert(written == out.items.len);
-                return out.toOwnedSlice(allocator);
+                const bytes = try out.toOwnedSlice(allocator);
+                return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
@@ -14982,8 +15022,9 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
                     try processMinimalCompressedMetaBlock(&reader, out.items, &written, header.decoded_len, &last_distances, window_bits);
                 if (written != meta_block_end) return error.SizeMismatch;
                 if (header.final) {
-                    try ensureZeroPaddingAndEnd(reader);
-                    return out.toOwnedSlice(allocator);
+                    const input_read = try finishStreamPrefix(reader);
+                    const bytes = try out.toOwnedSlice(allocator);
+                    return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
                 }
             },
             .uncompressed => |meta_block_len| {
@@ -15004,6 +15045,19 @@ pub fn decodeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []cons
 
 pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAllocLimited(allocator, stream, max_output_len);
+    const decoded = try decodeStreamPrefixAllocLimitedWithOptions(allocator, stream, max_output_len, options);
+    errdefer decoded.deinit(allocator);
+    if (decoded.input_read != stream.len) return error.TrailingData;
+    return decoded.bytes;
+}
+
+pub fn decodeStreamPrefixAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error!DecodedPrefix {
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamPrefixAlloc(allocator, stream);
+    return decodeStreamPrefixAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
+}
+
+pub fn decodeStreamPrefixAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamPrefixAllocLimited(allocator, stream, max_output_len);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -15021,9 +15075,10 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
     while (true) {
         switch (try readStreamMetaBlockHeader(&reader)) {
             .end => {
-                try ensureZeroPaddingAndEnd(reader);
+                const input_read = try finishStreamPrefix(reader);
                 std.debug.assert(written == out.items.len);
-                return out.toOwnedSlice(allocator);
+                const bytes = try out.toOwnedSlice(allocator);
+                return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
@@ -15035,8 +15090,9 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
                     try processMinimalCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (written != meta_block_end) return error.SizeMismatch;
                 if (header.final) {
-                    try ensureZeroPaddingAndEnd(reader);
-                    return out.toOwnedSlice(allocator);
+                    const input_read = try finishStreamPrefix(reader);
+                    const bytes = try out.toOwnedSlice(allocator);
+                    return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
                 }
             },
             .uncompressed => |meta_block_len| {
@@ -15065,6 +15121,17 @@ pub fn decodeStreamAllocExactSizeWithOptions(allocator: std.mem.Allocator, strea
     const written = try decodeStreamIntoExactSizeWithOptions(stream, out, expected_output_len, options);
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+pub fn decodeStreamPrefixAllocExactSize(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize) Error!DecodedPrefix {
+    return decodeStreamPrefixAllocExactSizeWithOptions(allocator, stream, expected_output_len, .{});
+}
+
+pub fn decodeStreamPrefixAllocExactSizeWithOptions(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const result = try decodeStreamPrefixIntoExactSizeWithOptions(stream, out, expected_output_len, options);
+    return .{ .bytes = out, .input_read = result.input_read, .output_written = result.output_written };
 }
 
 pub fn decodeStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8) Error!usize {
@@ -15140,6 +15207,36 @@ pub fn decodeStreamAppendExactSizeWithOptions(allocator: std.mem.Allocator, out:
     return written;
 }
 
+pub fn decodeStreamPrefixAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8) Error!DecodePrefixResult {
+    return decodeStreamPrefixAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), .{});
+}
+
+pub fn decodeStreamPrefixAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, options: DecodeOptions) Error!DecodePrefixResult {
+    return decodeStreamPrefixAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), options);
+}
+
+pub fn decodeStreamPrefixAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixAppendLimitedWithOptions(allocator, out, stream, max_output_len, .{});
+}
+
+pub fn decodeStreamPrefixAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const decoded = try decodeStreamPrefixAllocLimitedWithOptions(allocator, stream, max_output_len, options);
+    defer decoded.deinit(allocator);
+    try out.appendSlice(allocator, decoded.bytes);
+    return .{ .input_read = decoded.input_read, .output_written = decoded.output_written };
+}
+
+pub fn decodeStreamPrefixAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixAppendExactSizeWithOptions(allocator, out, stream, expected_output_len, .{});
+}
+
+pub fn decodeStreamPrefixAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const decoded = try decodeStreamPrefixAllocExactSizeWithOptions(allocator, stream, expected_output_len, options);
+    defer decoded.deinit(allocator);
+    try out.appendSlice(allocator, decoded.bytes);
+    return .{ .input_read = decoded.input_read, .output_written = decoded.output_written };
+}
+
 const StreamMetaBlockHeader = union(enum) {
     end,
     metadata,
@@ -15185,7 +15282,13 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
             return payload.len;
         }
     }
-    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamInto(stream, output);
+    const decoded = try decodeStreamPrefixInto(stream, output);
+    if (decoded.input_read != stream.len) return error.TrailingData;
+    return decoded.output_written;
+}
+
+pub fn decodeStreamPrefixInto(stream: []const u8, output: []u8) Error!DecodePrefixResult {
+    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamPrefixInto(stream, output);
     var reader = bitstream.BitReader.init(stream);
     const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
@@ -15193,15 +15296,13 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
     while (true) {
         switch (try readStreamMetaBlockHeader(&reader)) {
             .end => {
-                try ensureZeroPaddingAndEnd(reader);
-                return written;
+                return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
                 try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
                 if (header.final) {
-                    try ensureZeroPaddingAndEnd(reader);
-                    return written;
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
                 }
             },
             .uncompressed => |meta_block_len| {
@@ -15226,10 +15327,17 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
             return payload.len;
         }
     }
+    const decoded = try decodeStreamPrefixIntoWithOptions(stream, output, options);
+    if (decoded.input_read != stream.len) return error.TrailingData;
+    return decoded.output_written;
+}
+
+pub noinline fn decodeStreamPrefixIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!DecodePrefixResult {
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamPrefixInto(stream, output);
     var shared = try decodeSharedDictionary(options);
     const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
     if (dictionary == null and stream.len >= large_stream_decode_threshold)
-        return decodeLargeStreamIntoWithOptions(stream, output, options);
+        return decodeLargeStreamPrefixIntoWithOptions(stream, output, options);
     var reader = bitstream.BitReader.init(stream);
     const window = try readWindowInfo(&reader, options);
     var written: usize = 0;
@@ -15237,15 +15345,13 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
     while (true) {
         switch (try readStreamMetaBlockHeader(&reader)) {
             .end => {
-                try ensureZeroPaddingAndEnd(reader);
-                return written;
+                return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
                 try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (header.final) {
-                    try ensureZeroPaddingAndEnd(reader);
-                    return written;
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
                 }
             },
             .uncompressed => |meta_block_len| {
@@ -15310,7 +15416,7 @@ noinline fn singleUncompressedStreamPayload(stream: []const u8) ?[]const u8 {
 
 const large_stream_decode_threshold: usize = 16 * 1024;
 
-noinline fn decodeLargeStreamInto(stream: []const u8, output: []u8) Error!usize {
+noinline fn decodeLargeStreamPrefixInto(stream: []const u8, output: []u8) Error!DecodePrefixResult {
     var reader = bitstream.BitReader.init(stream);
     const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
@@ -15318,15 +15424,13 @@ noinline fn decodeLargeStreamInto(stream: []const u8, output: []u8) Error!usize 
     while (true) {
         switch (try readStreamMetaBlockHeader(&reader)) {
             .end => {
-                try ensureZeroPaddingAndEnd(reader);
-                return written;
+                return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |meta| {
                 try processLargeCompressedMetaBlock(&reader, output, &written, meta.decoded_len, &last_distances, window_bits);
                 if (meta.final) {
-                    try ensureZeroPaddingAndEnd(reader);
-                    return written;
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
                 }
             },
             .uncompressed => |meta_block_len| {
@@ -15339,7 +15443,7 @@ noinline fn decodeLargeStreamInto(stream: []const u8, output: []u8) Error!usize 
     }
 }
 
-noinline fn decodeLargeStreamIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!usize {
+noinline fn decodeLargeStreamPrefixIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!DecodePrefixResult {
     var reader = bitstream.BitReader.init(stream);
     const window = try readWindowInfo(&reader, options);
     var written: usize = 0;
@@ -15347,15 +15451,13 @@ noinline fn decodeLargeStreamIntoWithOptions(stream: []const u8, output: []u8, o
     while (true) {
         switch (try readStreamMetaBlockHeader(&reader)) {
             .end => {
-                try ensureZeroPaddingAndEnd(reader);
-                return written;
+                return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |meta| {
                 try processLargeCompressedMetaBlockWithOptions(&reader, output, &written, meta.decoded_len, &last_distances, window);
                 if (meta.final) {
-                    try ensureZeroPaddingAndEnd(reader);
-                    return written;
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
                 }
             },
             .uncompressed => |meta_block_len| {
@@ -15394,6 +15496,22 @@ pub fn decodeStreamIntoLimitedWithOptions(stream: []const u8, output: []u8, max_
     return written;
 }
 
+pub fn decodeStreamPrefixIntoLimited(stream: []const u8, output: []u8, max_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixIntoLimitedWithOptions(stream, output, max_output_len, .{});
+}
+
+pub fn decodeStreamPrefixIntoLimitedWithOptions(stream: []const u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const size = try decodedStreamPrefixSizeLimitedWithOptions(stream, max_output_len, options);
+    const decoded_len = try stream_count.toLocal(size.decoded_bytes);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const result = decodeStreamPrefixIntoWithOptions(stream, output[0..decoded_len], options) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (result.input_read != size.input_read or result.output_written != decoded_len) return error.SizeMismatch;
+    return result;
+}
+
 pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_output_len: usize) Error!usize {
     if (output.len < expected_output_len) return error.OutputTooSmall;
     const written = decodeStreamInto(stream, output[0..expected_output_len]) catch |err| switch (err) {
@@ -15415,6 +15533,20 @@ pub fn decodeStreamIntoExactSizeWithOptions(stream: []const u8, output: []u8, ex
     return written;
 }
 
+pub fn decodeStreamPrefixIntoExactSize(stream: []const u8, output: []u8, expected_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixIntoExactSizeWithOptions(stream, output, expected_output_len, .{});
+}
+
+pub fn decodeStreamPrefixIntoExactSizeWithOptions(stream: []const u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const result = decodeStreamPrefixIntoWithOptions(stream, output[0..expected_output_len], options) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (result.output_written != expected_output_len) return error.SizeMismatch;
+    return result;
+}
+
 pub fn decodedStreamSize(stream: []const u8) Error!Counter {
     return try decodedStreamSizeLimited(stream, std.math.maxInt(Counter));
 }
@@ -15431,6 +15563,28 @@ pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) 
 pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
     if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSizeLimited(stream, max_output_len);
     return (try summarizeStreamLimitedWithOptions(stream, max_output_len, options)).decoded_bytes;
+}
+
+pub fn decodedStreamPrefixSize(stream: []const u8) Error!DecodedPrefixSize {
+    return decodedStreamPrefixSizeLimitedWithOptions(stream, std.math.maxInt(Counter), .{});
+}
+
+pub fn decodedStreamPrefixSizeLimited(stream: []const u8, max_output_len: Counter) Error!DecodedPrefixSize {
+    return decodedStreamPrefixSizeLimitedWithOptions(stream, max_output_len, .{});
+}
+
+pub fn decodedStreamPrefixSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!DecodedPrefixSize {
+    return decodedStreamPrefixSizeLimitedWithOptions(stream, std.math.maxInt(Counter), options);
+}
+
+pub fn decodedStreamPrefixSizeLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!DecodedPrefixSize {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    var input_read: usize = 0;
+    const summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, &diagnostics, null, &input_read) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => return error.UnsupportedBrotliFeature,
+        else => |public_err| return public_err,
+    };
+    return .{ .input_read = input_read, .decoded_bytes = summary.decoded_bytes };
 }
 
 pub fn summarizeStream(stream: []const u8) Error!StreamSummary {
@@ -15462,7 +15616,7 @@ pub fn summarizeStreamWithOptionsAndDiagnostics(stream: []const u8, options: Dec
 }
 
 pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: Counter, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, .{}, diagnostics, null) catch |err| switch (err) {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, .{}, diagnostics, null, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
@@ -15470,7 +15624,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
 
 pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
@@ -15510,7 +15664,7 @@ pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, histo
 }
 
 pub fn summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
@@ -15557,13 +15711,13 @@ pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.A
             // and streams that never need the larger history still complete
             // through the fixed in-state ring, while a genuine exhaustion
             // reports the original allocation failure.
-            return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |summary_err| switch (summary_err) {
+            return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null, null) catch |summary_err| switch (summary_err) {
                 error.SummaryHistoryExhausted => return alloc_err,
                 else => |public_err| return public_err,
             };
         };
         defer allocator.free(history);
-        return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
+        return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history, null) catch |err| switch (err) {
             error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
             else => |public_err| public_err,
         };
@@ -15573,7 +15727,7 @@ pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.A
     // 16-bit window. Avoid reserving as much as 16 MiB merely because the wire
     // header advertises WBITS=24; retry with the declared window only when the
     // fixed summary actually loses context needed to select a literal tree.
-    const fixed_summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
+    const fixed_summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => null,
         else => |public_err| return public_err,
     };
@@ -15587,7 +15741,7 @@ pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.A
     const history_len = stream_count.bounded(max_output_len, (@as(usize, 1) << window_bits) - 16);
     const history = try allocator.alloc(u8, history_len);
     defer allocator.free(history);
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history, null) catch |err| switch (err) {
         // A full RFC window can replay every legal backward copy. Preserve the
         // public error contract if a future decoder extension violates that
         // invariant rather than leaking this private retry signal.
@@ -15666,7 +15820,7 @@ test "br allocating summary history hint is bounded and conservative" {
     try std.testing.expectEqual(stored.len, (try summarizeStreamAlloc(std.testing.failing_allocator, stored_stream)).decoded_bytes);
 }
 
-fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
+fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8, prefix_input_read: ?*usize) SummaryError!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
     const window = readWindowInfo(&reader, options) catch |err| {
@@ -15681,7 +15835,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
     var summary = StreamSummary{
         .window_bits = window.bits,
         .large_window = window.large,
-        .input_bytes = stream.len,
+        .input_bytes = 0,
     };
     var last_distances = initial_last_distances;
     var literal_history = LiteralHistory{ .external = history_storage };
@@ -15699,10 +15853,15 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             };
             const is_last_empty = is_last_empty_bit == 1;
             if (is_last_empty) {
-                ensureZeroPaddingAndEnd(reader) catch |err| {
+                const input_read = finishStreamPrefix(reader) catch |err| {
                     recordSummaryError(diagnostics, .padding, reader, meta_block_index);
                     return err;
                 };
+                if (prefix_input_read) |published| published.* = input_read else if (input_read != stream.len) {
+                    recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                    return error.TrailingData;
+                }
+                summary.input_bytes = input_read;
                 summary.meta_block_count = std.math.add(Counter, summary.meta_block_count, 1) catch return error.IntegerOverflow;
                 summary.empty_meta_block_count = std.math.add(Counter, summary.empty_meta_block_count, 1) catch return error.IntegerOverflow;
                 return summary;
@@ -15756,10 +15915,15 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
                 return err;
             };
             try applySummaryMetaBlockStats(&summary, block_stats);
-            ensureZeroPaddingAndEnd(reader) catch |err| {
+            const input_read = finishStreamPrefix(reader) catch |err| {
                 recordSummaryError(diagnostics, .padding, reader, meta_block_index);
                 return err;
             };
+            if (prefix_input_read) |published| published.* = input_read else if (input_read != stream.len) {
+                recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                return error.TrailingData;
+            }
+            summary.input_bytes = input_read;
             return summary;
         }
         const is_uncompressed_bit = reader.readBits(u1, 1) catch |err| {
@@ -15800,6 +15964,105 @@ fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u
 
 fn decodedStreamSizeAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
     return (try summarizeStreamAllocLimitedWithOptions(allocator, stream, max_output_len, options)).decoded_bytes;
+}
+
+pub fn decodeStreamPrefixChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error!DecodedPrefix {
+    return decodeStreamPrefixChunksAllocWithOptions(allocator, chunks, compressed_scratch, .{});
+}
+
+pub fn decodeStreamPrefixChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!DecodedPrefix {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixAllocWithOptions(allocator, joined, options);
+}
+
+pub fn decodeStreamPrefixChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!DecodedPrefix {
+    return decodeStreamPrefixChunksAllocLimitedWithOptions(allocator, chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn decodeStreamPrefixChunksAllocLimitedWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixAllocLimitedWithOptions(allocator, joined, max_output_len, options);
+}
+
+pub fn decodeStreamPrefixChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!DecodedPrefix {
+    return decodeStreamPrefixChunksAllocExactSizeWithOptions(allocator, chunks, compressed_scratch, expected_output_len, .{});
+}
+
+pub fn decodeStreamPrefixChunksAllocExactSizeWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixAllocExactSizeWithOptions(allocator, joined, expected_output_len, options);
+}
+
+pub fn decodeStreamPrefixChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!DecodePrefixResult {
+    return decodeStreamPrefixChunksAppendWithOptions(allocator, out, chunks, compressed_scratch, .{});
+}
+
+pub fn decodeStreamPrefixChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!DecodePrefixResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixAppendWithOptions(allocator, out, joined, options);
+}
+
+pub fn decodeStreamPrefixChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixChunksAppendLimitedWithOptions(allocator, out, chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn decodeStreamPrefixChunksAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixAppendLimitedWithOptions(allocator, out, joined, max_output_len, options);
+}
+
+pub fn decodeStreamPrefixChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixChunksAppendExactSizeWithOptions(allocator, out, chunks, compressed_scratch, expected_output_len, .{});
+}
+
+pub fn decodeStreamPrefixChunksAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixAppendExactSizeWithOptions(allocator, out, joined, expected_output_len, options);
+}
+
+pub fn decodeStreamPrefixChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!DecodePrefixResult {
+    return decodeStreamPrefixChunksIntoWithOptions(chunks, compressed_scratch, output, .{});
+}
+
+pub fn decodeStreamPrefixChunksIntoWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodeOptions) Error!DecodePrefixResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixIntoWithOptions(joined, output, options);
+}
+
+pub fn decodeStreamPrefixChunksIntoLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixChunksIntoLimitedWithOptions(chunks, compressed_scratch, output, max_output_len, .{});
+}
+
+pub fn decodeStreamPrefixChunksIntoLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixIntoLimitedWithOptions(joined, output, max_output_len, options);
+}
+
+pub fn decodeStreamPrefixChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!DecodePrefixResult {
+    return decodeStreamPrefixChunksIntoExactSizeWithOptions(chunks, compressed_scratch, output, expected_output_len, .{});
+}
+
+pub fn decodeStreamPrefixChunksIntoExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeStreamPrefixIntoExactSizeWithOptions(joined, output, expected_output_len, options);
+}
+
+pub fn decodedStreamPrefixChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!DecodedPrefixSize {
+    return decodedStreamPrefixChunksSizeWithOptions(chunks, compressed_scratch, .{});
+}
+
+pub fn decodedStreamPrefixChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!DecodedPrefixSize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodedStreamPrefixSizeWithOptions(joined, options);
+}
+
+pub fn decodedStreamPrefixChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter) Error!DecodedPrefixSize {
+    return decodedStreamPrefixChunksSizeLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn decodedStreamPrefixChunksSizeLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) Error!DecodedPrefixSize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodedStreamPrefixSizeLimitedWithOptions(joined, max_output_len, options);
 }
 
 pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
@@ -24626,9 +24889,13 @@ fn skipMetadataMetaBlockAndReturnLen(reader: *bitstream.BitReader) Error!usize {
 }
 
 fn ensureZeroPaddingAndEnd(reader: bitstream.BitReader) Error!void {
+    if (try finishStreamPrefix(reader) != reader.input.len) return error.TrailingData;
+}
+
+fn finishStreamPrefix(reader: bitstream.BitReader) Error!usize {
     var copy = reader;
     try consumeZeroPaddingToByte(&copy);
-    if (copy.byte_index != copy.input.len) return error.TrailingData;
+    return copy.byte_index;
 }
 
 test "br stored stream encodes RFC-valid empty stream" {

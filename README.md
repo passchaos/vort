@@ -1493,6 +1493,16 @@ defer zstd_bounded_incremental.deinit();
 // incremental decoder through Options.decode.
 const br_large_window = vort.BrotliDecodeOptions{ .allow_large_window = true };
 _ = try vort.brDecodeStreamIntoWithOptions(encoded_large_window, output, br_large_window);
+// Prefix APIs validate exactly one Brotli stream and return its byte boundary;
+// strict brDecodeStream* APIs continue to reject the same suffix.
+const br_first = try vort.brEncodeStoredStreamAlloc(allocator, "payload");
+defer allocator.free(br_first);
+const br_joined = try std.mem.concat(allocator, u8, &.{ br_first, "NEXT-PROTOCOL" });
+defer allocator.free(br_joined);
+var br_prefix_output: ["payload".len]u8 = undefined;
+const br_prefix = try vort.brDecodeStreamPrefixInto(br_joined, &br_prefix_output);
+const untouched_suffix = br_joined[br_prefix.input_read..];
+_ = untouched_suffix;
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
 var zstd_incremental_encoder = try vort.ZstdNativeIncrementalFrameEncoder.initWithPresetDictionary(allocator, .{
     .include_content_size = false,
