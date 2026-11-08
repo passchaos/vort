@@ -148,3 +148,12 @@ before/after hash snapshot covers these handoff checks. Earlier timing-run
 manifests cover core source and executable identity with supplemental Br-tool
 bindings; the final full snapshot is not retroactively described as having
 existed during those runs. No source changes occur between timing and handoff.
+
+## Tree-score cache capacity experiment: rejected
+
+A 2026-11-09 screen doubled the 128-entry/4-way literal tree-score cache to
+256x4 and 256x8. Both variants preserved the exact q8 wires, but ordinary
+64 KiB encode medians did not improve: Mozilla/source were 240.9/240.2 ms at
+128x4, 242.3/242.0 ms at 256x4 and 240.7/242.5 ms at 256x8. The measured
+conflict misses are therefore not the dominant cost; keep 128x4.
+
