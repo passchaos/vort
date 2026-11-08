@@ -38521,7 +38521,10 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expect(section.regenerated_size <= 4096);
     try std.testing.expect(section.sequence_count >= 1024);
     try std.testing.expect(sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count));
-    try std.testing.expect(sequence_decode_policy.preferSmallCopies(section.regenerated_size, section.sequence_count));
+    // The 1024 threshold moves this 1834-sequence fixture to the dense split
+    // executor; the compact small-copy path remains covered by the direct
+    // `tryDecodeAllFseSplitHuffmanSequences` calls below.
+    try std.testing.expect(!sequence_decode_policy.preferSmallCopies(section.regenerated_size, section.sequence_count));
     try std.testing.expectEqual(SymbolMode.compressed, spec.ll_mode);
     try std.testing.expectEqual(SymbolMode.compressed, spec.of_mode);
     try std.testing.expectEqual(SymbolMode.compressed, spec.ml_mode);
@@ -38621,12 +38624,32 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_short_rep0_fast_hits = 0;
     test_split_huffman_field_group_hits = 0;
     test_large_fse_no_low_builder_hits = 0;
-    const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
-    try std.testing.expectEqual(@as(usize, 3), test_large_fse_no_low_builder_hits);
+    var generic_direct_written: usize = 0;
+    var generic_direct_frame_state: SequenceFrameState = .{};
+    var generic_direct_state = try initSequenceDecodeState(
+        &spec,
+        section.sequence_count,
+        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+        generic_direct_frame_state.repeated_offsets,
+    );
+    try std.testing.expect(try tryDecodeAllFseSplitHuffmanSequences(
+        section,
+        fast_output[0..expected.len],
+        &generic_direct_written,
+        0,
+        &generic_direct_frame_state,
+        .terminal,
+        &generic_direct_state,
+        true,
+    ));
+    try std.testing.expectEqual(expected.len, generic_direct_written);
+    try std.testing.expectEqualSlices(u8, expected, fast_output[0..generic_direct_written]);
     try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
     try std.testing.expect(test_split_huffman_single_literal_hits > 1000);
     try std.testing.expect(test_split_huffman_match_68_70_hits > 100);
-    try std.testing.expect(test_split_huffman_match_6_63_hits > 0);
+    // This block's 4--7 byte matches take the paired fast path, so the
+    // general short-match branch is not entered here.
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_match_6_63_hits);
     try std.testing.expect(test_split_huffman_positive_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_compact_literal_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_common_sequence_hits > 500);
@@ -38635,6 +38658,40 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expect(test_split_huffman_direct_offset_fast_hits > 100);
     try std.testing.expect(test_split_huffman_short_rep0_fast_hits > 100);
     try std.testing.expect(test_split_huffman_field_group_hits > 1000);
+
+    test_split_huffman_decode_hits = 0;
+    test_split_huffman_single_literal_hits = 0;
+    test_split_huffman_match_68_70_hits = 0;
+    test_split_huffman_match_6_63_hits = 0;
+    test_split_huffman_positive_rep0_hits = 0;
+    test_split_huffman_compact_literal_rep0_hits = 0;
+    test_split_huffman_direct_offset_hits = 0;
+    test_split_huffman_direct_offset_single_literal_hits = 0;
+    test_split_huffman_direct_offset_match_68_71_hits = 0;
+    test_split_huffman_direct_offset_fast_hits = 0;
+    test_split_huffman_short_literal_hits = 0;
+    test_split_huffman_common_sequence_hits = 0;
+    test_split_huffman_compact_direct_hits = 0;
+    test_split_huffman_compact_pair_hits = 0;
+    test_split_huffman_short_rep0_fast_hits = 0;
+    test_split_huffman_field_group_hits = 0;
+    test_large_fse_no_low_builder_hits = 0;
+    const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
+    try std.testing.expectEqual(expected.len, fast_written);
+    try std.testing.expectEqualSlices(u8, expected, fast_output[0..fast_written]);
+    try std.testing.expectEqual(@as(usize, 3), test_large_fse_no_low_builder_hits);
+    try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
+    try std.testing.expect(test_split_huffman_field_group_hits > 1000);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_single_literal_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_match_68_70_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_match_6_63_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_positive_rep0_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_compact_literal_rep0_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_common_sequence_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_compact_direct_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_compact_pair_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_direct_offset_fast_hits);
+    try std.testing.expectEqual(@as(usize, 0), test_split_huffman_short_rep0_fast_hits);
 
     var discarded_table_state: SequenceFrameState = .{ .retain_sequence_tables = false };
     var discarded_output: [expected.len]u8 = undefined;
@@ -38803,7 +38860,8 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         &encoded,
         generic_output[0 .. expected.len - 1],
     ));
-    try std.testing.expectEqualSlices(u8, fast_output, generic_output);
+    // Partial publication before `OutputTooSmall` is executor-specific; the
+    // complete-frame equality is checked above and in the mutation loop.
 
     const bitstream_start = first_block.payload_offset + spec.bitstream_offset;
     const bitstream_bits = (encoded.len - bitstream_start) * 8;

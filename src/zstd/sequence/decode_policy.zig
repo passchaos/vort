@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const small_literal_limit = 4 * 1024;
-pub const wide_copy_sequence_min = 2048;
+pub const wide_copy_sequence_min = 1024;
 pub const split_sequence_min = 1024;
 pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;

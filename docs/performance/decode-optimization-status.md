@@ -74,6 +74,13 @@ with 49% more).
   address-taken local and the exit commit interfere with the split loop's
   register allocation. Do not retry this shape without a different escape
   analysis.
+- Zstd `wide_copy_sequence_min` 2048 -> 1024 was adopted. Blocks with
+  `literal_bytes <= 4096`, `sequence_count <= 4096` and sequence counts in
+  `[1024, 2048)` now use the dense four-stream executor. A 36-row paired
+  matrix (64 KiB focus plus all twelve 1 MiB sources at levels 3/19) measures
+  a `0.968166` geometric mean, `0.6711`/`0.6723` on the target `nci`/`xml`
+  64 KiB level-3 rows and a worst control of `1.0039`. See
+  [the evidence](zstd-small-copy-policy-20261109.md).
 
 ## Remaining structural options
 
