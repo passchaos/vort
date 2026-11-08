@@ -1992,3 +1992,13 @@ Native, Linux x86 and actual Node/WASI execution retain a receipt for this
 primitive layer. Frame/header/block orchestration, dictionary/history state,
 checksum publication, diagnostics and a public source-backed frame API are not
 implemented by this increment.
+
+On top of these primitives, an internal source literals-section layout/range
+parser reads the one- to five-byte section header and derives checked absolute
+ranges for Raw, RLE, Compressed and Treeless payloads, direct/FSE
+tree-description bytes, one/four Huffman streams, the encoded sequence count
+and its trailing payload. Tests cover every kind/size format, all three count
+tiers, count-zero trailing-data layering, callback short/failure paths,
+nonzero offsets above 4 GiB and callbacks that reject any entropy-payload read.
+This is layout discovery only: tree weights and decoding tables are not
+decoded or built, and no literal, sequence, block or frame payload is decoded.

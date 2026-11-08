@@ -26496,3 +26496,15 @@ reuse, so production keeps the simpler independently owned plans.
   source-backed Zstd frame decode API; frame parsing, block dispatch,
   dictionary/history integration, checksum publication and public contracts
   remain future work.
+
+- 2026-11-08: Added an internal source-backed Zstd literals-section
+  layout/range parser on top of the checked ranges. It reads the one- to
+  five-byte `Literals_Section_Header`, locates Raw, RLE, Compressed and
+  Treeless literal payloads, identifies direct/FSE tree-description byte
+  ranges, partitions one/four Huffman stream ranges, and isolates the encoded
+  sequence count from its trailing payload. Native, Linux x86 and actual
+  wasm32-wasi contracts cover every kind/size format, short reads, nonzero
+  offsets above 4 GiB, callback failures and proof that entropy payload ranges
+  are not read during layout discovery. This does not decode tree weights,
+  build Huffman/FSE tables, decode literal or sequence payloads, dispatch
+  blocks, decode frames, or expose a public source-backed frame API.

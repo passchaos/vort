@@ -74,6 +74,9 @@ test "Zstd source reverse consumer contracts" {
         sequence_bit_reader.Reader,
     );
 }
+test "Zstd source literals metadata contracts" {
+    try @import("zstd/source/literals_tests.zig").contracts(SourceLiteralsTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -84,6 +87,34 @@ const prefix_decode_stream = @import("zstd/prefix/decode_stream.zig");
 const prefix_encode_call = @import("zstd/prefix/encode_call.zig");
 const stable_output = @import("zstd/decode/stable_output.zig");
 const stable_driver = @import("zstd/decode/stable_driver.zig");
+
+const SourceLiteralsTestSupport = struct {
+    pub const HeaderResult = struct {
+        kind: literals_header.Kind,
+        size_format: u2,
+        encoded_len: usize,
+        regenerated_size: usize,
+        compressed_size: usize,
+    };
+    pub const CountResult = struct { count: usize, encoded_len: usize };
+
+    pub fn parseHeader(bytes: []const u8) Error!HeaderResult {
+        var offset: usize = 0;
+        const value = try parseLiteralsHeader(bytes, &offset);
+        return .{
+            .kind = value.kind,
+            .size_format = value.size_format,
+            .encoded_len = offset,
+            .regenerated_size = value.regenerated_size,
+            .compressed_size = value.compressed_size,
+        };
+    }
+
+    pub fn parseCount(bytes: []const u8) Error!CountResult {
+        var offset: usize = 0;
+        return .{ .count = try parseSequenceCount(bytes, &offset), .encoded_len = offset };
+    }
+};
 pub const DictionaryUsage = prefix_binding.Usage;
 pub const PrefixSnapshot = prefix_binding.Snapshot;
 pub const PrefixPhase = prefix_binding.Phase;
@@ -115,6 +146,9 @@ const huffman_x2_policy = @import("zstd/literals/huffman_x2_policy.zig");
 const huffman_x2_test = if (builtin.is_test) @import("zstd/literals/huffman_x2.zig") else struct {};
 const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
 const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
+const literals_header = @import("zstd/literals/header.zig");
+const literal_stream_layout = @import("zstd/literals/streams.zig");
+const literal_tree_description = @import("zstd/literals/tree_description.zig");
 const literal_copy = @import("zstd/literals/copy.zig");
 const single_literal_cost = @import("zstd/literals/single_cost_cache.zig");
 const winner_literal_cost = @import("zstd/literals/winner_cost_cache.zig");
@@ -148,8 +182,10 @@ const dictionary_resume_tests = @import("zstd/incremental/dictionary_resume_test
 const compressed_workspace = @import("zstd/decode/compressed_workspace.zig");
 const history_workspace = @import("zstd/decode/history_workspace.zig");
 const source_input = @import("zstd/source/input.zig");
+const source_literals = @import("zstd/source/literals.zig");
 const source_reverse_bit_reader = @import("zstd/source/reverse_bit_reader.zig");
 const source_reverse_bit_reader_tests = @import("zstd/source/reverse_bit_reader_tests.zig");
+const sequence_count_wire = @import("zstd/sequence/count.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
 const working_allocator = @import("io/working_allocator.zig");
@@ -1382,8 +1418,13 @@ test {
     _ = compressed_workspace_tests;
     _ = history_workspace_tests;
     _ = source_input;
+    _ = source_literals;
     _ = source_reverse_bit_reader;
     _ = source_reverse_bit_reader_tests;
+    _ = literals_header;
+    _ = literal_stream_layout;
+    _ = literal_tree_description;
+    _ = sequence_count_wire;
     _ = incremental_history;
     _ = incremental_history_index;
     _ = incremental_history_match;
@@ -12155,7 +12196,7 @@ fn validateSupportedLiteralSection(section: LiteralOnlySection) Error!void {
     }
 }
 
-const LiteralsKind = enum { raw, rle, compressed, treeless };
+const LiteralsKind = literals_header.Kind;
 
 const LiteralOnlySection = struct {
     kind: LiteralsKind,
@@ -12303,124 +12344,33 @@ fn parseHuffmanLiteralStreams(
     const stream_data_end = std.math.add(usize, literal_payload_offset, compressed_size) catch return error.IntegerOverflow;
     if (huffman_stream_offset > stream_data_end or stream_data_end > block.len) return error.CorruptFrame;
     const stream_data = block[huffman_stream_offset..stream_data_end];
-    if (size_format == 0) return .one;
-    if (stream_data.len < 6) return error.CorruptFrame;
-    const stream_1_length: usize = std.mem.readInt(u16, stream_data[0..2], .little);
-    const stream_2_length: usize = std.mem.readInt(u16, stream_data[2..4], .little);
-    const stream_3_length: usize = std.mem.readInt(u16, stream_data[4..6], .little);
-    const stream_1_start: usize = 6;
-    const stream_2_start = std.math.add(usize, stream_1_start, stream_1_length) catch return error.IntegerOverflow;
-    const stream_3_start = std.math.add(usize, stream_2_start, stream_2_length) catch return error.IntegerOverflow;
-    const stream_4_start = std.math.add(usize, stream_3_start, stream_3_length) catch return error.IntegerOverflow;
-    if (stream_4_start > stream_data.len) return error.CorruptFrame;
-    return .{ .four = .{
-        stream_data[stream_1_start..stream_2_start],
-        stream_data[stream_2_start..stream_3_start],
-        stream_data[stream_3_start..stream_4_start],
-        stream_data[stream_4_start..],
-    } };
+    var jump: [6]u8 = undefined;
+    const layout = if (size_format == 0)
+        try literal_stream_layout.parse(size_format, stream_data.len, null)
+    else blk: {
+        if (stream_data.len < jump.len) return error.CorruptFrame;
+        @memcpy(&jump, stream_data[0..jump.len]);
+        break :blk try literal_stream_layout.parse(size_format, stream_data.len, &jump);
+    };
+    return switch (layout) {
+        .one => .one,
+        .four => |spans| .{ .four = .{
+            stream_data[spans[0].offset..][0..spans[0].len],
+            stream_data[spans[1].offset..][0..spans[1].len],
+            stream_data[spans[2].offset..][0..spans[2].len],
+            stream_data[spans[3].offset..][0..spans[3].len],
+        } },
+    };
 }
 
-const LiteralsHeaderInfo = struct {
-    kind: LiteralsKind,
-    size_format: u2,
-    regenerated_size: usize,
-    compressed_size: usize = 0,
-};
+const LiteralsHeaderInfo = literals_header.Info;
 
 fn parseLiteralsHeader(block: []const u8, offset: *usize) Error!LiteralsHeaderInfo {
-    if (offset.* >= block.len) return error.TruncatedFrame;
-    const byte0 = block[offset.*];
-    offset.* += 1;
-    const block_type = byte0 & 0x03;
-    const size_format: u2 = @intCast((byte0 >> 2) & 0x03);
-    const kind: LiteralsKind = switch (block_type) {
-        0 => .raw,
-        1 => .rle,
-        2 => .compressed,
-        else => .treeless,
-    };
-
-    if (kind == .compressed or kind == .treeless) {
-        return try parseHuffmanLiteralsHeader(block, offset, byte0, size_format, kind);
-    }
-
-    const regenerated_size: usize = switch (size_format) {
-        0, 2 => byte0 >> 3,
-        1 => blk: {
-            if (block.len - offset.* < 1) return error.TruncatedFrame;
-            const byte1 = block[offset.*];
-            offset.* += 1;
-            break :blk @as(usize, byte0 >> 4) + (@as(usize, byte1) << 4);
-        },
-        else => blk: {
-            if (block.len - offset.* < 2) return error.TruncatedFrame;
-            const byte1 = block[offset.*];
-            const byte2 = block[offset.* + 1];
-            offset.* += 2;
-            break :blk @as(usize, byte0 >> 4) + (@as(usize, byte1) << 4) + (@as(usize, byte2) << 12);
-        },
-    };
-    return .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size };
-}
-
-fn parseHuffmanLiteralsHeader(
-    block: []const u8,
-    offset: *usize,
-    byte0: u8,
-    size_format: u2,
-    kind: LiteralsKind,
-) Error!LiteralsHeaderInfo {
-    return switch (size_format) {
-        0, 1 => blk: {
-            if (block.len - offset.* < 2) return error.TruncatedFrame;
-            const byte1 = block[offset.*];
-            const byte2 = block[offset.* + 1];
-            offset.* += 2;
-            const value = @as(usize, byte0 >> 4) |
-                (@as(usize, byte1) << 4) |
-                (@as(usize, byte2) << 12);
-            const regenerated_size = value & 0x3ff;
-            const compressed_size = (value >> 10) & 0x3ff;
-            if (compressed_size == 0) return error.CorruptFrame;
-            if (size_format == 1 and compressed_size < 10) return error.CorruptFrame;
-            break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
-        },
-        2 => blk: {
-            if (block.len - offset.* < 3) return error.TruncatedFrame;
-            const byte1 = block[offset.*];
-            const byte2 = block[offset.* + 1];
-            const byte3 = block[offset.* + 2];
-            offset.* += 3;
-            const value = @as(usize, byte0 >> 4) |
-                (@as(usize, byte1) << 4) |
-                (@as(usize, byte2) << 12) |
-                (@as(usize, byte3) << 20);
-            const regenerated_size = value & 0x3fff;
-            const compressed_size = (value >> 14) & 0x3fff;
-            if (compressed_size < 10) return error.CorruptFrame;
-            break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
-        },
-        else => blk: {
-            if (block.len - offset.* < 4) return error.TruncatedFrame;
-            const byte1 = block[offset.*];
-            const byte2 = block[offset.* + 1];
-            const byte3 = block[offset.* + 2];
-            const byte4 = block[offset.* + 3];
-            offset.* += 4;
-            // Two eighteen-bit fields share a 36-bit wire value, independent
-            // of the local pointer width. Narrow only the extracted sizes.
-            const value = @as(u64, byte0 >> 4) |
-                (@as(u64, byte1) << 4) |
-                (@as(u64, byte2) << 12) |
-                (@as(u64, byte3) << 20) |
-                (@as(u64, byte4) << 28);
-            const regenerated_size: usize = @intCast(value & 0x3ffff);
-            const compressed_size: usize = @intCast((value >> 18) & 0x3ffff);
-            if (compressed_size < 10) return error.CorruptFrame;
-            break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
-        },
-    };
+    if (offset.* > block.len) return error.TruncatedFrame;
+    const decoded = try literals_header.parse(block[offset.*..]);
+    offset.* = std.math.add(usize, offset.*, decoded.encoded_len) catch
+        return error.IntegerOverflow;
+    return decoded;
 }
 
 fn decodeStdZstdHuffmanTree(
@@ -12955,22 +12905,13 @@ test "zstd linear Huffman tree parser matches generated trees" {
 }
 
 fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
-    if (offset.* >= block.len) return error.TruncatedFrame;
-    const byte0 = block[offset.*];
-    offset.* += 1;
-    if (byte0 == 0) return 0;
-    if (byte0 < 128) {
-        return byte0;
-    }
-    if (byte0 < 255) {
-        if (block.len - offset.* < 1) return error.TruncatedFrame;
-        const count = (@as(usize, byte0 - 128) << 8) + block[offset.*];
-        offset.* += 1;
-        return count;
-    }
-    if (block.len - offset.* < 2) return error.TruncatedFrame;
-    const count = @as(usize, block[offset.*]) + (@as(usize, block[offset.* + 1]) << 8) + 0x7f00;
-    offset.* += 2;
+    if (offset.* > block.len) return error.TruncatedFrame;
+    const bytes = block[offset.*..];
+    if (bytes.len == 0) return error.TruncatedFrame;
+    const encoded_len = sequence_count_wire.encodedLen(bytes[0]);
+    const count = try sequence_count_wire.parse(bytes);
+    offset.* = std.math.add(usize, offset.*, encoded_len) catch
+        return error.IntegerOverflow;
     return count;
 }
 
@@ -34135,9 +34076,9 @@ test "zstd Huffman literal header preserves both eighteen-bit sizes" {
             defer encoded.deinit(std.testing.allocator);
             try std.testing.expect((try emitHuffmanLiteralsHeader(std.testing.allocator, &encoded, vector.regenerated, vector.compressed, treeless)) != null);
             try std.testing.expectEqualSlices(u8, &expected, encoded.items);
-            var offset: usize = 1;
-            const parsed = try parseHuffmanLiteralsHeader(&expected, &offset, expected[0], 3, if (treeless) .treeless else .compressed);
-            try std.testing.expectEqual(@as(usize, 5), offset);
+            const parsed = try literals_header.parse(&expected);
+            try std.testing.expectEqual(@as(usize, 5), parsed.encoded_len);
+            try std.testing.expectEqual(if (treeless) LiteralsKind.treeless else .compressed, parsed.kind);
             try std.testing.expectEqual(vector.regenerated, parsed.regenerated_size);
             try std.testing.expectEqual(vector.compressed, parsed.compressed_size);
         }

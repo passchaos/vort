@@ -36,23 +36,23 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute source-backed Zstd reverse-reader contracts on native, x86 and WASI",
+        "Execute source-backed Zstd primitive contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",
-        "Compile source-backed Zstd reverse-reader WASI contracts",
+        "Compile source-backed Zstd primitive WASI contracts",
     );
 
     for ([_]std.Build.ResolvedTarget{ target, x86, wasi }, 0..) |variant, index| {
         const suffix = ([_][]const u8{ "", "-x86", "-wasm" })[index];
         const gate = b.step(
             b.fmt("test-zstd-source-reverse{s}", .{suffix}),
-            "Execute source-backed Zstd paged reverse-reader contracts",
+            "Execute source-backed Zstd range, literals and reverse-reader contracts",
         );
         const implementation_tests = b.addTest(.{
             .name = b.fmt("vort-zstd-source-reverse{s}-tests", .{suffix}),
             .root_module = codecModule(b, variant, optimize),
-            .filters = &.{"Zstd source reverse"},
+            .filters = &.{"Zstd source"},
         });
         if (index == 2) {
             implementation_tests.stack_size = 8 * 1024 * 1024;

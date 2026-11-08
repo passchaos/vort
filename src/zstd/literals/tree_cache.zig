@@ -1,6 +1,6 @@
 const std = @import("std");
+const tree_description = @import("tree_description.zig");
 
-const max_description_len = 128;
 const slot_count = 4;
 
 pub fn Cache(comptime Tree: type) type {
@@ -13,7 +13,7 @@ pub fn Cache(comptime Tree: type) type {
         };
 
         const Entry = struct {
-            description: [max_description_len]u8 = undefined,
+            description: [tree_description.max_len]u8 = undefined,
             description_len: u8 = 0,
             tree: Tree = undefined,
             valid: bool = false,
@@ -30,10 +30,10 @@ pub fn Cache(comptime Tree: type) type {
         hit_count: usize = 0,
 
         pub fn find(self: *Self, payload: []const u8) ?Hit {
-            const description_len = encodedDescriptionLen(payload) orelse return null;
-            const description = payload[0..description_len];
+            const description_len = tree_description.completeLen(payload) orelse return null;
+            const encoded = payload[0..description_len];
             for (&self.slots) |*slot| {
-                if (!slot.matches(description)) continue;
+                if (!slot.matches(encoded)) continue;
                 self.hit_count += 1;
                 return .{ .tree = &slot.tree, .description_len = description_len };
             }
@@ -41,7 +41,7 @@ pub fn Cache(comptime Tree: type) type {
         }
 
         pub fn store(self: *Self, payload: []const u8, description_len: usize, tree: Tree) void {
-            if (encodedDescriptionLen(payload) != description_len) return;
+            if (tree_description.completeLen(payload) != description_len) return;
             const slot = &self.slots[self.next_slot];
             @memcpy(slot.description[0..description_len], payload[0..description_len]);
             slot.description_len = @intCast(description_len);
@@ -50,18 +50,6 @@ pub fn Cache(comptime Tree: type) type {
             self.next_slot = (self.next_slot + 1) % self.slots.len;
         }
     };
-}
-
-fn encodedDescriptionLen(payload: []const u8) ?usize {
-    if (payload.len == 0) return null;
-    const header = payload[0];
-    const body_len: usize = if (header < 128)
-        header
-    else
-        (@as(usize, header - 127) + 1) / 2;
-    const description_len = 1 + body_len;
-    if (description_len > max_description_len or description_len > payload.len) return null;
-    return description_len;
 }
 
 test "Huffman tree cache matches complete self-delimiting descriptions" {
