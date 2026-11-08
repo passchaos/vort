@@ -2482,6 +2482,9 @@ pub const ZstdSourceFrameWorkspace = zstd.SourceFrameWorkspace;
 pub const ZstdSourceFrameDecodeOptions = zstd.SourceFrameDecodeOptions;
 pub const ZstdSourceFrameInfo = zstd.SourceFrameInfo;
 pub const ZstdSourceFrameDecodeResult = zstd.SourceFrameDecodeResult;
+pub const ZstdSourceStreamDecodeOptions = zstd.SourceStreamDecodeOptions;
+pub const ZstdSourceStreamInfo = zstd.SourceStreamInfo;
+pub const ZstdSourceStreamDecodeResult = zstd.SourceStreamDecodeResult;
 
 test "root Zstd source decode consumer contracts" {
     try @import("tests/zstd_source_decode/root.zig").contracts(@This());
@@ -2495,6 +2498,10 @@ pub const zstdSourceFrameDecodedSize = zstd.sourceFrameDecodedSize;
 pub const zstdDecodeSourceFrameInto = zstd.decodeSourceFrameInto;
 pub const zstdDecodeSourceFrameAppend = zstd.decodeSourceFrameAppend;
 pub const zstdDecodeSourceFrameAlloc = zstd.decodeSourceFrameAlloc;
+pub const zstdInspectSourceStream = zstd.inspectSourceStream;
+pub const zstdDecodeSourceStreamInto = zstd.decodeSourceStreamInto;
+pub const zstdDecodeSourceStreamAppend = zstd.decodeSourceStreamAppend;
+pub const zstdDecodeSourceStreamAlloc = zstd.decodeSourceStreamAlloc;
 pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;

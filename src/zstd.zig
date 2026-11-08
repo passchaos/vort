@@ -1095,7 +1095,13 @@ const SourceDecodeApiTestSupport = struct {
     pub const decodedSize = sourceFrameDecodedSize;
     pub const Workspace = SourceFrameWorkspace;
     pub const Options = SourceFrameDecodeOptions;
+    pub const StreamOptions = SourceStreamDecodeOptions;
     pub const DecodeDictionary = NativeDictionary;
+    pub const DecodeDictionarySet = NativeDictionarySet;
+    pub const inspectStream = inspectSourceStream;
+    pub const decodeStreamInto = decodeSourceStreamInto;
+    pub const decodeStreamAppend = decodeSourceStreamAppend;
+    pub const decodeStreamAlloc = decodeSourceStreamAlloc;
     pub const decodeFrameOracle = SourceCompressedBlockTestSupport.decodeFrameOracle;
     pub const loadFullDictionaryFixture = SourceCompressedBlockTestSupport.loadFullDictionaryFixture;
     pub const freeFullDictionaryFixture = SourceCompressedBlockTestSupport.freeFullDictionaryFixture;
@@ -5317,6 +5323,7 @@ const SourceDecodeSupport = struct {
     pub const HuffmanCodec = SourceHuffmanCodec;
     pub const SequenceCodec = SourceSequenceCodec;
     pub const DecodeDictionary = NativeDictionary;
+    pub const DecodeDictionarySet = NativeDictionarySet;
     pub const State = source_compressed_block.FrameState(HuffmanCodec, SequenceCodec);
 
     pub fn initialState(dictionary: ?DecodeDictionary) Error!State {
@@ -5345,6 +5352,13 @@ pub const sourceFrameDecodedSize = source_decode_facade.decodedSize;
 pub const decodeSourceFrameInto = source_decode_facade.decodeInto;
 pub const decodeSourceFrameAppend = source_decode_facade.decodeAppend;
 pub const decodeSourceFrameAlloc = source_decode_facade.decodeAlloc;
+pub const SourceStreamDecodeOptions = source_decode_facade.StreamOptions;
+pub const SourceStreamInfo = source_decode_facade.StreamInfo;
+pub const SourceStreamDecodeResult = source_decode_facade.StreamResult;
+pub const inspectSourceStream = source_decode_facade.inspectStream;
+pub const decodeSourceStreamInto = source_decode_facade.decodeStreamInto;
+pub const decodeSourceStreamAppend = source_decode_facade.decodeStreamAppend;
+pub const decodeSourceStreamAlloc = source_decode_facade.decodeStreamAlloc;
 
 pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;
 pub const decodeConcatenatedFrameAllocExactSize = decodeNativeConcatenatedFrameAllocExactSize;

@@ -1,15 +1,17 @@
-//! One-shot public decoding of a source-backed Zstandard data frame.
+//! One-shot public decoding of source-backed Zstandard frames and streams.
 //!
 //! The caller owns the random-access source, the destination and every
-//! workspace slice. `inspect` walks only block headers to report the exact
-//! decoded size and frame end; `decodeInto` executes the frame through the
-//! transactional frame executor. Neither function allocates.
+//! workspace slice. `inspect*` walks only element and block headers to report
+//! exact boundaries and, where the wire carries them, decoded sizes.
+//! `decode*` executes data frames through the transactional frame executor and
+//! advances skippable frames without reading their payloads.
 //!
 //! A failed decode may leave a committed prefix in the destination because the
 //! executor publishes each complete block. Callers that need all-or-nothing
 //! output should decode into their own staging buffer and publish after
-//! success. The destination must be large enough for the whole frame; a full
-//! destination returns `OutputTooSmall` without discarding committed blocks.
+//! success. Fixed destinations must be large enough for the whole stream; a
+//! full destination returns `OutputTooSmall` without discarding committed
+//! blocks. The append forms keep committed output on error.
 const std = @import("std");
 const core = @import("../../core.zig");
 const byte_source = @import("../../io/source.zig");
@@ -45,6 +47,17 @@ pub fn Facade(comptime Support: type) type {
             ignore_checksum: bool = false,
         };
 
+        pub const StreamOptions = struct {
+            format: stream_cursor.FrameFormat = .standard,
+            /// Used for ID-less data frames and as a fallback for a declared ID.
+            dictionary: ?Support.DecodeDictionary = null,
+            /// Resolves declared nonzero dictionary IDs before the fallback.
+            dictionary_set: ?Support.DecodeDictionarySet = null,
+            frame_decoded_max: Count = std.math.maxInt(Count),
+            total_decoded_max: Count = std.math.maxInt(Count),
+            ignore_checksum: bool = false,
+        };
+
         pub const FrameInfo = struct {
             content_size: ?u64,
             has_checksum: bool,
@@ -63,12 +76,53 @@ pub fn Facade(comptime Support: type) type {
             frame_end_offset: u64,
         };
 
+        pub const StreamInfo = struct {
+            /// Null when any compressed frame omits its declared content size.
+            total_decoded: ?Count,
+            stream_end_offset: u64,
+            data_frames: usize,
+            skippable_frames: usize,
+        };
+
+        pub const StreamResult = struct {
+            decoded_len: Count,
+            stream_end_offset: u64,
+            data_frames: usize,
+            skippable_frames: usize,
+        };
+
         const Parsed = struct {
-            available: source_input.Range,
             frame: source_frame.DataFrameLayout,
+            dictionary: ?Support.DecodeDictionary,
             dictionary_id: u32,
             dictionary_content: []const u8,
         };
+
+        fn resolveDictionary(
+            header_id: u32,
+            dictionary: ?Support.DecodeDictionary,
+        ) Error!?Support.DecodeDictionary {
+            if (header_id == 0) return dictionary;
+            const resolved = dictionary orelse return error.NeedDictionary;
+            if (resolved.id != header_id) return error.DictionaryMismatch;
+            return resolved;
+        }
+
+        fn fromLayout(
+            frame: source_frame.DataFrameLayout,
+            dictionary: ?Support.DecodeDictionary,
+        ) Error!Parsed {
+            const resolved = try resolveDictionary(
+                frame.header.dictionary_id,
+                dictionary,
+            );
+            return .{
+                .frame = frame,
+                .dictionary = resolved,
+                .dictionary_id = frame.header.dictionary_id,
+                .dictionary_content = if (resolved) |value| value.content else &.{},
+            };
+        }
 
         fn parse(source: byte_source.Source, options: Options) Error!Parsed {
             const available = try source_input.Range.init(
@@ -80,34 +134,13 @@ pub fn Facade(comptime Support: type) type {
                 available,
                 options.format,
             );
-            const dictionary_id = if (options.dictionary) |dictionary|
-                dictionary.id
-            else
-                0;
-            if (frame.header.dictionary_id != dictionary_id) {
-                if (dictionary_id == 0) return error.NeedDictionary;
-                return error.DictionaryMismatch;
-            }
-            return .{
-                .available = available,
-                .frame = frame,
-                .dictionary_id = dictionary_id,
-                .dictionary_content = if (options.dictionary) |dictionary|
-                    dictionary.content
-                else
-                    &.{},
-            };
+            return fromLayout(frame, options.dictionary);
         }
 
-        /// Walk block headers without reading payloads or decoding entropy.
-        /// The checksum footer is range-checked but its value is not compared.
-        /// Compressed blocks do not carry their regenerated size in the block
-        /// header, so their total is only known from a declared content size.
-        pub fn inspect(
-            source: byte_source.Source,
+        fn inspectFrameLayout(
+            parsed: Parsed,
             options: Options,
         ) Error!FrameInfo {
-            const parsed = try parse(source, options);
             var total: Count = 0;
             var all_uncompressed = true;
             var offset = parsed.frame.first_block_offset;
@@ -138,7 +171,7 @@ pub fn Facade(comptime Support: type) type {
                 if (known > options.frame_decoded_max)
                     return error.OutputLimitExceeded;
             if (parsed.frame.header.has_checksum) {
-                const end = try parsed.available.end();
+                const end = try parsed.frame.available.end();
                 if (offset > end or end - offset < 4)
                     return error.TruncatedFrame;
                 offset += 4;
@@ -155,6 +188,17 @@ pub fn Facade(comptime Support: type) type {
             };
         }
 
+        /// Walk block headers without reading payloads or decoding entropy.
+        /// The checksum footer is range-checked but its value is not compared.
+        /// Compressed blocks do not carry their regenerated size in the block
+        /// header, so their total is only known from a declared content size.
+        pub fn inspect(
+            source: byte_source.Source,
+            options: Options,
+        ) Error!FrameInfo {
+            return inspectFrameLayout(try parse(source, options), options);
+        }
+
         pub fn decodedSize(
             source: byte_source.Source,
             options: Options,
@@ -162,34 +206,35 @@ pub fn Facade(comptime Support: type) type {
             return (try inspect(source, options)).decoded_size;
         }
 
-        /// Decode one complete data frame into caller-owned destination.
-        pub fn decodeInto(
-            source: byte_source.Source,
-            destination: []u8,
+        fn openFrame(
+            parsed: Parsed,
             workspace: Workspace,
             options: Options,
-        ) Error!Result {
-            const parsed = try parse(source, options);
+            history: *history_workspace.Binding,
+            state: *Support.State,
+        ) Error!frame_executor.Executor(
+            Support.HuffmanCodec,
+            Support.SequenceCodec,
+        ) {
             const required_history = try history_workspace.requiredLen(
                 parsed.frame.header.window_size,
                 parsed.dictionary_content.len,
             );
             if (workspace.history.len < required_history)
                 return error.OutputTooSmall;
-            var history = try history_workspace.Binding.init(workspace.history);
+            history.* = try history_workspace.Binding.init(workspace.history);
             try history.beginFrame(
                 parsed.frame.header.window_size,
                 parsed.dictionary_content.len,
             );
-
-            var state = try Support.initialState(options.dictionary);
-            var executor = try frame_executor.Executor(
+            state.* = try Support.initialState(parsed.dictionary);
+            return frame_executor.Executor(
                 Support.HuffmanCodec,
                 Support.SequenceCodec,
             ).init(
                 parsed.frame,
-                &state,
-                &history,
+                state,
+                history,
                 parsed.dictionary_content,
                 parsed.dictionary_id,
                 workspace.staging,
@@ -200,7 +245,23 @@ pub fn Facade(comptime Support: type) type {
                     .ignore_checksum = options.ignore_checksum,
                 },
             );
+        }
 
+        fn decodeFrameInto(
+            parsed: Parsed,
+            destination: []u8,
+            workspace: Workspace,
+            options: Options,
+        ) Error!Result {
+            var history: history_workspace.Binding = undefined;
+            var state: Support.State = undefined;
+            var executor = try openFrame(
+                parsed,
+                workspace,
+                options,
+                &history,
+                &state,
+            );
             var written: usize = 0;
             while (executor.snapshot().phase != .done) {
                 switch (executor.snapshot().phase) {
@@ -219,48 +280,22 @@ pub fn Facade(comptime Support: type) type {
             };
         }
 
-        /// Append one decoded frame to a growable caller list. Output is
-        /// published block by block; the list keeps the committed prefix on
-        /// error, so callers that need all-or-nothing output must truncate it.
-        pub fn decodeAppend(
+        fn decodeFrameAppend(
+            parsed: Parsed,
             allocator: std.mem.Allocator,
-            source: byte_source.Source,
-            workspace: Workspace,
             out: *std.ArrayList(u8),
+            workspace: Workspace,
             options: Options,
         ) Error!Result {
-            const parsed = try parse(source, options);
-            const required_history = try history_workspace.requiredLen(
-                parsed.frame.header.window_size,
-                parsed.dictionary_content.len,
-            );
-            if (workspace.history.len < required_history)
-                return error.OutputTooSmall;
-            var history = try history_workspace.Binding.init(workspace.history);
-            try history.beginFrame(
-                parsed.frame.header.window_size,
-                parsed.dictionary_content.len,
-            );
-
-            var state = try Support.initialState(options.dictionary);
-            var executor = try frame_executor.Executor(
-                Support.HuffmanCodec,
-                Support.SequenceCodec,
-            ).init(
-                parsed.frame,
-                &state,
+            var history: history_workspace.Binding = undefined;
+            var state: Support.State = undefined;
+            var executor = try openFrame(
+                parsed,
+                workspace,
+                options,
                 &history,
-                parsed.dictionary_content,
-                parsed.dictionary_id,
-                workspace.staging,
-                workspace.literal_page,
-                workspace.sequence_page,
-                .{
-                    .frame_decoded_max = options.frame_decoded_max,
-                    .ignore_checksum = options.ignore_checksum,
-                },
+                &state,
             );
-
             var buffer: [4096]u8 = undefined;
             while (executor.snapshot().phase != .done) {
                 switch (executor.snapshot().phase) {
@@ -277,6 +312,40 @@ pub fn Facade(comptime Support: type) type {
             };
         }
 
+        /// Decode one complete data frame into caller-owned destination.
+        pub fn decodeInto(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            options: Options,
+        ) Error!Result {
+            return decodeFrameInto(
+                try parse(source, options),
+                destination,
+                workspace,
+                options,
+            );
+        }
+
+        /// Append one decoded frame to a growable caller list. Output is
+        /// published block by block; the list keeps the committed prefix on
+        /// error, so callers that need all-or-nothing output must truncate it.
+        pub fn decodeAppend(
+            allocator: std.mem.Allocator,
+            source: byte_source.Source,
+            workspace: Workspace,
+            out: *std.ArrayList(u8),
+            options: Options,
+        ) Error!Result {
+            return decodeFrameAppend(
+                try parse(source, options),
+                allocator,
+                out,
+                workspace,
+                options,
+            );
+        }
+
         /// Decode into a newly allocated buffer.
         pub fn decodeAlloc(
             allocator: std.mem.Allocator,
@@ -287,6 +356,203 @@ pub fn Facade(comptime Support: type) type {
             var output: std.ArrayList(u8) = .empty;
             errdefer output.deinit(allocator);
             _ = try decodeAppend(allocator, source, workspace, &output, options);
+            return output.toOwnedSlice(allocator);
+        }
+
+        fn resolveStreamDictionary(
+            header_id: u32,
+            options: StreamOptions,
+        ) Error!?Support.DecodeDictionary {
+            if (header_id == 0) return options.dictionary;
+            if (options.dictionary_set) |set|
+                if (set.find(header_id)) |dictionary| return dictionary;
+            const fallback = options.dictionary orelse return error.NeedDictionary;
+            if (fallback.id != header_id) return error.DictionaryMismatch;
+            return fallback;
+        }
+
+        fn streamRange(source: byte_source.Source) Error!source_input.Range {
+            return source_input.Range.init(source, 0, source.len);
+        }
+
+        fn frameOptions(
+            options: StreamOptions,
+            frame_decoded_max: Count,
+        ) Options {
+            return .{
+                .format = options.format,
+                .frame_decoded_max = frame_decoded_max,
+                .ignore_checksum = options.ignore_checksum,
+            };
+        }
+
+        /// Walk every element header and every data-frame block header without
+        /// reading payloads or decoding entropy.
+        pub fn inspectStream(
+            source: byte_source.Source,
+            options: StreamOptions,
+        ) Error!StreamInfo {
+            const range = try streamRange(source);
+            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var total: ?Count = 0;
+            var data_frames: usize = 0;
+            var skippable_frames: usize = 0;
+            while (try cursor.next()) |element| {
+                switch (element) {
+                    .skippable => skippable_frames += 1,
+                    .data => |frame| {
+                        const dictionary = try resolveStreamDictionary(
+                            frame.header.dictionary_id,
+                            options,
+                        );
+                        const parsed = try fromLayout(frame, dictionary);
+                        const info = try inspectFrameLayout(
+                            parsed,
+                            frameOptions(options, options.frame_decoded_max),
+                        );
+                        if (total) |value| {
+                            if (info.decoded_size) |size| {
+                                const next = try count.add(value, size);
+                                if (next > options.total_decoded_max)
+                                    return error.OutputLimitExceeded;
+                                total = next;
+                            } else {
+                                total = null;
+                            }
+                        }
+                        data_frames += 1;
+                        try cursor.finishData(info.frame_end_offset);
+                    },
+                }
+            }
+            return .{
+                .total_decoded = total,
+                .stream_end_offset = cursor.offset(),
+                .data_frames = data_frames,
+                .skippable_frames = skippable_frames,
+            };
+        }
+
+        fn remainingCap(total: Count, maximum: Count) Error!Count {
+            if (total > maximum) return error.OutputLimitExceeded;
+            return maximum - total;
+        }
+
+        /// Decode every data frame into caller-owned destination while
+        /// advancing skippable frames without reading their payloads.
+        pub fn decodeStreamInto(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            options: StreamOptions,
+        ) Error!StreamResult {
+            const range = try streamRange(source);
+            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var total: Count = 0;
+            var written: usize = 0;
+            var data_frames: usize = 0;
+            var skippable_frames: usize = 0;
+            while (try cursor.next()) |element| {
+                switch (element) {
+                    .skippable => skippable_frames += 1,
+                    .data => |frame| {
+                        const dictionary = try resolveStreamDictionary(
+                            frame.header.dictionary_id,
+                            options,
+                        );
+                        const parsed = try fromLayout(frame, dictionary);
+                        const cap = try remainingCap(
+                            total,
+                            options.total_decoded_max,
+                        );
+                        const result = try decodeFrameInto(
+                            parsed,
+                            destination[written..],
+                            workspace,
+                            frameOptions(
+                                options,
+                                @min(options.frame_decoded_max, cap),
+                            ),
+                        );
+                        written += try count.toLocal(result.decoded_len);
+                        total = try count.add(total, result.decoded_len);
+                        data_frames += 1;
+                        try cursor.finishData(result.frame_end_offset);
+                    },
+                }
+            }
+            return .{
+                .decoded_len = total,
+                .stream_end_offset = cursor.offset(),
+                .data_frames = data_frames,
+                .skippable_frames = skippable_frames,
+            };
+        }
+
+        pub fn decodeStreamAppend(
+            allocator: std.mem.Allocator,
+            source: byte_source.Source,
+            workspace: Workspace,
+            out: *std.ArrayList(u8),
+            options: StreamOptions,
+        ) Error!StreamResult {
+            const range = try streamRange(source);
+            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var total: Count = 0;
+            var data_frames: usize = 0;
+            var skippable_frames: usize = 0;
+            while (try cursor.next()) |element| {
+                switch (element) {
+                    .skippable => skippable_frames += 1,
+                    .data => |frame| {
+                        const dictionary = try resolveStreamDictionary(
+                            frame.header.dictionary_id,
+                            options,
+                        );
+                        const parsed = try fromLayout(frame, dictionary);
+                        const cap = try remainingCap(
+                            total,
+                            options.total_decoded_max,
+                        );
+                        const result = try decodeFrameAppend(
+                            parsed,
+                            allocator,
+                            out,
+                            workspace,
+                            frameOptions(
+                                options,
+                                @min(options.frame_decoded_max, cap),
+                            ),
+                        );
+                        total = try count.add(total, result.decoded_len);
+                        data_frames += 1;
+                        try cursor.finishData(result.frame_end_offset);
+                    },
+                }
+            }
+            return .{
+                .decoded_len = total,
+                .stream_end_offset = cursor.offset(),
+                .data_frames = data_frames,
+                .skippable_frames = skippable_frames,
+            };
+        }
+
+        pub fn decodeStreamAlloc(
+            allocator: std.mem.Allocator,
+            source: byte_source.Source,
+            workspace: Workspace,
+            options: StreamOptions,
+        ) Error![]u8 {
+            var output: std.ArrayList(u8) = .empty;
+            errdefer output.deinit(allocator);
+            _ = try decodeStreamAppend(
+                allocator,
+                source,
+                workspace,
+                &output,
+                options,
+            );
             return output.toOwnedSlice(allocator);
         }
     };

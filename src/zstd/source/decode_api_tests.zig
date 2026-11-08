@@ -506,6 +506,302 @@ fn sourceFailureRetry(comptime Support: type) !void {
     try std.testing.expect(found);
 }
 
+fn streamConcatenation(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "one", true);
+    const skip_a = stream_common.appendSkippable(&fixture, 3, "skip");
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRleBlock(&fixture, '2', 2, true);
+    _ = stream_common.appendSkippable(&fixture, 9, &.{});
+    fixture.appendSlice(&stream_common.zero_sequence_frame);
+
+    const forbidden = [_]stream_common.Span{
+        .{ .offset = skip_a + 8, .len = 4 },
+    };
+    var source = stream_common.TrackingSource{
+        .bytes = fixture.bytes(),
+        .forbidden = &forbidden,
+    };
+    const view = source.source();
+    const info = try Support.inspectStream(view, .{});
+    try std.testing.expectEqual(
+        @as(?u64, 10),
+        if (info.total_decoded) |size| @as(u64, @intCast(size)) else null,
+    );
+    try std.testing.expectEqual(@as(usize, 3), info.data_frames);
+    try std.testing.expectEqual(@as(usize, 2), info.skippable_frames);
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.len)),
+        info.stream_end_offset,
+    );
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var output: [10]u8 = undefined;
+    const result = try Support.decodeStreamInto(
+        view,
+        &output,
+        workspace.view(),
+        .{},
+    );
+    try std.testing.expectEqual(
+        @as(u64, 10),
+        @as(u64, @intCast(result.decoded_len)),
+    );
+    try std.testing.expectEqual(@as(usize, 3), result.data_frames);
+    try std.testing.expectEqual(@as(usize, 2), result.skippable_frames);
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.len)),
+        result.stream_end_offset,
+    );
+    try std.testing.expectEqualStrings("one22zzzzz", &output);
+    try std.testing.expect(!source.forbidden_read);
+
+    const allocated = try Support.decodeStreamAlloc(
+        std.testing.allocator,
+        view,
+        workspace.view(),
+        .{},
+    );
+    defer std.testing.allocator.free(allocated);
+    try std.testing.expectEqualStrings("one22zzzzz", allocated);
+}
+
+fn streamDictionarySet(comptime Support: type) !void {
+    var fixture = try Support.loadFullDictionaryFixture(std.testing.allocator);
+    defer Support.freeFullDictionaryFixture(std.testing.allocator, &fixture);
+
+    const dictionary_bytes = try stream_common.decodeHex(
+        @embedFile("../testdata/libzstd-trained-repeat.dict.hex"),
+    );
+    defer std.testing.allocator.free(dictionary_bytes);
+    const standard = try Support.DecodeDictionary.initFromStandardDictionary(
+        dictionary_bytes,
+    );
+    const dictionaries = [_]Support.DecodeDictionary{standard.dictionary};
+    const set = Support.DecodeDictionarySet.init(&dictionaries);
+
+    var stream: stream_common.Fixture = .{};
+    _ = stream_common.appendFrame(&stream, fixture.frame);
+    _ = stream_common.appendSkippable(&stream, 1, "x");
+    stream_common.appendDataHeader(&stream, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&stream, "tail", true);
+
+    var source = stream_common.TrackingSource{ .bytes = stream.bytes() };
+    const view = source.source();
+    const info = try Support.inspectStream(view, .{ .dictionary_set = set });
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.expected.len + 4)),
+        @as(u64, @intCast(info.total_decoded.?)),
+    );
+    try std.testing.expectEqual(@as(usize, 2), info.data_frames);
+    try std.testing.expectEqual(@as(usize, 1), info.skippable_frames);
+    try std.testing.expectEqual(
+        @as(u64, @intCast(stream.len)),
+        info.stream_end_offset,
+    );
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        2304,
+        2304,
+        standard.dictionary.content.len,
+        17,
+    );
+    defer workspace.deinit(std.testing.allocator);
+    const allocated = try Support.decodeStreamAlloc(
+        std.testing.allocator,
+        view,
+        workspace.view(),
+        .{ .dictionary_set = set },
+    );
+    defer std.testing.allocator.free(allocated);
+    try std.testing.expectEqualSlices(
+        u8,
+        fixture.expected,
+        allocated[0..fixture.expected.len],
+    );
+    try std.testing.expectEqualStrings(
+        "tail",
+        allocated[fixture.expected.len..],
+    );
+}
+
+fn streamBounds(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "abc", true);
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "de", true);
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.bytes() };
+    const view = source.source();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        Support.inspectStream(view, .{ .total_decoded_max = 4 }),
+    );
+    const info = try Support.inspectStream(view, .{});
+    try std.testing.expectEqual(
+        @as(?u64, 5),
+        if (info.total_decoded) |size| @as(u64, @intCast(size)) else null,
+    );
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var short: [4]u8 = undefined;
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        Support.decodeStreamInto(view, &short, workspace.view(), .{}),
+    );
+    try std.testing.expectEqualStrings("abcd", &short);
+
+    var output: [5]u8 = undefined;
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        Support.decodeStreamInto(
+            view,
+            &output,
+            workspace.view(),
+            .{ .total_decoded_max = 4 },
+        ),
+    );
+    try std.testing.expectEqualStrings("abc", output[0..3]);
+}
+
+fn streamSkippableOnly(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    _ = stream_common.appendSkippable(&fixture, 2, "abc");
+    _ = stream_common.appendSkippable(&fixture, 5, &.{});
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.bytes() };
+    const view = source.source();
+    const info = try Support.inspectStream(view, .{});
+    try std.testing.expectEqual(
+        @as(?u64, 0),
+        if (info.total_decoded) |size| @as(u64, @intCast(size)) else null,
+    );
+    try std.testing.expectEqual(@as(usize, 0), info.data_frames);
+    try std.testing.expectEqual(@as(usize, 2), info.skippable_frames);
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.len)),
+        info.stream_end_offset,
+    );
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+    const result = try Support.decodeStreamInto(
+        view,
+        &.{},
+        workspace.view(),
+        .{},
+    );
+    try std.testing.expectEqual(
+        @as(u64, 0),
+        @as(u64, @intCast(result.decoded_len)),
+    );
+    try std.testing.expectEqual(@as(usize, 2), result.skippable_frames);
+}
+
+fn streamEmpty(comptime Support: type) !void {
+    var source = stream_common.TrackingSource{ .bytes = &.{} };
+    const view = source.source();
+    const info = try Support.inspectStream(view, .{});
+    try std.testing.expectEqual(
+        @as(?u64, 0),
+        if (info.total_decoded) |size| @as(u64, @intCast(size)) else null,
+    );
+    try std.testing.expectEqual(@as(u64, 0), info.stream_end_offset);
+    try std.testing.expectEqual(@as(usize, 0), info.data_frames);
+    try std.testing.expectEqual(@as(usize, 0), info.skippable_frames);
+}
+
+fn streamMagicless(comptime Support: type) !void {
+    var standard: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&standard, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&standard, "one", true);
+    stream_common.appendDataHeader(&standard, 0x00, 0x00, null);
+    stream_common.appendRleBlock(&standard, '2', 2, true);
+
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendMagiclessHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "one", true);
+    stream_common.appendMagiclessHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRleBlock(&fixture, '2', 2, true);
+
+    const expected = try oracle(Support, standard.bytes());
+    defer std.testing.allocator.free(expected);
+    var source = stream_common.TrackingSource{ .bytes = fixture.bytes() };
+    const view = source.source();
+    const info = try Support.inspectStream(view, .{ .format = .magicless });
+    try std.testing.expectEqual(
+        @as(u64, @intCast(expected.len)),
+        @as(u64, @intCast(info.total_decoded.?)),
+    );
+    try std.testing.expectEqual(@as(usize, 2), info.data_frames);
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+    const allocated = try Support.decodeStreamAlloc(
+        std.testing.allocator,
+        view,
+        workspace.view(),
+        .{ .format = .magicless },
+    );
+    defer std.testing.allocator.free(allocated);
+    try std.testing.expectEqualSlices(u8, expected, allocated);
+}
+
+fn streamTruncated(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "abc", true);
+    _ = stream_common.appendSkippable(&fixture, 4, "skip");
+
+    // The data frame ends at byte 12; that prefix is a complete shorter stream.
+    const data_end = 12;
+    for (1..fixture.len) |len| {
+        var source = stream_common.TrackingSource{ .bytes = fixture.bytes()[0..len] };
+        const view = source.source();
+        if (len == data_end) {
+            const info = try Support.inspectStream(view, .{});
+            try std.testing.expectEqual(@as(usize, 1), info.data_frames);
+            try std.testing.expectEqual(@as(usize, 0), info.skippable_frames);
+            continue;
+        }
+        try std.testing.expectError(
+            error.TruncatedFrame,
+            Support.inspectStream(view, .{}),
+        );
+    }
+}
+
 pub fn contracts(comptime Support: type) !void {
     try rawRleFrame(Support);
     try compressedFixtures(Support);
@@ -520,4 +816,11 @@ pub fn contracts(comptime Support: type) !void {
     try contentSizeMismatch(Support);
     try inspectReadsHeadersOnly(Support);
     try sourceFailureRetry(Support);
+    try streamConcatenation(Support);
+    try streamDictionarySet(Support);
+    try streamBounds(Support);
+    try streamSkippableOnly(Support);
+    try streamEmpty(Support);
+    try streamMagicless(Support);
+    try streamTruncated(Support);
 }

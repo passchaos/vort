@@ -36,7 +36,7 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute source-backed Zstd layout, literal-stream, compressed-block, frame-execution, stream-cursor, public frame-decode and entropy primitive contracts on native, x86 and WASI",
+        "Execute source-backed Zstd layout, literal-stream, compressed-block, frame-execution, stream-cursor, public frame/stream decode and entropy primitive contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",

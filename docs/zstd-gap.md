@@ -2181,5 +2181,25 @@ frames, truncated prefixes, trailing suffixes, destination and workspace
 bounds, checksum mismatch/ignore, decoded caps, header-only inspection and
 source-failure retry. Native, Linux x86 and actual WASI runs share the
 `Zstd source` filter, and root exports are covered by a consumer contract.
-Dictionary-set selection and skippable/concatenated orchestration in the public
-API remain absent. No performance or RSS claim follows.
+No performance or RSS claim follows.
+
+The same facade now exposes a public stream API:
+
+- `inspectSourceStream` walks every element and data-frame block header,
+  reporting the total decoded size when known, the stream end, and data /
+  skippable frame counts;
+- `decodeSourceStreamInto`, `decodeSourceStreamAppend` and
+  `decodeSourceStreamAlloc` decode concatenated data frames and advance
+  skippable frames without reading their payloads;
+- `SourceStreamDecodeOptions` adds a `NativeDictionarySet` lookup for declared
+  nonzero frame IDs, an ID-less/fallback dictionary, per-frame and whole-stream
+  decoded caps, format selection and checksum policy.
+
+Dictionary selection prefers the set for declared nonzero IDs, then the
+fallback dictionary when its ID matches; ID-less frames use the fallback
+dictionary when supplied, matching the slice decoder's history behavior.
+Skippable payloads are never read. Tests cover concatenated data/skippable
+streams with compressed and checksum frames, dictionary-set selection, the
+total and per-frame caps, fixed-destination partial publication, skippable-only
+and empty streams, magicless streams, truncation at element boundaries, and
+root exports. No performance or RSS claim follows.
