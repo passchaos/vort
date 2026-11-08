@@ -2020,8 +2020,18 @@ tree-description bytes, one/four Huffman streams, the encoded sequence count
 and its trailing payload. Tests cover every kind/size format, all three count
 tiers, count-zero trailing-data layering, callback short/failure paths,
 nonzero offsets above 4 GiB and callbacks that reject any entropy-payload read.
-This is layout discovery only: tree weights and decoding tables are not
-decoded or built, and no literal, sequence, block or frame payload is decoded.
+This parser remains layout discovery only and does not itself decode a literal,
+sequence, block or frame payload.
+
+An internal transactional preparation step now consumes only the located
+Direct or FSE tree description, using at most 128 bytes of caller scratch, and
+returns an owned canonical tree plus complete 11-bit (2,048-entry) lookup.
+Treeless sections reuse the immutable committed table without requesting a
+replacement; a newly prepared table remains pending until whole-block success.
+The existing deep system-zstd FSE fixture and a Direct fixture are
+differentially checked with scratch/callback/canary/4-GiB/error-priority cases
+on native, Linux x86 and actual WASI. Huffman literal streams remain unread and
+unexecuted, and this is not a public source decoder.
 
 Sequence metadata can now be prepared directly from the trailing source range
 through a transactional one-byte forward cursor. It parses descriptions in
@@ -2031,5 +2041,5 @@ remaining reverse bitstream without reading even its marker byte. A 64-tuple
 slice parse/resolve differential plus mixed-order, every-prefix truncation,
 invalid-RLE, Repeat-state, zero-count, callback-failure, scratch, 4-GiB-offset
 and actual WASI contracts validate this metadata boundary. Reverse FSE state
-initialization and symbol execution, literals tree/table decoding, match
+initialization and symbol execution, Huffman literal-stream execution, match
 copying, block/frame orchestration and a public source decoder remain absent.

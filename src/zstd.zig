@@ -85,6 +85,9 @@ test "Zstd source sequence metadata contracts" {
 test "Zstd source frame and block layout contracts" {
     try source_frame_tests.contracts(SourceFrameTestSupport);
 }
+test "Zstd source Huffman tree preparation contracts" {
+    try source_huffman_tests.contracts(SourceHuffmanTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -389,6 +392,40 @@ const SourceFrameTestSupport = struct {
         };
     }
 };
+
+const SourceHuffmanTestSupport = struct {
+    pub const Codec = SourceHuffmanCodec;
+    pub const Table = SourceHuffmanTable;
+
+    pub fn parseStdDescription(description: []const u8) core.Error!Table {
+        var reader: std.Io.Reader = .fixed(description);
+        var remaining: std.Io.Limit = .limited(description.len);
+        const tree = decodeStdZstdHuffmanTree(&reader, &remaining) catch |err| switch (err) {
+            error.EndOfStream => return error.TruncatedFrame,
+            else => return error.CorruptFrame,
+        };
+        if (reader.seek != description.len) return error.CorruptFrame;
+        var lookup: CompleteHuffmanLiteralLookup = undefined;
+        if (!lookup.buildComplete(&tree)) return error.CorruptFrame;
+        return .{ .tree = tree, .lookup = lookup };
+    }
+
+    pub fn expectTableEqual(expected: *const Table, actual: *const Table) !void {
+        try std.testing.expectEqual(expected.tree.max_bit_count, actual.tree.max_bit_count);
+        try std.testing.expectEqual(expected.tree.symbol_count_minus_one, actual.tree.symbol_count_minus_one);
+        const node_count = @as(usize, expected.tree.symbol_count_minus_one) + 1;
+        try std.testing.expectEqualSlices(
+            StdZstdHuffmanTree.PrefixedSymbol,
+            expected.tree.nodes[0..node_count],
+            actual.tree.nodes[0..node_count],
+        );
+        try std.testing.expectEqualSlices(
+            CompleteHuffmanLiteralLookup.CompleteEntry,
+            &expected.lookup.entries,
+            &actual.lookup.entries,
+        );
+    }
+};
 pub const DictionaryUsage = prefix_binding.Usage;
 pub const PrefixSnapshot = prefix_binding.Snapshot;
 pub const PrefixPhase = prefix_binding.Phase;
@@ -462,6 +499,7 @@ const source_reverse_bit_reader = @import("zstd/source/reverse_bit_reader.zig");
 const source_reverse_bit_reader_tests = @import("zstd/source/reverse_bit_reader_tests.zig");
 const source_sequences = @import("zstd/source/sequences.zig");
 const source_frame_tests = @import("zstd/source/frame_tests.zig");
+const source_huffman_tests = @import("zstd/source/huffman_tests.zig");
 const sequence_count_wire = @import("zstd/sequence/count.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
@@ -938,6 +976,30 @@ const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 const HuffmanLiteralLookup = huffman_lookup.Table(11);
 const CompleteHuffmanLiteralLookup = huffman_lookup.CompleteTable(11);
 const NarrowHuffmanLiteralLookup = huffman_lookup.CompleteTable(7);
+const SourceHuffmanTable = struct {
+    tree: StdZstdHuffmanTree,
+    lookup: CompleteHuffmanLiteralLookup,
+};
+
+const SourceHuffmanCodec = struct {
+    pub const Table = SourceHuffmanTable;
+
+    pub fn decodeDescription(description: []const u8) core.Error!Table {
+        var reader: std.Io.Reader = .fixed(description);
+        var remaining: std.Io.Limit = .limited(description.len);
+        const tree = decodeFrameHuffmanTree(description, &reader, &remaining, null) catch |err| switch (err) {
+            error.EndOfStream => return error.TruncatedFrame,
+            else => return error.CorruptFrame,
+        };
+        if (reader.seek != description.len) return error.CorruptFrame;
+        var lookup: CompleteHuffmanLiteralLookup = undefined;
+        if (!lookup.buildComplete(&tree)) return error.CorruptFrame;
+        return .{
+            .tree = tree,
+            .lookup = lookup,
+        };
+    }
+};
 const PreparedNarrowHuffmanLookup = struct {
     table: NarrowHuffmanLiteralLookup = undefined,
     complete: bool = false,

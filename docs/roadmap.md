@@ -26539,3 +26539,18 @@ reuse, so production keeps the simpler independently owned plans.
   This prepares sequence metadata only: it does not inspect the reverse marker,
   initialize FSE states, decode sequence symbols, execute matches, dispatch
   blocks or frames, or expose a public source-backed decoder.
+
+- 2026-11-08: Added internal source-backed Zstd Huffman table preparation
+  between literals prefix parsing and jump/count finalization. Compressed
+  sections copy only their self-delimiting Direct or FSE tree description into
+  caller scratch bounded at 128 bytes, then return an owned canonical tree and
+  complete 11-bit (2,048-entry) lookup. Treeless sections reuse the immutable
+  committed table and do not request replacement; fresh tables remain pending
+  until the caller has validated the complete block. Differential contracts
+  cover a Direct tree and the existing deep system-zstd FSE fixture, exact and
+  short scratch, short reads, callback faults, canaries, poisoned scratch after
+  success, unread stream data, absolute offsets above 4 GiB and tree-before-
+  jump/count error priority on native, Linux x86 and actual WASI. This prepares
+  Direct/FSE tree+lookup state and Treeless reuse only. It does not execute any
+  Huffman literal stream, finish a source block/frame, or expose a public
+  source-backed decoder.

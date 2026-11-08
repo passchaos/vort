@@ -19,6 +19,22 @@ pub const Streams = union(enum) {
     four: [4]source_input.Range,
 };
 
+/// Tree-independent literals metadata. Source decoders prepare a compressed
+/// tree from this view before reading four-stream jumps or sequence counts,
+/// matching the established slice parser's semantic error priority.
+pub const PrefixLayout = struct {
+    block: source_input.Range,
+    kind: header.Kind,
+    size_format: u2,
+    regenerated_size: usize,
+    compressed_size: usize,
+    header_range: source_input.Range,
+    literal_payload: source_input.Range,
+    tree_description: ?source_input.Range,
+    stream_data: ?source_input.Range,
+    sequence_offset: u64,
+};
+
 pub const Layout = struct {
     kind: header.Kind,
     size_format: u2,
@@ -33,7 +49,7 @@ pub const Layout = struct {
     sequence_payload: source_input.Range,
 };
 
-pub fn parseLayout(block: source_input.Range, previous_tree_available: bool) Error!Layout {
+pub fn parsePrefix(block: source_input.Range, previous_tree_available: bool) Error!PrefixLayout {
     const first = try block.byte(0);
     const header_len = header.encodedLen(first);
     var header_bytes: [header.max_encoded_len]u8 = undefined;
@@ -51,7 +67,7 @@ pub fn parseLayout(block: source_input.Range, previous_tree_available: bool) Err
         return error.CorruptFrame;
 
     var description_range: ?source_input.Range = null;
-    var huffman_streams: Streams = .none;
+    var stream_data: ?source_input.Range = null;
     if (decoded.kind == .compressed or decoded.kind == .treeless) {
         const description_len: usize = if (decoded.kind == .compressed) blk: {
             const tree_first = try literal_payload.byte(0);
@@ -61,17 +77,39 @@ pub fn parseLayout(block: source_input.Range, previous_tree_available: bool) Err
             break :blk len;
         } else 0;
         const description_len_u64: u64 = @intCast(description_len);
-        const stream_data = try literal_payload.subrange(
+        stream_data = try literal_payload.subrange(
             description_len_u64,
             literal_payload.len - description_len_u64,
         );
+    }
+
+    const sequence_offset = std.math.add(u64, literal_offset, @as(u64, @intCast(literal_len))) catch
+        return error.IntegerOverflow;
+
+    return .{
+        .block = block,
+        .kind = decoded.kind,
+        .size_format = decoded.size_format,
+        .regenerated_size = decoded.regenerated_size,
+        .compressed_size = decoded.compressed_size,
+        .header_range = header_range,
+        .literal_payload = literal_payload,
+        .tree_description = description_range,
+        .stream_data = stream_data,
+        .sequence_offset = sequence_offset,
+    };
+}
+
+pub fn finishLayout(prefix: PrefixLayout) Error!Layout {
+    var huffman_streams: Streams = .none;
+    if (prefix.stream_data) |stream_data| {
         var jump: [6]u8 = undefined;
-        const numeric = if (decoded.size_format == 0)
-            try stream_layout.parse(decoded.size_format, @intCast(stream_data.len), null)
+        const numeric = if (prefix.size_format == 0)
+            try stream_layout.parse(prefix.size_format, @intCast(stream_data.len), null)
         else blk: {
             if (stream_data.len < jump.len) return error.CorruptFrame;
             try stream_data.readExact(0, &jump);
-            break :blk try stream_layout.parse(decoded.size_format, @intCast(stream_data.len), &jump);
+            break :blk try stream_layout.parse(prefix.size_format, @intCast(stream_data.len), &jump);
         };
         huffman_streams = switch (numeric) {
             .one => |span| .{ .one = try stream_data.subrange(@intCast(span.offset), @intCast(span.len)) },
@@ -84,34 +122,36 @@ pub fn parseLayout(block: source_input.Range, previous_tree_available: bool) Err
         };
     }
 
-    const sequence_offset = std.math.add(u64, literal_offset, @as(u64, @intCast(literal_len))) catch
-        return error.IntegerOverflow;
-    const sequence_first = try block.byte(sequence_offset);
+    const sequence_first = try prefix.block.byte(prefix.sequence_offset);
     const count_len = sequence_count.encodedLen(sequence_first);
     var count_bytes: [sequence_count.max_encoded_len]u8 = undefined;
-    try block.readExact(sequence_offset, count_bytes[0..count_len]);
+    try prefix.block.readExact(prefix.sequence_offset, count_bytes[0..count_len]);
     const count = try sequence_count.parse(count_bytes[0..count_len]);
-    const count_range = try block.subrange(sequence_offset, @intCast(count_len));
-    const sequence_payload_offset = std.math.add(u64, sequence_offset, @as(u64, @intCast(count_len))) catch
+    const count_range = try prefix.block.subrange(prefix.sequence_offset, @intCast(count_len));
+    const sequence_payload_offset = std.math.add(u64, prefix.sequence_offset, @as(u64, @intCast(count_len))) catch
         return error.IntegerOverflow;
-    const sequence_payload = try block.subrange(
+    const sequence_payload = try prefix.block.subrange(
         sequence_payload_offset,
-        block.len - sequence_payload_offset,
+        prefix.block.len - sequence_payload_offset,
     );
 
     return .{
-        .kind = decoded.kind,
-        .size_format = decoded.size_format,
-        .regenerated_size = decoded.regenerated_size,
-        .compressed_size = decoded.compressed_size,
-        .header_range = header_range,
-        .literal_payload = literal_payload,
-        .tree_description = description_range,
+        .kind = prefix.kind,
+        .size_format = prefix.size_format,
+        .regenerated_size = prefix.regenerated_size,
+        .compressed_size = prefix.compressed_size,
+        .header_range = prefix.header_range,
+        .literal_payload = prefix.literal_payload,
+        .tree_description = prefix.tree_description,
         .streams = huffman_streams,
         .sequence_count = count,
         .sequence_count_range = count_range,
         .sequence_payload = sequence_payload,
     };
+}
+
+pub fn parseLayout(block: source_input.Range, previous_tree_available: bool) Error!Layout {
+    return finishLayout(try parsePrefix(block, previous_tree_available));
 }
 
 test "Zstd source literals raw layout skips payload bytes" {
