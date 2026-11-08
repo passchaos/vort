@@ -81,6 +81,10 @@ with 49% more).
   a `0.968166` geometric mean, `0.6711`/`0.6723` on the target `nci`/`xml`
   64 KiB level-3 rows and a worst control of `1.0039`. See
   [the evidence](zstd-small-copy-policy-20261109.md).
+- Zstd `split_sequence_min` 1024 -> 512 was rejected. A 48-row paired screen
+  (twelve sources, 64 KiB/1 MiB, levels 3/19, five rounds) measures a
+  `1.0006` geometric mean, no row more than 2% faster and `xml` 64 KiB
+  level 3 3.3% slower. Keep 1024.
 
 ## Remaining structural options
 
