@@ -97,4 +97,7 @@ non-regression control bar by more than 10% on individual text rows; the
 32 KiB variant is worse overall. The effect is content-dependent: larger
 fragments find more matches on database/structured data but mix text content
 that the 16 KiB one-pass entropy model separates. Keep 16 KiB as the default.
+The 64 KiB target remains available per call through the one-shot
+`PlannedEncodeOptions.block_len` control documented in
+[the block-length contract](../../formats/brotli-block-length.md).
 

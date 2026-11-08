@@ -341,6 +341,13 @@ pub const PlannedEncodeOptions = struct {
     /// explicit widths above 16. Leaving this null preserves the established
     /// policy, including ratio mode's automatic 17-bit candidate.
     window_bits: ?u5 = null,
+    /// Explicit meta-block target for one-shot planned encoding. Zero keeps
+    /// the quality/level default (16 KiB for q0, 32 KiB for q6/q7/q11, and
+    /// 64 KiB otherwise). A non-zero value must be at least 16 KiB and at most
+    /// 64 KiB; HQ may select up to its own 16 MiB target. Larger q0/q1
+    /// fragments find more matches on binary/structured data at the cost of
+    /// fragment latency and a less homogeneous one-pass entropy model.
+    block_len: usize = 0,
     /// Optional metadata emitted before the payload meta-block.
     metadata: []const u8 = "",
     /// For ratio inputs above the automatic 256-byte dictionary gate, examine
@@ -5042,6 +5049,7 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
         .large_window = options.large_window,
         .mode = options.mode,
         .window_bits = try resolvedPlannedWindowBits(options),
+        .block_len = options.block_len,
         .metadata = options.metadata,
         .command_state_max_input_kib = options.command_state_max_input_kib,
         .binary_command_state = options.binary_command_state,
@@ -7341,6 +7349,12 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
     }
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
+    if (options.block_len != 0) {
+        if (options.quality == null) return error.InvalidBlockPlan;
+        if (options.block_len < 16 * 1024) return error.InvalidBlockPlan;
+        const max_block_len = if (options.hq != null) hq_options.max_block_len else planned_chunk_max_input_len;
+        if (options.block_len > max_block_len) return error.InvalidBlockPlan;
+    }
     if (options.quality != null) {
         if (options.level != .fast) return error.InvalidBlockPlan;
         const schedule = try resolvedQualitySchedule(options);
@@ -28982,10 +28996,57 @@ test "br planned quality options validate selector mode level and window contrac
         payload.len,
         .{ .quality = 11, .command_state_max_input_kib = 65 },
     ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 0, .block_len = 8 * 1024 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 0, .block_len = 128 * 1024 },
+    ));
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 0, .block_len = 64 * 1024 },
+    )) >= payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .level = .fast, .block_len = 64 * 1024 },
+    ));
     const oversized_len = max_uncompressed_meta_block_len + 1;
     const oversized_quality_bound = try encodedPlannedStreamBoundWithOptions(oversized_len, .{ .quality = 8 });
     const oversized_single_block_bound = try encodedStoredStreamBound(oversized_len);
     try std.testing.expect(oversized_quality_bound > oversized_single_block_bound);
+}
+
+test "br planned one-shot block length controls q0 fragment size" {
+    const allocator = std.testing.allocator;
+    const input = try allocator.alloc(u8, 64 * 1024);
+    defer allocator.free(input);
+    const text = "{\"service\":\"vort\",\"items\":[1,4,8],\"status\":\"repeated\"}\n";
+    for (input, 0..) |*byte, index| {
+        byte.* = if (index % 97 == 0) @truncate(index / 97) else text[index % text.len];
+    }
+
+    const default_wire = try encodePlannedStreamWithOptionsAlloc(
+        allocator,
+        input,
+        .{ .quality = 0 },
+    );
+    defer allocator.free(default_wire);
+    const large_wire = try encodePlannedStreamWithOptionsAlloc(
+        allocator,
+        input,
+        .{ .quality = 0, .block_len = 64 * 1024 },
+    );
+    defer allocator.free(large_wire);
+    try std.testing.expect(!std.mem.eql(u8, default_wire, large_wire));
+
+    const default_decoded = try decodeStreamAlloc(allocator, default_wire);
+    defer allocator.free(default_decoded);
+    try std.testing.expectEqualSlices(u8, input, default_decoded);
+    const large_decoded = try decodeStreamAlloc(allocator, large_wire);
+    defer allocator.free(large_decoded);
+    try std.testing.expectEqualSlices(u8, input, large_decoded);
 }
 
 test "br planned quality and mode matrix is deterministic bounded and reusable" {
