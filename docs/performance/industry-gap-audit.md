@@ -810,14 +810,20 @@ for the missing current competitor measurements.
 3. Continue compatibility and physical-boundary audits using reproducible
    independent fixtures. Internal Huffman preparation now handles only Direct/
    FSE tree descriptions and Treeless reuse, returning an owned tree plus
-   complete 2,048-entry lookup with at most 128 bytes of caller scratch. Before
-   listing source-backed Zstd frame decoding as implemented, complete Huffman
-   literal-stream and reverse sequence-state execution, then complete frame-end
-   traversal/execution, dictionary/history, checksum/error and public contracts
-   on top of the validated reverse-reader, frame/block-layout, literals-layout,
-   Huffman-preparation and sequence-metadata primitives. A
-   low-priority legacy
-   LZMA1 case is `lc + lp > 4`:
+   complete 2,048-entry lookup with at most 128 bytes of caller scratch;
+   resumable one/four-stream Huffman literal execution is also internal. A
+   transactional sequence cursor now executes the prepared tables through the
+   paged reverse reader. Its coverage accounting remains distinct: sequence
+   wire metadata remains full at 64 Predefined/RLE/Compressed/Repeat tuples, while
+   concrete cursor execution covers all 27 resolved Predefined/RLE/Compressed
+   tuples after Repeat resolution (`sequence-reverse-execution` for WASI).
+   Before listing source-backed Zstd frame decoding as implemented, complete
+   literal/match/history execution, frame-end traversal, block/frame dispatch,
+   dictionary/history, checksum/error and public contracts on top of the
+   validated reverse-reader, frame/block-layout,
+   literals-layout, Huffman-preparation and sequence-metadata primitives. This
+   work has no source-decoder or performance-completion claim. A low-priority
+   legacy LZMA1 case is `lc + lp > 4`:
    the common property parser rejects it, while the liblzma documentation
    acknowledges old LZMA1 streams outside its own supported range. Tiny SDK
    fixtures must establish the actual wire case before implementation; XZ/LZMA2

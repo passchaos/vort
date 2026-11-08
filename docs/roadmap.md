@@ -26567,3 +26567,17 @@ reuse, so production keeps the simpler independently owned plans.
   executor only: it does not initialize or execute sequence states, copy
   matches, dispatch blocks or frames, expose a public source decoder, or make
   a performance claim.
+
+- 2026-11-08: Added an internal transactional cursor and execution contracts
+  for source-backed Zstd sequence bitstreams. The cursor initializes the
+  resolved LL/OF/ML states from the caller-paged reverse
+  reader, decodes one complete sequence as its commit unit, rolls back reader,
+  FSE and repeated-offset state on failure, and validates the exact terminal
+  bit boundary. Wire-metadata coverage remains all 64 Predefined/RLE/
+  Compressed/Repeat tuples; concrete cursor coverage separately exercises all
+  27 resolved Predefined/RLE/Compressed tuples after Repeat resolution. The
+  WASI coverage receipt records `sequence-reverse-execution`. This internal
+  cursor returns sequence lengths/offsets only: literal consumption,
+  match/history execution, block/frame orchestration, dictionary integration,
+  a public source decoder and any performance claim remain outside this
+  increment.

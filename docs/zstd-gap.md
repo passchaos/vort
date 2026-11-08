@@ -2051,7 +2051,22 @@ and Repeat tables, preserves the previous-table snapshot, and returns the
 remaining reverse bitstream without reading even its marker byte. A 64-tuple
 slice parse/resolve differential plus mixed-order, every-prefix truncation,
 invalid-RLE, Repeat-state, zero-count, callback-failure, scratch, 4-GiB-offset
-and actual WASI contracts validate this metadata boundary. Reverse FSE state
-initialization and symbol execution, match copying, block/frame orchestration
-and a public source decoder remain absent. Huffman literal execution is the
-independent internal cursor described above.
+and actual WASI contracts validate this metadata boundary. This metadata step
+leaves reverse FSE state initialization and symbol execution to the separate
+internal cursor below. Match copying, block/frame orchestration and a public
+source decoder remain absent. Huffman literal execution is the independent
+internal cursor described above.
+
+An internal transactional sequence cursor now executes prepared tables through
+the caller-paged reverse reader. It initializes the resolved LL/OF/ML states,
+decodes one complete sequence per commit, preserves the logical reader plus
+FSE/repeated-offset state on failure, and checks exact
+terminal-bit exhaustion. The wire-metadata mask above remains full at all 64
+Predefined/RLE/Compressed/Repeat tuples; execution coverage is a separate
+set of all 27 concrete Predefined/RLE/Compressed tuples after Repeat has
+resolved to a prior table. The WASI coverage name is
+`sequence-reverse-execution`. The cursor only returns decoded literal length,
+match length and offset values. It does not consume literals, copy
+matches/history, dispatch blocks or frames,
+integrate dictionaries, expose a public source decoder or establish any
+performance result.

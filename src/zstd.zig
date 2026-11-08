@@ -82,6 +82,9 @@ test "Zstd source literals metadata contracts" {
 test "Zstd source sequence metadata contracts" {
     try @import("zstd/source/sequences_tests.zig").contracts(SourceSequenceTestSupport);
 }
+test "Zstd source sequence reverse execution contracts" {
+    try source_sequence_cursor_tests.contracts(SourceSequenceTestSupport);
+}
 test "Zstd source frame and block layout contracts" {
     try source_frame_tests.contracts(SourceFrameTestSupport);
 }
@@ -134,6 +137,13 @@ const SourceSequenceCodec = struct {
     pub const Tables = SequenceTables;
     pub const Spec = SequenceModeSpec;
     pub const Limits = struct { symbol_count: usize, max_accuracy_log: u4 };
+    pub const State = struct {
+        ll_state: usize,
+        of_state: usize,
+        ml_state: usize,
+        repeated_offsets: [3]usize,
+    };
+    pub const Sequence = DecodedSequence;
 
     pub fn initSpec(modes: [3]source_sequences.Mode) Spec {
         var spec: Spec = undefined;
@@ -174,16 +184,16 @@ const SourceSequenceCodec = struct {
         const selected_bases = bases(field);
         const selected_bits = bits(field);
         if (code >= selected_bases.len) return error.CorruptFrame;
-        const symbol = SequenceSymbol{
+        const selected_symbol = SequenceSymbol{
             .base = @intCast(selected_bases[code]),
             .additional_bits = selected_bits[code],
             .next_state = 0,
             .state_bits = 0,
         };
         switch (field) {
-            .literal_length => spec.literal_rle = symbol,
-            .offset => spec.offset_rle = symbol,
-            .match_length => spec.match_rle = symbol,
+            .literal_length => spec.literal_rle = selected_symbol,
+            .offset => spec.offset_rle = selected_symbol,
+            .match_length => spec.match_rle = selected_symbol,
         }
     }
 
@@ -223,6 +233,149 @@ const SourceSequenceCodec = struct {
         return resolved.tables();
     }
 
+    pub fn initState(
+        reader: *source_reverse_bit_reader.Reader,
+        tables: *const Tables,
+        repeated_offsets: [3]usize,
+    ) source_reverse_bit_reader.Error!State {
+        const ll_state = try initialState(reader, tables, .literal_length);
+        const of_state = try initialState(reader, tables, .offset);
+        const ml_state = try initialState(reader, tables, .match_length);
+        _ = try symbol(tables, .literal_length, ll_state);
+        _ = try symbol(tables, .offset, of_state);
+        _ = try symbol(tables, .match_length, ml_state);
+        return .{
+            .ll_state = ll_state,
+            .of_state = of_state,
+            .ml_state = ml_state,
+            .repeated_offsets = repeated_offsets,
+        };
+    }
+
+    pub fn readSequence(
+        reader: *source_reverse_bit_reader.Reader,
+        tables: *const Tables,
+        state: *State,
+        last: bool,
+    ) source_reverse_bit_reader.Error!Sequence {
+        const ll_symbol = try symbol(tables, .literal_length, state.ll_state);
+        const of_symbol = try symbol(tables, .offset, state.of_state);
+        const ml_symbol = try symbol(tables, .match_length, state.ml_state);
+        const offset_extra = try reader.read(of_symbol.additional_bits);
+        const match_len = std.math.add(
+            usize,
+            ml_symbol.base,
+            try reader.read(ml_symbol.additional_bits),
+        ) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(
+            usize,
+            ll_symbol.base,
+            try reader.read(ll_symbol.additional_bits),
+        ) catch return error.IntegerOverflow;
+        const match_offset = try resolveSequenceOffset(
+            of_symbol.base,
+            of_symbol.additional_bits,
+            offset_extra,
+            literal_len,
+            &state.repeated_offsets,
+        );
+        if (last) {
+            try reader.expectEnd();
+        } else {
+            // Zstandard transition order is LL, ML, OF.
+            state.ll_state = try transition(reader, tables.ll_mode, ll_symbol);
+            state.ml_state = try transition(reader, tables.ml_mode, ml_symbol);
+            state.of_state = try transition(reader, tables.of_mode, of_symbol);
+        }
+        return .{
+            .literal_len = literal_len,
+            .match_len = match_len,
+            .match_offset = match_offset,
+        };
+    }
+
+    pub fn repeatedOffsets(state: *const State) [3]usize {
+        return state.repeated_offsets;
+    }
+
+    fn initialState(
+        reader: *source_reverse_bit_reader.Reader,
+        tables: *const Tables,
+        field: source_sequences.Field,
+    ) source_reverse_bit_reader.Error!usize {
+        const selected_mode = mode(tables, field);
+        return switch (selected_mode) {
+            .predefined => try reader.readSmall(switch (field) {
+                .literal_length, .match_length => 6,
+                .offset => 5,
+            }),
+            .compressed => blk: {
+                const accuracy_log = fse(tables, field).accuracy_log;
+                if (accuracy_log == 0 or accuracy_log > 9) return error.CorruptFrame;
+                break :blk try reader.readSmall(@intCast(accuracy_log));
+            },
+            .rle => 0,
+            .repeat => error.CorruptFrame,
+        };
+    }
+
+    pub fn symbol(
+        tables: *const Tables,
+        field: source_sequences.Field,
+        state: usize,
+    ) core.Error!SequenceSymbol {
+        return switch (mode(tables, field)) {
+            .predefined => switch (field) {
+                .literal_length => try defaultLiteralLengthSymbol(state),
+                .offset => try defaultOffsetSymbol(state),
+                .match_length => try defaultMatchLengthSymbol(state),
+            },
+            .rle => rle(tables, field) orelse error.CorruptFrame,
+            .compressed => try fse(tables, field).symbol(state),
+            .repeat => error.CorruptFrame,
+        };
+    }
+
+    fn transition(
+        reader: *source_reverse_bit_reader.Reader,
+        selected_mode: SymbolMode,
+        selected_symbol: SequenceSymbol,
+    ) source_reverse_bit_reader.Error!usize {
+        return switch (selected_mode) {
+            .predefined, .compressed => std.math.add(
+                usize,
+                selected_symbol.next_state,
+                try reader.readSmall(@intCast(selected_symbol.state_bits)),
+            ) catch return error.IntegerOverflow,
+            .rle => 0,
+            .repeat => error.CorruptFrame,
+        };
+    }
+
+    pub fn mode(tables: *const Tables, field: source_sequences.Field) SymbolMode {
+        return switch (field) {
+            .literal_length => tables.ll_mode,
+            .offset => tables.of_mode,
+            .match_length => tables.ml_mode,
+        };
+    }
+
+    fn rle(tables: *const Tables, field: source_sequences.Field) ?SequenceSymbol {
+        return switch (field) {
+            .literal_length => tables.literal_rle,
+            .offset => tables.offset_rle,
+            .match_length => tables.match_rle,
+        };
+    }
+
+    pub fn fse(tables: *const Tables, field: source_sequences.Field) *const SequenceFseTable {
+        return switch (field) {
+            .literal_length => &tables.literal_fse,
+            .offset => &tables.offset_fse,
+            .match_length => &tables.match_fse,
+        };
+    }
+
     fn bases(field: source_sequences.Field) []const usize {
         return switch (field) {
             .literal_length => &ll_base,
@@ -244,6 +397,34 @@ const SourceSequenceTestSupport = struct {
     pub const Codec = SourceSequenceCodec;
     pub const Tables = SequenceTables;
     pub const Mode = source_sequences.Mode;
+    pub const ResolvedMode = enum { predefined, rle, compressed };
+    pub const Corpus = enum {
+        libzstd_numbered_json_block0,
+        decodecorpus_block0,
+        decodecorpus_block1,
+        decodecorpus_block2,
+        trained_dictionary_repeat,
+    };
+    pub const OwnedFixture = struct {
+        bytes: []u8,
+        sequence_count: usize,
+        wire_modes: [3]Mode,
+        resolved_modes: [3]ResolvedMode,
+        previous_tables: ?Tables,
+        initial_repeated_offsets: [3]usize,
+    };
+    pub const OracleStep = struct {
+        sequence: Codec.Sequence,
+        ll_state: usize,
+        of_state: usize,
+        ml_state: usize,
+        repeated_offsets: [3]usize,
+        remaining_bits: usize,
+    };
+    pub const OwnedOracle = struct {
+        steps: []OracleStep,
+        final_repeated_offsets: [3]usize,
+    };
     pub const SliceResult = struct {
         mode_byte: u8,
         wire_modes: source_sequences.WireModes,
@@ -317,6 +498,299 @@ const SourceSequenceTestSupport = struct {
             .repeat_mask = repeat_mask,
             .tables = resolved.tables(),
             .bitstream_offset = parsed.bitstream_offset,
+        };
+    }
+
+    pub fn loadSequenceFixture(
+        allocator: std.mem.Allocator,
+        corpus: Corpus,
+    ) !?OwnedFixture {
+        const Selection = struct { encoded: []const u8, block_index: usize };
+        const selection: Selection = switch (corpus) {
+            .libzstd_numbered_json_block0 => .{
+                .encoded = @as([]const u8, @embedFile("zstd/testdata/libzstd-numbered-json.frame.hex")),
+                .block_index = @as(usize, 0),
+            },
+            .decodecorpus_block0 => .{
+                .encoded = @as([]const u8, @embedFile("zstd/testdata/decodecorpus-predefined-repeat.frame.hex")),
+                .block_index = @as(usize, 0),
+            },
+            .decodecorpus_block1 => .{
+                .encoded = @as([]const u8, @embedFile("zstd/testdata/decodecorpus-predefined-repeat.frame.hex")),
+                .block_index = @as(usize, 1),
+            },
+            .decodecorpus_block2 => .{
+                .encoded = @as([]const u8, @embedFile("zstd/testdata/decodecorpus-predefined-repeat.frame.hex")),
+                .block_index = @as(usize, 2),
+            },
+            .trained_dictionary_repeat => return null,
+        };
+        const frame = try decodeHexFixture(allocator, selection.encoded);
+        defer allocator.free(frame);
+        return @as(?OwnedFixture, try extractSequenceFixture(
+            allocator,
+            frame,
+            selection.block_index,
+        ));
+    }
+
+    pub fn freeSequenceFixture(
+        allocator: std.mem.Allocator,
+        fixture: *OwnedFixture,
+    ) void {
+        allocator.free(fixture.bytes);
+        fixture.* = undefined;
+    }
+
+    pub fn decodeSequenceSliceOracle(
+        allocator: std.mem.Allocator,
+        fixture: *const OwnedFixture,
+    ) Error!OwnedOracle {
+        var offset: usize = 0;
+        const parsed = try parseSequenceModeSpec(
+            fixture.bytes,
+            &offset,
+            fixture.sequence_count,
+        );
+        const resolved = try resolveSequenceModeSpec(parsed, fixture.previous_tables);
+        const tables = resolved.tables();
+        const reader = try ReverseBitReader.init(fixture.bytes[resolved.bitstream_offset..]);
+        var state = try initStreamingSequenceDecodeState(
+            resolved,
+            fixture.sequence_count,
+            reader,
+            fixture.initial_repeated_offsets,
+        );
+        const steps = try allocator.alloc(OracleStep, fixture.sequence_count);
+        errdefer allocator.free(steps);
+        for (steps) |*step| {
+            const sequence = try readStreamingModeSequence(&tables, &state);
+            step.* = .{
+                .sequence = sequence,
+                .ll_state = state.ll_state,
+                .of_state = state.of_state,
+                .ml_state = state.ml_state,
+                .repeated_offsets = state.repeated_offsets,
+                .remaining_bits = state.reader.available(),
+            };
+        }
+        return .{
+            .steps = steps,
+            .final_repeated_offsets = state.repeated_offsets,
+        };
+    }
+
+    pub fn freeSequenceSliceOracle(
+        allocator: std.mem.Allocator,
+        oracle: *OwnedOracle,
+    ) void {
+        allocator.free(oracle.steps);
+        oracle.* = undefined;
+    }
+
+    pub fn emitResolvedFixture(
+        allocator: std.mem.Allocator,
+        modes: [3]ResolvedMode,
+    ) Error!OwnedFixture {
+        const wire_modes = [3]Mode{
+            @enumFromInt(@intFromEnum(modes[0])),
+            @enumFromInt(@intFromEnum(modes[1])),
+            @enumFromInt(@intFromEnum(modes[2])),
+        };
+        var metadata: [128]u8 = undefined;
+        const metadata_len = try emitFixture(wire_modes, &metadata);
+        const parsed = try parseSlice(metadata[0..metadata_len], 2, null);
+
+        var fields: [12]BitField = undefined;
+        var field_count: usize = 0;
+        var states = [3]usize{ 0, 0, 0 };
+        inline for (.{
+            source_sequences.Field.literal_length,
+            source_sequences.Field.offset,
+            source_sequences.Field.match_length,
+        }, 0..) |field, index| {
+            const selected_mode = SourceSequenceCodec.mode(&parsed.tables, field);
+            switch (selected_mode) {
+                .predefined => try appendBitField(
+                    &fields,
+                    &field_count,
+                    0,
+                    switch (field) {
+                        .literal_length, .match_length => 6,
+                        .offset => 5,
+                    },
+                ),
+                .compressed => try appendBitField(
+                    &fields,
+                    &field_count,
+                    0,
+                    SourceSequenceCodec.fse(&parsed.tables, field).accuracy_log,
+                ),
+                .rle => {},
+                .repeat => return error.CorruptFrame,
+            }
+            states[index] = 0;
+        }
+
+        for (0..2) |sequence_index| {
+            const ll = try SourceSequenceCodec.symbol(
+                &parsed.tables,
+                .literal_length,
+                states[0],
+            );
+            const of = try SourceSequenceCodec.symbol(
+                &parsed.tables,
+                .offset,
+                states[1],
+            );
+            const ml = try SourceSequenceCodec.symbol(
+                &parsed.tables,
+                .match_length,
+                states[2],
+            );
+            try appendBitField(&fields, &field_count, 0, of.additional_bits);
+            try appendBitField(&fields, &field_count, 0, ml.additional_bits);
+            try appendBitField(&fields, &field_count, 0, ll.additional_bits);
+            if (sequence_index == 0) {
+                inline for (.{
+                    .{ source_sequences.Field.literal_length, ll, @as(usize, 0) },
+                    .{ source_sequences.Field.match_length, ml, @as(usize, 2) },
+                    .{ source_sequences.Field.offset, of, @as(usize, 1) },
+                }) |transition| {
+                    const selected_mode = SourceSequenceCodec.mode(
+                        &parsed.tables,
+                        transition[0],
+                    );
+                    if (selected_mode == .predefined or selected_mode == .compressed) {
+                        try appendBitField(
+                            &fields,
+                            &field_count,
+                            0,
+                            transition[1].state_bits,
+                        );
+                        states[transition[2]] = transition[1].next_state;
+                    }
+                }
+            }
+        }
+
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(allocator);
+        try output.appendSlice(allocator, metadata[0..parsed.bitstream_offset]);
+        try emitReverseBitstreamFromReadOrder(
+            allocator,
+            &output,
+            fields[0..field_count],
+        );
+        return .{
+            .bytes = try output.toOwnedSlice(allocator),
+            .sequence_count = 2,
+            .wire_modes = wire_modes,
+            .resolved_modes = modes,
+            .previous_tables = null,
+            .initial_repeated_offsets = initial_repeated_offsets,
+        };
+    }
+
+    fn decodeHexFixture(
+        allocator: std.mem.Allocator,
+        encoded: []const u8,
+    ) Error![]u8 {
+        const hex = std.mem.trim(u8, encoded, " \r\n\t");
+        if (hex.len % 2 != 0) return error.CorruptFrame;
+        const bytes = try allocator.alloc(u8, hex.len / 2);
+        errdefer allocator.free(bytes);
+        _ = std.fmt.hexToBytes(bytes, hex) catch return error.CorruptFrame;
+        return bytes;
+    }
+
+    fn extractSequenceFixture(
+        allocator: std.mem.Allocator,
+        frame: []const u8,
+        target_block: usize,
+    ) Error!OwnedFixture {
+        const header = try inspectNativeFrameHeader(frame);
+        var header_offset = header.payload_offset;
+        var frame_state: SequenceFrameState = .{};
+        var block_index: usize = 0;
+        while (true) : (block_index += 1) {
+            const inspected = try inspectNativeFrameBlockAt(frame, header_offset);
+            if (inspected.block_type != .compressed) {
+                if (block_index == target_block) return error.CorruptFrame;
+            } else {
+                const block = frame[inspected.payload_offset..][0..inspected.payload_len];
+                const section = try parseLiteralsSection(block, &frame_state);
+                if (block_index == target_block) {
+                    if (section.sequence_count == 0) return error.CorruptFrame;
+                    const section_bytes = block[section.sequence_payload_offset..];
+                    var relative_offset: usize = 0;
+                    const parsed = try parseSequenceModeSpec(
+                        section_bytes,
+                        &relative_offset,
+                        section.sequence_count,
+                    );
+                    const resolved = try resolveSequenceModeSpec(
+                        parsed,
+                        frame_state.previous_tables,
+                    );
+                    return .{
+                        .bytes = try allocator.dupe(u8, section_bytes),
+                        .sequence_count = section.sequence_count,
+                        .wire_modes = wireModes(parsed),
+                        .resolved_modes = resolvedModes(resolved),
+                        .previous_tables = frame_state.previous_tables,
+                        .initial_repeated_offsets = frame_state.repeated_offsets,
+                    };
+                }
+                if (section.sequence_count != 0) {
+                    var sequence_offset = section.sequence_payload_offset;
+                    const parsed = try parseSequenceModeSpec(
+                        block,
+                        &sequence_offset,
+                        section.sequence_count,
+                    );
+                    const resolved = try resolveSequenceModeSpec(
+                        parsed,
+                        frame_state.previous_tables,
+                    );
+                    var state = try initSequenceDecodeState(
+                        &resolved,
+                        section.sequence_count,
+                        try ReverseBitReader.init(block[resolved.bitstream_offset..]),
+                        frame_state.repeated_offsets,
+                    );
+                    while (state.remaining != 0) _ = try readModeSequence(&state);
+                    frame_state.previous_tables = resolved.tables();
+                    frame_state.repeated_offsets = state.repeated_offsets;
+                }
+            }
+            if (inspected.last) return error.CorruptFrame;
+            header_offset = inspected.next_header_offset;
+        }
+    }
+
+    fn wireModes(spec: SequenceModeSpec) [3]Mode {
+        return .{
+            @enumFromInt(@intFromEnum(spec.ll_mode)),
+            @enumFromInt(@intFromEnum(spec.of_mode)),
+            @enumFromInt(@intFromEnum(spec.ml_mode)),
+        };
+    }
+
+    fn resolvedModes(spec: SequenceModeSpec) [3]ResolvedMode {
+        return .{
+            resolvedMode(spec.ll_mode),
+            resolvedMode(spec.of_mode),
+            resolvedMode(spec.ml_mode),
+        };
+    }
+
+    fn resolvedMode(mode_value: SymbolMode) ResolvedMode {
+        return switch (mode_value) {
+            .predefined => .predefined,
+            .rle => .rle,
+            .compressed => .compressed,
+            .repeat => unreachable,
         };
     }
 
@@ -526,6 +1000,7 @@ const source_literals = @import("zstd/source/literals.zig");
 const source_reverse_bit_reader = @import("zstd/source/reverse_bit_reader.zig");
 const source_reverse_bit_reader_tests = @import("zstd/source/reverse_bit_reader_tests.zig");
 const source_sequences = @import("zstd/source/sequences.zig");
+const source_sequence_cursor_tests = @import("zstd/source/sequence_cursor_tests.zig");
 const source_frame_tests = @import("zstd/source/frame_tests.zig");
 const source_huffman_tests = @import("zstd/source/huffman_tests.zig");
 const source_huffman_literal_tests = @import("zstd/source/huffman_literal_tests.zig");
@@ -13416,7 +13891,7 @@ const SequenceFseTable = struct {
     len: usize = 0,
     accuracy_log: u8 = 0,
 
-    fn symbol(self: *const SequenceFseTable, state: usize) Error!SequenceSymbol {
+    fn symbol(self: *const SequenceFseTable, state: usize) core.Error!SequenceSymbol {
         if (state >= self.len) {
             @branchHint(.unlikely);
             return error.CorruptFrame;
@@ -13975,15 +14450,15 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
     }
 }
 
-fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
+fn defaultLiteralLengthSymbol(state: usize) core.Error!SequenceSymbol {
     return sequence_predefined.literal(state);
 }
 
-fn defaultOffsetSymbol(state: usize) Error!SequenceSymbol {
+fn defaultOffsetSymbol(state: usize) core.Error!SequenceSymbol {
     return sequence_predefined.offset(state);
 }
 
-fn defaultMatchLengthSymbol(state: usize) Error!SequenceSymbol {
+fn defaultMatchLengthSymbol(state: usize) core.Error!SequenceSymbol {
     return sequence_predefined.match(state);
 }
 
@@ -17358,7 +17833,7 @@ test "wide sequence transition matches bounded reader" {
 /// the low 32 bits and the reader rejects fields wider than 32 bits. A 64-bit
 /// usize sum therefore cannot overflow, so the hot path can use a plain add.
 /// Narrow targets keep the checked form.
-inline fn addOffsetParts(a: usize, b: usize) Error!usize {
+inline fn addOffsetParts(a: usize, b: usize) core.Error!usize {
     if (comptime @bitSizeOf(usize) >= 64) return a + b;
     return std.math.add(usize, a, b) catch return error.IntegerOverflow;
 }
@@ -17369,7 +17844,7 @@ inline fn resolveSequenceOffset(
     offset_extra: usize,
     literal_len: usize,
     repeated_offsets: *[3]usize,
-) Error!usize {
+) core.Error!usize {
     if (offset_bits > 1) {
         const offset = try addOffsetParts(offset_base, offset_extra);
         updateRepeatedOffsets(repeated_offsets, offset);
@@ -17400,7 +17875,7 @@ fn updateRepeatedOffsets(repeated_offsets: *[3]usize, offset: usize) void {
     repeated_offsets.* = .{ offset, previous_0, previous_1 };
 }
 
-inline fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
+inline fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) core.Error!usize {
     switch (index) {
         0 => {},
         1 => std.mem.swap(usize, &repeated_offsets[0], &repeated_offsets[1]),
