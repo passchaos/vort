@@ -26563,10 +26563,9 @@ reuse, so production keeps the simpler independently owned plans.
   success. Fixed libzstd and decodecorpus blocks cover Compressed and Treeless
   execution against the independent slice path on 9-, 10- and 17-byte pages,
   including fragmented output, stream ends, callback retry and transactional
-  table state on native, Linux x86 and actual WASI. This is an internal literal
-  executor only: it does not initialize or execute sequence states, copy
-  matches, dispatch blocks or frames, expose a public source decoder, or make
-  a performance claim.
+  table state on native, Linux x86 and actual WASI. The Huffman cursor remains
+  an independently tested primitive; the unified literal stream and outer
+  compressed-block executor below compose it with the remaining block work.
 
 - 2026-11-08: Added an internal transactional cursor and execution contracts
   for source-backed Zstd sequence bitstreams. The cursor initializes the
@@ -26577,7 +26576,35 @@ reuse, so production keeps the simpler independently owned plans.
   Compressed/Repeat tuples; concrete cursor coverage separately exercises all
   27 resolved Predefined/RLE/Compressed tuples after Repeat resolution. The
   WASI coverage receipt records `sequence-reverse-execution`. This internal
-  cursor returns sequence lengths/offsets only: literal consumption,
-  match/history execution, block/frame orchestration, dictionary integration,
-  a public source decoder and any performance claim remain outside this
-  increment.
+  cursor still returns sequence lengths/offsets as its primitive contract; the
+  outer compressed-block executor below consumes those tuples rather than
+  treating cursor coverage alone as block completion.
+
+- 2026-11-08: Added a unified internal source literal stream for Raw, RLE and
+  one-/four-stream Huffman sections, then composed it with the sequence cursor
+  in a source-backed outer **Compressed-block-only** executor. The executor
+  performs literals, sequences, match copies and trailing literals in wire
+  semantics order into caller-owned whole-block staging bounded by the frame's
+  `Block_Maximum_Size` (normally 128 KiB). Only complete success atomically
+  commits caller history, a pending Huffman table, resolved LL/OF/ML tables,
+  repeated offsets and the frame decoded counter; a validated block can then
+  drain through arbitrarily small caller output. Differential fixtures cover
+  Raw, RLE, Compressed and Treeless literals inside compressed blocks, zero
+  sequences, a large all-FSE block with Raw literals, Repeat/Treeless reuse
+  across blocks, callback failure and retry, aliased or short workspaces, and
+  native, Linux x86 and actual WASI execution. The schema-v1 WASI receipt adds
+  `literal-stream-execution` and `compressed-block-execution`.
+  This does not traverse or dispatch a frame, execute outer Raw/RLE blocks,
+  select or install dictionary history, validate a checksum footer, handle
+  skippable/concatenated frames, expose a public source decoder, or establish
+  performance or RSS gains. The next source-decoder slice is a frame executor
+  with outer Raw/RLE dispatch, followed by dictionary/checksum integration and
+  a public API.
+
+- 2026-11-08: Hardened the existing incremental Zstd `block_stream` path at
+  two completion boundaries. A zero-sequence compressed block now checks its
+  declared `Regenerated_Size` against the frame-specific
+  `Block_Maximum_Size` before publishing any output. A sequence-bearing block
+  may reach its terminal state only when the decoded-size preflight has no
+  remaining bytes. These checks belong to the existing incremental decoder,
+  independently of the new source-backed compressed-block executor.

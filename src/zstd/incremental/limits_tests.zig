@@ -86,6 +86,57 @@ test "Zstd incremental limits output exact below zero and no content size" {
     }
 }
 
+test "Zstd incremental zero-sequence compressed block respects frame block maximum" {
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x00, // no content size or checksum
+        0x00, // 1 KiB window and therefore 1 KiB Block_Maximum_Size
+        0x25, 0x00, 0x00, // last compressed block, four payload bytes
+        0x15, 0x40, // RLE literals, regenerated size 1,025
+        'z',
+        0x00, // zero sequences
+    };
+    for (policies) |policy| {
+        var decoder = zstd.NativeIncrementalFrameDecoder.initWithOptions(
+            std.testing.allocator,
+            .{ .input_policy = policy },
+        );
+        defer decoder.deinit();
+        var output: [1025]u8 = @splat(0xa5);
+        try std.testing.expectError(error.CorruptFrame, decoder.step(&frame, &output));
+        try std.testing.expectEqual(@as(core.StreamCount, 0), decoder.snapshot().output_written);
+        try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().last_step_progress.output_written);
+        for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+    }
+}
+
+test "Zstd incremental compressed block requires exact preflight output" {
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, 0x84, 0x45, 0x00,
+        0x00, 0x09, 'a',  0x01,
+        0x50, 0x01, 0x00, 0x00,
+        0x2a,
+    };
+    var decoder = zstd.NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    const primed = try decoder.step(&frame, &.{});
+    try std.testing.expectEqual(core.StepResult.Status.need_output, primed.status);
+    try std.testing.expectEqual(
+        @as(usize, 132),
+        decoder.block_stream_decoded_block_remaining,
+    );
+    decoder.block_stream_decoded_block_remaining += 1;
+
+    var output: [132]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decoder.step(&.{}, &output));
+    try std.testing.expectEqual(
+        @as(usize, output.len),
+        decoder.snapshot().last_step_progress.output_written,
+    );
+    try std.testing.expectEqualSlices(u8, "a" ** output.len, &output);
+}
+
 test "Zstd incremental limits cumulative concatenation preserves per-frame cap" {
     const payload = "member payload";
     const frame = try rawFrame(payload, false);

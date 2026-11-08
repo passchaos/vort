@@ -36,18 +36,18 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute source-backed Zstd layout, Huffman and transactional sequence reverse execution, and entropy primitive contracts on native, x86 and WASI",
+        "Execute source-backed Zstd layout, literal-stream, compressed-block and entropy primitive contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",
-        "Compile source-backed Zstd layout, Huffman and transactional sequence reverse execution, and entropy primitive WASI contracts",
+        "Compile source-backed Zstd layout, literal-stream, compressed-block and entropy primitive WASI contracts",
     );
 
     for ([_]std.Build.ResolvedTarget{ target, x86, wasi }, 0..) |variant, index| {
         const suffix = ([_][]const u8{ "", "-x86", "-wasm" })[index];
         const gate = b.step(
             b.fmt("test-zstd-source-reverse{s}", .{suffix}),
-            "Execute source-backed Zstd frame/block layout, literals, Huffman table preparation/execution, sequence metadata/execution and reverse-reader contracts",
+            "Execute source-backed Zstd frame/block layout, unified literal streams, Huffman/sequence primitives and compressed-block contracts",
         );
         const implementation_tests = b.addTest(.{
             .name = b.fmt("vort-zstd-source-reverse{s}-tests", .{suffix}),

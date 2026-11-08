@@ -2040,9 +2040,9 @@ decodecorpus Compressed/Treeless blocks are checked byte-for-byte against the
 independent slice path on 9-, 10- and 17-byte pages, including exact segment
 ends, fragmented output, callback failure/retry, malformed markers, offsets
 above 4 GiB and pending/committed table invariants. Publication still belongs
-to whole-block success. This slice does not initialize or execute reverse FSE
-sequence states, copy matches, dispatch blocks/frames, expose a public source
-decoder, or establish a performance result.
+to whole-block success. The Huffman cursor remains an independently tested
+primitive; the unified literal stream and outer compressed-block executor
+below compose it with reverse sequence execution and match copies.
 
 Sequence metadata can now be prepared directly from the trailing source range
 through a transactional one-byte forward cursor. It parses descriptions in
@@ -2051,11 +2051,12 @@ and Repeat tables, preserves the previous-table snapshot, and returns the
 remaining reverse bitstream without reading even its marker byte. A 64-tuple
 slice parse/resolve differential plus mixed-order, every-prefix truncation,
 invalid-RLE, Repeat-state, zero-count, callback-failure, scratch, 4-GiB-offset
-and actual WASI contracts validate this metadata boundary. This metadata step
-leaves reverse FSE state initialization and symbol execution to the separate
-internal cursor below. Match copying, block/frame orchestration and a public
-source decoder remain absent. Huffman literal execution is the independent
-internal cursor described above.
+and actual WASI contracts validate this metadata boundary. The metadata cursor
+itself leaves reverse FSE state initialization and symbol execution to the
+separate internal cursor below, and leaves match copying and block composition
+to the outer executor below. Frame orchestration and a public source decoder
+remain absent. Huffman literal execution is the independent internal cursor
+described above.
 
 An internal transactional sequence cursor now executes prepared tables through
 the caller-paged reverse reader. It initializes the resolved LL/OF/ML states,
@@ -2065,8 +2066,35 @@ terminal-bit exhaustion. The wire-metadata mask above remains full at all 64
 Predefined/RLE/Compressed/Repeat tuples; execution coverage is a separate
 set of all 27 concrete Predefined/RLE/Compressed tuples after Repeat has
 resolved to a prior table. The WASI coverage name is
-`sequence-reverse-execution`. The cursor only returns decoded literal length,
-match length and offset values. It does not consume literals, copy
-matches/history, dispatch blocks or frames,
-integrate dictionaries, expose a public source decoder or establish any
-performance result.
+`sequence-reverse-execution`. The cursor still returns decoded literal length,
+match length and offset values as its primitive contract; the higher-level
+executor below consumes those tuples rather than treating cursor coverage alone
+as block completion.
+
+A unified source literal stream now presents Raw, RLE and one-/four-stream
+Huffman sections to the same executor. An internal source-backed outer
+**Compressed-block-only** executor composes that stream with sequence decoding,
+match copying and trailing literals into caller-owned whole-block staging
+bounded by the frame's `Block_Maximum_Size` (normally 128 KiB). Only complete
+success atomically commits caller history, the pending Huffman table, resolved
+LL/OF/ML tables, repeated offsets and the frame decoded counter. A validated
+block then drains under arbitrary tiny-output backpressure. Differential
+fixtures cover compressed blocks containing Raw, RLE, Compressed and Treeless
+literals, zero sequences, a large all-FSE Raw-literals block, Repeat/Treeless
+reuse across blocks, callback failure/retry, aliased and short workspaces, and
+native, Linux x86 and actual Node/WASI execution. The schema-v1 receipt adds
+`literal-stream-execution` and `compressed-block-execution`.
+
+This executor does not traverse or dispatch frames, execute outer Raw/RLE
+blocks, select or install dictionary history, validate a checksum footer,
+handle skippable or concatenated frames, expose a public source decoder, or
+establish performance/RSS gains. The next gap is a source frame executor with
+outer Raw/RLE dispatch, followed by dictionary/checksum integration and a
+public API.
+
+Separately, the existing incremental `block_stream` decoder now rejects a
+zero-sequence compressed block whose `Regenerated_Size` exceeds the
+frame-specific `Block_Maximum_Size` before publishing output. Its
+sequence-bearing terminal state also requires the decoded-size preflight's
+remaining count to be zero. These checks do not widen the source executor's
+scope.

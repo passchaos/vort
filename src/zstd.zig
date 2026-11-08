@@ -94,6 +94,12 @@ test "Zstd source Huffman tree preparation contracts" {
 test "Zstd source Huffman literal execution contracts" {
     try source_huffman_literal_tests.contracts(SourceHuffmanLiteralTestSupport);
 }
+test "Zstd source literal stream execution contracts" {
+    try source_literal_stream_tests.contracts(SourceHuffmanLiteralTestSupport);
+}
+test "Zstd source compressed block execution contracts" {
+    try source_compressed_block_tests.contracts(SourceCompressedBlockTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -928,6 +934,51 @@ const SourceHuffmanLiteralTestSupport = struct {
         oracle.previous_huffman_tree = candidate;
     }
 };
+
+const SourceCompressedBlockTestSupport = struct {
+    pub const HuffmanCodec = SourceHuffmanCodec;
+    pub const SequenceCodec = SourceSequenceCodec;
+    pub const State = source_compressed_block.FrameState(HuffmanCodec, SequenceCodec);
+
+    pub fn initialState() State {
+        return .{ .repeated_offsets = initial_repeated_offsets };
+    }
+
+    pub fn decodeFrameOracle(
+        allocator: std.mem.Allocator,
+        frame: []const u8,
+    ) Error![]u8 {
+        return decodeFrameAlloc(allocator, frame);
+    }
+
+    pub fn expectHuffmanEqual(
+        expected: *const HuffmanCodec.Table,
+        actual: *const HuffmanCodec.Table,
+    ) !void {
+        try SourceHuffmanTestSupport.expectTableEqual(expected, actual);
+    }
+
+    pub fn expectSequenceTablesEqual(
+        expected: *const SequenceCodec.Tables,
+        actual: *const SequenceCodec.Tables,
+    ) !void {
+        try SourceSequenceTestSupport.expectTablesEqual(expected, actual);
+    }
+
+    pub fn expectStateEqual(expected: *const State, actual: *const State) !void {
+        try std.testing.expectEqual(expected.frame_decoded, actual.frame_decoded);
+        try std.testing.expectEqual(expected.repeated_offsets, actual.repeated_offsets);
+        try std.testing.expectEqual(expected.huffman != null, actual.huffman != null);
+        if (expected.huffman) |*expected_table|
+            try expectHuffmanEqual(expected_table, &actual.huffman.?);
+        try std.testing.expectEqual(
+            expected.sequence_tables != null,
+            actual.sequence_tables != null,
+        );
+        if (expected.sequence_tables) |*expected_tables|
+            try expectSequenceTablesEqual(expected_tables, &actual.sequence_tables.?);
+    }
+};
 pub const DictionaryUsage = prefix_binding.Usage;
 pub const PrefixSnapshot = prefix_binding.Snapshot;
 pub const PrefixPhase = prefix_binding.Phase;
@@ -1004,6 +1055,9 @@ const source_sequence_cursor_tests = @import("zstd/source/sequence_cursor_tests.
 const source_frame_tests = @import("zstd/source/frame_tests.zig");
 const source_huffman_tests = @import("zstd/source/huffman_tests.zig");
 const source_huffman_literal_tests = @import("zstd/source/huffman_literal_tests.zig");
+const source_literal_stream_tests = @import("zstd/source/literal_stream_tests.zig");
+const source_compressed_block = @import("zstd/source/compressed_block.zig");
+const source_compressed_block_tests = @import("zstd/source/compressed_block_tests.zig");
 const sequence_count_wire = @import("zstd/sequence/count.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
@@ -7387,6 +7441,10 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 return err;
                             };
                             if (literal_section.sequence_count == 0) {
+                                if (literal_section.regenerated_size > self.block_stream_block_size_max) {
+                                    self.recordError(.block_stream, error.CorruptFrame);
+                                    return error.CorruptFrame;
+                                }
                                 validateSupportedLiteralSection(literal_section) catch |err| {
                                     self.recordError(.block_stream, err);
                                     return err;
@@ -7667,6 +7725,10 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     self.recordError(.block_stream, err);
                                     return err;
                                 };
+                            }
+                            if (self.block_stream_decoded_block_remaining != 0) {
+                                self.recordError(.block_stream, error.SizeMismatch);
+                                return error.SizeMismatch;
                             }
                             if (!self.block_stream_block_last) {
                                 self.direct_sequence_state.repeated_offsets = sequence_state.repeated_offsets;
