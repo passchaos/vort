@@ -72,6 +72,12 @@ record the exact `.literal_only` sequence/literal trace once and add a
 record-based sequence-section emitter for the baseline and candidate tables,
 or prove the two parsers emit identical records on the training corpus.
 
+The scoring path also builds three dictionary-match block candidates per
+sample block (`emitDictionaryMatchCompressedBlockWithScratch`: mixed, multi
+and single) and keeps the shortest. Each candidate recomputes its literal and
+sequence sections. A shared-parse path must reuse those block plans across
+the baseline and candidate dictionaries, not only the top-level sample parse.
+
 A cheaper variant that reused one `NativeFrameEncoder` across samples was
 tested and rejected: text/JSON improved only 1.2-1.4%, binary regressed 2.9%,
 all dictionary checksums stayed identical, and the arena retained about
