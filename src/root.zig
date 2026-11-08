@@ -2485,6 +2485,10 @@ pub const ZstdSourceFrameDecodeResult = zstd.SourceFrameDecodeResult;
 pub const ZstdSourceStreamDecodeOptions = zstd.SourceStreamDecodeOptions;
 pub const ZstdSourceStreamInfo = zstd.SourceStreamInfo;
 pub const ZstdSourceStreamDecodeResult = zstd.SourceStreamDecodeResult;
+pub const ZstdSourceStreamElement = zstd.SourceStreamElement;
+pub const ZstdSourceStreamDataFrameInfo = zstd.SourceStreamDataFrameInfo;
+pub const ZstdSourceStreamSkippableFrameInfo = zstd.SourceStreamSkippableFrameInfo;
+pub const ZstdSourceStreamCursor = zstd.SourceStreamCursor;
 
 test "root Zstd source decode consumer contracts" {
     try @import("tests/zstd_source_decode/root.zig").contracts(@This());

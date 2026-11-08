@@ -132,4 +132,39 @@ pub fn contracts(comptime Support: type) !void {
     );
     defer std.testing.allocator.free(stream_allocated);
     try std.testing.expectEqualStrings("roottail", stream_allocated);
+
+    var cursor_source = Support.SliceByteSource{ .bytes = stream };
+    var cursor = try Support.ZstdSourceStreamCursor.init(
+        cursor_source.source(),
+        .standard,
+    );
+    var cursor_output: [8]u8 = undefined;
+    var cursor_written: usize = 0;
+    var cursor_skippables: usize = 0;
+    while (try cursor.next()) |element| {
+        switch (element) {
+            .skippable => |skippable| {
+                try std.testing.expectEqual(@as(u4, 2), skippable.skippable_id);
+                try std.testing.expectEqual(@as(u64, 1), skippable.payload_len);
+                cursor_skippables += 1;
+            },
+            .data => {
+                const cursor_result = try cursor.decodeInto(
+                    cursor_output[cursor_written..],
+                    workspace,
+                    .{},
+                );
+                cursor_written += @intCast(cursor_result.decoded_len);
+            },
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 1), cursor_skippables);
+    try std.testing.expectEqualStrings(
+        "roottail",
+        cursor_output[0..cursor_written],
+    );
+    try std.testing.expectEqual(
+        @as(u64, @intCast(stream.len)),
+        cursor.offset(),
+    );
 }

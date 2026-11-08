@@ -802,6 +802,249 @@ fn streamTruncated(comptime Support: type) !void {
     }
 }
 
+fn streamCursorTraversal(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "one", true);
+    const skip_a = stream_common.appendSkippable(&fixture, 3, "skip");
+    stream_common.appendDataHeader(&fixture, 0x04, 0x00, null);
+    stream_common.appendRleBlock(&fixture, '2', 2, true);
+    stream_common.appendChecksum(&fixture, "22");
+    const skip_b = stream_common.appendSkippable(&fixture, 9, &.{});
+
+    const forbidden = [_]stream_common.Span{
+        .{ .offset = skip_a + 8, .len = 4 },
+        .{ .offset = skip_b + 8, .len = 0 },
+    };
+    var source = stream_common.TrackingSource{
+        .bytes = fixture.bytes(),
+        .forbidden = &forbidden,
+    };
+    const view = source.source();
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var cursor = try Support.StreamCursor.init(view, .standard);
+    const first = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u64, 0), first.data.offset);
+    try std.testing.expectEqual(@as(u32, 0), first.data.dictionary_id);
+    try std.testing.expectEqual(@as(?u64, null), first.data.content_size);
+    try std.testing.expect(!first.data.has_checksum);
+    try std.testing.expect(cursor.pending());
+    try std.testing.expectEqual(@as(u64, 0), cursor.offset());
+
+    const first_info = try cursor.inspectPending(.{});
+    try std.testing.expectEqual(
+        @as(u64, 3),
+        @as(u64, @intCast(first_info.decoded_size.?)),
+    );
+    try std.testing.expectEqual(@as(u64, 12), first_info.frame_end_offset);
+    try std.testing.expectEqual(@as(u64, 12), cursor.offset());
+    try std.testing.expect(!cursor.pending());
+
+    const second = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u64, 12), second.skippable.offset);
+    try std.testing.expectEqual(@as(u4, 3), second.skippable.skippable_id);
+    try std.testing.expectEqual(@as(u64, 20), second.skippable.payload_offset);
+    try std.testing.expectEqual(@as(u64, 4), second.skippable.payload_len);
+    try std.testing.expectEqual(@as(u64, 24), second.skippable.next_offset);
+
+    const third = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(third.data.has_checksum);
+    try std.testing.expectEqual(@as(?u64, null), third.data.content_size);
+    var output: [2]u8 = undefined;
+    const result = try cursor.decodeInto(&output, workspace.view(), .{});
+    try std.testing.expectEqualStrings("22", &output);
+    try std.testing.expectEqual(@as(u64, 38), result.frame_end_offset);
+    try std.testing.expectEqual(
+        @as(u64, 2),
+        @as(u64, @intCast(cursor.totalDecoded())),
+    );
+    try std.testing.expect(!cursor.pending());
+
+    const fourth = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u64, 38), fourth.skippable.offset);
+    try std.testing.expectEqual(@as(u4, 9), fourth.skippable.skippable_id);
+    try std.testing.expectEqual(@as(u64, 0), fourth.skippable.payload_len);
+    try std.testing.expectEqual(@as(u64, 46), fourth.skippable.next_offset);
+    try std.testing.expect((try cursor.next()) == null);
+    try std.testing.expectEqual(@as(u64, 46), cursor.offset());
+    try std.testing.expect(!source.forbidden_read);
+}
+
+fn streamCursorSkipDictionaryFrame(comptime Support: type) !void {
+    var fixture = try Support.loadFullDictionaryFixture(std.testing.allocator);
+    defer Support.freeFullDictionaryFixture(std.testing.allocator, &fixture);
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.frame };
+    var cursor = try Support.StreamCursor.init(source.source(), .standard);
+    const element = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(element.data.dictionary_id != 0);
+    try std.testing.expect(fixture.expected.len > 1);
+    // Skipping does not require the dictionary or a decoded-output budget.
+    const info = try cursor.skipData(.{ .frame_decoded_max = 1 });
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.frame.len)),
+        info.frame_end_offset,
+    );
+    try std.testing.expect((try cursor.next()) == null);
+
+    const dictionary_bytes = try stream_common.decodeHex(
+        @embedFile("../testdata/libzstd-trained-repeat.dict.hex"),
+    );
+    defer std.testing.allocator.free(dictionary_bytes);
+    const standard = try Support.DecodeDictionary.initFromStandardDictionary(
+        dictionary_bytes,
+    );
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        2304,
+        2304,
+        standard.dictionary.content.len,
+        17,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var decode_source = stream_common.TrackingSource{ .bytes = fixture.frame };
+    var decode_cursor = try Support.StreamCursor.init(
+        decode_source.source(),
+        .standard,
+    );
+    _ = (try decode_cursor.next()) orelse return error.TestUnexpectedResult;
+    const output = try std.testing.allocator.alloc(u8, fixture.expected.len);
+    defer std.testing.allocator.free(output);
+    const result = try decode_cursor.decodeInto(
+        output,
+        workspace.view(),
+        .{ .dictionary = standard.dictionary },
+    );
+    try std.testing.expectEqualSlices(u8, fixture.expected, output);
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.expected.len)),
+        @as(u64, @intCast(result.decoded_len)),
+    );
+}
+
+fn streamCursorBounds(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "abc", true);
+    stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "de", true);
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.bytes() };
+    const view = source.source();
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var cursor = try Support.StreamCursor.init(view, .standard);
+    try std.testing.expectError(
+        error.InvalidStreamState,
+        cursor.decodeInto(&.{}, workspace.view(), .{}),
+    );
+    try std.testing.expectError(
+        error.InvalidStreamState,
+        cursor.skipData(.{}),
+    );
+    _ = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expectError(error.InvalidStreamState, cursor.next());
+
+    var short: [2]u8 = undefined;
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        cursor.decodeInto(&short, workspace.view(), .{}),
+    );
+    try std.testing.expect(cursor.pending());
+    try std.testing.expectEqual(@as(u64, 0), cursor.offset());
+
+    var output: [5]u8 = undefined;
+    const first = try cursor.decodeInto(output[0..3], workspace.view(), .{});
+    try std.testing.expectEqual(
+        @as(u64, 3),
+        @as(u64, @intCast(first.decoded_len)),
+    );
+    try std.testing.expectEqualStrings("abc", output[0..3]);
+    try std.testing.expect(!cursor.pending());
+
+    _ = (try cursor.next()) orelse return error.TestUnexpectedResult;
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        cursor.decodeInto(
+            output[3..5],
+            workspace.view(),
+            .{ .total_decoded_max = 4 },
+        ),
+    );
+    try std.testing.expect(cursor.pending());
+    const second = try cursor.decodeInto(
+        output[3..5],
+        workspace.view(),
+        .{ .total_decoded_max = 5 },
+    );
+    try std.testing.expectEqual(
+        @as(u64, 2),
+        @as(u64, @intCast(second.decoded_len)),
+    );
+    try std.testing.expectEqualStrings("abcde", &output);
+    try std.testing.expectEqual(
+        @as(u64, 5),
+        @as(u64, @intCast(cursor.totalDecoded())),
+    );
+}
+
+fn streamCursorMagicless(comptime Support: type) !void {
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendMagiclessHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRawBlock(&fixture, "one", true);
+    stream_common.appendMagiclessHeader(&fixture, 0x00, 0x00, null);
+    stream_common.appendRleBlock(&fixture, '2', 2, true);
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.bytes() };
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var cursor = try Support.StreamCursor.init(source.source(), .magicless);
+    var output: [5]u8 = undefined;
+    var written: usize = 0;
+    while (try cursor.next()) |element| {
+        switch (element) {
+            .skippable => return error.TestUnexpectedResult,
+            .data => {
+                const result = try cursor.decodeInto(
+                    output[written..],
+                    workspace.view(),
+                    .{},
+                );
+                written += try core.stream_count.toLocal(result.decoded_len);
+            },
+        }
+    }
+    try std.testing.expectEqualStrings("one22", output[0..written]);
+    try std.testing.expectEqual(
+        @as(u64, @intCast(fixture.len)),
+        cursor.offset(),
+    );
+}
+
 pub fn contracts(comptime Support: type) !void {
     try rawRleFrame(Support);
     try compressedFixtures(Support);
@@ -823,4 +1066,8 @@ pub fn contracts(comptime Support: type) !void {
     try streamEmpty(Support);
     try streamMagicless(Support);
     try streamTruncated(Support);
+    try streamCursorTraversal(Support);
+    try streamCursorSkipDictionaryFrame(Support);
+    try streamCursorBounds(Support);
+    try streamCursorMagicless(Support);
 }

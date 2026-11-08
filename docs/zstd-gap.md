@@ -2203,3 +2203,24 @@ streams with compressed and checksum frames, dictionary-set selection, the
 total and per-frame caps, fixed-destination partial publication, skippable-only
 and empty streams, magicless streams, truncation at element boundaries, and
 root exports. No performance or RSS claim follows.
+
+A resumable public stream cursor now exposes caller-driven traversal:
+
+- `SourceStreamCursor.init` opens a standard or magicless source stream;
+- `next` returns checked data-frame header fields or a skippable frame's exact
+  payload range and next offset;
+- `decodeInto` executes the pending data frame into a caller destination with
+  dictionary-set selection, per-frame and cumulative decoded caps, and
+  publishes the exact frame end;
+- `inspectPending` walks block headers and publishes the end, while `skipData`
+  does the same without requiring dictionary content or a decoded-output
+  budget;
+- `totalDecoded`, `offset` and `pending` expose cursor state.
+
+A failed frame decode leaves the element pending so callers can retry with a
+larger destination; skippable payloads are never read. Tests cover mixed
+data/skippable traversal with forbidden payload spans, header inspection,
+dictionary-frame skipping without dictionary content, retry after destination
+failure, cumulative cap enforcement, magicless streams, state errors, and root
+exports. Native, Linux x86 and actual WASI runs share the `Zstd source` filter.
+No performance or RSS claim follows.

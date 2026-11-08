@@ -474,8 +474,10 @@ skippable frames without reading their payloads. A public one-frame source API
 now adds header/end/size inspection, caller-workspace `decodeInto`, append and
 allocation forms with an optional single dictionary. A public stream API adds
 concatenated data/skippable traversal, dictionary-set selection, per-frame and
-whole-stream decoded caps, and the same caller-workspace forms. No performance
-claim follows.
+whole-stream decoded caps, and the same caller-workspace forms. A resumable
+stream cursor adds caller-driven element traversal and per-frame decoding into
+a reusable destination, including dictionary-frame skipping without dictionary
+content and cumulative decoded caps. No performance claim follows.
 
 ### Earlier detailed completion audit (started 2026-09-11)
 
