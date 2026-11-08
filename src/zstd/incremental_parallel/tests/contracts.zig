@@ -355,5 +355,51 @@ pub fn run(comptime Z: type) type {
                 try std.testing.expectEqualSlices(u8, plain, output.written());
             }
         }
+
+        test "Zstd parallel incremental rsyncable chunking is invariant and serial-equivalent" {
+            const input = try h.a.alloc(u8, 1536 * 1024);
+            defer h.a.free(input);
+            h.noise(input, 0x5eed);
+            var index: usize = 0;
+            while (index + 1024 <= input.len) : (index += 4096) {
+                @memset(input[index..][0..1024], @truncate(index / 4096));
+            }
+            var opts = h.options(Z);
+            opts.frame.selection = .literal_only;
+            opts.frame.block_size_max = 32 * 1024;
+            opts.frame.window_log = 15;
+            opts.parallel.job_size = 512 * 1024;
+            opts.parallel.max_inflight_jobs = 2;
+            opts.parallel.max_inflight_bytes = 1024 * 1024;
+            opts.parallel.rsyncable = true;
+
+            var encoder = try E.init(h.a, opts);
+            defer encoder.deinit();
+            const first = try h.drive(Z, &encoder, opts, input, 257, 257);
+            defer h.a.free(first);
+            const wire = try h.verify(Z, first, input, opts.frame, null);
+            try h.complete(encoder.snapshot(), opts, input.len, wire.blocks);
+
+            var serial_opts = opts;
+            serial_opts.parallel.worker_count = 1;
+            var serial_encoder = try E.init(h.a, serial_opts);
+            defer serial_encoder.deinit();
+            const second = try h.drive(
+                Z,
+                &serial_encoder,
+                serial_opts,
+                input,
+                13,
+                257,
+            );
+            defer h.a.free(second);
+            try std.testing.expectEqualSlices(u8, first, second);
+            try h.complete(
+                serial_encoder.snapshot(),
+                serial_opts,
+                input.len,
+                wire.blocks,
+            );
+        }
     };
 }

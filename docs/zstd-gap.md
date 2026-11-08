@@ -2238,12 +2238,22 @@ Boundaries are a pure function of the input bytes and `job_size`. Serial
 fallback and multi-worker execution submit the same spans and emit identical
 frame bytes. The profile now reports the actual submitted Job count after the
 operation. The default remains `false`, so existing wires, admission and
-benchmark rows are unchanged. The persistent incremental parallel and
-seekable-frame encoders keep their existing boundaries.
+benchmark rows are unchanged.
+
+The persistent incremental parallel encoder now exposes the same option. Its
+chunk scanner uses the same rolling hash and minimum-block rule, accepts only
+the prefix before a hit, seals a filling Job whose current position is already
+a hit without consuming new input, and charges the minimum-block upper bound
+during admission. Splitting the same stream into different chunk sizes produces
+identical frame bytes. The seekable-frame encoder keeps its independent-frame
+boundaries.
 
 Tests cover minimum Job size and hit-mask construction, deterministic and
 minimum-block-bounded boundaries, the edit-at-a-boundary shift property,
-end-to-end decode through Vort and the Zig standard-library decoder, repeated
-encode determinism, serial/multi-worker byte equality, and the actual Job
-count. The parallel frame/queue suite passes 141 tests. No performance or RSS
-claim follows from this functional control.
+chunk-scanner agreement with whole-input boundaries, incremental chunking
+invariance, end-to-end decode through Vort and the Zig standard-library
+decoder, repeated encode determinism, serial/multi-worker byte equality, and
+the actual Job count. The parallel frame/queue suite passes 141 tests and the
+incremental suite passes 178 tests on native, with the single-fallback and
+actual WASI variants also passing. No performance or RSS claim follows from
+this functional control.

@@ -5,13 +5,14 @@ const core = @import("../../core.zig");
 const count = core.stream_count;
 const memory = @import("../../io/threaded_working_memory.zig");
 const types = @import("types.zig");
+const one_shot = @import("../parallel/types.zig");
 const jobs_mod = @import("job.zig");
 const workers_mod = @import("worker.zig");
 const history_mod = @import("history.zig");
 const configuration = @import("configuration.zig");
 const observations = @import("observations.zig");
 
-pub const SealReason = enum { more_input, flush, finish };
+pub const SealReason = enum { more_input, flush, finish, rsync };
 
 pub fn Queue(comptime Codec: type) type {
     return struct {
@@ -197,6 +198,18 @@ pub fn Queue(comptime Codec: type) type {
             defer self.unlock();
             return if (self.filling) |ordinal| self.at(ordinal).plain().len else 0;
         }
+        /// Copy the last up-to-`rsync_window` bytes already buffered for the
+        /// filling Job (history prefix plus accepted plaintext). Returns the
+        /// copied length; zero when no Job is filling.
+        pub fn fillingTail(self: *Self, out: *[one_shot.rsync_window]u8) usize {
+            self.lock();
+            defer self.unlock();
+            const ordinal = self.filling orelse return 0;
+            const bytes = self.at(ordinal).bytes.items;
+            const len = @min(bytes.len, out.len);
+            @memcpy(out[0..len], bytes[bytes.len - len ..]);
+            return len;
+        }
         pub fn setAdmissionLimit(self: *Self, maximum: types.Count) void {
             self.lock();
             defer self.unlock();
@@ -291,6 +304,10 @@ pub fn Queue(comptime Codec: type) type {
             }
             const job = self.at(self.filling.?);
             if (reason == .more_input and job.plain().len != self.config.geometry.job_size) {
+                self.unlock();
+                return error.InvalidBlockPlan;
+            }
+            if (reason == .rsync and (!self.config.parallel.rsyncable or job.plain().len < one_shot.rsync_min_block_size)) {
                 self.unlock();
                 return error.InvalidBlockPlan;
             }

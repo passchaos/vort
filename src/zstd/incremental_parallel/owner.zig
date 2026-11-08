@@ -8,6 +8,7 @@ const settings = @import("options.zig");
 const profiles = @import("profiles.zig");
 const stream = @import("stream.zig");
 const queue_mod = @import("queue.zig");
+const one_shot = @import("../parallel/types.zig");
 const prefix = @import("../prefix/binding.zig");
 const prefix_errors = @import("../incremental/encoder/prefix_errors.zig");
 
@@ -42,6 +43,7 @@ pub fn Owner(comptime Codec: type) type {
         state: stream.State = .{},
         hash: Codec.Hash = Codec.Hash.init(0),
         actual_state: Codec.State,
+        rsync: ?one_shot.Rsync = null,
         front_job: ?*Queue.Job = null,
         front_emitted: Codec.Profile.Emitted = .{},
         delivered_emitted: Codec.Profile.Emitted = .{},
@@ -68,6 +70,8 @@ pub fn Owner(comptime Codec: type) type {
             const self = allocator.create(Self) catch |err| return control.coordinator.mapError(err);
             errdefer allocator.destroy(self);
             self.* = .{ .control = control, .queue = undefined, .options = prepared.options, .config = prepared.config, .actual_state = undefined, .state = .{ .expected_input_len = expected } };
+            if (prepared.options.parallel.rsyncable)
+                self.rsync = try one_shot.Rsync.init(prepared.config.geometry.job_size);
             self.actual_state = try Codec.initialState(if (prefixUsage(prepared.options)) null else prepared.config.dictionary);
             errdefer Codec.deinitState(allocator, &self.actual_state);
             self.queue = try Queue.create(control, prepared.config);
@@ -233,11 +237,22 @@ pub fn Owner(comptime Codec: type) type {
         fn validateOffer(self: *Self, input_len: usize, current: Limits) Error!void {
             if (input_len == 0) return;
             _ = try self.state.checkInput(input_len, current.max_input_len);
+            const admitted = self.queue.copyProfile().accepted_jobs;
+            if (self.config.parallel.rsyncable) {
+                // Content-defined Jobs can be as short as the minimum block,
+                // so charge the conservative upper bound rather than the
+                // nominal Job size.
+                const jobs = if (input_len == 0)
+                    0
+                else
+                    1 + (input_len - 1) / one_shot.rsync_min_block_size;
+                if (try count.addLocal(admitted, jobs) > current.max_job_count) return error.OutputLimitExceeded;
+                return;
+            }
             const filling = self.queue.fillingLen();
             const existing_room = if (filling == 0) 0 else self.config.geometry.job_size - filling;
             const extra = input_len - @min(input_len, existing_room);
             const jobs = if (extra == 0) 0 else 1 + (extra - 1) / self.config.geometry.job_size;
-            const admitted = self.queue.copyProfile().accepted_jobs;
             if (try count.addLocal(admitted, jobs) > current.max_job_count) return error.OutputLimitExceeded;
         }
 
@@ -304,19 +319,42 @@ pub fn Owner(comptime Codec: type) type {
                     continue;
                 }
                 if (progress.input_read < input.len) {
-                    if (self.queue.fillingLen() == self.config.geometry.job_size) {
+                    const filling = self.queue.fillingLen();
+                    if (filling == self.config.geometry.job_size) {
                         _ = self.queue.seal(.more_input) catch |err| return self.poison(err);
                         continue;
                     }
                     const room = self.queue.admissionRoom();
                     if (room != 0) {
-                        const take = @min(room, input.len - progress.input_read);
+                        var take = @min(room, input.len - progress.input_read);
+                        var rsync_hit = false;
+                        if (self.rsync) |rsync| {
+                            var before: [one_shot.rsync_window]u8 = undefined;
+                            const before_len = self.queue.fillingTail(&before);
+                            const scan = rsync.scanChunk(
+                                before[0..before_len],
+                                input[progress.input_read..][0..take],
+                                filling,
+                            );
+                            if (scan.hit and scan.take == 0) {
+                                // The current Job already ends at a point.
+                                _ = self.queue.seal(.rsync) catch |err| return self.poison(err);
+                                continue;
+                            }
+                            if (scan.hit) {
+                                take = scan.take;
+                                rsync_hit = true;
+                            }
+                        }
                         _ = try self.state.checkInput(take, current.max_input_len);
                         const accepted = self.queue.accept(input[progress.input_read..][0..take], take) catch |err| return self.poison(err);
                         if (accepted != 0) {
                             self.state.commitInput(try self.state.checkInput(accepted, current.max_input_len));
                             self.hash.update(input[progress.input_read..][0..accepted]);
                             progress.input_read += accepted;
+                            if (rsync_hit and accepted == take) {
+                                _ = self.queue.seal(.rsync) catch |err| return self.poison(err);
+                            }
                             continue;
                         }
                     }

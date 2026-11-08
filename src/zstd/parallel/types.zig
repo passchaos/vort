@@ -113,6 +113,63 @@ pub const Rsync = struct {
             position += 1;
         }
     }
+
+    pub const ChunkScan = struct {
+        /// Input bytes to accept before the current Job ends.
+        take: usize,
+        /// True when a synchronization point ends the Job at `take`.
+        hit: bool,
+    };
+
+    /// Scan one streaming chunk that follows `before`, the last up-to
+    /// `rsync_window` bytes already accepted into the current Job.
+    /// `accepted_len` is that Job's current plain length. The first candidate
+    /// is at or after `rsync_min_block_size`; the whole chunk is accepted when
+    /// no point is found. A hit at `take == 0` means the current Job is
+    /// already at a synchronization point.
+    pub fn scanChunk(
+        self: Rsync,
+        before: []const u8,
+        input: []const u8,
+        accepted_len: usize,
+    ) ChunkScan {
+        var position: usize = if (accepted_len >= rsync_min_block_size)
+            0
+        else
+            rsync_min_block_size - accepted_len;
+        if (position >= input.len) return .{ .take = input.len, .hit = false };
+        var window: [rsync_window]u8 = undefined;
+        if (position >= rsync_window) {
+            @memcpy(window[0..], input[position - rsync_window .. position]);
+        } else {
+            const from_before = rsync_window - position;
+            if (before.len < from_before)
+                return .{ .take = input.len, .hit = false };
+            @memcpy(
+                window[0..from_before],
+                before[before.len - from_before ..],
+            );
+            @memcpy(window[from_before..], input[0..position]);
+        }
+        var hash = rollingHash(&window);
+        var head: usize = 0;
+        while (true) {
+            if (hash & self.hit_mask == self.hit_mask)
+                return .{ .take = position, .hit = true };
+            if (position == input.len)
+                return .{ .take = input.len, .hit = false };
+            const remove = window[head];
+            window[head] = input[position];
+            head = (head + 1) & (rsync_window - 1);
+            hash = rollingRotate(
+                hash,
+                remove,
+                input[position],
+                self.prime_power,
+            );
+            position += 1;
+        }
+    }
 };
 
 fn primePower(base: u64, exponent: usize) u64 {
@@ -288,6 +345,55 @@ test "Zstd rsyncable boundaries are deterministic and minimum-block bounded" {
             start = end;
         }
         try std.testing.expectEqual(input.len, first[first.len - 1]);
+    }
+}
+
+test "Zstd rsyncable chunk scanner matches whole-input boundaries" {
+    const allocator = std.testing.allocator;
+    const input = try allocator.alloc(u8, 2 * 1024 * 1024);
+    defer allocator.free(input);
+    var state: u32 = 0x0bad_f00d;
+    for (input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 15);
+    }
+    const job_size = 512 * 1024;
+    const rsync = try Rsync.init(job_size);
+    const whole = try collectRsyncBoundaries(allocator, rsync, input, job_size);
+    defer allocator.free(whole);
+    inline for (.{ 1, 7, 4096, 65536 }) |chunk_size| {
+        var boundaries: std.ArrayList(usize) = .empty;
+        defer boundaries.deinit(allocator);
+        var before: [rsync_window]u8 = undefined;
+        var before_len: usize = 0;
+        var offset: usize = 0;
+        var accepted: usize = 0;
+        while (offset < input.len) {
+            if (accepted == job_size) {
+                try boundaries.append(allocator, offset);
+                accepted = 0;
+                continue;
+            }
+            const room = job_size - accepted;
+            const chunk = input[offset..][0..@min(@min(chunk_size, input.len - offset), room)];
+            const scan = rsync.scanChunk(before[0..before_len], chunk, accepted);
+            if (scan.hit and scan.take == 0) {
+                try boundaries.append(allocator, offset);
+                accepted = 0;
+                continue;
+            }
+            const take = if (scan.hit) scan.take else chunk.len;
+            offset += take;
+            accepted += take;
+            before_len = @min(rsync_window, offset);
+            @memcpy(before[0..before_len], input[offset - before_len .. offset]);
+            if (scan.hit) {
+                try boundaries.append(allocator, offset);
+                accepted = 0;
+            }
+        }
+        if (accepted != 0) try boundaries.append(allocator, input.len);
+        try std.testing.expectEqualSlices(usize, whole, boundaries.items);
     }
 }
 

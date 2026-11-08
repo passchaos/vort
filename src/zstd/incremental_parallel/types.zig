@@ -15,12 +15,16 @@ pub const ParallelOptions = struct {
     max_inflight_jobs: usize = 4,
     max_inflight_bytes: usize = 4 * 1024 * 1024,
     max_working_memory: usize = 256 * 1024 * 1024,
+    /// Cut Jobs at content-defined synchronization points. Requires
+    /// `job_size` of at least `one_shot.rsync_min_job_size`.
+    rsyncable: bool = false,
     profile: ?*Profile = null,
 
     pub fn validate(self: ParallelOptions) Error!void {
         if (self.worker_count == 0 or self.worker_count > 64 or self.job_size == 0 or
             self.max_inflight_jobs == 0 or self.max_inflight_bytes == 0)
             return error.InvalidBlockPlan;
+        if (self.rsyncable) _ = try one_shot.Rsync.init(self.job_size);
     }
 };
 
