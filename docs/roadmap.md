@@ -460,6 +460,17 @@ frame-append rollback and numeric-bound defects. Native chains and default
 search retain their own behavior; reference parameter normalization does not
 establish liblz4 byte, ratio or throughput parity.
 
+The [Zstd source frame executor](zstd-gap.md#2026-11-09-source-frame-executor)
+now walks one source-backed data frame to its exact end: Raw, RLE and
+Compressed blocks share one transactional commit path, caller-selected
+dictionary history and entropy state are admitted before the first block,
+whole-frame decoded and content-size limits are enforced, and the optional
+XXH64 footer is validated or explicitly consumed. Differential coverage spans
+the existing compressed fixtures, a full standard dictionary, retries,
+truncation, aliasing and the execute/drain contract on native, Linux x86 and
+actual WASI. Skippable/concatenated orchestration, dictionary-set selection
+and a public source-backed API remain open, and no performance claim follows.
+
 ### Earlier detailed completion audit (started 2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these

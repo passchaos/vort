@@ -2098,3 +2098,33 @@ frame-specific `Block_Maximum_Size` before publishing output. Its
 sequence-bearing terminal state also requires the decoded-size preflight's
 remaining count to be zero. These checks do not widen the source executor's
 scope.
+
+## 2026-11-09: source frame executor
+
+An internal source-backed frame executor now consumes one complete standard or
+magicless data frame from checked ranges. It walks block headers with the
+existing layout parser, dispatches Raw, RLE and Compressed blocks, and commits
+caller history plus frame state only after a complete block succeeds. Raw
+payloads stream through bounded caller staging, RLE fills staging from its one
+source byte, and Compressed blocks reuse the transactional block executor with
+the frame's `Block_Maximum_Size`, content size and whole-frame decoded cap.
+After the last block the executor consumes the optional four-byte XXH64 footer,
+compares it with a streaming hash of committed output (or consumes it under an
+explicit ignore policy), and reports the exact frame end offset so a caller can
+stop before a concatenated suffix.
+
+Dictionary identity is admitted before the first block: a nonzero frame ID
+without caller dictionary state fails as `NeedDictionary`, and a mismatched
+caller ID fails as `DictionaryMismatch`. Caller-selected dictionary history and
+initial entropy/repeated-offset state flow through the existing block executor.
+Skippable-frame traversal, concatenated-stream orchestration, dictionary-set
+selection and a public source-backed API remain absent.
+
+Differential tests cover multi-block Raw/RLE frames, zero-length RLE, declared
+and mismatched content sizes, whole-frame caps, checksum validation/ignore/
+mismatch, trailing suffixes, the existing all-FSE/numbered-JSON/mixed
+compressed fixtures, the full standard dictionary fixture, retry after every
+source-failure mode, every truncated prefix, workspace aliasing, undersized
+staging/pages, inactive or nonempty history, and the execute/drain phase
+contract. Native, Linux x86 and actual WASI runs share the same `Zstd source`
+filter. No performance or RSS claim follows from this functional slice.
