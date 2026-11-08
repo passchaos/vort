@@ -85,6 +85,10 @@ with 49% more).
   (twelve sources, 64 KiB/1 MiB, levels 3/19, five rounds) measures a
   `1.0006` geometric mean, no row more than 2% faster and `xml` 64 KiB
   level 3 3.3% slower. Keep 1024.
+- Zstd `wide_copy_sequence_min` 1024 -> 512 was rejected. The same 48-row
+  paired screen measures a `0.9992` geometric mean, only `nci`/`ooffice`
+  64 KiB level 3 about 2% faster, and `mozilla` 1 MiB level 3 1.6% slower.
+  The 1024 threshold already captures the large `nci`/`xml` wins.
 
 ## Remaining structural options
 
