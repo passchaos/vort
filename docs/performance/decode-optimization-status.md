@@ -65,6 +65,16 @@ with 49% more).
 - Any correct truncation guard that places a non-inlinable call inside the
   incremental literal loop costs more than the check it removes.
 
+## Later 2026-11-09 finding
+
+- Zstd split-loop repeated-offset local promotion was rejected. Copying
+  `state.repeated_offsets` into a local array with a `defer` commit made the
+  64 KiB level-3 `nci` and `xml` rows 17.5% and 19.4% slower in a five-round
+  alternating A/B; `mozilla` improved 1.6% and `dickens` was neutral. The
+  address-taken local and the exit commit interfere with the split loop's
+  register allocation. Do not retry this shape without a different escape
+  analysis.
+
 ## Remaining structural options
 
 1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total
