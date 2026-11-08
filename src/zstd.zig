@@ -88,6 +88,9 @@ test "Zstd source frame and block layout contracts" {
 test "Zstd source Huffman tree preparation contracts" {
     try source_huffman_tests.contracts(SourceHuffmanTestSupport);
 }
+test "Zstd source Huffman literal execution contracts" {
+    try source_huffman_literal_tests.contracts(SourceHuffmanLiteralTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -426,6 +429,31 @@ const SourceHuffmanTestSupport = struct {
         );
     }
 };
+
+const SourceHuffmanLiteralTestSupport = struct {
+    pub const Codec = SourceHuffmanCodec;
+    pub const SliceOracle = struct {
+        previous_huffman_tree: ?StdZstdHuffmanTree = null,
+    };
+
+    pub fn initSliceOracle() SliceOracle {
+        return .{};
+    }
+
+    pub fn decodeSliceLiterals(
+        oracle: *SliceOracle,
+        block: []const u8,
+        output: []u8,
+    ) Error!void {
+        var candidate = oracle.previous_huffman_tree;
+        const section = try parseLiteralsSectionWithPreviousTree(block, &candidate);
+        if (output.len != section.regenerated_size) return error.SizeMismatch;
+        var state = (try initHuffmanLiteralDecodeState(block, section)) orelse
+            return error.CorruptFrame;
+        try copyLiteralsFromHuffmanState(&state, &section, 0, output);
+        oracle.previous_huffman_tree = candidate;
+    }
+};
 pub const DictionaryUsage = prefix_binding.Usage;
 pub const PrefixSnapshot = prefix_binding.Snapshot;
 pub const PrefixPhase = prefix_binding.Phase;
@@ -500,6 +528,7 @@ const source_reverse_bit_reader_tests = @import("zstd/source/reverse_bit_reader_
 const source_sequences = @import("zstd/source/sequences.zig");
 const source_frame_tests = @import("zstd/source/frame_tests.zig");
 const source_huffman_tests = @import("zstd/source/huffman_tests.zig");
+const source_huffman_literal_tests = @import("zstd/source/huffman_literal_tests.zig");
 const sequence_count_wire = @import("zstd/sequence/count.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
@@ -998,6 +1027,65 @@ const SourceHuffmanCodec = struct {
             .tree = tree,
             .lookup = lookup,
         };
+    }
+
+    pub fn readSymbol(
+        reader: *source_reverse_bit_reader.Reader,
+        table: *const Table,
+    ) source_reverse_bit_reader.Error!u8 {
+        const width = table.tree.max_bit_count;
+        if (width == 0) return error.CorruptFrame;
+        if (reader.available() >= width) {
+            const prefix = try reader.peekSmall(width);
+            const entry = table.lookup.lookupAssumeComplete(
+                prefix << @intCast(CompleteHuffmanLiteralLookup.bit_width - width),
+            );
+            if (entry.bit_count == 0 or entry.bit_count > reader.available())
+                return error.CorruptFrame;
+            try reader.skip(entry.bit_count);
+            return entry.symbol;
+        }
+        return readCold(reader, &table.tree);
+    }
+
+    fn readCold(
+        reader: *source_reverse_bit_reader.Reader,
+        tree: *const StdZstdHuffmanTree,
+    ) source_reverse_bit_reader.Error!u8 {
+        const saved = reader.checkpoint();
+        errdefer reader.restore(saved);
+
+        const max_bit_count = tree.max_bit_count;
+        const starting_bit_count = StdZstdHuffmanTree.weightToBitCount(
+            tree.nodes[tree.symbol_count_minus_one].weight,
+            max_bit_count,
+        );
+        if (starting_bit_count == 0) return error.CorruptFrame;
+        var bits_read: u4 = 0;
+        var tree_index: usize = tree.symbol_count_minus_one;
+        var bit_count_to_read = starting_bit_count;
+        var prefix: u16 = 0;
+        while (true) {
+            if (bit_count_to_read > reader.available()) return error.CorruptFrame;
+            const new_bits = try reader.readSmall(bit_count_to_read);
+            prefix <<= bit_count_to_read;
+            prefix |= @intCast(new_bits);
+            bits_read += bit_count_to_read;
+            const result = queryHuffmanTree(tree, tree_index, prefix) catch
+                return error.CorruptFrame;
+            switch (result) {
+                .symbol => |symbol| return symbol,
+                .index => |index| {
+                    tree_index = index;
+                    const bit_count = StdZstdHuffmanTree.weightToBitCount(
+                        tree.nodes[index].weight,
+                        max_bit_count,
+                    );
+                    if (bit_count <= bits_read) return error.CorruptFrame;
+                    bit_count_to_read = bit_count - bits_read;
+                },
+            }
+        }
     }
 };
 const PreparedNarrowHuffmanLookup = struct {

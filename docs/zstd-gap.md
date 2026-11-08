@@ -2030,8 +2030,19 @@ Treeless sections reuse the immutable committed table without requesting a
 replacement; a newly prepared table remains pending until whole-block success.
 The existing deep system-zstd FSE fixture and a Direct fixture are
 differentially checked with scratch/callback/canary/4-GiB/error-priority cases
-on native, Linux x86 and actual WASI. Huffman literal streams remain unread and
-unexecuted, and this is not a public source decoder.
+on native, Linux x86 and actual WASI. Preparation leaves Huffman literal streams
+unread; execution is a separate internal cursor and this is not a public source
+decoder.
+
+That cursor now resumably executes one- and four-stream Huffman literals in
+logical output order while reusing one caller-owned page. Real libzstd and
+decodecorpus Compressed/Treeless blocks are checked byte-for-byte against the
+independent slice path on 9-, 10- and 17-byte pages, including exact segment
+ends, fragmented output, callback failure/retry, malformed markers, offsets
+above 4 GiB and pending/committed table invariants. Publication still belongs
+to whole-block success. This slice does not initialize or execute reverse FSE
+sequence states, copy matches, dispatch blocks/frames, expose a public source
+decoder, or establish a performance result.
 
 Sequence metadata can now be prepared directly from the trailing source range
 through a transactional one-byte forward cursor. It parses descriptions in
@@ -2041,5 +2052,6 @@ remaining reverse bitstream without reading even its marker byte. A 64-tuple
 slice parse/resolve differential plus mixed-order, every-prefix truncation,
 invalid-RLE, Repeat-state, zero-count, callback-failure, scratch, 4-GiB-offset
 and actual WASI contracts validate this metadata boundary. Reverse FSE state
-initialization and symbol execution, Huffman literal-stream execution, match
-copying, block/frame orchestration and a public source decoder remain absent.
+initialization and symbol execution, match copying, block/frame orchestration
+and a public source decoder remain absent. Huffman literal execution is the
+independent internal cursor described above.

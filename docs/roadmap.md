@@ -26554,3 +26554,16 @@ reuse, so production keeps the simpler independently owned plans.
   Direct/FSE tree+lookup state and Treeless reuse only. It does not execute any
   Huffman literal stream, finish a source block/frame, or expose a public
   source-backed decoder.
+
+- 2026-11-08: Added internal resumable execution for source-backed Zstd
+  one- and four-stream Huffman literals. A cursor consumes checked stream
+  ranges in logical literal order, reuses one caller-owned page across stream
+  transitions, exposes exact decoded/remaining progress, and leaves a freshly
+  prepared table pending until the enclosing caller reports whole-block
+  success. Fixed libzstd and decodecorpus blocks cover Compressed and Treeless
+  execution against the independent slice path on 9-, 10- and 17-byte pages,
+  including fragmented output, stream ends, callback retry and transactional
+  table state on native, Linux x86 and actual WASI. This is an internal literal
+  executor only: it does not initialize or execute sequence states, copy
+  matches, dispatch blocks or frames, expose a public source decoder, or make
+  a performance claim.

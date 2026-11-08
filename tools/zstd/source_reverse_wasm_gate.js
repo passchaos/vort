@@ -40,8 +40,9 @@ console.log(JSON.stringify({
     schema: "vort.zstd.source-primitives.wasm.v1",
     pointer_bits: 32,
     minimum_page_len: 9,
+    tested_page_lengths: [9, 10, 17],
     maximum_tree_description_len: 128,
-    coverage: ["reverse-bit-reader", "frame-block-layout", "literals-layout", "huffman-table-preparation", "sequence-metadata"],
+    coverage: ["reverse-bit-reader", "frame-block-layout", "literals-layout", "huffman-table-preparation", "huffman-literal-execution", "sequence-metadata"],
     status: "ok",
     executions,
 }));

@@ -19,6 +19,10 @@ pub const Snapshot = struct {
     last_page_offset: ?u64,
 };
 
+pub const Checkpoint = struct {
+    remaining_bits: usize,
+};
+
 pub const Reader = struct {
     range: source_input.Range,
     range_len: usize,
@@ -36,6 +40,8 @@ pub const Reader = struct {
         if (range.len == 0) return error.TruncatedFrame;
         const range_len = std.math.cast(usize, range.len) orelse
             return error.IntegerOverflow;
+        const payload_bits = std.math.mul(usize, range_len - 1, 8) catch
+            return error.IntegerOverflow;
         var self = Reader{
             .range = range,
             .range_len = range_len,
@@ -46,7 +52,8 @@ pub const Reader = struct {
         const last = self.cachedByte(range_len - 1);
         if (last == 0) return error.CorruptFrame;
         const marker_bit: usize = 7 - @clz(last);
-        self.remaining_bits = (range_len - 1) * 8 + marker_bit;
+        self.remaining_bits = std.math.add(usize, payload_bits, marker_bit) catch
+            return error.IntegerOverflow;
         return self;
     }
 
@@ -95,6 +102,17 @@ pub const Reader = struct {
 
     pub fn expectEnd(self: Reader) Error!void {
         if (self.remaining_bits != 0) return error.CorruptFrame;
+    }
+
+    pub fn checkpoint(self: Reader) Checkpoint {
+        return .{ .remaining_bits = self.remaining_bits };
+    }
+
+    /// Restore only the logical bit cursor. Cached bytes and telemetry remain
+    /// reusable; a later read reloads automatically when the cache no longer
+    /// covers the restored position.
+    pub fn restore(self: *Reader, saved: Checkpoint) void {
+        self.remaining_bits = saved.remaining_bits;
     }
 
     pub fn snapshot(self: Reader) Snapshot {
@@ -190,4 +208,46 @@ test "Zstd source reverse reader matches slice reads across page boundaries" {
     try actual.expectEnd();
     try std.testing.expect(actual.snapshot().descending_loads != 0);
     try std.testing.expect(actual.snapshot().page_capacity < bytes.len);
+}
+
+test "Zstd source reverse reader checkpoint restores across page refills" {
+    const byte_source = @import("../../io/source.zig");
+    var bytes: [40]u8 = undefined;
+    for (&bytes, 0..) |*byte, index| byte.* = @truncate(index * 31 + 7);
+    bytes[bytes.len - 1] |= 0x80;
+    var source = byte_source.SliceSource{ .bytes = &bytes };
+    const range = try source_input.Range.init(source.source(), 0, bytes.len);
+    var page: [minimum_page_len]u8 = undefined;
+    var reader = try Reader.init(range, &page);
+    const saved = reader.checkpoint();
+    const expected = try reader.read(9);
+    for (0..12) |_| _ = try reader.read(8);
+    const loads_before_restore = reader.snapshot().page_loads;
+    reader.restore(saved);
+    try std.testing.expectEqual(expected, try reader.read(9));
+    try std.testing.expect(reader.snapshot().page_loads > loads_before_restore);
+}
+
+test "Zstd source reverse reader rejects bit-count overflow before callback" {
+    const byte_source = @import("../../io/source.zig");
+    const Context = struct {
+        calls: usize = 0,
+        fn readAt(raw: *anyopaque, _: u64, output: []u8) error{SourceReadFailed}!usize {
+            const self: *@This() = @ptrCast(@alignCast(raw));
+            self.calls += 1;
+            @memset(output, 0x80);
+            return output.len;
+        }
+    };
+    var context: Context = .{};
+    const overflow_len: u64 = @as(u64, std.math.maxInt(usize) / 8) + 2;
+    const source = byte_source.Source{
+        .context = &context,
+        .len = overflow_len,
+        .read_at = Context.readAt,
+    };
+    const range = try source_input.Range.init(source, 0, overflow_len);
+    var page: [minimum_page_len]u8 = undefined;
+    try std.testing.expectError(error.IntegerOverflow, Reader.init(range, &page));
+    try std.testing.expectEqual(@as(usize, 0), context.calls);
 }
