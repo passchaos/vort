@@ -835,11 +835,11 @@ for the missing current competitor measurements.
    concrete cursor execution covers all 27 resolved Predefined/RLE/Compressed
    tuples after Repeat resolution (`sequence-reverse-execution` for WASI); the
    schema-v1 receipt separately records `literal-stream-execution` and
-   `compressed-block-execution`. Before listing source-backed Zstd frame
-   decoding as implemented, add the source frame executor, outer Raw/RLE block
-   dispatch, dictionary selection/history, checksum/footer, skippable/concat
-   and public contracts. The current outer executor is limited to compressed
-   blocks and has no public source-decoder, performance or RSS claim. A
+   `compressed-block-execution`. The source-backed Zstd decoder now includes the frame
+   executor, outer Raw/RLE block dispatch, dictionary selection/history,
+   checksum/footer, skippable/concatenated traversal and public frame, stream
+   and resumable-cursor contracts. It carries functional evidence only, with
+   no performance or RSS claim. A
    low-priority
    legacy LZMA1 case is `lc + lp > 4`:
    the common property parser rejects it, while the liblzma documentation
