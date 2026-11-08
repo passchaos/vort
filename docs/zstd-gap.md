@@ -2151,3 +2151,35 @@ failure modes. A forbidden-span source proves skippable payload bytes are never
 read. Native, Linux x86 and actual WASI runs share the `Zstd source` filter.
 Dictionary-set selection and a public source-backed API remain absent, and no
 performance or RSS claim follows.
+
+## 2026-11-09: public source frame decode API
+
+The internal source frame executor is now exposed as a caller-owned public
+API for one complete data frame:
+
+- `inspectSourceFrame` walks block headers only, reports header fields, the
+  exact frame end (including the checksum footer range), and a decoded size
+  that is exact for all-Raw/RLE frames or the declared content size when a
+  compressed block omits its regenerated size from the block header;
+- `decodeSourceFrameInto` executes the frame into a caller destination with
+  caller-owned history, staging and two entropy pages; it allocates nothing
+  and returns the decoded length plus the exact frame end;
+- `decodeSourceFrameAppend` and `decodeSourceFrameAlloc` provide growable
+  convenience forms; the append form keeps committed output on error;
+- `sourceFrameDecodedSize` exposes the optional size query.
+
+`SourceFrameDecodeOptions` selects standard or magicless frames, one optional
+`NativeDictionary` (standard full or raw content), a whole-frame decoded cap
+and explicit checksum ignoring. Dictionary identity is admitted before any
+payload read. A full destination returns `OutputTooSmall` after the committed
+prefix; callers needing all-or-nothing output decode into their own staging
+buffer. `inspect` does not decode entropy or compare the checksum value.
+
+Tests cover raw/RLE and checksum frames, the existing compressed fixtures, the
+full standard dictionary fixture, missing/mismatched dictionary IDs, magicless
+frames, truncated prefixes, trailing suffixes, destination and workspace
+bounds, checksum mismatch/ignore, decoded caps, header-only inspection and
+source-failure retry. Native, Linux x86 and actual WASI runs share the
+`Zstd source` filter, and root exports are covered by a consumer contract.
+Dictionary-set selection and skippable/concatenated orchestration in the public
+API remain absent. No performance or RSS claim follows.

@@ -106,6 +106,9 @@ test "Zstd source frame execution contracts" {
 test "Zstd source stream cursor contracts" {
     try @import("zstd/source/stream_cursor_tests.zig").contracts(SourceCompressedBlockTestSupport);
 }
+test "Zstd source frame decode API contracts" {
+    try @import("zstd/source/decode_api_tests.zig").contracts(SourceDecodeApiTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -1059,17 +1062,7 @@ const SourceCompressedBlockTestSupport = struct {
     }
 
     fn initialSourceState(dictionary: NativeDictionary) Error!State {
-        const native = try initialSequenceFrameState(dictionary);
-        var state: State = .{
-            .sequence_tables = native.previous_tables,
-            .repeated_offsets = native.repeated_offsets,
-        };
-        if (native.previous_huffman_tree) |tree| {
-            var lookup: CompleteHuffmanLiteralLookup = undefined;
-            if (!lookup.buildComplete(&tree)) return error.InvalidDictionaryMetadata;
-            state.huffman = .{ .tree = tree, .lookup = lookup };
-        }
-        return state;
+        return SourceDecodeSupport.initialState(dictionary);
     }
 
     fn decodeHexOwned(
@@ -1093,6 +1086,19 @@ const SourceCompressedBlockTestSupport = struct {
         allocator.free(fixture.frame);
         fixture.* = undefined;
     }
+};
+
+const SourceDecodeApiTestSupport = struct {
+    pub const decodeInto = decodeSourceFrameInto;
+    pub const decodeAlloc = decodeSourceFrameAlloc;
+    pub const inspect = inspectSourceFrame;
+    pub const decodedSize = sourceFrameDecodedSize;
+    pub const Workspace = SourceFrameWorkspace;
+    pub const Options = SourceFrameDecodeOptions;
+    pub const DecodeDictionary = NativeDictionary;
+    pub const decodeFrameOracle = SourceCompressedBlockTestSupport.decodeFrameOracle;
+    pub const loadFullDictionaryFixture = SourceCompressedBlockTestSupport.loadFullDictionaryFixture;
+    pub const freeFullDictionaryFixture = SourceCompressedBlockTestSupport.freeFullDictionaryFixture;
 };
 pub const DictionaryUsage = prefix_binding.Usage;
 pub const PrefixSnapshot = prefix_binding.Snapshot;
@@ -5303,6 +5309,42 @@ pub fn decodedFrameSizeWithDictionarySet(frame: []const u8, dictionary_set: Nati
 pub fn decodedFrameSizeLimitedWithDictionarySet(frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: Count) Error!Count {
     return try decodedNativeFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
 }
+
+pub const ByteSource = byte_source.Source;
+pub const ByteSourceError = byte_source.Error;
+
+const SourceDecodeSupport = struct {
+    pub const HuffmanCodec = SourceHuffmanCodec;
+    pub const SequenceCodec = SourceSequenceCodec;
+    pub const DecodeDictionary = NativeDictionary;
+    pub const State = source_compressed_block.FrameState(HuffmanCodec, SequenceCodec);
+
+    pub fn initialState(dictionary: ?DecodeDictionary) Error!State {
+        const dict = dictionary orelse return .{};
+        const native = try initialSequenceFrameState(dict);
+        var state: State = .{
+            .sequence_tables = native.previous_tables,
+            .repeated_offsets = native.repeated_offsets,
+        };
+        if (native.previous_huffman_tree) |tree| {
+            var lookup: CompleteHuffmanLiteralLookup = undefined;
+            if (!lookup.buildComplete(&tree)) return error.InvalidDictionaryMetadata;
+            state.huffman = .{ .tree = tree, .lookup = lookup };
+        }
+        return state;
+    }
+};
+
+const source_decode_facade = @import("zstd/source/decode_api.zig").Facade(SourceDecodeSupport);
+pub const SourceFrameWorkspace = source_decode_facade.Workspace;
+pub const SourceFrameDecodeOptions = source_decode_facade.Options;
+pub const SourceFrameInfo = source_decode_facade.FrameInfo;
+pub const SourceFrameDecodeResult = source_decode_facade.Result;
+pub const inspectSourceFrame = source_decode_facade.inspect;
+pub const sourceFrameDecodedSize = source_decode_facade.decodedSize;
+pub const decodeSourceFrameInto = source_decode_facade.decodeInto;
+pub const decodeSourceFrameAppend = source_decode_facade.decodeAppend;
+pub const decodeSourceFrameAlloc = source_decode_facade.decodeAlloc;
 
 pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;
 pub const decodeConcatenatedFrameAllocExactSize = decodeNativeConcatenatedFrameAllocExactSize;

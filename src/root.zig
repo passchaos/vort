@@ -2478,10 +2478,23 @@ pub const ZstdPrefixContentType = zstd.PrefixContentType;
 pub const ZstdFrameEncodeDirective = zstd.FrameEncodeDirective;
 pub const ZstdDecodeMemoryProfile = zstd.DecodeMemoryProfile;
 pub const ZstdDecodeMemorySnapshot = zstd.DecodeMemorySnapshot;
+pub const ZstdSourceFrameWorkspace = zstd.SourceFrameWorkspace;
+pub const ZstdSourceFrameDecodeOptions = zstd.SourceFrameDecodeOptions;
+pub const ZstdSourceFrameInfo = zstd.SourceFrameInfo;
+pub const ZstdSourceFrameDecodeResult = zstd.SourceFrameDecodeResult;
+
+test "root Zstd source decode consumer contracts" {
+    try @import("tests/zstd_source_decode/root.zig").contracts(@This());
+}
 
 test "root exports Zstd decode memory quota and reusable snapshot" {
     try @import("tests/zstd_decode_memory/root_exports.zig").contracts(@This());
 }
+pub const zstdInspectSourceFrame = zstd.inspectSourceFrame;
+pub const zstdSourceFrameDecodedSize = zstd.sourceFrameDecodedSize;
+pub const zstdDecodeSourceFrameInto = zstd.decodeSourceFrameInto;
+pub const zstdDecodeSourceFrameAppend = zstd.decodeSourceFrameAppend;
+pub const zstdDecodeSourceFrameAlloc = zstd.decodeSourceFrameAlloc;
 pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;

@@ -470,8 +470,11 @@ the existing compressed fixtures, a full standard dictionary, retries,
 truncation, aliasing and the execute/drain contract on native, Linux x86 and
 actual WASI. A source stream cursor now traverses standard or magicless
 concatenated streams, returns checked data-frame layouts and advances
-skippable frames without reading their payloads. Dictionary-set selection and
-a public source-backed API remain open, and no performance claim follows.
+skippable frames without reading their payloads. A public one-frame source API
+now adds header/end/size inspection, caller-workspace `decodeInto`, append and
+allocation forms with an optional single dictionary. Dictionary-set selection
+and public skippable/concatenated orchestration remain open, and no performance
+claim follows.
 
 ### Earlier detailed completion audit (started 2026-09-11)
 
