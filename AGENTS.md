@@ -2,9 +2,35 @@
 
 ## Project Mission
 
-`vort` is intended to become a next-generation compression library whose long-term goal is to surpass `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` in both functionality and performance.
+`vort` is intended to become a next-generation compression library whose long-term goal is to surpass `zlib`, `zlib-ng`, `zlib-rs`, `zstd`, and the corresponding Brotli references in both functionality and performance.
 
-Treat this as a product direction and engineering bar, not a one-time checklist. A completed milestone only means the current slice has reached its target; when continuing work, raise the bar with stricter compatibility, better ratios, faster throughput, lower memory use, broader APIs, stronger validation, or wider platform coverage.
+Treat this as a product direction and engineering bar, not a one-time checklist. Performance leadership is the first optimization priority. Correctness, wire compatibility, memory safety, bounded-resource behavior, and deterministic contracts are hard constraints rather than metrics that may be traded away. A completed milestone only means the current slice has reached its target; when continuing work, raise the bar with faster throughput, lower latency, better ratios, fewer allocations, lower peak memory, stricter compatibility, or broader validated coverage.
+
+The repository-wide architecture and acceptance rules are defined in
+[`docs/performance-first-architecture.md`](docs/performance-first-architecture.md).
+Use that document when choosing between feature expansion, structural work,
+micro-optimization, and benchmark infrastructure.
+
+## Optimization Priority
+
+1. Remove end-to-end architectural waste before tuning isolated instructions:
+   repeated parsing, repeated match search, repeated entropy planning, losing
+   candidate wire materialization, avoidable copies, per-call allocation, and
+   per-call thread creation are P0 problems.
+2. Keep scalar/reference implementations as correctness oracles, while allowing
+   production hot paths to use prepared plans, runtime CPU dispatch, persistent
+   workspaces, and codec-specific kernels.
+3. Optimize measured whole operations and matched lifecycle comparisons first.
+   A microbenchmark win is insufficient when the relevant full codec/corpus
+   matrix is neutral or slower.
+4. Add functionality ahead of performance work only when it removes a blocker
+   to the target architecture, closes a material user-facing gap, or is required
+   for a fair competitor comparison. Otherwise prefer the highest-ROI measured
+   performance gap.
+5. Do not claim parity or leadership from historical, partial, synthetic, or
+   unmatched evidence. Current-source results must identify competitor version,
+   API lifecycle, corpus, CPU, target features, build mode, thread policy,
+   compressed size, throughput, and memory scope.
 
 ## Baselines and References
 
@@ -13,7 +39,19 @@ Use the local and system-available implementations as references and competitors
 - `zlib`: compatibility, gzip/zlib/raw deflate behavior, API expectations, checksums, streaming semantics, and legacy interoperability.
 - `zlib-ng`: modern deflate/inflate performance techniques, CPU dispatch, and benchmark methodology.
 - `zlib-rs`: memory-safe implementation tradeoffs, Rust API ergonomics, fuzzing/test strategy, and portability ideas.
+- `libdeflate`: high-throughput Deflate encode/decode kernels, table layouts,
+  match finding, benchmark discipline, and whole-buffer API expectations.
 - `zstd`: modern compression design, dictionaries, long-distance matching, skippable frames, seekable use cases, training workflows, and high-throughput benchmarking.
+- `libbrotli`: Brotli quality scheduling, HQ parsing, context modeling,
+  dictionary behavior, streaming lifecycle, and matched encode/decode evidence.
+
+Sibling repositories are optional implementation aids, not automatic
+dependencies. `../harnessz` may supply generic sampling/statistics/process
+isolation after a Vort pilot preserves codec-specific schemas and provenance.
+`../parz` may supply persistent coarse-grained scheduling after an operation-
+specific A/B proves a win. Pin accepted revisions and hide both behind Vort
+adapters; never expose their types in public codec APIs or use their scheduling
+inside symbol/match/entropy hot loops.
 
 Prefer local checkouts under `~/Work` when present before relying on web snippets. Study competitors for behavior, tests, performance envelopes, and edge cases, but design `vort` as a Zig-native library rather than a mechanical port.
 
@@ -41,11 +79,30 @@ The library should eventually cover and exceed the practical capabilities users 
 - Use explicit allocators and explicit ownership. Avoid hidden global state.
 - Design streaming state machines as resumable, testable components with clear input/output progress accounting.
 - Separate format parsing, entropy coding, match finding, block planning, checksums, CPU feature dispatch, and I/O adapters into small modules.
+- Separate match analysis, candidate planning, entropy planning, and final wire
+  emission. Losing candidates should not build complete output; the winner
+  should normally be emitted exactly once.
+- Make one-shot APIs thin facades over reusable contexts/workspaces. Warmed
+  caller-owned paths should perform zero heap allocation per block or frame
+  where the format permits it.
+- Select architecture-specific kernels once when a context is initialized.
+  Keep scalar, portable-vector, x86, AArch64, and WASM behavior identical and
+  avoid feature checks inside symbol or match loops.
+- Use persistent caller-owned schedulers for coarse independent work. Do not
+  create threads per call, nest internal parallel regions, or schedule token,
+  symbol, sequence, match, or other fine-grained hot-loop work.
 - Preserve deterministic behavior for identical inputs, settings, dictionaries, and build targets unless a mode explicitly opts into adaptive nondeterminism.
 - Keep compatibility modes bit-exact or behavior-exact where that is part of the target. Native modes may innovate freely but must be documented and versioned.
-- Prefer simple portable reference implementations before optimized variants. Every optimized path must have reference comparison tests.
+- Maintain simple portable reference implementations as differential oracles.
+  Every optimized path must have reference comparison tests, but production
+  architecture must not be constrained to the reference implementation's data
+  layout or control flow.
 - Treat memory limits, decompression bombs, integer overflow, malformed streams, and hostile inputs as core design constraints from the beginning.
 - Make performance claims only with reproducible benchmarks and record the competitor version, CPU, build mode, corpus, and command line.
+- Keep public facades small, production modules cohesive, and tests outside
+  mega-files. Facades should normally remain below 2,000 lines, production
+  modules below 1,500 lines, and any file above 3,000 lines requires an explicit
+  split plan.
 - Avoid copying competitor internals blindly. Translate useful invariants into clear Zig designs.
 
 ## Zig and Tooling Expectations
@@ -85,6 +142,19 @@ Maintain benchmark evidence as the project grows. Track at least:
 - cold and warmed runs, build mode, CPU model, thread count, and enabled CPU features;
 - comparison against available `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` command-line or library APIs;
 - separate results for compatibility formats and native `vort` formats.
+
+Performance changes must retain raw samples and use interleaved comparisons on
+dedicated performance hosts. Prefer paired statistics and confidence intervals;
+use isolated child processes for RSS and foreign-library memory measurements.
+General CI should validate correctness, schemas, artifacts, and benchmark
+executability, while fixed-host gates enforce throughput/ratio/memory ratchets.
+
+For an optimization to merge, require an end-to-end improvement on its declared
+target and explicit non-regression controls. The default bar is at least 3%
+geometric-mean improvement with a confidence interval excluding parity, target
+weak-row improvement of at least 20% when repairing a known cliff, no control
+row below 0.98x, and no wire/ratio regression beyond the codec-specific budget.
+Codec-specific gates in the performance architecture may be stricter.
 
 Do not trade away decompression safety, compatibility, or output correctness for benchmark wins.
 

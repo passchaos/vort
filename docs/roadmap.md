@@ -1,14 +1,43 @@
 # Vort roadmap
 
-The current priority is closing practical compression and decompression gaps
-for Deflate, Zstd and Brotli. The
+The current priority is end-to-end performance leadership for Deflate, Zstd
+and Brotli under the
+[performance-first architecture](performance-first-architecture.md).
+Correctness, compatibility, safety, deterministic behavior and explicit
+resource ownership remain hard constraints, but feature breadth is no longer a
+substitute for competitive throughput, ratio, latency or memory evidence.
+
+The first architecture wave removes repeated work before adding more isolated
+micro-kernels:
+
+1. establish current-source, matched-lifecycle benchmark matrices with raw
+   samples, ratio and memory evidence;
+2. separate match analysis, candidate planning, entropy planning and winner-only
+   emission;
+3. make reusable contexts and caller workspaces the implementation core, with
+   one-shot APIs as thin facades;
+4. add once-per-context runtime CPU dispatch and persistent coarse-grained
+   scheduling; and
+5. split the Deflate, Zstd and Brotli mega translation units along those hot
+   dataflow boundaries.
+
+Codec P0 work is Deflate reusable matcher/workspace plus direct wrapper sinks,
+Zstd policy separation plus `BlockPlan`/winner-only emission and direct options
+decode, and Brotli q8+ candidate graphs that replace repeated complete wire
+materialization. The
 [2026-11-03 gap assessment](performance/industry-gap-current-20261103.md)
-routes to the latest relevant comparisons while retaining each source and
-workload epoch. Brotli q8 context scoring and candidate emission, Brotli/Zstd
-high-quality speed/size tradeoffs, and decoder payload/per-block work remain
-priorities. Full-file, dictionary, streaming, memory and platform comparisons
-must accompany narrower wins. Preserve malformed-input safety, candidate
-ordering, incremental progress and allocator ownership throughout this work.
+retains the dated evidence that motivates these choices; historical ratios are
+not current-head rankings. Full-file, dictionary, streaming, memory and platform
+comparisons must accompany narrower wins. Preserve malformed-input safety,
+candidate ordering, incremental progress and allocator ownership throughout.
+
+`../harnessz` is an approved pilot candidate for raw sampling, interleaved
+comparisons, statistics and process isolation, while Vort retains codec schemas,
+corpora, competitor adapters and provenance. `../parz` is an approved pilot
+candidate only for persistent coarse-grained scheduling, beginning with an A/B
+of independent Zstd seekable frames. Neither sibling library is admitted to
+codec hot loops, and neither becomes a dependency until its pilot meets the
+architecture's stop/go gates.
 
 The [codec format controls](formats/codec-format-controls.md) expose zlib
 encoder windows from 9 to 15 bits through one-shot, reusable and incremental

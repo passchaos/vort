@@ -1,5 +1,11 @@
 # Deflate, Zstd and Brotli gap assessment, 2026-11-03
 
+This dated assessment is input to, not a replacement for, the current
+[performance-first architecture](../performance-first-architecture.md). As of
+2026-11-08 the architecture document controls implementation order, benchmark
+acceptance and dependency pilots. Ratios below remain tied to their recorded
+source/workload epochs and must not be presented as current-head rankings.
+
 The industry-best objective remains active. Standard formats, dictionaries and
 streaming are broadly implemented, but compression speed, high-quality parsing
 and decoder throughput still leave measurable gaps. This assessment preserves

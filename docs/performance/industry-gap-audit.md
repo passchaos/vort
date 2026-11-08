@@ -6,6 +6,17 @@ latest relevant encoding, decoding, resource and platform evidence. The
 decompression-only priority and encoder freeze recorded below describe their
 earlier task boundary; the current workflow also optimizes Brotli encoding.
 
+As of 2026-11-08, the controlling design is the
+[performance-first architecture](../performance-first-architecture.md).
+Performance leadership is the first optimization priority; correctness,
+compatibility, safety, determinism and bounded resources are mandatory
+constraints. The immediate work is architectural rather than another sequence
+of isolated micro-kernels: reusable workspaces, shared analysis and candidate
+plans, winner-only emission, prepared decode plans, runtime CPU dispatch,
+persistent coarse scheduling and statistically defensible competitor gates.
+The dated sections below remain evidence, but they do not override that order
+or establish a current-head ranking.
+
 Date: 2026-10-26. The window/resource increment starts at `fa35a843`; the
 subsequent [stream-count increment](stream-counts-functional-baseline.md) starts
 at `dacd500a`. Their functional evidence is separate from the dated performance

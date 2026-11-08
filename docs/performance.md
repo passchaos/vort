@@ -1,5 +1,11 @@
 # Performance evidence
 
+The project-wide optimization order, target dataflow, merge gates and benchmark
+rules are defined by the
+[performance-first architecture](performance-first-architecture.md). This file
+is an evidence index: individual epochs remain scoped to their recorded source,
+host and workload, and do not by themselves establish current-head leadership.
+
 [Zstd HQ functionality](performance/zstd-hq-functional-baseline.md) records the
 new binary-tree and integer/fractional-cost strategy paths, conditional two-pass
 training, exact offset emission, dictionaries and transactional streaming. Its

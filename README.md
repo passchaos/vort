@@ -5,6 +5,16 @@ objective is to surpass `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` in both
 functionality and performance while preserving explicit ownership, deterministic
 behavior, robust validation, and library-first APIs.
 
+Performance leadership is the project's first optimization priority;
+correctness, compatibility, safety, determinism, and bounded resource contracts
+remain non-negotiable constraints. The target architecture, codec-specific
+milestones, benchmark evidence rules, and adoption boundaries for sibling
+projects are defined in the
+[performance-first architecture](docs/performance-first-architecture.md).
+Current broad format coverage does not by itself establish industry-leading
+throughput, ratio, latency, or memory use; those claims require current-source,
+matched-lifecycle competitor evidence.
+
 The library is under active development. Its current capabilities include:
 
 - zlib-compatible Adler-32;
