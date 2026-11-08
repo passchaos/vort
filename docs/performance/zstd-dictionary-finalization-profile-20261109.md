@@ -62,3 +62,9 @@ shared parse) and evaluate both entropy/repcode variants without re-running
 the matcher and literal planner, while preserving the exact selected
 dictionary bytes and the held-out parity rows. No optimization is claimed by
 this profile.
+
+A cheaper variant that reused one `NativeFrameEncoder` across samples was
+tested and rejected: text/JSON improved only 1.2-1.4%, binary regressed 2.9%,
+all dictionary checksums stayed identical, and the arena retained about
+0.25-0.5 MiB more. Encoder construction was not the bottleneck; the shared
+parse is required.
