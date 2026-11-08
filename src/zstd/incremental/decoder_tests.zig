@@ -241,7 +241,7 @@ test "zstd default block stream preserves id-less preset history" {
     const dictionary = zstd.NativeDictionary.initRawContent("wxyz");
     // One RLE-mode sequence references the four-byte raw dictionary without a
     // Dictionary_ID field or output literals.
-    const frame = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0x20, 4, 0x3d, 0, 0, 0, 1, 0x54, 0, 2, 1, 7 };
+    const frame = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0x00, 0, 0x3d, 0, 0, 0, 1, 0x54, 0, 2, 1, 7 };
     var decoder = zstd.NativeIncrementalFrameDecoder.initWithDictionary(std.testing.allocator, dictionary);
     defer decoder.deinit();
     try drain(&decoder, &frame, "wxyz", 1, 1);

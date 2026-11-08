@@ -33,7 +33,7 @@ pub fn contracts(comptime Z: type) !void {
     // An external dictionary remains available before frame output fills
     // the window, including a single-segment FCS=3 with an offset of 4.
     const dictionary = Z.NativeDictionary.init(42, "abcd");
-    const dictionary_frame = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0x21, 42, 3, 0x3d, 0, 0, 0, 1, 0x54, 0, 2, 0, 7 };
+    const dictionary_frame = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0x01, 0, 42, 0x3d, 0, 0, 0, 1, 0x54, 0, 2, 0, 7 };
     try std.testing.expectEqual(@as(@import("../../core.zig").StreamCount, 3), try Z.decodedNativeFrameSizeWithDictionary(&dictionary_frame, dictionary));
 
     // Validate the exact compressed-block shape against an actual materialized

@@ -26493,9 +26493,27 @@ reuse, so production keeps the simpler independently owned plans.
   overflow, poisoned page reuse and synthetic nonzero offsets above 4 GiB.
   Native, Linux x86 and actual wasm32-wasi test execution make the bounded
   residency contract portable. This increment does not expose or complete a
-  source-backed Zstd frame decode API; frame parsing, block dispatch,
+  source-backed Zstd frame decode API; frame execution, block dispatch,
   dictionary/history integration, checksum publication and public contracts
   remain future work.
+
+- 2026-11-08: Added an internal source-backed Zstd frame/header/block range
+  parser. It recognizes standard data magic, all 16 skippable IDs and explicit
+  magicless data frames; parses descriptor, window, dictionary-ID and content-
+  size fields; and returns checked absolute ranges for frame headers and Raw,
+  RLE or Compressed block headers/payloads. Slice-parser differential coverage
+  spans all 256 descriptor bytes, both frame formats, the maximum 18-byte
+  standard header and every truncation point. Native, Linux x86 and actual
+  wasm32-wasi contracts also cover block kinds and size limits, one-byte short
+  reads, callback faults, offsets above 4 GiB and proof that skippable or block
+  payloads are not read during layout discovery. The shared block validation
+  also aligns compressed wire-size admission with the frame's
+  `Block_Maximum_Size`, as required by the format and libzstd, while the large
+  raw/RLE fast path now accepts valid zero-regenerated-size RLE blocks with
+  their mandatory one-byte wire payload. This is an internal range parser only:
+  it does not decode payloads, find or validate the complete frame end, publish
+  checksums, apply dictionary policy, dispatch blocks, or expose a public source
+  decoder.
 
 - 2026-11-08: Added an internal source-backed Zstd literals-section
   layout/range parser on top of the checked ranges. It reads the one- to

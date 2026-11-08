@@ -36,7 +36,7 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute source-backed Zstd primitive contracts on native, x86 and WASI",
+        "Execute source-backed Zstd frame-layout and entropy primitive contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",
@@ -47,7 +47,7 @@ pub fn register(
         const suffix = ([_][]const u8{ "", "-x86", "-wasm" })[index];
         const gate = b.step(
             b.fmt("test-zstd-source-reverse{s}", .{suffix}),
-            "Execute source-backed Zstd range, literals, sequence metadata and reverse-reader contracts",
+            "Execute source-backed Zstd frame/block layout, literals, sequence metadata and reverse-reader contracts",
         );
         const implementation_tests = b.addTest(.{
             .name = b.fmt("vort-zstd-source-reverse{s}-tests", .{suffix}),

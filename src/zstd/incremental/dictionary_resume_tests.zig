@@ -259,7 +259,7 @@ test "Zstd dictionary resume preserves fatal errors and ID zero never requests a
         decoder_live = false;
         try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
     }
-    const idless = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0x20, 4, 0x3d, 0, 0, 0, 1, 0x54, 0, 2, 1, 7 };
+    const idless = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0x00, 0, 0x3d, 0, 0, 0, 1, 0x54, 0, 2, 1, 7 };
     var decoder = zstd.NativeIncrementalFrameDecoder.init(allocator);
     defer decoder.deinit();
     var output: [4]u8 = undefined;

@@ -130,7 +130,6 @@ fn scan(frame: []const u8) Error!?Plan {
         if (block_type > 1) return null;
         const len: usize = @intCast(header >> 3);
         if (len > block_size_max) return error.CorruptFrame;
-        if (block_type == 1 and len == 0) return error.CorruptFrame;
         const stored_len: usize = if (block_type == 0) len else 1;
         if (frame.len - offset < stored_len) return error.TruncatedFrame;
         decoded = std.math.add(usize, decoded, len) catch
@@ -163,6 +162,23 @@ test "Zstd raw frame fast path supports RLE blocks" {
         try tryDecode(&frame, &output),
     );
     for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+}
+
+test "Zstd raw frame fast path accepts zero-length RLE blocks" {
+    // A zero regenerated-size RLE block is valid and still carries one wire
+    // payload byte. Keep this on the >=256-byte scan path so output capacity
+    // cannot change acceptance relative to the general decoder.
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd, 0x60, 0x00, 0x00,
+        0x02, 0x00, 0x00, 0xa5, 0x03, 0x08, 0x00,
+        0x5a,
+    };
+    var output: [256]u8 = undefined;
+    try std.testing.expectEqual(
+        @as(?usize, output.len),
+        try tryDecode(&frame, &output),
+    );
+    for (output) |byte| try std.testing.expectEqual(@as(u8, 0x5a), byte);
 }
 
 test "Zstd raw frame fast path decodes eligible frame without mutation on miss" {

@@ -284,15 +284,18 @@ Open items include:
   and expand allocation/RSS and real-file throughput comparisons beyond the
   current requested-allocation and cumulative-output limits.
 - Source-backed frame decoding: checked source ranges, the caller-paged
-  reverse-bit reader, a literals-section layout/range parser and transactional
-  sequence-metadata preparation are validated internal primitives only. The
-  layout parser locates Raw, RLE, Compressed and Treeless payloads,
-  tree-description bytes, one/four streams and the trailing sequence range.
+  reverse-bit reader, frame/header/block and literals-section layout/range
+  parsers, and transactional sequence-metadata preparation are validated
+  internal primitives only. The frame parser recognizes standard, magicless
+  and skippable headers and locates individual Raw, RLE and Compressed block
+  payload ranges without reading them. The literals parser locates Raw, RLE,
+  Compressed and Treeless payloads, tree-description bytes, one/four streams
+  and the trailing sequence range.
   Sequence preparation resolves LL/OF/ML tables but does not initialize
   reverse states, decode symbols or execute copies; literal tree/table decoding
-  is also absent. Complete block/frame parsing and dispatch,
-  dictionary/history integration, checksum publication, diagnostics and public
-  source-decoder contracts remain future work.
+  is also absent. Complete frame-end traversal and block dispatch,
+  dictionary/history policy, checksum validation/publication, diagnostics and
+  public source-decoder contracts remain future work.
 - Dictionary workflows: dictionary IDs, content-derived stable IDs,
   deterministic training helpers with versioned catalog metadata records and
   byte validation, checked in-memory dictionary catalogs, and preset-history

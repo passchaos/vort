@@ -1989,9 +1989,29 @@ operation streams and every marker, bit alignment and width on 9-, 10-, 17-,
 one-/two-/three-byte short reads, page poisoning and reuse, canaries, a
 synthetic base offset above 4 GiB, and bounded request/residency telemetry.
 Native, Linux x86 and actual Node/WASI execution retain a receipt for this
-primitive layer. Frame/header/block orchestration, dictionary/history state,
-checksum publication, diagnostics and a public source-backed frame API are not
+primitive layer. Frame execution, dictionary/history state, checksum
+publication, diagnostics and a public source-backed frame API are not
 implemented by this increment.
+
+An internal source-backed frame/header/block range parser now recognizes
+standard data magic, all 16 skippable IDs and caller-selected magicless data
+frames. It parses every descriptor/window/dictionary-ID/content-size shape and
+returns checked absolute ranges for individual Raw, RLE and Compressed block
+headers and wire payloads without reading those payloads. Slice-parser
+differentials cover all 256 descriptor bytes in both formats, every prefix of
+the maximum 18-byte standard header, block kinds/limits and header/payload
+truncation. Callback faults, one-byte short reads, payload-forbidden sources,
+canaries and absolute bases above 4 GiB run on native, Linux x86 and actual
+WASI; the receipt records `frame-block-layout`. This is layout discovery only:
+it does not decode payloads, determine or validate a complete frame end,
+validate/publish the checksum, apply dictionary policy, dispatch blocks or
+expose a public source decoder.
+
+The shared block parser also closes two wire-compatibility gaps: compressed
+`Block_Content` is now rejected when it exceeds the frame-specific
+`Block_Maximum_Size` (not merely the global 128 KiB ceiling), matching the Zstd
+format and libzstd, and the large raw/RLE fast path accepts a valid zero-size
+RLE block while still consuming its required one-byte payload.
 
 On top of these primitives, an internal source literals-section layout/range
 parser reads the one- to five-byte section header and derives checked absolute
