@@ -2682,6 +2682,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
         \\  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
         \\    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
+        \\    --block-len=BYTES selects a one-shot quality-scheduled meta-block target
+        \\                              (16 KiB..64 KiB; q0 default is 16 KiB, others 32/64 KiB)
         \\    --large-window explicitly selects the Brotli Large Window extension (independent of HQ)
         \\                              With --large-window, --window-bits accepts 10..30; default remains 16
         \\    --hq (quality 10/11 only); HQ parameters also explicitly select HQ:

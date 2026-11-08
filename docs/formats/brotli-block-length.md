@@ -17,6 +17,9 @@ meta-block target. Zero keeps the quality/level default: 16 KiB for q0,
   parser see more of the input, at the cost of fragment latency and a less
   homogeneous one-pass entropy model.
 - Defaults and existing wires are unchanged when `block_len` is zero.
+- The CLI exposes `--block-len=BYTES` for `encode-br-file`,
+  `encode-br-stream-file` and `encode-br-hex`; the HQ-specific
+  `--hq-block-len` remains separate.
 
 ## Measured trade-off
 
