@@ -63,6 +63,15 @@ the matcher and literal planner, while preserving the exact selected
 dictionary bytes and the held-out parity rows. No optimization is claimed by
 this profile.
 
+Implementation constraint: the collection step uses
+`hashGreedyPlanWithDictionaryReuse`/the lazy dictionary planner, while the
+scoring step uses the `.literal_only` frame path
+(`emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl`). The two parsers
+are not interchangeable by assumption. A shared-parse path must therefore
+record the exact `.literal_only` sequence/literal trace once and add a
+record-based sequence-section emitter for the baseline and candidate tables,
+or prove the two parsers emit identical records on the training corpus.
+
 A cheaper variant that reused one `NativeFrameEncoder` across samples was
 tested and rejected: text/JSON improved only 1.2-1.4%, binary regressed 2.9%,
 all dictionary checksums stayed identical, and the arena retained about
