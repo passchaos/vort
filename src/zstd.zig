@@ -19486,7 +19486,6 @@ fn nativeSeekableFrameCount(input_len: usize, frame_size: usize) Error!usize {
 }
 
 const ParallelNativeSeekableFrameResult = struct {
-    allocator: std.mem.Allocator,
     input: []const u8,
     options: NativeFrameOptions,
     dictionary: ?NativeDictionary,
@@ -19496,36 +19495,45 @@ const ParallelNativeSeekableFrameResult = struct {
     frame: ?[]u8 = null,
     err: ?Error = null,
 
-    fn run(self: *ParallelNativeSeekableFrameResult) void {
-        var encoder = NativeFrameEncoder.init(self.allocator);
-        defer encoder.deinit();
+    fn run(self: *ParallelNativeSeekableFrameResult, encoder: *NativeFrameEncoder) bool {
         const encoded = if (self.dictionary) |dictionary|
             encoder.encodeWithDictionaryAlloc(self.input, self.options, dictionary)
         else
             encoder.encodeWithOptionsAlloc(self.input, self.options);
         const result = encoded catch |err| {
             self.err = err;
-            return;
+            return false;
         };
         self.frame = result.frame;
         self.entry.* = nativeSeekableFrameSize(result.frame.len, self.input, self.seek_checksums) catch |err| {
             self.err = err;
-            return;
+            return false;
         };
+        return true;
+    }
+};
+
+/// One persistent encoder per worker. Frame scratch, match tables and entropy
+/// workspaces are prepared on the first frame and reused for every later frame
+/// this worker claims, matching the serial seekable encoder's ownership.
+const ParallelNativeSeekableWorker = struct {
+    encoder: NativeFrameEncoder,
+
+    fn run(self: *ParallelNativeSeekableWorker, queue: *ParallelNativeSeekableQueue) void {
+        while (true) {
+            const index = queue.next.fetchAdd(1, .monotonic);
+            if (index >= queue.results.len) return;
+            // A failed frame poisons this encoder's transaction. The operation
+            // already reports the first error; stop claiming work instead of
+            // observing partially reset scratch.
+            if (!queue.results[index].run(&self.encoder)) return;
+        }
     }
 };
 
 const ParallelNativeSeekableQueue = struct {
     next: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
     results: []ParallelNativeSeekableFrameResult,
-
-    fn run(self: *ParallelNativeSeekableQueue) void {
-        while (true) {
-            const index = self.next.fetchAdd(1, .monotonic);
-            if (index >= self.results.len) return;
-            self.results[index].run();
-        }
-    }
 };
 
 fn encodeNativeSeekableStreamParallelInternal(
@@ -19571,7 +19579,6 @@ fn encodeNativeSeekableStreamParallelUnbudgeted(
         const start = frame_index * options.frame_size;
         const end = @min(input.len, start + options.frame_size);
         result.* = .{
-            .allocator = parallel_allocator,
             .input = input[start..end],
             .options = options.frame_options,
             .dictionary = if (options.frame_options.dictionary_usage == .prefix and frame_index != 0) null else dictionary,
@@ -19585,16 +19592,21 @@ fn encodeNativeSeekableStreamParallelUnbudgeted(
     const actual_workers = @min(worker_count, frame_count);
     const threads = try allocator.alloc(std.Thread, actual_workers - 1);
     defer allocator.free(threads);
+    const workers = try allocator.alloc(ParallelNativeSeekableWorker, actual_workers);
+    defer allocator.free(workers);
+    for (workers) |*worker| worker.* = .{ .encoder = NativeFrameEncoder.init(parallel_allocator) };
+    defer for (workers) |*worker| worker.encoder.deinit();
+
     var queue: ParallelNativeSeekableQueue = .{ .results = results };
     var spawned: usize = 0;
     var spawn_failure: ?Error = null;
     while (spawned < threads.len) : (spawned += 1) {
-        threads[spawned] = std.Thread.spawn(.{ .allocator = parallel_allocator }, ParallelNativeSeekableQueue.run, .{&queue}) catch |err| {
+        threads[spawned] = std.Thread.spawn(.{ .allocator = parallel_allocator }, ParallelNativeSeekableWorker.run, .{ &workers[spawned + 1], &queue }) catch |err| {
             if (err == error.OutOfMemory) spawn_failure = mapScopedAllocationError(parallel_allocator, error.OutOfMemory);
             break;
         };
     }
-    if (spawn_failure == null) queue.run();
+    if (spawn_failure == null) workers[0].run(&queue);
     for (threads[0..spawned]) |thread| thread.join();
     if (spawn_failure) |err| return err;
 
@@ -36482,9 +36494,10 @@ test "zstd parallel seekable encoder handles metadata allocation failure before 
         .seek_checksums = false,
     };
 
-    // The first three allocations are the entry array, per-frame result array,
-    // and thread-handle array. All must exist before any worker can start.
-    for (0..3) |fail_index| {
+    // The first four allocations are the entry array, per-frame result array,
+    // thread-handle array, and persistent worker-context array. All must exist
+    // before any worker can start.
+    for (0..4) |fail_index| {
         var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
             .fail_index = fail_index,
         });
@@ -36507,17 +36520,19 @@ test "zstd parallel seekable encoder joins workers after encoder allocation fail
         .seek_checksums = false,
     };
 
-    // Three metadata allocations complete before worker threads start. The
-    // next allocation is made by a frame encoder through LockedAllocator.
+    // Four metadata allocations complete before worker threads start. The next
+    // allocation is made by a worker's persistent frame encoder through
+    // LockedAllocator; after that induced failure every later allocation also
+    // fails, so the workers stop and the coordinator joins them.
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
-        .fail_index = 3,
+        .fail_index = 4,
     });
     try std.testing.expectError(
         error.OutOfMemory,
         encodeNativeSeekableStreamParallelAlloc(failing.allocator(), payload, options, 4),
     );
     try std.testing.expect(failing.has_induced_failure);
-    try std.testing.expectEqual(@as(usize, 3), failing.allocations);
+    try std.testing.expectEqual(@as(usize, 4), failing.allocations);
     try std.testing.expectEqual(failing.allocations, failing.deallocations);
     try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
 }

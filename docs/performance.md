@@ -12,6 +12,12 @@ training, exact offset emission, dictionaries and transactional streaming. Its
 78-test and versioned-reference evidence is functional validation; ratio,
 throughput and RSS leadership still require current-source corpus comparisons.
 
+[Zstd parallel seekable worker reuse](performance/zstd-seekable-parallel-worker-reuse.md)
+records persistent per-worker encoder contexts replacing per-frame construction:
+about 4--7% same-run parallel/serial ratio improvement at 2/4/8 workers with
+identical seekable wire. It is scoped evidence for that operation, not a general
+Zstd throughput claim.
+
 Vort does not yet claim broad compression performance leadership. This document
 records scoped measurements and the benchmark protocol so each claim can be
 tied to reproducible evidence.
