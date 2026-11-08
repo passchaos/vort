@@ -1,10 +1,71 @@
 //! Public one-frame wire contracts, specialized by the codec facade hook.
 const std = @import("std");
 const h = @import("helpers.zig");
+const types = @import("../types.zig");
 const a = h.a;
 
 pub fn run(comptime Z: type) type {
     return struct {
+        test "Zstd parallel frame rsyncable jobs are content-defined deterministic and serial-equivalent" {
+            const input = try a.alloc(u8, 1536 * 1024);
+            defer a.free(input);
+            h.noise(input, 0x5eed);
+            var index: usize = 0;
+            while (index + 1024 <= input.len) : (index += 4096) {
+                @memset(input[index..][0..1024], @truncate(index / 4096));
+            }
+            var options = h.native(Z);
+            options.selection = .literal_only;
+            options.block_size_max = 32 * 1024;
+            options.window_log = 15;
+            options.include_content_size = false;
+            options.content_checksum = false;
+            var profile: Z.ParallelProfile = .{};
+            const limits: Z.ParallelOptions = .{
+                .io = std.testing.io,
+                .worker_count = 2,
+                .job_size = 512 * 1024,
+                .max_inflight_jobs = 2,
+                .max_inflight_bytes = 1024 * 1024,
+                .max_working_memory = 64 * 1024 * 1024,
+                .rsyncable = true,
+                .profile = &profile,
+            };
+            const frame = try Z.encodeNativeParallelFrameAlloc(a, input, options, limits);
+            defer a.free(frame);
+            _ = try h.verify(Z, frame, input, options, null);
+            try std.testing.expect(
+                frame.len <= try Z.encodedNativeParallelFrameBound(input.len, options, limits),
+            );
+
+            const block_size = try Z.ParallelCodecSupport.blockSize(options);
+            const job_size = ((limits.job_size - 1) / block_size + 1) * block_size;
+            const rsync = try types.Rsync.init(job_size);
+            var expected_jobs: usize = 0;
+            var start: usize = 0;
+            while (true) {
+                const end = rsync.jobEnd(input, start, job_size);
+                expected_jobs += 1;
+                if (end == input.len) break;
+                start = end;
+            }
+            try std.testing.expect(expected_jobs > 1);
+            try std.testing.expectEqual(expected_jobs, profile.job_count);
+
+            const again = try Z.encodeNativeParallelFrameAlloc(a, input, options, limits);
+            defer a.free(again);
+            try std.testing.expectEqualSlices(u8, frame, again);
+
+            var serial_profile: Z.ParallelProfile = .{};
+            var serial = limits;
+            serial.worker_count = 1;
+            serial.profile = &serial_profile;
+            const serial_frame = try Z.encodeNativeParallelFrameAlloc(a, input, options, serial);
+            defer a.free(serial_frame);
+            try std.testing.expectEqualSlices(u8, frame, serial_frame);
+            try std.testing.expectEqual(expected_jobs, serial_profile.job_count);
+        }
+
         test "Zstd parallel frame empty tiny structured random and repeated inputs keep one envelope" {
             const structured = h.structured();
             var random: [513]u8 = undefined;

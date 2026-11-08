@@ -30,6 +30,7 @@ pub fn Queue(comptime Codec: type) type {
         submitted: usize = 0,
         claimed: usize = 0,
         published: usize = 0,
+        next_span_start: usize = 0,
         active: usize = 0,
         inflight_jobs: usize = 0,
         inflight_bytes: usize = 0,
@@ -214,11 +215,18 @@ pub fn Queue(comptime Codec: type) type {
                 self.unlock();
                 return error.InvalidBlockPlan;
             }
-            const expected_start = self.submitted * self.geometry.job_size;
-            const expected_end = expected_start + @min(self.geometry.job_size, self.input.len - expected_start);
-            if (span_start != expected_start or span_end != expected_end) {
-                self.unlock();
-                return error.InvalidBlockPlan;
+            if (self.parallel.rsyncable) {
+                if (span_start != self.next_span_start) {
+                    self.unlock();
+                    return error.InvalidBlockPlan;
+                }
+            } else {
+                const expected_start = self.submitted * self.geometry.job_size;
+                const expected_end = expected_start + @min(self.geometry.job_size, self.input.len - expected_start);
+                if (span_start != expected_start or span_end != expected_end) {
+                    self.unlock();
+                    return error.InvalidBlockPlan;
+                }
             }
             const plain_len = span_end - span_start;
             if (self.inflight_jobs == self.jobs.len or plain_len > self.parallel.max_inflight_bytes - self.inflight_bytes) {
@@ -232,6 +240,7 @@ pub fn Queue(comptime Codec: type) type {
             job.end = span_end;
             job.state = .queued;
             self.submitted += 1;
+            self.next_span_start = span_end;
             self.inflight_jobs += 1;
             self.inflight_bytes += plain_len;
             self.private_profile.peak_inflight_jobs = @max(self.private_profile.peak_inflight_jobs, self.inflight_jobs);

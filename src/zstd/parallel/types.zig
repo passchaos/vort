@@ -43,14 +43,102 @@ pub const Options = struct {
     max_inflight_jobs: usize = 4,
     max_inflight_bytes: usize = 4 * 1024 * 1024,
     max_working_memory: usize = 256 * 1024 * 1024,
+    /// Cut Jobs at content-defined synchronization points so a small input
+    /// edit only changes the surrounding Job. Requires `job_size` of at least
+    /// `rsync_min_job_size`; the average interval follows `job_size`.
+    rsyncable: bool = false,
     profile: ?*Profile = null,
 
     pub fn validate(self: Options) Error!void {
         if (self.worker_count == 0 or self.worker_count > 64 or self.job_size == 0 or
             self.max_inflight_jobs == 0 or self.max_inflight_bytes == 0)
             return error.InvalidBlockPlan;
+        if (self.rsyncable) _ = try rsyncBits(self.job_size);
     }
 };
+
+pub const rsync_min_job_size: usize = 512 * 1024;
+/// Upstream refuses synchronization points that would create Jobs smaller
+/// than one maximum-size Zstd block.
+pub const rsync_min_block_size: usize = 128 * 1024;
+pub const rsync_window: usize = 32;
+const rsync_prime: u64 = 0xCF1BBCDCB7A56463;
+const rsync_char_offset: u64 = 10;
+
+fn rsyncBits(job_size: usize) Error!u6 {
+    if (job_size < rsync_min_job_size) return error.InvalidBlockPlan;
+    const log = std.math.log2_int(usize, job_size >> 10);
+    if (log >= 54) return error.InvalidBlockPlan;
+    return @intCast(log + 10);
+}
+
+/// Upstream-compatible rolling hash and hit mask for one `job_size`. The
+/// average interval between synchronization points is `job_size` bytes.
+pub const Rsync = struct {
+    hit_mask: u64,
+    prime_power: u64,
+
+    pub fn init(job_size: usize) Error!Rsync {
+        const bits = try rsyncBits(job_size);
+        return .{
+            .hit_mask = (@as(u64, 1) << bits) - 1,
+            .prime_power = primePower(rsync_prime, rsync_window - 1),
+        };
+    }
+
+    /// End offset of the Job starting at `start`, capped at `job_size` bytes
+    /// and at the input end. A synchronization point is only considered after
+    /// `rsync_min_block_size` bytes, so a hit yields a Job at least that long.
+    pub fn jobEnd(
+        self: Rsync,
+        input: []const u8,
+        start: usize,
+        job_size: usize,
+    ) usize {
+        const remaining = input.len - start;
+        const nominal_end = start + @min(job_size, remaining);
+        if (remaining <= rsync_min_block_size + rsync_window)
+            return nominal_end;
+        var position = start + rsync_min_block_size;
+        var hash = rollingHash(input[position - rsync_window .. position]);
+        while (true) {
+            if (hash & self.hit_mask == self.hit_mask) return position;
+            if (position == nominal_end) return nominal_end;
+            hash = rollingRotate(
+                hash,
+                input[position - rsync_window],
+                input[position],
+                self.prime_power,
+            );
+            position += 1;
+        }
+    }
+};
+
+fn primePower(base: u64, exponent: usize) u64 {
+    var power: u64 = 1;
+    var factor = base;
+    var remaining = exponent;
+    while (remaining != 0) : (remaining >>= 1) {
+        if (remaining & 1 != 0) power *%= factor;
+        factor *%= factor;
+    }
+    return power;
+}
+
+fn rollingHash(bytes: []const u8) u64 {
+    var hash: u64 = 0;
+    for (bytes) |byte| {
+        hash = hash *% rsync_prime +% (@as(u64, byte) + rsync_char_offset);
+    }
+    return hash;
+}
+
+fn rollingRotate(hash: u64, remove: u8, add: u8, prime_power: u64) u64 {
+    var value = hash -% (@as(u64, remove) + rsync_char_offset) *% prime_power;
+    value = value *% rsync_prime +% (@as(u64, add) + rsync_char_offset);
+    return value;
+}
 
 pub const Geometry = struct {
     block_size: usize,
@@ -66,7 +154,12 @@ pub const Geometry = struct {
         const job_size = if (remainder == 0) options.job_size else std.math.add(usize, options.job_size, block_size - remainder) catch return error.IntegerOverflow;
         if (@min(input_len, job_size) > options.max_inflight_bytes)
             return error.WorkingMemoryLimitExceeded;
-        const job_count = if (input_len == 0) 1 else 1 + (input_len - 1) / job_size;
+        const job_count = if (input_len == 0)
+            1
+        else if (options.rsyncable)
+            1 + (input_len - 1) / rsync_min_block_size
+        else
+            1 + (input_len - 1) / job_size;
         const byte_slots = 1 + (options.max_inflight_bytes - 1) / job_size;
         const slots = @min(job_count, @min(options.max_inflight_jobs, byte_slots));
         const available_workers = @min(options.worker_count, slots);
@@ -126,4 +219,108 @@ test "Zstd parallel geometry checks rounding overflow and exact maximum ceiling"
     });
     try std.testing.expectEqual(maximum, geometry.job_count);
     try std.testing.expectEqual(@as(usize, 4), geometry.slot_count);
+}
+
+test "Zstd rsyncable options require the upstream minimum Job size" {
+    try std.testing.expectError(error.InvalidBlockPlan, Rsync.init(rsync_min_job_size - 1));
+    const rsync = try Rsync.init(rsync_min_job_size);
+    try std.testing.expectEqual(@as(u64, (1 << 19) - 1), rsync.hit_mask);
+    try std.testing.expectError(error.InvalidBlockPlan, (Options{
+        .io = .failing,
+        .job_size = rsync_min_job_size - 1,
+        .rsyncable = true,
+    }).validate());
+    try (Options{
+        .io = .failing,
+        .job_size = rsync_min_job_size,
+        .rsyncable = true,
+    }).validate();
+    const geometry = try Geometry.init(1024 * 1024, 128 * 1024, .{
+        .io = .failing,
+        .job_size = rsync_min_job_size,
+        .max_inflight_bytes = 1024 * 1024,
+        .rsyncable = true,
+    });
+    try std.testing.expectEqual(@as(usize, 8), geometry.job_count);
+    try std.testing.expectEqual(@as(usize, 2), geometry.slot_count);
+}
+
+fn collectRsyncBoundaries(
+    allocator: std.mem.Allocator,
+    rsync: Rsync,
+    input: []const u8,
+    job_size: usize,
+) ![]usize {
+    var boundaries: std.ArrayList(usize) = .empty;
+    errdefer boundaries.deinit(allocator);
+    var start: usize = 0;
+    while (true) {
+        const end = rsync.jobEnd(input, start, job_size);
+        if (end <= start or end > input.len) return error.TestUnexpectedResult;
+        try boundaries.append(allocator, end);
+        if (end == input.len) break;
+        start = end;
+    }
+    return boundaries.toOwnedSlice(allocator);
+}
+
+test "Zstd rsyncable boundaries are deterministic and minimum-block bounded" {
+    const allocator = std.testing.allocator;
+    const input = try allocator.alloc(u8, 4 * 1024 * 1024);
+    defer allocator.free(input);
+    var state: u32 = 0x1234_5678;
+    for (input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+    inline for (.{ rsync_min_job_size, 1024 * 1024, 2 * 1024 * 1024 }) |job_size| {
+        const rsync = try Rsync.init(job_size);
+        const first = try collectRsyncBoundaries(allocator, rsync, input, job_size);
+        defer allocator.free(first);
+        const second = try collectRsyncBoundaries(allocator, rsync, input, job_size);
+        defer allocator.free(second);
+        try std.testing.expectEqualSlices(usize, first, second);
+        var start: usize = 0;
+        for (first, 0..) |end, index| {
+            try std.testing.expect(end - start <= job_size);
+            if (index + 1 < first.len)
+                try std.testing.expect(end - start >= rsync_min_block_size);
+            start = end;
+        }
+        try std.testing.expectEqual(input.len, first[first.len - 1]);
+    }
+}
+
+test "Zstd rsyncable edit at a boundary only shifts later boundaries" {
+    const allocator = std.testing.allocator;
+    const original = try allocator.alloc(u8, 3 * 1024 * 1024);
+    defer allocator.free(original);
+    var state: u32 = 0xdead_beef;
+    for (original) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 13);
+    }
+    const job_size = 1024 * 1024;
+    const rsync = try Rsync.init(job_size);
+    const before = try collectRsyncBoundaries(allocator, rsync, original, job_size);
+    defer allocator.free(before);
+    try std.testing.expect(before.len >= 3);
+
+    const insertion = try allocator.alloc(u8, 1000);
+    defer allocator.free(insertion);
+    for (insertion, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    const edited = try allocator.alloc(u8, original.len + insertion.len);
+    defer allocator.free(edited);
+    const cut = before[0];
+    @memcpy(edited[0..cut], original[0..cut]);
+    @memcpy(edited[cut..][0..insertion.len], insertion);
+    @memcpy(edited[cut + insertion.len ..], original[cut..]);
+
+    const after = try collectRsyncBoundaries(allocator, rsync, edited, job_size);
+    defer allocator.free(after);
+    try std.testing.expectEqual(cut, after[0]);
+    try std.testing.expectEqual(before.len, after.len);
+    for (before[1..], after[1..]) |old_end, new_end| {
+        try std.testing.expectEqual(old_end + insertion.len, new_end);
+    }
 }

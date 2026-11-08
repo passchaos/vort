@@ -2224,3 +2224,26 @@ dictionary-frame skipping without dictionary content, retry after destination
 failure, cumulative cap enforcement, magicless streams, state errors, and root
 exports. Native, Linux x86 and actual WASI runs share the `Zstd source` filter.
 No performance or RSS claim follows.
+
+## 2026-11-09: rsyncable parallel jobs
+
+`ZstdParallelOptions.rsyncable` now cuts one-shot parallel frame Jobs at
+content-defined synchronization points. The rolling hash, 32-byte window,
+prime, character offset and hit-mask construction follow upstream Zstandard:
+`bits = floor(log2(job_size / 1 KiB)) + 10`, so the average interval is
+`job_size`. A point is only considered after 128 KiB, and `job_size` must be at
+least 512 KiB; this prevents Jobs smaller than one maximum-size Zstd block.
+
+Boundaries are a pure function of the input bytes and `job_size`. Serial
+fallback and multi-worker execution submit the same spans and emit identical
+frame bytes. The profile now reports the actual submitted Job count after the
+operation. The default remains `false`, so existing wires, admission and
+benchmark rows are unchanged. The persistent incremental parallel and
+seekable-frame encoders keep their existing boundaries.
+
+Tests cover minimum Job size and hit-mask construction, deterministic and
+minimum-block-bounded boundaries, the edit-at-a-boundary shift property,
+end-to-end decode through Vort and the Zig standard-library decoder, repeated
+encode determinism, serial/multi-worker byte equality, and the actual Job
+count. The parallel frame/queue suite passes 141 tests. No performance or RSS
+claim follows from this functional control.

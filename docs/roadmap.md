@@ -477,7 +477,10 @@ concatenated data/skippable traversal, dictionary-set selection, per-frame and
 whole-stream decoded caps, and the same caller-workspace forms. A resumable
 stream cursor adds caller-driven element traversal and per-frame decoding into
 a reusable destination, including dictionary-frame skipping without dictionary
-content and cumulative decoded caps. No performance claim follows.
+content and cumulative decoded caps. The one-shot parallel frame encoder now
+also offers upstream-compatible rsyncable Jobs with content-defined boundaries,
+identical serial/multi-worker wires and an actual Job count in its profile. No
+performance claim follows.
 
 ### Earlier detailed completion audit (started 2026-09-11)
 

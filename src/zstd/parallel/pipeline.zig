@@ -10,8 +10,13 @@ pub fn Pipeline(comptime Codec: type) type {
         pub fn append(control: *memory.Control, out: *std.ArrayList(u8), input: []const u8, frame_options: Codec.Options, parallel: types.Options, dictionary: ?Codec.Dictionary, work: *Codec.Profile, profile: *types.Profile) Codec.Error!void {
             const block_size = try Codec.blockSize(frame_options);
             const geometry = try types.Geometry.init(input.len, block_size, parallel);
+            const rsync: ?types.Rsync = if (parallel.rsyncable)
+                try types.Rsync.init(geometry.job_size)
+            else
+                null;
             const original_len = out.items.len;
             errdefer out.items.len = original_len;
+            var submitted: usize = 0;
             profile.* = .{
                 .available = true,
                 .serial_fallback = geometry.worker_count == 0,
@@ -33,23 +38,28 @@ pub fn Pipeline(comptime Codec: type) type {
                 const previous_heap_peak = profile.peak_requested_bytes;
                 const previous_heap_live = profile.live_requested_bytes;
                 profile.* = queue.copyProfile();
+                profile.job_count = submitted;
                 profile.peak_requested_bytes = previous_heap_peak;
                 profile.live_requested_bytes = previous_heap_live;
                 queue.deinit();
                 profile.retained_job_output_capacity = 0;
             }
             try queue.start();
-            var submitted: usize = 0;
             var published: usize = 0;
             var input_offset: usize = 0;
-            while (published < geometry.job_count) {
-                while (submitted < geometry.job_count) {
-                    const plain_len = @min(geometry.job_size, input.len - input_offset);
-                    const end = input_offset + plain_len;
+            var input_done = false;
+            while (true) {
+                while (!input_done and submitted - published < geometry.slot_count) {
+                    const end = if (rsync) |rsync_state|
+                        rsync_state.jobEnd(input, input_offset, geometry.job_size)
+                    else
+                        input_offset + @min(geometry.job_size, input.len - input_offset);
                     if (!try queue.submit(input_offset, end)) break;
                     submitted += 1;
                     input_offset = end;
+                    if (input_offset == input.len) input_done = true;
                 }
+                if (submitted == published) break;
                 const job = (try queue.peekOldest(true)) orelse return error.InvalidStreamState;
                 control.coordinator.clearFailure();
                 Codec.appendJob(control.allocator(), out, job.output.items, input, job.start, job.end, frame_options, dictionary, &state, work, profile) catch |err| return control.coordinator.mapError(err);

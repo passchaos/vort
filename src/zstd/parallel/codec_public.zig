@@ -70,7 +70,20 @@ pub fn Public(comptime Codec: type) type {
         fn boundFor(input_len: usize, options: Codec.Options, dictionary: ?Codec.Dictionary, parallel: types.Options) Error!usize {
             const inner = try Codec.prepareOptions(options, dictionary);
             _ = try types.Geometry.init(input_len, try Codec.blockSize(inner), parallel);
-            return Codec.bound(input_len, inner);
+            var result = try Codec.bound(input_len, inner);
+            if (parallel.rsyncable) {
+                // Every content-defined Job boundary can force one extra
+                // block header relative to the contiguous block layout.
+                const jobs = if (input_len == 0)
+                    1
+                else
+                    1 + (input_len - 1) / types.rsync_min_block_size;
+                const extra = std.math.mul(usize, jobs, 3) catch
+                    return error.IntegerOverflow;
+                result = std.math.add(usize, result, extra) catch
+                    return error.IntegerOverflow;
+            }
+            return result;
         }
 
         fn allocate(allocator: std.mem.Allocator, input: []const u8, options: Codec.Options, dictionary: ?Codec.Dictionary, parallel: types.Options) Error![]u8 {
