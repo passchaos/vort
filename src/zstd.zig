@@ -6,6 +6,7 @@ test "zstd ordinal retained capacity adoption" {
 const builtin = @import("builtin");
 const test_atomic_counter = if (builtin.is_test) @import("testing/atomic_counter.zig") else struct {};
 const core = @import("core.zig");
+const byte_source = @import("io/source.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const incremental_counts = @import("zstd/incremental/counts.zig");
@@ -63,6 +64,15 @@ test "Zstd prefix lifecycle public contracts" {
 }
 test "Zstd stable output public contracts" {
     try @import("tests/zstd_stable_output/main.zig").contracts(@This());
+}
+test "Zstd source reverse consumer contracts" {
+    try @import("tests/zstd_source_reverse_consumers.zig").contracts(
+        byte_source.Source,
+        byte_source.SliceSource,
+        source_input.Range,
+        source_reverse_bit_reader.Reader,
+        sequence_bit_reader.Reader,
+    );
 }
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
@@ -137,6 +147,9 @@ const incremental_limits_tests = @import("zstd/incremental/limits_tests.zig");
 const dictionary_resume_tests = @import("zstd/incremental/dictionary_resume_tests.zig");
 const compressed_workspace = @import("zstd/decode/compressed_workspace.zig");
 const history_workspace = @import("zstd/decode/history_workspace.zig");
+const source_input = @import("zstd/source/input.zig");
+const source_reverse_bit_reader = @import("zstd/source/reverse_bit_reader.zig");
+const source_reverse_bit_reader_tests = @import("zstd/source/reverse_bit_reader_tests.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
 const working_allocator = @import("io/working_allocator.zig");
@@ -1368,6 +1381,9 @@ test {
     _ = dictionary_resume_tests;
     _ = compressed_workspace_tests;
     _ = history_workspace_tests;
+    _ = source_input;
+    _ = source_reverse_bit_reader;
+    _ = source_reverse_bit_reader_tests;
     _ = incremental_history;
     _ = incremental_history_index;
     _ = incremental_history_match;

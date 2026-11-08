@@ -26482,3 +26482,17 @@ reuse, so production keeps the simpler independently owned plans.
   and samba and the 587-test deflate filter), while ReleaseFast `.best` 1 MiB
   encode time falls 8-18% (nci 1.99 -> 1.64 s, samba 1.12 -> 0.93 s).
   [Evidence](performance/deflate/refined-history-chunks.md).
+
+- 2026-11-08: Added checked random-access Zstd source ranges and a
+  caller-paged reverse-bit reader as internal foundations for a future frame
+  source decoder. The reader starts at the entropy marker and reloads one
+  caller-owned page toward lower offsets instead of materializing the complete
+  reverse payload. Slice-reader differential coverage spans page sizes 9, 10,
+  17, 31 and 4096, every marker/alignment/width combination, fields crossing
+  pages, one-/two-/three-byte callback reads, callback failures, range
+  overflow, poisoned page reuse and synthetic nonzero offsets above 4 GiB.
+  Native, Linux x86 and actual wasm32-wasi test execution make the bounded
+  residency contract portable. This increment does not expose or complete a
+  source-backed Zstd frame decode API; frame parsing, block dispatch,
+  dictionary/history integration, checksum publication and public contracts
+  remain future work.

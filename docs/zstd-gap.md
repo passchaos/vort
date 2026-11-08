@@ -1972,3 +1972,23 @@ cover 32,078 sequence pairs and 1,322 executor pairs in three modes; the full
 1,261 ReleaseSafe Zstd tests and 9,900 upstream frames pass.
 [Evidence](performance/zstd/raw-mixed-sequences.md). Dense split-Huffman work
 and the wider cross-format performance objective remain open.
+
+## 2026-11-08: source reverse-reader foundation
+
+A checked random-access range and caller-paged reverse-bit reader now provide
+the input primitives needed by a future Zstd frame source decoder. The reverse
+reader starts from the entropy marker, reloads pages toward lower offsets and
+keeps retained compressed memory bounded by the caller-selected page rather
+than the reverse payload length. Failed refills preserve the logical bit
+cursor, while checked `u64` range arithmetic distinguishes overflow,
+out-of-range access, early EOF, excessive callback counts and source failures.
+
+Differential validation against the established slice reader covers random
+operation streams and every marker, bit alignment and width on 9-, 10-, 17-,
+31- and 4096-byte pages. Dedicated cases cover fields crossing refills,
+one-/two-/three-byte short reads, page poisoning and reuse, canaries, a
+synthetic base offset above 4 GiB, and bounded request/residency telemetry.
+Native, Linux x86 and actual Node/WASI execution retain a receipt for this
+primitive layer. Frame/header/block orchestration, dictionary/history state,
+checksum publication, diagnostics and a public source-backed frame API are not
+implemented by this increment.

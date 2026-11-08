@@ -789,6 +789,8 @@ pub fn build(b: *std.Build) void {
     wasm_check_step.dependOn(zstd_compressed_workspace_gates.compile_wasm);
     const zstd_history_workspace_gates = @import("build/zstd_history_workspace.zig").register(b, target, optimize, vort_mod_releasefast);
     wasm_check_step.dependOn(zstd_history_workspace_gates.compile_wasm);
+    const zstd_source_reverse_gates = @import("build/zstd_source_reverse.zig").register(b, target, optimize);
+    wasm_check_step.dependOn(zstd_source_reverse_gates.compile_wasm);
     const zstd_test_filter = b.option(
         []const u8,
         "zstd-test-filter",
@@ -7850,6 +7852,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(zstd_prefix_stable_gates.compile_all);
     check_step.dependOn(zstd_compressed_workspace_gates.compile_all);
     check_step.dependOn(zstd_history_workspace_gates.compile_all);
+    check_step.dependOn(zstd_source_reverse_gates.all);
     check_step.dependOn(&zstd_parallel_frame_tests.step);
     check_step.dependOn(&zstd_parallel_frame_root_tests.step);
     check_step.dependOn(&zstd_parallel_frame_single_tests.step);
