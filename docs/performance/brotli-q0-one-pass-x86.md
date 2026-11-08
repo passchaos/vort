@@ -79,3 +79,22 @@ taskset -c 2 zig build -Doptimize=ReleaseFast \
 The remaining q0 throughput gap is in pre-LZ literal tree construction,
 complex-prefix header emission, output allocation, and the general bit writer;
 the generic 704-symbol command analysis is no longer on ordinary q0 blocks.
+
+## Larger q0 fragments: rejected
+
+The q0 stream block length is 16 KiB to bound latency and keep each fragment's
+entropy model homogeneous. Two candidates raised it and encoded the twelve
+Silesia 64 KiB/1 MiB prefixes at q0 with the same CLI. Ratios are
+candidate/16 KiB bytes.
+
+| Candidate block | 24-row size geomean | Worst row | Selected wins | Selected regressions |
+| --- | ---: | ---: | --- | --- |
+| 32 KiB | 1.0180 | `dickens.64k` 1.1754 | `osdb` 0.856, `x-ray` 0.939, `xml.64k` 0.964 | `dickens` 1.166-1.175, `webster` 1.135-1.161, `samba` 1.037-1.155 |
+| 64 KiB | 0.9710 | `dickens.64k` 1.1198 | `osdb` 0.753-0.755, `nci.64k` 0.877, `xml.64k` 0.913, `x-ray` 0.920-0.951 | `dickens` 1.086-1.120, `webster` 1.067-1.103, `samba.64k` 1.108 |
+
+The 64 KiB variant improves the corpus geometric mean but fails the
+non-regression control bar by more than 10% on individual text rows; the
+32 KiB variant is worse overall. The effect is content-dependent: larger
+fragments find more matches on database/structured data but mix text content
+that the 16 KiB one-pass entropy model separates. Keep 16 KiB as the default.
+
