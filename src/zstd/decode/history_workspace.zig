@@ -93,43 +93,129 @@ pub const Binding = struct {
         distance: usize,
         match_len: usize,
     ) core.Error!void {
-        if (step_start > written.* or output.len - written.* < match_len)
-            return error.OutputTooSmall;
-        const current = written.* - step_start;
-        const crossed = if (committed_position > count.fromLocal(self.window))
-            count.bounded(committed_position - count.fromLocal(self.window), dictionary.len)
-        else
-            0;
-        const dictionary_keep = dictionary.len - crossed;
-        const current_keep = current;
-        const ring_keep = self.len;
-        const available = std.math.add(
-            usize,
-            dictionary_keep,
-            std.math.add(usize, ring_keep, current_keep) catch return error.IntegerOverflow,
-        ) catch return error.IntegerOverflow;
-        if (distance == 0 or distance > available) return error.InvalidMatch;
+        if (written.* > output.len) return error.OutputTooSmall;
+        if (match_len > output.len - written.*) return error.OutputTooSmall;
+        if (step_start > written.*) return error.OutputTooSmall;
+        if (distance == 0) return error.InvalidMatch;
+
+        const current = std.math.sub(usize, written.*, step_start) catch
+            return error.IntegerOverflow;
+        const segments = try self.visibleSegments(dictionary.len, committed_position, current);
+        const available = try segments.available();
+        if (distance > available) return error.InvalidMatch;
+
         const destination = written.*;
-        for (0..match_len) |i| {
-            const source = available + i - distance;
-            output[destination + i] = if (source < dictionary_keep)
-                dictionary[dictionary.len - dictionary_keep + source]
-            else if (source < dictionary_keep + ring_keep)
-                self.chronological(self.len - ring_keep + source - dictionary_keep)
+        const destination_end = std.math.add(usize, destination, match_len) catch
+            return error.IntegerOverflow;
+        const dictionary_start = std.math.sub(usize, dictionary.len, segments.dictionary_keep) catch
+            return error.IntegerOverflow;
+        const ring_start = std.math.sub(usize, self.len, segments.ring_keep) catch
+            return error.IntegerOverflow;
+        const current_start = std.math.sub(usize, written.*, segments.current_keep) catch
+            return error.IntegerOverflow;
+        const ring_end = std.math.add(usize, segments.dictionary_keep, segments.ring_keep) catch
+            return error.IntegerOverflow;
+        const source_start = std.math.sub(usize, available, distance) catch
+            return error.IntegerOverflow;
+        _ = std.math.add(usize, source_start, match_len) catch
+            return error.IntegerOverflow;
+
+        var source = source_start;
+        var destination_index = destination;
+        while (destination_index < destination_end) {
+            output[destination_index] = if (source < segments.dictionary_keep)
+                dictionary[std.math.add(usize, dictionary_start, source) catch return error.IntegerOverflow]
+            else if (source < ring_end)
+                self.chronological(std.math.add(
+                    usize,
+                    ring_start,
+                    std.math.sub(usize, source, segments.dictionary_keep) catch return error.IntegerOverflow,
+                ) catch return error.IntegerOverflow)
             else if (source < available)
-                output[written.* - current_keep + source - dictionary_keep - ring_keep]
+                output[
+                    std.math.add(
+                        usize,
+                        current_start,
+                        std.math.sub(usize, source, ring_end) catch return error.IntegerOverflow,
+                    ) catch return error.IntegerOverflow
+                ]
             else
-                output[destination + source - available];
+                output[
+                    std.math.add(
+                        usize,
+                        destination,
+                        std.math.sub(usize, source, available) catch return error.IntegerOverflow,
+                    ) catch return error.IntegerOverflow
+                ];
+            source = std.math.add(usize, source, 1) catch return error.IntegerOverflow;
+            destination_index = std.math.add(usize, destination_index, 1) catch return error.IntegerOverflow;
         }
-        written.* += match_len;
+        written.* = destination_end;
     }
 
     pub fn availableLen(self: Binding, dictionary_len: usize, produced: Count) core.Error!usize {
-        const crossed = if (produced > count.fromLocal(self.window))
-            count.bounded(produced - count.fromLocal(self.window), dictionary_len)
+        return (try self.visibleSegments(dictionary_len, produced, 0)).available();
+    }
+
+    pub fn availableLenWithCurrent(
+        self: Binding,
+        dictionary_len: usize,
+        committed_position: Count,
+        current_len: usize,
+    ) core.Error!usize {
+        return (try self.visibleSegments(dictionary_len, committed_position, current_len)).available();
+    }
+
+    const VisibleSegments = struct {
+        dictionary_keep: usize,
+        ring_keep: usize,
+        current_keep: usize,
+
+        fn available(self: VisibleSegments) core.Error!usize {
+            const output_keep = std.math.add(usize, self.ring_keep, self.current_keep) catch
+                return error.IntegerOverflow;
+            return std.math.add(usize, self.dictionary_keep, output_keep) catch
+                return error.IntegerOverflow;
+        }
+    };
+
+    fn visibleSegments(
+        self: Binding,
+        dictionary_len: usize,
+        committed_position: Count,
+        current: usize,
+    ) core.Error!VisibleSegments {
+        const total_position = try count.addLocal(committed_position, current);
+        const window_position = count.fromLocal(self.window);
+        const visible = if (total_position < window_position)
+            std.math.add(usize, dictionary_len, try count.toLocal(total_position)) catch
+                return error.IntegerOverflow
         else
-            0;
-        return std.math.add(usize, self.len, dictionary_len - crossed) catch return error.IntegerOverflow;
+            self.window;
+        // Before the window, all dictionary bytes remain addressable. If it exceeds the window,
+        // only its newest window-sized suffix can enter the boundary phase-out.
+        const phased_dictionary_len = @min(dictionary_len, self.window);
+        const dictionary_keep = if (total_position < window_position)
+            dictionary_len
+        else if (total_position == window_position)
+            phased_dictionary_len
+        else blk: {
+            const crossed_position = std.math.sub(Count, total_position, window_position) catch
+                return error.IntegerOverflow;
+            const crossed = count.bounded(crossed_position, phased_dictionary_len);
+            break :blk std.math.sub(usize, phased_dictionary_len, crossed) catch
+                return error.IntegerOverflow;
+        };
+        const output_keep = std.math.sub(usize, visible, dictionary_keep) catch
+            return error.IntegerOverflow;
+        const current_keep = @min(current, output_keep);
+        const requested_ring_keep = std.math.sub(usize, output_keep, current_keep) catch
+            return error.IntegerOverflow;
+        return .{
+            .dictionary_keep = dictionary_keep,
+            .ring_keep = @min(self.len, requested_ring_keep),
+            .current_keep = current_keep,
+        };
     }
 
     fn chronological(self: Binding, position: usize) u8 {
@@ -161,12 +247,103 @@ test "Zstd history workspace ring phases dictionary into expanded output history
     ring.append("abc");
     var output: [1]u8 = undefined;
     var written: usize = 0;
-    try ring.copyMatch(dictionary, &output, &written, 0, 3, 7, 1);
+    try ring.copyMatch(dictionary, &output, &written, 0, 2, 6, 1);
     try std.testing.expectEqualStrings("W", &output);
+    try std.testing.expectEqual(@as(usize, 6), try ring.availableLen(dictionary.len, 2));
     written = 0;
-    try ring.copyMatch(dictionary, &output, &written, 0, 4, 6, 1);
+    try ring.copyMatch(dictionary, &output, &written, 0, 3, 3, 1);
     try std.testing.expectEqualStrings("X", &output);
-    try std.testing.expectEqual(@as(usize, 7), try ring.availableLen(dictionary.len, 3));
-    try std.testing.expectEqual(@as(usize, 6), try ring.availableLen(dictionary.len, 4));
+    written = 0;
+    try ring.copyMatch(dictionary, &output, &written, 0, 4, 3, 1);
+    try std.testing.expectEqualStrings("Y", &output);
+    try std.testing.expectEqual(@as(usize, 3), try ring.availableLen(dictionary.len, 3));
+    try std.testing.expectEqual(@as(usize, 3), try ring.availableLen(dictionary.len, 4));
     try std.testing.expectEqual(@as(usize, 3), try ring.availableLen(dictionary.len, 7));
+}
+
+test "Zstd history workspace dictionary visibility follows window boundaries" {
+    const Case = struct { produced: usize, visible: usize, first: u8 };
+    const cases = [_]Case{
+        .{ .produced = 7, .visible = 10, .first = 'X' },
+        .{ .produced = 8, .visible = 8, .first = 'X' },
+        .{ .produced = 9, .visible = 8, .first = 'Y' },
+        .{ .produced = 11, .visible = 8, .first = 'd' },
+        .{ .produced = 12, .visible = 8, .first = 'e' },
+    };
+    const history = "abcdefghijkl";
+    for (cases) |case| {
+        var storage: [11]u8 = undefined;
+        var ring = try Binding.init(&storage);
+        try ring.beginFrame(8, 3);
+        ring.append(history[0..case.produced]);
+        try std.testing.expectEqual(case.visible, try ring.availableLen(3, case.produced));
+
+        var output: [1]u8 = undefined;
+        var written: usize = 0;
+        try ring.copyMatch("XYZ", &output, &written, 0, case.produced, case.visible, 1);
+        try std.testing.expectEqual(case.first, output[0]);
+        written = 0;
+        try std.testing.expectError(
+            error.InvalidMatch,
+            ring.copyMatch("XYZ", &output, &written, 0, case.produced, case.visible + 1, 1),
+        );
+    }
+}
+
+test "Zstd history workspace match crosses dictionary ring current and overlap" {
+    var storage: [10]u8 = undefined;
+    var ring = try Binding.init(&storage);
+    try ring.beginFrame(8, 2);
+    ring.append("abc");
+    var output: [10]u8 = undefined;
+    @memcpy(output[0..2], "xy");
+    var written: usize = 2;
+    try std.testing.expectEqual(
+        @as(usize, 7),
+        try ring.availableLenWithCurrent(2, 3, written),
+    );
+    try ring.copyMatch("DE", &output, &written, 0, 3, 7, 8);
+    try std.testing.expectEqualStrings("xyDEabcxyD", &output);
+}
+
+test "Zstd history workspace uses wrapped ring suffix and actual retained length" {
+    var storage: [7]u8 = undefined;
+    var ring = try Binding.init(&storage);
+    try ring.beginFrame(5, 2);
+    ring.append("0123456789");
+    try std.testing.expectEqual(@as(usize, 5), try ring.availableLen(2, 10));
+    var output: [5]u8 = undefined;
+    var written: usize = 0;
+    try ring.copyMatch("XY", &output, &written, 0, 10, 5, 5);
+    try std.testing.expectEqualStrings("56789", &output);
+
+    var short_storage: [10]u8 = undefined;
+    var short = try Binding.init(&short_storage);
+    try short.beginFrame(8, 2);
+    short.append("ab");
+    try std.testing.expectEqual(@as(usize, 4), try short.availableLen(2, 7));
+}
+
+test "Zstd history workspace positions stay wide and additions are checked" {
+    var storage: [8]u8 = undefined;
+    var ring = try Binding.init(&storage);
+    try ring.beginFrame(8, 0);
+    ring.append("abcdefgh");
+    const wide: Count = (@as(Count, 1) << 32) + 17;
+    try std.testing.expectEqual(@as(usize, 8), try ring.availableLen(0, wide));
+    var output: [2]u8 = .{ 'q', 0 };
+    var written: usize = 0;
+    try ring.copyMatch(&.{}, output[0..1], &written, 0, wide, 8, 1);
+    try std.testing.expectEqual(@as(u8, 'a'), output[0]);
+
+    written = 1;
+    try std.testing.expectError(
+        error.IntegerOverflow,
+        ring.copyMatch(&.{}, &output, &written, 0, std.math.maxInt(Count), 1, 0),
+    );
+    written = 3;
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        ring.copyMatch(&.{}, &output, &written, 0, 0, 1, 0),
+    );
 }

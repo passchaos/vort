@@ -35,14 +35,22 @@ pub fn validateInitialFrameLimits(
 pub fn validateHistory(
     history: history_workspace.Binding,
     frame_decoded: Count,
+    dictionary_len: usize,
     block_decoded_max: usize,
 ) Error!void {
-    if (!history.active() or history.limit == 0 or history.window == 0 or
-        history.limit != history.window or history.limit > history.storage.len or
-        history.head >= history.limit or history.len > history.limit or
-        block_decoded_max > history.window)
+    if (!history.active()) return error.InvalidStreamState;
+    const expected_limit = try history_workspace.requiredLen(
+        count.fromLocal(history.window),
+        dictionary_len,
+    );
+    if (history.limit != expected_limit or
+        history.limit > history.storage.len or
+        history.len > history.limit or
+        block_decoded_max > history.window or
+        (history.limit == 0 and history.head != 0) or
+        (history.limit != 0 and history.head >= history.limit))
         return error.InvalidStreamState;
-    if (history.len != count.bounded(frame_decoded, history.window))
+    if (history.len != count.bounded(frame_decoded, history.limit))
         return error.InvalidStreamState;
 
     // history_workspace.append uses ordinary additions after its branch. A
@@ -59,12 +67,14 @@ pub fn validateAliases(
     prepared: anytype,
     committed: anytype,
     history: *history_workspace.Binding,
+    dictionary_history: []const u8,
     staging: []const u8,
     literal_page: []const u8,
     sequence_page: []const u8,
 ) Error!void {
     const regions = [_][]const u8{
         history.storage,
+        dictionary_history,
         staging,
         literal_page,
         sequence_page,

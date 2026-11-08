@@ -101,6 +101,7 @@ fn runFramePage(
             &prepared,
             &state,
             &history,
+            &.{},
             staging_guard[1 .. staging_guard.len - 1],
             literal_guard[1 .. literal_guard.len - 1],
             sequence_guard[1 .. sequence_guard.len - 1],

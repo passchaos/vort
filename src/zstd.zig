@@ -939,9 +939,82 @@ const SourceCompressedBlockTestSupport = struct {
     pub const HuffmanCodec = SourceHuffmanCodec;
     pub const SequenceCodec = SourceSequenceCodec;
     pub const State = source_compressed_block.FrameState(HuffmanCodec, SequenceCodec);
+    pub const OwnedDictionaryFixture = struct {
+        frame: []u8,
+        dictionary: []u8,
+        state: State,
+        expected: []u8,
+    };
 
     pub fn initialState() State {
         return .{ .repeated_offsets = initial_repeated_offsets };
+    }
+
+    pub fn loadFullDictionaryFixture(
+        allocator: std.mem.Allocator,
+    ) Error!OwnedDictionaryFixture {
+        const dictionary_bytes = try decodeHexOwned(
+            allocator,
+            @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"),
+        );
+        defer allocator.free(dictionary_bytes);
+        const frame = try decodeHexOwned(
+            allocator,
+            @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"),
+        );
+        errdefer allocator.free(frame);
+        const standard = try NativeDictionary.initFromStandardDictionary(dictionary_bytes);
+        const dictionary = try allocator.dupe(u8, standard.dictionary.content);
+        errdefer allocator.free(dictionary);
+        const state = try initialSourceState(standard.dictionary);
+        const expected = try decodeFrameAllocWithDictionary(
+            allocator,
+            frame,
+            standard.dictionary,
+        );
+        errdefer allocator.free(expected);
+        return .{
+            .frame = frame,
+            .dictionary = dictionary,
+            .state = state,
+            .expected = expected,
+        };
+    }
+
+    pub fn freeFullDictionaryFixture(
+        allocator: std.mem.Allocator,
+        fixture: *OwnedDictionaryFixture,
+    ) void {
+        freeDictionaryFixture(allocator, fixture);
+    }
+
+    pub fn loadRawDictionaryBlockFixture(
+        allocator: std.mem.Allocator,
+    ) Error!OwnedDictionaryFixture {
+        const wire = [_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x00, 0x3d, 0x00,
+            0x00, 0x00, 0x01, 0x54, 0x00, 0x02, 0x01, 0x07,
+        };
+        const frame = try allocator.dupe(u8, &wire);
+        errdefer allocator.free(frame);
+        const dictionary = try allocator.dupe(u8, "wxyz");
+        errdefer allocator.free(dictionary);
+        const native = NativeDictionary.initRawContent(dictionary);
+        const expected = try decodeFrameAllocWithDictionary(allocator, frame, native);
+        errdefer allocator.free(expected);
+        return .{
+            .frame = frame,
+            .dictionary = dictionary,
+            .state = try initialSourceState(native),
+            .expected = expected,
+        };
+    }
+
+    pub fn freeRawDictionaryBlockFixture(
+        allocator: std.mem.Allocator,
+        fixture: *OwnedDictionaryFixture,
+    ) void {
+        freeDictionaryFixture(allocator, fixture);
     }
 
     pub fn decodeFrameOracle(
@@ -977,6 +1050,42 @@ const SourceCompressedBlockTestSupport = struct {
         );
         if (expected.sequence_tables) |*expected_tables|
             try expectSequenceTablesEqual(expected_tables, &actual.sequence_tables.?);
+    }
+
+    fn initialSourceState(dictionary: NativeDictionary) Error!State {
+        const native = try initialSequenceFrameState(dictionary);
+        var state: State = .{
+            .sequence_tables = native.previous_tables,
+            .repeated_offsets = native.repeated_offsets,
+        };
+        if (native.previous_huffman_tree) |tree| {
+            var lookup: CompleteHuffmanLiteralLookup = undefined;
+            if (!lookup.buildComplete(&tree)) return error.InvalidDictionaryMetadata;
+            state.huffman = .{ .tree = tree, .lookup = lookup };
+        }
+        return state;
+    }
+
+    fn decodeHexOwned(
+        allocator: std.mem.Allocator,
+        encoded: []const u8,
+    ) Error![]u8 {
+        const hex = std.mem.trim(u8, encoded, " \r\n\t");
+        if (hex.len % 2 != 0) return error.CorruptFrame;
+        const bytes = try allocator.alloc(u8, hex.len / 2);
+        errdefer allocator.free(bytes);
+        _ = std.fmt.hexToBytes(bytes, hex) catch return error.CorruptFrame;
+        return bytes;
+    }
+
+    fn freeDictionaryFixture(
+        allocator: std.mem.Allocator,
+        fixture: *OwnedDictionaryFixture,
+    ) void {
+        allocator.free(fixture.expected);
+        allocator.free(fixture.dictionary);
+        allocator.free(fixture.frame);
+        fixture.* = undefined;
     }
 };
 pub const DictionaryUsage = prefix_binding.Usage;

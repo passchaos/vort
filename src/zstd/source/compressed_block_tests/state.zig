@@ -62,6 +62,7 @@ fn zeroSequencesKeepCommittedEntropy(comptime Support: type) !void {
         &prepared,
         &state,
         &history,
+        &.{},
         &staging,
         &literal_page,
         &sequence_page,

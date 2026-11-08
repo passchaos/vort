@@ -5,7 +5,8 @@
 //! are published together only after the complete block has validated. The
 //! prepared value, frame state, history binding, staging, and both exclusive
 //! pages must keep stable addresses for the executor lifetime. Source backing
-//! bytes must also remain stable and must not alias any mutable workspace.
+//! and dictionary-history bytes must remain alive and immutable for that whole
+//! lifetime, and must not alias any executor state or mutable workspace.
 //!
 //! A successfully executed block leases `staging[0..committedBytes().len]`
 //! until `drain` has consumed it. The caller must not reuse or mutate that
@@ -101,6 +102,7 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
         prepared: *const BlockPrepared,
         committed: *State,
         history: *history_workspace.Binding,
+        dictionary_history: []const u8,
         staging: []u8,
         limits: Limits,
         literals: LiteralStream,
@@ -118,11 +120,16 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
 
         /// Validate every caller-owned workspace before initializing either
         /// source cursor. This makes undersized, inactive, or aliasing plans
-        /// fail before the first source callback.
+        /// fail before the first source callback. `dictionary_history` must
+        /// be the exact immutable history slice whose length configured the
+        /// binding; it is borrowed for the full executor lifetime and must
+        /// not alias executor state or mutable workspace. Pass `&.{}` when
+        /// the frame has no dictionary history.
         pub fn init(
             prepared: *const BlockPrepared,
             committed: *State,
             history: *history_workspace.Binding,
+            dictionary_history: []const u8,
             staging: []u8,
             literal_page: []u8,
             sequence_page: []u8,
@@ -137,12 +144,14 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
             try workspace.validateHistory(
                 history.*,
                 committed.frame_decoded,
+                dictionary_history.len,
                 limits.block_decoded_max,
             );
             try workspace.validateAliases(
                 prepared,
                 committed,
                 history,
+                dictionary_history,
                 staging,
                 literal_page,
                 sequence_page,
@@ -176,6 +185,7 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
                 .prepared = prepared,
                 .committed = committed,
                 .history = history,
+                .dictionary_history = dictionary_history,
                 .staging = staging,
                 .limits = limits,
                 .literals = literals,

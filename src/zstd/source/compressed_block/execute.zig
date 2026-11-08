@@ -91,23 +91,22 @@ fn copyLiteralRun(self: anytype, next_phase: anytype) Error!void {
 }
 
 fn copyPendingMatch(self: anytype) Error!void {
-    // Binding.copyMatch subtracts before validating `written` and uses
-    // `available + i`; prove both operations safe in this wrapper.
+    // Keep the executor's physical-capacity and visible-span arithmetic
+    // explicit before entering the shared history copier.
     if (self.written > self.staging.len or
         self.match_len > self.staging.len - self.written)
         return error.OutputTooSmall;
-    const available = std.math.add(
-        usize,
-        self.history.len,
+    const available = try self.history.availableLenWithCurrent(
+        self.dictionary_history.len,
+        self.initial_frame_decoded,
         self.written,
-    ) catch return error.IntegerOverflow;
+    );
     _ = std.math.add(usize, available, self.match_len) catch
         return error.IntegerOverflow;
-    const visible = @min(available, self.history.window);
-    if (self.match_offset == 0 or self.match_offset > visible)
+    if (self.match_offset == 0 or self.match_offset > available)
         return error.InvalidMatch;
     try self.history.copyMatch(
-        &.{},
+        self.dictionary_history,
         self.staging,
         &self.written,
         0,
