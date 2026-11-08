@@ -2117,8 +2117,9 @@ Dictionary identity is admitted before the first block: a nonzero frame ID
 without caller dictionary state fails as `NeedDictionary`, and a mismatched
 caller ID fails as `DictionaryMismatch`. Caller-selected dictionary history and
 initial entropy/repeated-offset state flow through the existing block executor.
-Skippable-frame traversal, concatenated-stream orchestration, dictionary-set
-selection and a public source-backed API remain absent.
+The frame executor itself stops at one data frame; the stream cursor below adds
+skippable and concatenated traversal. Dictionary-set selection and a public
+source-backed API remain absent.
 
 Differential tests cover multi-block Raw/RLE frames, zero-length RLE, declared
 and mismatched content sizes, whole-frame caps, checksum validation/ignore/
@@ -2128,3 +2129,25 @@ source-failure mode, every truncated prefix, workspace aliasing, undersized
 staging/pages, inactive or nonempty history, and the execute/drain phase
 contract. Native, Linux x86 and actual WASI runs share the same `Zstd source`
 filter. No performance or RSS claim follows from this functional slice.
+
+## 2026-11-09: source stream cursor
+
+An internal source stream cursor now walks standard or magicless Zstandard
+streams element by element. It parses only the next header, returns checked
+data-frame layouts to the frame executor, and advances skippable frames after
+range-checking their eight-byte header and payload span without reading the
+payload. `finishData` publishes the exact frame end reported by a successful
+frame executor, so checksum footers and concatenated suffixes stay separate.
+Failed header parses leave the offset unchanged for retry; a pending data
+element rejects a second `next`, and `finishData` rejects offsets outside the
+stream. The cursor holds no decoded state, so callers reset frame-local history
+and entropy state between data frames.
+
+Tests cover data/skippable/data concatenation with checksum and compressed
+frames, skippable-only and empty streams, all 16 skippable IDs, magicless
+concatenation, the existing compressed fixtures, every truncated skippable and
+data prefix, pending/finish state errors, and retry after all three source
+failure modes. A forbidden-span source proves skippable payload bytes are never
+read. Native, Linux x86 and actual WASI runs share the `Zstd source` filter.
+Dictionary-set selection and a public source-backed API remain absent, and no
+performance or RSS claim follows.

@@ -468,8 +468,10 @@ whole-frame decoded and content-size limits are enforced, and the optional
 XXH64 footer is validated or explicitly consumed. Differential coverage spans
 the existing compressed fixtures, a full standard dictionary, retries,
 truncation, aliasing and the execute/drain contract on native, Linux x86 and
-actual WASI. Skippable/concatenated orchestration, dictionary-set selection
-and a public source-backed API remain open, and no performance claim follows.
+actual WASI. A source stream cursor now traverses standard or magicless
+concatenated streams, returns checked data-frame layouts and advances
+skippable frames without reading their payloads. Dictionary-set selection and
+a public source-backed API remain open, and no performance claim follows.
 
 ### Earlier detailed completion audit (started 2026-09-11)
 

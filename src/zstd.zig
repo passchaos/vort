@@ -103,6 +103,9 @@ test "Zstd source compressed block execution contracts" {
 test "Zstd source frame execution contracts" {
     try @import("zstd/source/frame_executor_tests.zig").contracts(SourceCompressedBlockTestSupport);
 }
+test "Zstd source stream cursor contracts" {
+    try @import("zstd/source/stream_cursor_tests.zig").contracts(SourceCompressedBlockTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
