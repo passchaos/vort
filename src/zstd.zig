@@ -77,6 +77,9 @@ test "Zstd source reverse consumer contracts" {
 test "Zstd source literals metadata contracts" {
     try @import("zstd/source/literals_tests.zig").contracts(SourceLiteralsTestSupport);
 }
+test "Zstd source sequence metadata contracts" {
+    try @import("zstd/source/sequences_tests.zig").contracts(SourceSequenceTestSupport);
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -113,6 +116,228 @@ const SourceLiteralsTestSupport = struct {
     pub fn parseCount(bytes: []const u8) Error!CountResult {
         var offset: usize = 0;
         return .{ .count = try parseSequenceCount(bytes, &offset), .encoded_len = offset };
+    }
+};
+
+const SourceSequenceCodec = struct {
+    pub const Tables = SequenceTables;
+    pub const Spec = SequenceModeSpec;
+    pub const Limits = struct { symbol_count: usize, max_accuracy_log: u4 };
+
+    pub fn initSpec(modes: [3]source_sequences.Mode) Spec {
+        var spec: Spec = undefined;
+        spec.ll_mode = @enumFromInt(@intFromEnum(modes[0]));
+        spec.of_mode = @enumFromInt(@intFromEnum(modes[1]));
+        spec.ml_mode = @enumFromInt(@intFromEnum(modes[2]));
+        spec.literal_rle = null;
+        spec.offset_rle = null;
+        spec.match_rle = null;
+        spec.literal_fse.len = 0;
+        spec.literal_fse.accuracy_log = 0;
+        spec.offset_fse.len = 0;
+        spec.offset_fse.accuracy_log = 0;
+        spec.match_fse.len = 0;
+        spec.match_fse.accuracy_log = 0;
+        spec.bitstream_offset = 0;
+        return spec;
+    }
+
+    pub fn limits(field: source_sequences.Field) Limits {
+        return switch (field) {
+            .literal_length => .{
+                .symbol_count = sequence_table_symbol_count_max.literal,
+                .max_accuracy_log = sequence_table_accuracy_log_max.literal,
+            },
+            .offset => .{
+                .symbol_count = sequence_table_symbol_count_max.offset,
+                .max_accuracy_log = sequence_table_accuracy_log_max.offset,
+            },
+            .match_length => .{
+                .symbol_count = sequence_table_symbol_count_max.match,
+                .max_accuracy_log = sequence_table_accuracy_log_max.match,
+            },
+        };
+    }
+
+    pub fn setRle(spec: *Spec, field: source_sequences.Field, code: u8) core.Error!void {
+        const selected_bases = bases(field);
+        const selected_bits = bits(field);
+        if (code >= selected_bases.len) return error.CorruptFrame;
+        const symbol = SequenceSymbol{
+            .base = @intCast(selected_bases[code]),
+            .additional_bits = selected_bits[code],
+            .next_state = 0,
+            .state_bits = 0,
+        };
+        switch (field) {
+            .literal_length => spec.literal_rle = symbol,
+            .offset => spec.offset_rle = symbol,
+            .match_length => spec.match_rle = symbol,
+        }
+    }
+
+    pub fn buildFse(
+        spec: *Spec,
+        field: source_sequences.Field,
+        normalized: []const u16,
+        table_len: usize,
+    ) core.Error!void {
+        switch (field) {
+            .literal_length => try buildSequenceFseTableFromNormalized(
+                &spec.literal_fse,
+                normalized,
+                table_len,
+                &ll_base,
+                &ll_bits,
+            ),
+            .offset => try buildSequenceFseTableFromNormalized(
+                &spec.offset_fse,
+                normalized,
+                table_len,
+                &of_base,
+                &of_bits,
+            ),
+            .match_length => try buildSequenceFseTableFromNormalized(
+                &spec.match_fse,
+                normalized,
+                table_len,
+                &ml_base,
+                &ml_bits,
+            ),
+        }
+    }
+
+    pub fn resolve(spec: Spec, previous: ?*const Tables) core.Error!Tables {
+        const resolved = try resolveSequenceModeSpec(spec, if (previous) |tables| tables.* else null);
+        return resolved.tables();
+    }
+
+    fn bases(field: source_sequences.Field) []const usize {
+        return switch (field) {
+            .literal_length => &ll_base,
+            .offset => &of_base,
+            .match_length => &ml_base,
+        };
+    }
+
+    fn bits(field: source_sequences.Field) []const u8 {
+        return switch (field) {
+            .literal_length => &ll_bits,
+            .offset => &of_bits,
+            .match_length => &ml_bits,
+        };
+    }
+};
+
+const SourceSequenceTestSupport = struct {
+    pub const Codec = SourceSequenceCodec;
+    pub const Tables = SequenceTables;
+    pub const Mode = source_sequences.Mode;
+    pub const SliceResult = struct {
+        mode_byte: u8,
+        wire_modes: source_sequences.WireModes,
+        repeat_mask: u3,
+        tables: Tables,
+        bitstream_offset: usize,
+    };
+
+    pub fn emitFixture(modes: [3]Mode, output: []u8) Error!usize {
+        if (output.len == 0) return error.OutputTooSmall;
+        output[0] = (@as(u8, @intFromEnum(modes[0])) << 6) |
+            (@as(u8, @intFromEnum(modes[1])) << 4) |
+            (@as(u8, @intFromEnum(modes[2])) << 2);
+        var written: usize = 1;
+        for (modes) |mode| switch (mode) {
+            .predefined, .repeat => {},
+            .rle => {
+                if (written == output.len) return error.OutputTooSmall;
+                output[written] = 0;
+                written += 1;
+            },
+            .compressed => {
+                const normalized = [_]i16{ 16, 16 };
+                var count: usize = 0;
+                try emitFseNormalizedCountFixed(
+                    output[written..],
+                    &count,
+                    &normalized,
+                    1,
+                    5,
+                );
+                written = std.math.add(usize, written, count) catch
+                    return error.IntegerOverflow;
+            },
+        };
+        if (written == output.len) return error.OutputTooSmall;
+        output[written] = 1;
+        return written + 1;
+    }
+
+    pub fn previousTables() Error!Tables {
+        var fixture: [64]u8 = undefined;
+        const len = try emitFixture(@splat(.compressed), &fixture);
+        return (try parseSlice(fixture[0..len], 1, null)).tables;
+    }
+
+    pub fn parseSlice(
+        bytes: []const u8,
+        sequence_count: usize,
+        previous: ?*const Tables,
+    ) Error!SliceResult {
+        if (bytes.len == 0) return error.TruncatedFrame;
+        var offset: usize = 0;
+        const parsed = try parseSequenceModeSpec(bytes, &offset, sequence_count);
+        const resolved = try resolveSequenceModeSpec(
+            parsed,
+            if (previous) |tables| tables.* else null,
+        );
+        const wire_modes = source_sequences.WireModes{
+            .literal_length = @enumFromInt(@intFromEnum(parsed.ll_mode)),
+            .offset = @enumFromInt(@intFromEnum(parsed.of_mode)),
+            .match_length = @enumFromInt(@intFromEnum(parsed.ml_mode)),
+        };
+        var repeat_mask: u3 = 0;
+        if (wire_modes.literal_length == .repeat) repeat_mask |= 1;
+        if (wire_modes.offset == .repeat) repeat_mask |= 2;
+        if (wire_modes.match_length == .repeat) repeat_mask |= 4;
+        return .{
+            .mode_byte = bytes[0],
+            .wire_modes = wire_modes,
+            .repeat_mask = repeat_mask,
+            .tables = resolved.tables(),
+            .bitstream_offset = parsed.bitstream_offset,
+        };
+    }
+
+    pub fn expectTablesEqual(expected: *const Tables, actual: *const Tables) !void {
+        try expectTableEqual(expected.ll_mode, expected.literal_rle, &expected.literal_fse, actual.ll_mode, actual.literal_rle, &actual.literal_fse);
+        try expectTableEqual(expected.of_mode, expected.offset_rle, &expected.offset_fse, actual.of_mode, actual.offset_rle, &actual.offset_fse);
+        try expectTableEqual(expected.ml_mode, expected.match_rle, &expected.match_fse, actual.ml_mode, actual.match_rle, &actual.match_fse);
+    }
+
+    fn expectTableEqual(
+        expected_mode: SymbolMode,
+        expected_rle: ?SequenceSymbol,
+        expected_fse: *const SequenceFseTable,
+        actual_mode: SymbolMode,
+        actual_rle: ?SequenceSymbol,
+        actual_fse: *const SequenceFseTable,
+    ) !void {
+        try std.testing.expectEqual(expected_mode, actual_mode);
+        switch (expected_mode) {
+            .rle => try std.testing.expectEqual(expected_rle, actual_rle),
+            .compressed => {
+                try std.testing.expectEqual(expected_fse.len, actual_fse.len);
+                try std.testing.expectEqual(expected_fse.accuracy_log, actual_fse.accuracy_log);
+                try std.testing.expectEqualSlices(
+                    SequenceSymbol,
+                    expected_fse.entries[0..expected_fse.len],
+                    actual_fse.entries[0..actual_fse.len],
+                );
+            },
+            .predefined => {},
+            .repeat => return error.CorruptFrame,
+        }
     }
 };
 pub const DictionaryUsage = prefix_binding.Usage;
@@ -182,9 +407,11 @@ const dictionary_resume_tests = @import("zstd/incremental/dictionary_resume_test
 const compressed_workspace = @import("zstd/decode/compressed_workspace.zig");
 const history_workspace = @import("zstd/decode/history_workspace.zig");
 const source_input = @import("zstd/source/input.zig");
+const source_forward_cursor = @import("zstd/source/forward_cursor.zig");
 const source_literals = @import("zstd/source/literals.zig");
 const source_reverse_bit_reader = @import("zstd/source/reverse_bit_reader.zig");
 const source_reverse_bit_reader_tests = @import("zstd/source/reverse_bit_reader_tests.zig");
+const source_sequences = @import("zstd/source/sequences.zig");
 const sequence_count_wire = @import("zstd/sequence/count.zig");
 const compressed_workspace_tests = @import("zstd/incremental/compressed_workspace_tests.zig");
 const history_workspace_tests = @import("zstd/incremental/history_workspace_tests.zig");
@@ -1418,9 +1645,11 @@ test {
     _ = compressed_workspace_tests;
     _ = history_workspace_tests;
     _ = source_input;
+    _ = source_forward_cursor;
     _ = source_literals;
     _ = source_reverse_bit_reader;
     _ = source_reverse_bit_reader_tests;
+    _ = source_sequences;
     _ = literals_header;
     _ = literal_stream_layout;
     _ = literal_tree_description;
@@ -13202,7 +13431,7 @@ fn resolveSymbolTable(
     fse: SequenceFseTable,
     previous: ?SequenceTables,
     selector: enum { ll, of, ml },
-) Error!ResolvedSymbolTable {
+) core.Error!ResolvedSymbolTable {
     return switch (mode) {
         .repeat => blk: {
             const tables = previous orelse return error.CorruptFrame;
@@ -13216,7 +13445,7 @@ fn resolveSymbolTable(
     };
 }
 
-fn resolveSequenceModeSpec(spec: SequenceModeSpec, previous: ?SequenceTables) Error!SequenceModeSpec {
+fn resolveSequenceModeSpec(spec: SequenceModeSpec, previous: ?SequenceTables) core.Error!SequenceModeSpec {
     if (spec.ll_mode == .predefined and
         spec.of_mode == .predefined and
         spec.ml_mode == .predefined)
@@ -13298,38 +13527,53 @@ fn readFseSequenceTableInto(
     offset.* = std.math.add(usize, offset.*, decoded.bytes_consumed) catch return error.IntegerOverflow;
     if (offset.* > block.len) return error.TruncatedFrame;
 
-    table.len = decoded.table_len;
-    table.accuracy_log = @intCast(std.math.log2_int(usize, decoded.table_len));
-    const normalized = values[0..decoded.value_count];
-    if ((decoded.table_len == 64 or decoded.table_len == 128) and normalized.len <= 53) {
+    try buildSequenceFseTableFromNormalized(
+        table,
+        values[0..decoded.value_count],
+        decoded.table_len,
+        bases,
+        bits,
+    );
+}
+
+fn buildSequenceFseTableFromNormalized(
+    table: anytype,
+    normalized: []const u16,
+    table_len: usize,
+    bases: []const usize,
+    bits: []const u8,
+) core.Error!void {
+    table.len = table_len;
+    table.accuracy_log = @intCast(std.math.log2_int(usize, table_len));
+    if ((table_len == 64 or table_len == 128) and normalized.len <= 53) {
         var no_low_probability = true;
         for (normalized) |value| no_low_probability = no_low_probability and value != 0;
         if (no_low_probability) {
             if (builtin.is_test) test_atomic_counter.add(&test_small_fse_no_low_builder_hits, 1);
             sequence_fse_builder.buildSmallNoLowAssumeValid(
                 normalized,
-                table.entries[0..decoded.table_len],
+                table.entries[0..table_len],
                 bases,
                 bits,
             );
             return;
         }
     }
-    if (decoded.table_len == 256) {
+    if (table_len == 256) {
         var no_low_probability = true;
         for (normalized) |value| no_low_probability = no_low_probability and value != 0;
         if (no_low_probability) {
             if (builtin.is_test) test_atomic_counter.add(&test_large_fse_no_low_builder_hits, 1);
             large_fse_table.buildNoLowProbabilityAssumeValid(
                 normalized,
-                table.entries[0..decoded.table_len],
+                table.entries[0..table_len],
                 bases,
                 bits,
             );
             return;
         }
     }
-    try sequence_fse_builder.buildMapped(normalized, table.entries[0..decoded.table_len], bases, bits);
+    try sequence_fse_builder.buildMapped(normalized, table.entries[0..table_len], bases, bits);
 }
 
 test "Zstd small no-low serialized parser routes and truncation" {

@@ -2002,3 +2002,14 @@ tiers, count-zero trailing-data layering, callback short/failure paths,
 nonzero offsets above 4 GiB and callbacks that reject any entropy-payload read.
 This is layout discovery only: tree weights and decoding tables are not
 decoded or built, and no literal, sequence, block or frame payload is decoded.
+
+Sequence metadata can now be prepared directly from the trailing source range
+through a transactional one-byte forward cursor. It parses descriptions in
+LL/OF/ML wire order, builds or reuses the selected Predefined, RLE, Compressed
+and Repeat tables, preserves the previous-table snapshot, and returns the
+remaining reverse bitstream without reading even its marker byte. A 64-tuple
+slice parse/resolve differential plus mixed-order, every-prefix truncation,
+invalid-RLE, Repeat-state, zero-count, callback-failure, scratch, 4-GiB-offset
+and actual WASI contracts validate this metadata boundary. Reverse FSE state
+initialization and symbol execution, literals tree/table decoding, match
+copying, block/frame orchestration and a public source decoder remain absent.

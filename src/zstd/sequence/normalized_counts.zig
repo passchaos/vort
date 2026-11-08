@@ -9,6 +9,11 @@ pub const Result = struct {
     bytes_consumed: usize,
 };
 
+pub const Decoded = struct {
+    value_count: usize,
+    table_len: usize,
+};
+
 const text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_fse_counts",
     .macho => "__TEXT,__vort_zstd_fc",
@@ -45,6 +50,10 @@ const ReservoirReader = struct {
         self.available -= count;
         return value;
     }
+
+    inline fn bytesConsumed(self: ReservoirReader) usize {
+        return self.next_index - self.available / 8;
+    }
 };
 
 /// Decode one byte-aligned Zstd FSE normalized-count description. Sequence
@@ -76,6 +85,32 @@ inline fn parseInto(
     values: *[capacity]u16,
 ) Error!Result {
     var reader = ReservoirReader.init(bytes);
+    const decoded = try parseCore(capacity, Error, &reader, expected_symbol_count, max_accuracy_log, values);
+    return .{
+        .value_count = decoded.value_count,
+        .table_len = decoded.table_len,
+        .bytes_consumed = reader.bytesConsumed(),
+    };
+}
+
+pub fn parseReader(
+    comptime ReaderError: type,
+    reader: anytype,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+    values: *[256]u16,
+) (Error || ReaderError)!Decoded {
+    return parseCore(256, ReaderError, reader, expected_symbol_count, max_accuracy_log, values);
+}
+
+inline fn parseCore(
+    comptime capacity: usize,
+    comptime ReaderError: type,
+    reader: anytype,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+    values: *[capacity]u16,
+) (Error || ReaderError)!Decoded {
     const accuracy_log_biased = try reader.read(4);
     if (accuracy_log_biased > max_accuracy_log -| 5) return error.CorruptFrame;
     const accuracy_log: u4 = @intCast(accuracy_log_biased + 5);
@@ -117,10 +152,9 @@ inline fn parseInto(
 
     if (value_count < 2 or accumulated_probability != total_probability or value_count > expected_symbol_count)
         return error.CorruptFrame;
-    return .{
+    return Decoded{
         .value_count = value_count,
         .table_len = @as(usize, 1) << accuracy_log,
-        .bytes_consumed = reader.next_index - reader.available / 8,
     };
 }
 

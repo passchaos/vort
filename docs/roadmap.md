@@ -26508,3 +26508,16 @@ reuse, so production keeps the simpler independently owned plans.
   are not read during layout discovery. This does not decode tree weights,
   build Huffman/FSE tables, decode literal or sequence payloads, dispatch
   blocks, decode frames, or expose a public source-backed frame API.
+
+- 2026-11-08: Added internal source-backed Zstd sequence-metadata preparation.
+  A one-byte transactional forward cursor parses LL/OF/ML mode bytes and RLE or
+  normalized-count descriptions in wire order, resolves Predefined, RLE,
+  Compressed and Repeat tables without mutating the previous-table snapshot,
+  and returns an unread absolute range for the reverse sequence bitstream.
+  Slice parse/resolve differential tests cover all 64 mode tuples, mixed wire
+  order, every truncated description prefix, invalid RLE symbols, Repeat
+  availability and error priority, zero-count layering, callback faults,
+  offsets above 4 GiB and scratch bounds on native, Linux x86 and actual WASI.
+  This prepares sequence metadata only: it does not inspect the reverse marker,
+  initialize FSE states, decode sequence symbols, execute matches, dispatch
+  blocks or frames, or expose a public source-backed decoder.
