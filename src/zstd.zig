@@ -15519,27 +15519,53 @@ noinline fn decodeAllFseRawSequences(
         const ll_next_state = sequenceSymbolNextState(ll_word);
         const of_next_state = sequenceSymbolNextState(of_word);
         const ml_next_state = sequenceSymbolNextState(ml_word);
-        const transition_bits: u8 = if (remaining == 1)
+        const is_last_sequence = remaining == 1;
+        const transition_bits: u8 = if (is_last_sequence)
             0
         else
             ll_state_bits + ml_state_bits + of_state_bits;
         const total_bits: u8 = of_additional_bits + ml_additional_bits +
             ll_additional_bits + transition_bits;
         var field_group = sequence_field_group.Group.init(&reader, total_bits);
-        const fields_are_grouped = field_group != null;
-        if (builtin.is_test and fields_are_grouped) test_atomic_counter.add(&test_all_fse_raw_field_group_hits, 1);
-        const offset_extra = if (fields_are_grouped)
-            field_group.?.read(of_additional_bits)
-        else
-            try reader.readSequenceField(of_additional_bits);
-        const match_len = match_base_value + if (fields_are_grouped)
-            field_group.?.read(ml_additional_bits)
-        else
-            try reader.readSequenceField(ml_additional_bits);
-        const literal_len = literal_base_value + if (fields_are_grouped)
-            field_group.?.read(ll_additional_bits)
-        else
-            try reader.readSequenceField(ll_additional_bits);
+        if (builtin.is_test and field_group != null) test_atomic_counter.add(&test_all_fse_raw_field_group_hits, 1);
+        // Read the complete field set and transitions in one branch. The rare
+        // ungrouped path lives out of line so the hot loop keeps the group
+        // word in a register and drops the per-field optional chain.
+        var offset_extra: usize = undefined;
+        var match_extra: usize = undefined;
+        var literal_extra: usize = undefined;
+        if (field_group) |*group| {
+            offset_extra = group.read(of_additional_bits);
+            match_extra = group.read(ml_additional_bits);
+            literal_extra = group.read(ll_additional_bits);
+            if (!is_last_sequence) {
+                const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
+                state.ll_state = ll_next_state + transitions[0];
+                state.ml_state = ml_next_state + transitions[1];
+                state.of_state = of_next_state + transitions[2];
+            }
+        } else {
+            const ungrouped = try readUngroupedSequenceFields(
+                &reader,
+                of_additional_bits,
+                ml_additional_bits,
+                ll_additional_bits,
+                ll_state_bits,
+                ml_state_bits,
+                of_state_bits,
+                !is_last_sequence,
+            );
+            offset_extra = ungrouped.offset_extra;
+            match_extra = ungrouped.match_extra;
+            literal_extra = ungrouped.literal_extra;
+            state.ll_state = ll_next_state + ungrouped.ll_state_delta;
+            state.ml_state = ml_next_state + ungrouped.ml_state_delta;
+            state.of_state = of_next_state + ungrouped.of_state_delta;
+        }
+        if (is_last_sequence) try reader.expectEnd();
+        remaining -= 1;
+        const match_len = match_base_value + match_extra;
+        const literal_len = literal_base_value + literal_extra;
         const match_offset = if (of_additional_bits > 1) blk: {
             const offset = offset_base_value + offset_extra;
             const previous_0 = state.repeated_offsets[0];
@@ -15550,18 +15576,6 @@ noinline fn decodeAllFseRawSequences(
             try large_offset.positiveLiteralRep0(&state.repeated_offsets)
         else
             try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
-        remaining -= 1;
-        if (remaining != 0) {
-            if (fields_are_grouped) {
-                state.ll_state = ll_next_state + field_group.?.read(ll_state_bits);
-                state.ml_state = ml_next_state + field_group.?.read(ml_state_bits);
-                state.of_state = of_next_state + field_group.?.read(of_state_bits);
-            } else {
-                state.ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
-                state.ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
-                state.of_state = of_next_state + try reader.readSequenceField(of_state_bits);
-            }
-        } else try reader.expectEnd();
 
         if (comptime dense_short_pairs) {
             if (literal_len == 0 and match_len == 8 and match_offset == 7) {
@@ -15729,7 +15743,8 @@ inline fn decodeAllFseHuffmanSequencesImpl(
         const of_next_state = sequenceSymbolNextState(of_word);
         const ml_next_state = sequenceSymbolNextState(ml_word);
         state.remaining -= 1;
-        const transition_bits: u8 = if (state.remaining == 0)
+        const is_last_sequence = state.remaining == 0;
+        const transition_bits: u8 = if (is_last_sequence)
             0
         else
             ll_state_bits + ml_state_bits + of_state_bits;
@@ -15737,31 +15752,44 @@ inline fn decodeAllFseHuffmanSequencesImpl(
             ll_additional_bits + transition_bits;
         var field_group: ?sequence_field_group.Group =
             sequence_field_group.Group.init(&state.reader, total_bits);
-        const fields_are_grouped = field_group != null;
-        const offset_extra = if (fields_are_grouped)
-            field_group.?.read(of_additional_bits)
-        else
-            try state.reader.readSequenceField(of_additional_bits);
-        const match_len = match_base_value + if (fields_are_grouped)
-            field_group.?.read(ml_additional_bits)
-        else
-            try state.reader.readSequenceField(ml_additional_bits);
-        const literal_len = literal_base_value + if (fields_are_grouped)
-            field_group.?.read(ll_additional_bits)
-        else
-            try state.reader.readSequenceField(ll_additional_bits);
-        const match_offset = try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
-        if (state.remaining != 0) {
-            if (fields_are_grouped) {
-                state.ll_state = ll_next_state + field_group.?.read(ll_state_bits);
-                state.ml_state = ml_next_state + field_group.?.read(ml_state_bits);
-                state.of_state = of_next_state + field_group.?.read(of_state_bits);
-            } else {
-                state.ll_state = ll_next_state + try state.reader.readSequenceField(ll_state_bits);
-                state.ml_state = ml_next_state + try state.reader.readSequenceField(ml_state_bits);
-                state.of_state = of_next_state + try state.reader.readSequenceField(of_state_bits);
+        // Keep the grouped and ungrouped reads in one branch each. The rare
+        // ungrouped path lives out of line so the hot loop keeps the group
+        // word in a register and drops the per-field optional chain.
+        var offset_extra: usize = undefined;
+        var match_extra: usize = undefined;
+        var literal_extra: usize = undefined;
+        if (field_group) |*group| {
+            offset_extra = group.read(of_additional_bits);
+            match_extra = group.read(ml_additional_bits);
+            literal_extra = group.read(ll_additional_bits);
+            if (!is_last_sequence) {
+                const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
+                state.ll_state = ll_next_state + transitions[0];
+                state.ml_state = ml_next_state + transitions[1];
+                state.of_state = of_next_state + transitions[2];
             }
-        } else try state.reader.expectEnd();
+        } else {
+            const ungrouped = try readUngroupedSequenceFields(
+                &state.reader,
+                of_additional_bits,
+                ml_additional_bits,
+                ll_additional_bits,
+                ll_state_bits,
+                ml_state_bits,
+                of_state_bits,
+                !is_last_sequence,
+            );
+            offset_extra = ungrouped.offset_extra;
+            match_extra = ungrouped.match_extra;
+            literal_extra = ungrouped.literal_extra;
+            state.ll_state = ll_next_state + ungrouped.ll_state_delta;
+            state.ml_state = ml_next_state + ungrouped.ml_state_delta;
+            state.of_state = of_next_state + ungrouped.of_state_delta;
+        }
+        if (is_last_sequence) try state.reader.expectEnd();
+        const match_len = match_base_value + match_extra;
+        const literal_len = literal_base_value + literal_extra;
+        const match_offset = try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
