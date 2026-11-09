@@ -150,6 +150,37 @@ returns that row to -1.53%/+0.06% in eight-round rechecks.
 Raw rows: [inline five-round A/B](data/brotli-decoded-size-dispatch-20261109/decoded-size-dispatch-inline-5r.csv)
 and the rejected [out-of-line first cut](data/brotli-decoded-size-dispatch-20261109/decoded-size-dispatch-5r.csv).
 
+## Updated reference matrix after the three increments
+
+Rerunning the same 48-row libbrotli 1.0.9 matrix (two invocations, per-row
+medians) after the inline, tree-pointer, and decoded-size-dispatch
+increments:
+
+| Quality | Prefix | Geometric ref/Vort | Vort slower |
+| --- | --- | ---: | ---: |
+| 6 | 64 KiB | 0.6888 | 1.45x |
+| 6 | 1 MiB | 0.8082 | 1.24x |
+| 11 | 64 KiB | 0.7287 | 1.37x |
+| 11 | 1 MiB | 0.8197 | 1.22x |
+| all 48 rows | | **0.7594** | **1.32x** |
+
+The full-matrix ratio moves from 0.7154 to 0.7594 (+6.1% relative
+throughput). The command-dense 64 KiB rows improve most: `nci.64k` q6 from
+0.3435 to about 0.52, `xml.64k` q6 from 0.3633 to about 0.55; `sao.1m` q6
+(1.0320) and `mozilla.1m` q11 (1.0126) remain faster than libbrotli. Raw
+rows: [matrix-post-dispatch.csv](data/brotli-decode-current-20261109/matrix-post-dispatch.csv).
+
+## Rejected: ten-bit fused external command lookup in the 10-bit literal path
+
+Wiring the prepared 10-bit fused command lookup (`readInsertCopyLengthsExternalLookup10Current`)
+into the auxiliary `processExternalLiteralLookupCompressedPayload`, with
+in-table nine-bit distance tail lookups, built and stayed correct only when
+distances kept the existing tail9 helper; the external-distance variant
+failed `InvalidHuffmanCode` on the command-dense rows. The correct
+command-10-only variant measured a 48-row three-round A/B geomean of
+`1.0075` (+0.75%, q11 1 MiB +1.50%) with no target-row benefit, so it was
+reverted. Do not retry without a different distance-lookup integration.
+
 ## Next
 
 - Rerun the libbrotli reference matrix so the current gap table reflects the

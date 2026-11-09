@@ -145,6 +145,14 @@ with 49% more).
   dictionaries and meta blocks below 64 KiB). 48-row five-round A/B `0.9536`
   (-4.64%, 95% CI `[-7.80%, -1.77%]`); command-dense 64 KiB rows improve
   16-32% (`mozilla`/`mr`/`xml`/`nci`), worst control `xml.1m` q11 +1.94%.
+- After the three Brotli increments the current-source libbrotli 1.0.9
+  reference/Vort 48-row geomean moved from `0.7154` to `0.7594` (Vort now
+  1.32x slower overall instead of 1.40x); 64 KiB q6 from 0.5989 to 0.6888,
+  64 KiB q11 from 0.6602 to 0.7287.
+- Rejected: ten-bit fused external command lookup inside the 10-bit literal
+  payload. The external-distance pairing failed `InvalidHuffmanCode` on the
+  command-dense rows; the correct command-10-only variant regressed the
+  48-row geomean +0.75% (q11 1 MiB +1.50%) with no target-row gain.
 
 ## Remaining structural options
 
