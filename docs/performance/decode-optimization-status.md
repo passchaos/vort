@@ -149,6 +149,12 @@ with 49% more).
   reference/Vort 48-row geomean moved from `0.7154` to `0.7594` (Vort now
   1.32x slower overall instead of 1.40x); 64 KiB q6 from 0.5989 to 0.6888,
   64 KiB q11 from 0.6602 to 0.7287.
+- Adopted: pin the active literal block's context map/mode, tree index,
+  external 10-bit lookup and canonical table in locals inside the 10-bit
+  external-literal payload, refreshing them only at explicit block switches.
+  48-row five-round A/B `0.9898` (-1.02%, 95% CI `[-1.32%, -0.72%]`); every
+  group improves 0.9-1.2%, worst control `x-ray.64k` q6 +0.89%. A
+  branch-scoped-locals variant regressed +0.54% and was rejected.
 - Rejected: ten-bit fused external command lookup inside the 10-bit literal
   payload. The external-distance pairing failed `InvalidHuffmanCode` on the
   command-dense rows; the correct command-10-only variant regressed the

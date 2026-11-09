@@ -181,6 +181,37 @@ command-10-only variant measured a 48-row three-round A/B geomean of
 `1.0075` (+0.75%, q11 1 MiB +1.50%) with no target-row benefit, so it was
 reverted. Do not retry without a different distance-lookup integration.
 
+## Increment: cache active literal block lookups in the 10-bit payload
+
+`processExternalLiteralLookupCompressedPayload` re-derived the active
+literal block's context-map slice, mode, tree index, external lookup and
+canonical table on every literal-run iteration. The block type, its
+context map/mode and the context-independent tree are now pinned in locals
+and refreshed only inside the explicit block-switch branch; the
+block-type-count comparison is hoisted to a `literal_multi_block` constant.
+
+A five-round 48-row paired `--vort-only` A/B against the decoded-size
+dispatch measures:
+
+| Group | new/old time geomean |
+| --- | ---: |
+| q6, 64 KiB | 0.9883 (-1.17%) |
+| q6, 1 MiB | 0.9911 (-0.89%) |
+| q11, 64 KiB | 0.9896 (-1.04%) |
+| q11, 1 MiB | 0.9904 (-0.96%) |
+| all 48 rows | **0.9898 (-1.02%)** |
+
+Bootstrap 95% interval over rows: `[-1.32%, -0.72%]`. Strongest rows:
+`osdb.1m` q6 -3.43%, `osdb.64k` q6 -3.19%, `mozilla.64k` q6 -2.92%;
+worst control `x-ray.64k` q6 +0.89%, every row above the 0.98x floor.
+A variant that scoped the context-map/mode locals inside the
+context-dependent branch measured `1.0054` (+0.54%) and was rejected; the
+function-scoped pins win consistently across all four groups.
+
+Raw rows: [five-round A/B](data/brotli-literal-block-cache-20261109/literal-block-cache-5r.csv),
+[three-round screen](data/brotli-literal-block-cache-20261109/literal-block-cache-3r.csv),
+[rejected scoped-locals variant](data/brotli-literal-block-cache-20261109/literal-block-cache-scoped-5r.csv).
+
 ## Next
 
 - Rerun the libbrotli reference matrix so the current gap table reflects the
@@ -188,3 +219,4 @@ reverted. Do not retry without a different distance-lookup integration.
 - Longer term, fuse the payload phase dispatch the way libbrotli's decoder does;
   the profile is flat across the per-command helpers, so only a restructure can
   close the remaining 1.2--1.7x gap.
+
