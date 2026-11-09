@@ -128,6 +128,15 @@ with 49% more).
   floor.
 - Rejected: inlining only `ensureLiteralBlock` and `literalContext` (neutral to
   +1.35%); inlining only `readCommandSymbol` (neutral).
+- Adopted: cache resolved tree pointers per block type in the generic
+  prepared-lookup payload. The command tree pointer and (inside the inline
+  tiers) the 64 literal-context and four distance-context tree pointers are
+  resolved on block switches instead of per symbol. 48-row five-round
+  `--vort-only` A/B `0.9916` (-0.84%, 95% CI `[-1.27%, -0.45%]`); command-dense
+  64 KiB rows improve 3-5%, worst control +0.98%. Gating the literal/distance
+  caches to frames with at most 64 trees was required: the ungated optional
+  pointer variant regressed `x-ray.1m` q11 +2.12%. See
+  [the Brotli matrix](brotli-decode-current-20261109.md).
 
 ## Remaining structural options
 

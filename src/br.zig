@@ -17854,26 +17854,30 @@ fn processMinimalCompressedMetaBlockImpl(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
+    var command_tree = try resolveCurrentCommandTree(&header);
+    const literals_all_inline = literalTreesAllInline(&header);
+    const distances_all_inline = distanceTreesAllInline(&header);
+    var literal_trees: CachedLiteralTrees = undefined;
+    if (literals_all_inline) try resolveCurrentLiteralTrees(&header, &literal_trees);
+    var distance_trees: CachedDistanceTrees = undefined;
+    if (distances_all_inline) try resolveCurrentDistanceTrees(&header, &distance_trees);
     var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     while (written.* < meta_block_end) {
-        const command_symbol = try readCommandSymbol(&header, reader);
+        const command_symbol = try readCachedCommandSymbol(&header, reader, &command_tree);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
-            try ensureLiteralBlock(&header, reader);
+            try ensureCachedLiteralBlock(&header, reader, &literal_trees, literals_all_inline);
             const context = try literalContext(&header, output, written.*);
-            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
-            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const tree = try literalPrefixForDecode(&header, tree_index);
-            const literal = try tree.decodePrepared(reader);
+            const literal = try decodeCachedLiteral(&header, reader, &literal_trees, literals_all_inline, context);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written.* == meta_block_end) return;
-        const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const decoded_distance = try readCachedMinimalDistance(&header, reader, lengths, last_distances, &distance_trees, distances_all_inline);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
@@ -18597,25 +18601,29 @@ noinline fn processDecodedCompressedPayload(
     header: *MinimalCompressedHeader,
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
+    var command_tree = try resolveCurrentCommandTree(header);
+    const literals_all_inline = literalTreesAllInline(header);
+    const distances_all_inline = distanceTreesAllInline(header);
+    var literal_trees: CachedLiteralTrees = undefined;
+    if (literals_all_inline) try resolveCurrentLiteralTrees(header, &literal_trees);
+    var distance_trees: CachedDistanceTrees = undefined;
+    if (distances_all_inline) try resolveCurrentDistanceTrees(header, &distance_trees);
     while (written.* < meta_block_end) {
-        const command_symbol = try readCommandSymbol(header, reader);
+        const command_symbol = try readCachedCommandSymbol(header, reader, &command_tree);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
-            try ensureLiteralBlock(header, reader);
+            try ensureCachedLiteralBlock(header, reader, &literal_trees, literals_all_inline);
             const context = try literalContext(header, output, written.*);
-            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
-            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const tree = try literalPrefixForDecode(header, tree_index);
-            const literal = try tree.decodePrepared(reader);
+            const literal = try decodeCachedLiteral(header, reader, &literal_trees, literals_all_inline, context);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written.* == meta_block_end) return;
-        const decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const decoded_distance = try readCachedMinimalDistance(header, reader, lengths, last_distances, &distance_trees, distances_all_inline);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
@@ -22944,7 +22952,7 @@ pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
 pub const transformStaticDictionaryWord = static_dictionary.transform;
 pub const fullStaticDictionarySizeBits = static_dictionary.sizeBits;
 
-inline fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
     return readCommandSymbolAny(header, reader);
 }
 
@@ -23103,7 +23111,7 @@ fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error
     return symbol;
 }
 
-inline fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*PrefixCode(704) {
+fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*PrefixCode(704) {
     const index = header.command_block.current_type;
     if (index < inline_command_tree_count) return &header.insert_copy_trees[index];
     if (header.active_packed_insert_copy_tree_index != index) {
@@ -23131,7 +23139,7 @@ noinline fn expandPackedLiteralPrefixForDecode(header: *MinimalCompressedHeader,
     return &header.packed_literal_cache[slot];
 }
 
-inline fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(max_distance_alphabet_size) {
+fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(max_distance_alphabet_size) {
     if (index >= header.distance_tree_count) return error.CorruptFrame;
     if (index < inline_distance_tree_count) return &header.distance_trees[index];
     if (header.active_packed_distance_tree_index != index) {
@@ -23139,6 +23147,122 @@ inline fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) 
         header.active_packed_distance_tree_index = index;
     }
     return &header.active_packed_distance_tree;
+}
+
+/// Resolved-tree caches for the generic prepared-lookup payload, used only by
+/// frames whose trees all fit the inline tier. Pointers are permanent there,
+/// so resolving them whenever a block type switches removes the per-symbol
+/// index checks. Packed-tier frames use the cold single-slot/rotating
+/// expansion helpers directly.
+const CachedLiteralTrees = [64]*PrefixCode(256);
+const CachedDistanceTrees = [4]*PrefixCode(max_distance_alphabet_size);
+
+fn resolveCurrentCommandTree(header: *MinimalCompressedHeader) Error!*PrefixCode(704) {
+    if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
+    return commandPrefixForDecode(header);
+}
+
+/// Frames that stay inside the inline literal tier can cache every context
+/// tree for the active block type. Packed-tier frames (>64 trees) keep the
+/// per-symbol expansion path instead of pinning mostly-null pointers.
+fn literalTreesAllInline(header: *const MinimalCompressedHeader) bool {
+    return header.literal_tree_count <= inline_literal_tree_count;
+}
+
+fn resolveCurrentLiteralTrees(header: *MinimalCompressedHeader, cache: *CachedLiteralTrees) Error!void {
+    const block_type = header.literal_block.current_type;
+    if (block_type >= max_literal_block_types) return error.UnsupportedBrotliFeature;
+    const map = header.literal_context_map[@as(usize, block_type) * 64 ..][0..64];
+    for (map, 0..) |tree_index, context| {
+        if (tree_index >= header.literal_tree_count) return error.CorruptFrame;
+        cache[context] = &header.literal_trees[tree_index];
+    }
+}
+
+fn resolveCurrentDistanceTrees(header: *MinimalCompressedHeader, cache: *CachedDistanceTrees) Error!void {
+    const block_type = header.distance_block.current_type;
+    if (block_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+    const map = header.distance_context_map[@as(usize, block_type) * 4 ..][0..4];
+    for (map, 0..) |tree_index, context| {
+        if (tree_index >= header.distance_tree_count) return error.CorruptFrame;
+        cache[context] = &header.distance_trees[tree_index];
+    }
+}
+
+fn distanceTreesAllInline(header: *const MinimalCompressedHeader) bool {
+    return header.distance_tree_count <= inline_distance_tree_count;
+}
+
+inline fn readCachedCommandSymbol(
+    header: *MinimalCompressedHeader,
+    reader: *bitstream.BitReader,
+    command_tree: **PrefixCode(704),
+) Error!u16 {
+    if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
+        command_tree.* = try resolveCurrentCommandTree(header);
+    }
+    const symbol = try command_tree.*.decodePrepared(reader);
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    return symbol;
+}
+
+inline fn ensureCachedLiteralBlock(
+    header: *MinimalCompressedHeader,
+    reader: *bitstream.BitReader,
+    literal_trees: *CachedLiteralTrees,
+    all_inline: bool,
+) Error!void {
+    if (header.literal_block.block_type_count > 1 and header.literal_block.remaining == 0) {
+        try switchBlockAny(max_literal_block_types, &header.literal_block, reader);
+        if (all_inline) try resolveCurrentLiteralTrees(header, literal_trees);
+    }
+}
+
+inline fn decodeCachedLiteral(
+    header: *MinimalCompressedHeader,
+    reader: *bitstream.BitReader,
+    literal_trees: *const CachedLiteralTrees,
+    all_inline: bool,
+    context: usize,
+) Error!u16 {
+    if (all_inline) return literal_trees[context].decodePrepared(reader);
+    const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+    if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+    const tree = try literalPrefixForDecode(header, tree_index);
+    return tree.decodePrepared(reader);
+}
+
+inline fn readCachedMinimalDistance(
+    header: *MinimalCompressedHeader,
+    reader: *bitstream.BitReader,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    distance_trees: *CachedDistanceTrees,
+    all_inline: bool,
+) Error!DecodedBrotliDistance {
+    const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
+        if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0) {
+            try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+            if (all_inline) try resolveCurrentDistanceTrees(header, distance_trees);
+        }
+        const context = distanceContext(lengths.copy_len);
+        const tree = if (all_inline)
+            distance_trees[context]
+        else blk2: {
+            const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+            if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
+            break :blk2 try distancePrefixForDecode(header, tree_index);
+        };
+        const decoded = try tree.decodePrepared(reader);
+        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+        break :blk decoded;
+    };
+    if (symbol < 16) return .{
+        .distance = try resolveShortDistance(symbol, last_distances),
+        .update_ring = symbol != 0,
+    };
+    return .{ .distance = try readPreparedDistance(header, reader, symbol), .update_ring = true };
 }
 
 fn ensureLiteralBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {

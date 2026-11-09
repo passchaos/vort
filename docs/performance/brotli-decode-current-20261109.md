@@ -76,12 +76,47 @@ Raw rows: [matrix.csv](data/brotli-decode-current-20261109/matrix.csv),
 [inline-ab.csv](data/brotli-decode-current-20261109/inline-ab.csv), and
 [inline-ab-recheck.csv](data/brotli-decode-current-20261109/inline-ab-recheck.csv).
 
+## Increment: cache resolved tree pointers per block type
+
+The generic prepared-lookup payload re-resolved every tree on each symbol:
+the command tree through an index check plus packed-tier comparison, and
+literal/distance trees through the context map plus bounds check. The
+prepared paths now pin resolved pointers for the current command block type
+and, for frames that stay inside the inline tiers, the 64 literal-context
+trees and four distance-context trees. Block switches re-resolve only the
+affected set. Frames with more than 64 literal or 64 distance trees keep the
+per-symbol expansion path: an ungated experiment pinned mostly-null optional
+pointers for those frames and regressed `x-ray.1m` q11 about 2%.
+
+`readCommandSymbol` and `commandPrefixForDecode` revert to regular calls;
+the literal/distance lookup helpers stay inline for the packed-tier fallback.
+The cached payload owns the hot resolution itself.
+
+A five-round 48-row paired `--vort-only` A/B against the inline increment
+measures:
+
+| Group | new/old time geomean |
+| --- | ---: |
+| q6, 64 KiB | 0.9838 (-1.62%) |
+| q6, 1 MiB | 0.9994 (-0.06%) |
+| q11, 64 KiB | 0.9876 (-1.24%) |
+| q11, 1 MiB | 0.9955 (-0.45%) |
+| all 48 rows | **0.9916 (-0.84%)** |
+
+Bootstrap 95% interval over rows: `[-1.27%, -0.45%]`. The command-dense
+64 KiB rows carry the gain: `mr.64k` q6 -5.04%, q11 -4.72%; `nci.64k` q6
+-4.46%; `xml.64k` q6 -3.68%; `mozilla.64k` q6 -3.08%, q11 -3.46%. Worst
+controls are `dickens.1m` q6 +0.98% and `reymont.1m` q6 +0.97%; every row
+stays above the 0.98x floor. The ungated variant measured 0.9908 overall but
+`x-ray.1m` q11 +2.12% in an eight-round recheck; the inline-tier gate
+restores that row to +0.05%.
+
+Raw rows: [gated five-round A/B](data/brotli-tree-pointer-20261109/cache-pointer-gated-5r.csv),
+[ungated three-round](data/brotli-tree-pointer-20261109/cache-pointer-ab.csv) and
+[ungated five-round](data/brotli-tree-pointer-20261109/cache-pointer-ab-5r.csv).
+
 ## Next
 
-- Cache the resolved command/literal/distance tree pointers per block type and
-  update them on block switch, removing the per-symbol index checks without
-  inlining the cold packed-tree expansion. This targets both the 64 KiB gains
-  and the 1 MiB regressions from the inline experiment.
 - Longer term, fuse the payload phase dispatch the way libbrotli's decoder does;
   the profile is flat across the per-command helpers, so only a restructure can
   close the remaining 1.2--1.7x gap.
