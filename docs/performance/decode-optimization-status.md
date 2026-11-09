@@ -181,6 +181,12 @@ with 49% more).
   payload. The external-distance pairing failed `InvalidHuffmanCode` on the
   command-dense rows; the correct command-10-only variant regressed the
   48-row geomean +0.75% (q11 1 MiB +1.50%) with no target-row gain.
+- Rejected (Brotli auxiliary payload micro-fusions, 2026-11-10): cached
+  distance `single_symbol` (1.0007), combined extra-bit extraction
+  (1.0342), split block-count/remaining branch (1.0000) and cached command
+  `single_symbol` (0.9965 five-round but +0.94% to +1.31% on 1 MiB rows in
+  ten-round rechecks). The payload is now structurally bound; further gain
+  needs a full libbrotli-style phase-machine fusion, not local caching.
 
 ## Remaining structural options
 

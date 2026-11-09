@@ -340,3 +340,25 @@ Both formats are neutral within noise (Deflate worst row
 row above the 0.98x floor while delivering the Brotli gain. Raw rows:
 [deflate](data/huffman-direct-long-code-20261109/deflate-direct-ab.csv)
 and [zstd](data/huffman-direct-long-code-20261109/zstd-direct-ab.csv).
+
+## Rejected micro-fusions in the auxiliary payload (2026-11-10)
+
+Four follow-up experiments against the post-fallback head, each a
+48-row five-round paired `--vort-only` A/B (Silesia, q6/q11, 64 KiB/1 MiB):
+
+| Experiment | 48-row new/old | Decision |
+| --- | ---: | --- |
+| Pin distance tree `single_symbol` in the cached distance state | 1.0007 (+0.07%) | rejected, neutral |
+| Combine insert/copy extra-bit reads into one staged extraction | 1.0342 (+3.42%) | rejected, regresses every group |
+| Split invariant block-type-count branch from per-symbol remaining check | 1.0000 | rejected, compiler already generates equivalent code |
+| Pin command tree `single_symbol`/pointer in the auxiliary payload | 0.9965 (-0.35%) | rejected: 64 KiB gains (best -1.94%) but ten-round rechecks show systematic 1 MiB regressions (+0.94% to +1.31%), including the target row `nci.64k` q6 turning +1.24% |
+
+The command-single experiment is the instructive one: the branch-miss
+profile (`-e branch-misses`) identified the per-symbol `single_symbol`
+check as the second-largest mispredict source (2.45%), but removing it
+added a cached optional plus a pointer that hurt the register-allocated
+1 MiB loop more than the saved branch helped; the five-row CI
+(`[-0.59%, -0.10%]`) hid row-level divergence that ten-round rechecks
+exposed. The payload's remaining cost is structural (67.8% self time,
+3.82% overall branch miss); further gains require the full
+libbrotli-style phase-machine fusion rather than local caching.
