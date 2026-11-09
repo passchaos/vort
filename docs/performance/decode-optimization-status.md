@@ -110,6 +110,25 @@ with 49% more).
   +7.1% and `reymont.1m` L19 +6.9% from loop codegen alone. The added branch and
   over-copy stores outweigh the target-row gain.
 
+## 2026-11-09 Deflate and Brotli decode baselines
+
+- Current-source Deflate one-shot decode vs libdeflate 1.10 on zlib-1.3 level
+  6/9 frames: 48-row reference/Vort geometric mean `0.9131` (Vort 1.10x
+  slower), 64 KiB rows 1.12x and 1 MiB rows 1.06-1.07x. `nci.1m` is 14% faster
+  than libdeflate. The 2026-11-01/02 table's 1.47x Deflate row is stale. See
+  [the Deflate matrix](deflate-decode-current-20261109.md).
+- Current-source Brotli one-shot decode vs libbrotli 1.0.9 at qualities 6/11:
+  48-row reference/Vort geometric mean `0.7154` (Vort 1.40x slower); 64 KiB
+  rows are 1.51-1.67x and 1 MiB rows 1.22-1.24x. `nci.64k` q6 is 2.9x slower.
+  See [the Brotli matrix](brotli-decode-current-20261109.md).
+- Adopted in Brotli decode: inline the per-symbol command/literal/distance tree
+  lookups and `readCommandSymbol`. 48-row `--vort-only` A/B `0.9949` (-0.51%,
+  95% CI `[-0.98%, -0.09%]`), with the weakest 64 KiB rows 3-5% faster and two
+  1 MiB rows about 2% slower. Below the default bar but above the 0.98x control
+  floor.
+- Rejected: inlining only `ensureLiteralBlock` and `literalContext` (neutral to
+  +1.35%); inlining only `readCommandSymbol` (neutral).
+
 ## Remaining structural options
 
 1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total

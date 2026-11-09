@@ -22944,7 +22944,7 @@ pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
 pub const transformStaticDictionaryWord = static_dictionary.transform;
 pub const fullStaticDictionarySizeBits = static_dictionary.sizeBits;
 
-fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+inline fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
     return readCommandSymbolAny(header, reader);
 }
 
@@ -23103,7 +23103,7 @@ fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error
     return symbol;
 }
 
-fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*PrefixCode(704) {
+inline fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*PrefixCode(704) {
     const index = header.command_block.current_type;
     if (index < inline_command_tree_count) return &header.insert_copy_trees[index];
     if (header.active_packed_insert_copy_tree_index != index) {
@@ -23113,7 +23113,7 @@ fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*PrefixCode(70
     return &header.active_packed_insert_copy_tree;
 }
 
-fn literalPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(256) {
+inline fn literalPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(256) {
     if (index >= header.literal_tree_count) return error.CorruptFrame;
     if (index < inline_literal_tree_count) return &header.literal_trees[index];
     return expandPackedLiteralPrefixForDecode(header, index);
@@ -23131,7 +23131,7 @@ noinline fn expandPackedLiteralPrefixForDecode(header: *MinimalCompressedHeader,
     return &header.packed_literal_cache[slot];
 }
 
-fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(max_distance_alphabet_size) {
+inline fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(max_distance_alphabet_size) {
     if (index >= header.distance_tree_count) return error.CorruptFrame;
     if (index < inline_distance_tree_count) return &header.distance_trees[index];
     if (header.active_packed_distance_tree_index != index) {
