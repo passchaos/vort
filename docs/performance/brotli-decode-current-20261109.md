@@ -313,3 +313,30 @@ q11 (1.0377) extend their leads over libbrotli; `nci.64k` q6 improved
   the profile is flat across the per-command helpers, so only a restructure can
   close the remaining 1.2--1.7x gap.
 
+
+## Cross-codec check of the shared fallback (Deflate and Zstd)
+
+`decodeValueLongAfterLookup` is shared by all three codecs, so the same
+new-vs-baseline binary pair was run over the 48 Silesia rows for the other
+formats (three alternating rounds, libdeflate 1.10 level 6/9 raw frames,
+libzstd 1.6.0 levels 3/19):
+
+| Codec / level | Group | new/old time geomean |
+| --- | --- | ---: |
+| Deflate 6 | 64 KiB | 1.0002 |
+| Deflate 6 | 1 MiB | 1.0017 |
+| Deflate 9 | 64 KiB | 1.0003 |
+| Deflate 9 | 1 MiB | 1.0004 |
+| Deflate all 48 | | **1.0006 (+0.06%)** |
+| Zstd 3 | 64 KiB | 0.9961 (-0.39%) |
+| Zstd 3 | 1 MiB | 1.0011 (+0.11%) |
+| Zstd 19 | 64 KiB | 0.9992 (-0.08%) |
+| Zstd 19 | 1 MiB | 0.9992 (-0.08%) |
+| Zstd all 48 | | **0.9989 (-0.11%)** |
+
+Both formats are neutral within noise (Deflate worst row
+`mr.1m` L6 +0.73%; Zstd driven by `webster.64k` L3 -5.43%, worst control
+`nci.64k` L3 +0.78%) — the direct-index change keeps every cross-codec
+row above the 0.98x floor while delivering the Brotli gain. Raw rows:
+[deflate](data/huffman-direct-long-code-20261109/deflate-direct-ab.csv)
+and [zstd](data/huffman-direct-long-code-20261109/zstd-direct-ab.csv).

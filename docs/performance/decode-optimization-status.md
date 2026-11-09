@@ -174,7 +174,9 @@ with 49% more).
   95% CI `[-2.55%, -1.48%]`); `nci.64k` q6 -8.11%, nci.64k q11 -6.80%.
   No wider fast-lookup table, so it avoids the quality-11 regression of the
   rejected 10-bit command tail lookup. Verified with huffman/br/zstd and
-  deflate (670) test suites.
+  deflate (670) test suites.   Cross-codec check is neutral: Deflate 48-row geomean 1.0006 and Zstd
+  0.9989 (libdeflate L6/L9, libzstd L3/L19), every row above the 0.98x
+  floor.
 - Rejected: ten-bit fused external command lookup inside the 10-bit literal
   payload. The external-distance pairing failed `InvalidHuffmanCode` on the
   command-dense rows; the correct command-10-only variant regressed the
