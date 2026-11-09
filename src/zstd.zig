@@ -15889,7 +15889,8 @@ inline fn tryDecodeMediumSplitHuffmanSequencesImpl(
         var field_group = sequence_field_group.Group.init(&reader, total_bits);
         // Keep the grouped and ungrouped reads in one branch each. Testing the
         // optional per field keeps the 64-bit group word in stack memory for
-        // every extraction instead of one register-resident word.
+        // every extraction instead of one register-resident word. The rare
+        // ungrouped path lives out of line so the hot loop stays compact.
         var offset_extra: usize = undefined;
         var match_extra: usize = undefined;
         var literal_extra: usize = undefined;
@@ -15897,11 +15898,31 @@ inline fn tryDecodeMediumSplitHuffmanSequencesImpl(
             offset_extra = group.read(of_additional_bits);
             match_extra = group.read(ml_additional_bits);
             literal_extra = group.read(ll_additional_bits);
+            if (remaining != 0) {
+                const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
+                ll_state = ll_next_state + transitions[0];
+                ml_state = ml_next_state + transitions[1];
+                of_state = of_next_state + transitions[2];
+            }
         } else {
-            offset_extra = try reader.readSequenceField(of_additional_bits);
-            match_extra = try reader.readSequenceField(ml_additional_bits);
-            literal_extra = try reader.readSequenceField(ll_additional_bits);
+            const ungrouped = try readUngroupedSequenceFields(
+                &reader,
+                of_additional_bits,
+                ml_additional_bits,
+                ll_additional_bits,
+                ll_state_bits,
+                ml_state_bits,
+                of_state_bits,
+                remaining != 0,
+            );
+            offset_extra = ungrouped.offset_extra;
+            match_extra = ungrouped.match_extra;
+            literal_extra = ungrouped.literal_extra;
+            ll_state = ll_next_state + ungrouped.ll_state_delta;
+            ml_state = ml_next_state + ungrouped.ml_state_delta;
+            of_state = of_next_state + ungrouped.of_state_delta;
         }
+        if (remaining == 0) try reader.expectEnd();
         const match_len = match_base_value + match_extra;
         const literal_len = literal_base_value + literal_extra;
         const match_offset = try resolveSequenceOffset(
@@ -15911,17 +15932,6 @@ inline fn tryDecodeMediumSplitHuffmanSequencesImpl(
             literal_len,
             &state.repeated_offsets,
         );
-        if (remaining != 0) {
-            if (field_group) |*group| {
-                ll_state = ll_next_state + group.read(ll_state_bits);
-                ml_state = ml_next_state + group.read(ml_state_bits);
-                of_state = of_next_state + group.read(of_state_bits);
-            } else {
-                ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
-                ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
-                of_state = of_next_state + try reader.readSequenceField(of_state_bits);
-            }
-        } else try reader.expectEnd();
 
         const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
         // Short matches stay on the wildcopy path: a 16-byte source window is
@@ -16035,6 +16045,46 @@ const tryDecodeAllFseSplitDenseHuffmanSequences = if (builtin.target.ofmt == .wa
 else
     tryDecodeAllFseSplitDenseHuffmanSequencesNative;
 
+const UngroupedSequenceFields = struct {
+    offset_extra: usize,
+    match_extra: usize,
+    literal_extra: usize,
+    ll_state_delta: usize,
+    ml_state_delta: usize,
+    of_state_delta: usize,
+};
+
+/// Read one sequence's fields through the ordinary bounded reader. The dense
+/// executor only reaches this path when the 64-bit field group cannot cover
+/// the whole sequence (large extras or the physical stream tail), so keeping
+/// it out of line leaves the grouped hot loop free of the fallback's branches
+/// and register pressure.
+noinline fn readUngroupedSequenceFields(
+    reader: *ReverseBitReader,
+    of_additional_bits: u8,
+    ml_additional_bits: u8,
+    ll_additional_bits: u8,
+    ll_state_bits: u8,
+    ml_state_bits: u8,
+    of_state_bits: u8,
+    has_transitions: bool,
+) Error!UngroupedSequenceFields {
+    var fields: UngroupedSequenceFields = .{
+        .offset_extra = try reader.readSequenceField(of_additional_bits),
+        .match_extra = try reader.readSequenceField(ml_additional_bits),
+        .literal_extra = try reader.readSequenceField(ll_additional_bits),
+        .ll_state_delta = 0,
+        .ml_state_delta = 0,
+        .of_state_delta = 0,
+    };
+    if (has_transitions) {
+        fields.ll_state_delta = try reader.readSequenceField(ll_state_bits);
+        fields.ml_state_delta = try reader.readSequenceField(ml_state_bits);
+        fields.of_state_delta = try reader.readSequenceField(of_state_bits);
+    }
+    return fields;
+}
+
 noinline fn tryDecodeAllFseSplitDenseHuffmanSequencesNative(
     section: LiteralOnlySection,
     output: []u8,
@@ -16134,14 +16184,22 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
                 of_state = of_next_state + transitions[2];
             }
         } else {
-            offset_extra = try reader.readSequenceField(of_additional_bits);
-            match_extra = try reader.readSequenceField(ml_additional_bits);
-            literal_extra = try reader.readSequenceField(ll_additional_bits);
-            if (remaining != 0) {
-                ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
-                ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
-                of_state = of_next_state + try reader.readSequenceField(of_state_bits);
-            }
+            const ungrouped = try readUngroupedSequenceFields(
+                &reader,
+                of_additional_bits,
+                ml_additional_bits,
+                ll_additional_bits,
+                ll_state_bits,
+                ml_state_bits,
+                of_state_bits,
+                remaining != 0,
+            );
+            offset_extra = ungrouped.offset_extra;
+            match_extra = ungrouped.match_extra;
+            literal_extra = ungrouped.literal_extra;
+            ll_state = ll_next_state + ungrouped.ll_state_delta;
+            ml_state = ml_next_state + ungrouped.ml_state_delta;
+            of_state = of_next_state + ungrouped.of_state_delta;
         }
         if (remaining == 0) try reader.expectEnd();
         const match_len = match_base_value + match_extra;
@@ -16544,7 +16602,8 @@ inline fn decodeAllFseSplitHuffmanSequences(
             literal_base_value == 1 and ll_additional_bits == 0 and
             of_additional_bits == 0;
         if (builtin.is_test and compact_literal_rep0) test_atomic_counter.add(&test_split_huffman_compact_literal_rep0_hits, 1);
-        const transition_bits: u8 = if (remaining == 1)
+        const is_last_sequence = remaining == 1;
+        const transition_bits: u8 = if (is_last_sequence)
             0
         else
             ll_state_bits + ml_state_bits + of_state_bits;
@@ -16552,9 +16611,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
             ll_additional_bits + transition_bits;
         var field_group: ?sequence_field_group.Group = if (use_grouped_fields) sequence_field_group.Group.init(&wide_reader, total_bits) else null;
         if (builtin.is_test and field_group != null) test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
-        // Read the complete field set inside one grouped/ungrouped branch.
-        // The previous per-field optional tests kept the group word in stack
-        // memory across every extraction instead of a live register.
+        // Read the complete field set and transitions inside one grouped or
+        // ungrouped branch. The rare ungrouped path lives out of line so the
+        // hot loop keeps the group word in a register.
         var offset_extra: usize = undefined;
         var match_extra: usize = undefined;
         var literal_extra: usize = undefined;
@@ -16562,15 +16621,43 @@ inline fn decodeAllFseSplitHuffmanSequences(
             offset_extra = if (compact_literal_rep0) 0 else group.read(of_additional_bits);
             match_extra = group.read(ml_additional_bits);
             literal_extra = if (compact_literal_rep0) 0 else group.read(ll_additional_bits);
+            if (!is_last_sequence) {
+                const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
+                state.ll_state = ll_next_state + transitions[0];
+                state.ml_state = ml_next_state + transitions[1];
+                state.of_state = of_next_state + transitions[2];
+            }
         } else if (use_grouped_fields) {
-            offset_extra = if (compact_literal_rep0) 0 else try wide_reader.readSequenceField(of_additional_bits);
-            match_extra = try wide_reader.readSequenceField(ml_additional_bits);
-            literal_extra = if (compact_literal_rep0) 0 else try wide_reader.readSequenceField(ll_additional_bits);
+            const ungrouped = try readUngroupedSequenceFields(
+                &wide_reader,
+                if (compact_literal_rep0) 0 else of_additional_bits,
+                ml_additional_bits,
+                if (compact_literal_rep0) 0 else ll_additional_bits,
+                ll_state_bits,
+                ml_state_bits,
+                of_state_bits,
+                !is_last_sequence,
+            );
+            offset_extra = ungrouped.offset_extra;
+            match_extra = ungrouped.match_extra;
+            literal_extra = ungrouped.literal_extra;
+            state.ll_state = ll_next_state + ungrouped.ll_state_delta;
+            state.ml_state = ml_next_state + ungrouped.ml_state_delta;
+            state.of_state = of_next_state + ungrouped.of_state_delta;
         } else {
             offset_extra = if (compact_literal_rep0) 0 else try state.reader.readSequenceField(of_additional_bits);
             match_extra = try state.reader.readSequenceField(ml_additional_bits);
             literal_extra = if (compact_literal_rep0) 0 else try state.reader.readSequenceField(ll_additional_bits);
+            if (!is_last_sequence) {
+                state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+                state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
+                state.of_state = try nextSequenceState(&state.reader, of_symbol);
+            }
         }
+        if (is_last_sequence) {
+            if (use_grouped_fields) try wide_reader.expectEnd() else try state.reader.expectEnd();
+        }
+        remaining -= 1;
         const match_len = match_base_value + match_extra;
         const literal_len = if (compact_literal_rep0) 1 else literal_base_value + literal_extra;
         const match_offset = if (compact_literal_rep0) blk: {
@@ -16598,27 +16685,6 @@ inline fn decodeAllFseSplitHuffmanSequences(
             use_long_match_wildcopy,
             match_len,
         );
-        remaining -= 1;
-        if (remaining != 0) {
-            if (use_grouped_fields) {
-                if (field_group) |*group| {
-                    state.ll_state = ll_next_state + group.read(ll_state_bits);
-                    state.ml_state = ml_next_state + group.read(ml_state_bits);
-                    state.of_state = of_next_state + group.read(of_state_bits);
-                } else {
-                    state.ll_state = ll_next_state + try wide_reader.readSequenceField(ll_state_bits);
-                    state.ml_state = ml_next_state + try wide_reader.readSequenceField(ml_state_bits);
-                    state.of_state = of_next_state + try wide_reader.readSequenceField(of_state_bits);
-                }
-            } else {
-                state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
-                state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
-                state.of_state = try nextSequenceState(&state.reader, of_symbol);
-            }
-        } else if (use_grouped_fields)
-            try wide_reader.expectEnd()
-        else
-            try state.reader.expectEnd();
 
         if (compact_literal_rep0 and match_len == 71 and match_offset >= 71) {
             if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
