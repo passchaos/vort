@@ -77,7 +77,12 @@ Some operations create workers per call or permit nesting. Options decode first
 creates owned output and copies it. Audited compressed-corpus decode was about
 0.81--0.88x libzstd; HQ encoding took about 3.1--4.6x reference time. The best
 ROI is policy separation, a metadata-only `BlockPlan`, winner-only emission,
-persistent scheduling, and direct options decode.
+persistent scheduling, and direct options decode. Note that
+`formatted_decode.owned` already decodes directly into its exact allocation;
+`into`/`append` stage a complete decoded buffer before publishing to preserve
+all-or-nothing publication and charged-budget accounting. A direct sink for
+those two forms therefore needs a transactional publication/budget API rather
+than a simple copy removal.
 
 Brotli q8 materialized a complete wire about 18 times; audited throughput was
 0.0283x libbrotli. Small decoder matrices are strong, but audited real one-shot
