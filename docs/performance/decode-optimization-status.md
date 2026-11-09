@@ -148,7 +148,11 @@ with 49% more).
 - After the three Brotli increments the current-source libbrotli 1.0.9
   reference/Vort 48-row geomean moved from `0.7154` to `0.7594` (Vort now
   1.32x slower overall instead of 1.40x); 64 KiB q6 from 0.5989 to 0.6888,
-  64 KiB q11 from 0.6602 to 0.7287.
+  64 KiB q11 from 0.6602 to 0.7287. After seven increments (through the
+  direct-indexed Huffman long-code fallback) the geomean is `0.7843` (Vort
+  1.28x slower): 64 KiB q6 0.7206, 1 MiB q6 0.8331, 64 KiB q11 0.7509,
+  1 MiB q11 0.8392; `sao.1m` q6 1.0745 and `mozilla.1m` q11 1.0377 beat
+  libbrotli.
 - Adopted: pin the active literal block's context map/mode, tree index,
   external 10-bit lookup and canonical table in locals inside the 10-bit
   external-literal payload, refreshing them only at explicit block switches.

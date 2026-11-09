@@ -283,6 +283,28 @@ all three codecs.
 
 Raw rows: [five-round A/B](data/huffman-direct-long-code-20261109/direct-long-code-5r.csv).
 
+
+
+## Updated reference matrix after all seven increments
+
+Rerunning the 48-row libbrotli 1.0.9 matrix after the inline, tree-pointer,
+decoded-size-dispatch, literal-block-cache, distance-block-cache and
+direct-indexed long-code increments:
+
+| Quality | Prefix | Geometric ref/Vort | Vort slower |
+| --- | --- | ---: | ---: |
+| 6 | 64 KiB | 0.7206 | 1.39x |
+| 6 | 1 MiB | 0.8331 | 1.20x |
+| 11 | 64 KiB | 0.7509 | 1.33x |
+| 11 | 1 MiB | 0.8392 | 1.19x |
+| all 48 rows | | **0.7843** | **1.28x** |
+
+The full-matrix ratio has moved 0.7154 -> 0.7594 -> 0.7843 (+9.6%
+cumulative relative throughput). `sao.1m` q6 (1.0745) and `mozilla.1m`
+q11 (1.0377) extend their leads over libbrotli; `nci.64k` q6 improved
+0.3435 -> 0.5794 and q11 0.4169 -> 0.5991. Raw rows:
+[matrix-post-direct.csv](data/brotli-decode-current-20261109/matrix-post-direct.csv).
+
 ## Next
 
 - Rerun the libbrotli reference matrix so the current gap table reflects the
