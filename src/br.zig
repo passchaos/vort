@@ -4570,6 +4570,16 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
         const chunks = [_][]const u8{input};
         return encodeHqWholeStreamAlloc(allocator, &chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
     }
+    if (options.block_len != 0 and options.quality == null) {
+        // Legacy one-shot levels share the chunked meta-block core when an
+        // explicit target is requested. Zero keeps the historical wire.
+        const chunks = [_][]const u8{input};
+        return encodePlannedStreamChunksWithOptionsAlloc(
+            allocator,
+            &chunks,
+            try plannedStreamChunksOptionsFromEncodeOptions(options),
+        );
+    }
     if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
         const chunks = [_][]const u8{input};
         return encodePlannedStreamChunksWithOptionsAlloc(
@@ -4980,7 +4990,8 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
     try validatePlannedEncodeOptions(input_len, options);
     const window_bits = try resolvedPlannedWindowBits(options);
-    if (options.hq != null or input_len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality))
+    if (options.hq != null or input_len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality) or
+        (options.block_len != 0 and options.quality == null))
         return encodedPlannedChunkedStreamBoundForInputLen(
             input_len,
             try plannedStreamChunksOptionsFromEncodeOptions(options),
@@ -7350,7 +7361,6 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
     if (options.block_len != 0) {
-        if (options.quality == null) return error.InvalidBlockPlan;
         if (options.block_len < 16 * 1024) return error.InvalidBlockPlan;
         const max_block_len = if (options.hq != null) hq_options.max_block_len else planned_chunk_max_input_len;
         if (options.block_len > max_block_len) return error.InvalidBlockPlan;
@@ -29008,10 +29018,10 @@ test "br planned quality options validate selector mode level and window contrac
         payload.len,
         .{ .quality = 0, .block_len = 64 * 1024 },
     )) >= payload.len);
-    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
         payload.len,
         .{ .level = .fast, .block_len = 64 * 1024 },
-    ));
+    )) >= payload.len);
     const oversized_len = max_uncompressed_meta_block_len + 1;
     const oversized_quality_bound = try encodedPlannedStreamBoundWithOptions(oversized_len, .{ .quality = 8 });
     const oversized_single_block_bound = try encodedStoredStreamBound(oversized_len);
@@ -29047,6 +29057,22 @@ test "br planned one-shot block length controls q0 fragment size" {
     const large_decoded = try decodeStreamAlloc(allocator, large_wire);
     defer allocator.free(large_decoded);
     try std.testing.expectEqualSlices(u8, input, large_decoded);
+
+    const legacy_wire = try encodePlannedStreamWithOptionsAlloc(
+        allocator,
+        input,
+        .{ .level = .fast, .block_len = 64 * 1024 },
+    );
+    defer allocator.free(legacy_wire);
+    try std.testing.expect(
+        legacy_wire.len <= try encodedPlannedStreamBoundWithOptions(
+            input.len,
+            .{ .level = .fast, .block_len = 64 * 1024 },
+        ),
+    );
+    const legacy_decoded = try decodeStreamAlloc(allocator, legacy_wire);
+    defer allocator.free(legacy_decoded);
+    try std.testing.expectEqualSlices(u8, input, legacy_decoded);
 }
 
 test "br planned quality and mode matrix is deterministic bounded and reusable" {
