@@ -78,11 +78,13 @@ creates owned output and copies it. Audited compressed-corpus decode was about
 0.81--0.88x libzstd; HQ encoding took about 3.1--4.6x reference time. The best
 ROI is policy separation, a metadata-only `BlockPlan`, winner-only emission,
 persistent scheduling, and direct options decode. Note that
-`formatted_decode.owned` already decodes directly into its exact allocation;
-`into`/`append` stage a complete decoded buffer before publishing to preserve
-all-or-nothing publication and charged-budget accounting. A direct sink for
-those two forms therefore needs a transactional publication/budget API rather
-than a simple copy removal.
+`formatted_decode.owned` already decodes directly into its exact allocation.
+`append` now decodes directly into caller-owned spare capacity when it fits,
+avoiding the staging allocation and copy; growth still stages a complete
+decoded buffer before publishing to preserve all-or-nothing capacity behavior
+and charged-budget accounting. `into` also stages, because the caller's prior
+bytes must remain untouched on error; a direct `into` needs a transactional
+publication/budget API rather than a simple copy removal.
 
 Brotli q8 materialized a complete wire about 18 times; audited throughput was
 0.0283x libbrotli. Small decoder matrices are strong, but audited real one-shot

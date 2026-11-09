@@ -44,6 +44,19 @@ pub fn append(comptime Codec: type, allocator: std.mem.Allocator, out: *std.Arra
     defer entry.deinit();
     var publication = try budget.AppendScope.initCharged(entry.lease, allocator, out);
     defer publication.deinit();
+    // Caller-owned spare capacity is already admitted by initExisting. Decode
+    // directly into it instead of allocating and copying a complete staging
+    // buffer. On error the list length is unchanged; bytes beyond `items.len`
+    // are not observable.
+    if (out.capacity - out.items.len >= size) {
+        const start = out.items.len;
+        const target = out.items.ptr[start..][0..size];
+        const written = Codec.decode(frame, target, entry.forward(options)) catch |err|
+            return @errorCast(entry.mapError(err));
+        if (written != size) return error.SizeMismatch;
+        out.items.len = start + size;
+        return size;
+    }
     const decoded = ownedSized(Codec, entry.allocator(), frame, entry.forward(options), size) catch |err|
         return @errorCast(entry.mapError(err));
     defer entry.allocator().free(decoded);
