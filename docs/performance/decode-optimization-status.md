@@ -90,6 +90,26 @@ with 49% more).
   64 KiB level 3 about 2% faster, and `mozilla` 1 MiB level 3 1.6% slower.
   The 1024 threshold already captures the large `nci`/`xml` wins.
 
+## 2026-11-09 Zstd decode session
+
+- Adopted: split-executor short-match routing, single-vector match kernels,
+  single-branch grouped field reads, one combined transition read
+  (`sequence_transition_group.read`), and an out-of-line ungrouped fallback
+  shared by the medium, dense, wide, raw all-FSE and Huffman-sequence
+  executors. Paired 48-row A/B against the session start: field-group increment
+  `0.9396` (-6.04%, 95% CI `[0.9221, 0.9557]`); raw-executor increment neutral
+  overall (`0.9975`) but `mozilla.1m` L19 -9.5% and `sao.1m` L19 -5.0%. The
+  absolute reference/Vort decode ratio moved from `0.7067` to `0.7562`.
+  See [sequence executors](zstd-decode-sequence-executors-20261109.md),
+  [field groups](zstd-decode-field-groups-20261109.md), and
+  [raw executors](zstd-decode-raw-field-groups-20261109.md).
+- Rejected: 4x16 unrolled 64-byte match wildcopy in the dense executor.
+  Gating at `match_len > 16` and `offset >= 64` gave `xml.64k` L19 -2.43% in an
+  8-round A/B but `dickens.64k` L3 +0.66%, `reymont.1m` L19 +0.99% and
+  `xml.64k` L3 +0.34%; gating at `match_len >= 64` regressed `dickens.64k` L3
+  +7.1% and `reymont.1m` L19 +6.9% from loop codegen alone. The added branch and
+  over-copy stores outweigh the target-row gain.
+
 ## Remaining structural options
 
 1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total
