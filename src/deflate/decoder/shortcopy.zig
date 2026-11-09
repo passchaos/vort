@@ -21,3 +21,22 @@ inline fn pair(comptime width: usize, destination: []u8, source: []const u8, len
     destination[0..width].* = first;
     destination[tail..][0..width].* = last;
 }
+
+/// Inline widening copy for non-overlapping matches up to the 258-byte
+/// Deflate maximum. Avoids the compiler-rt `memcpy` call (generic length
+/// dispatch plus register spills) by emitting fixed 16-byte vector moves with
+/// one overlapping tail store. Caller guarantees source and destination do
+/// not overlap and both spans stay inside their buffers.
+pub inline fn copyWide(destination: []u8, source: []const u8, length: usize) void {
+    std.debug.assert(length >= 3 and length <= 258 and length <= destination.len and length <= source.len);
+    var offset: usize = 0;
+    while (offset + 16 <= length) : (offset += 16) {
+        const head: [16]u8 = source[offset..][0..16].*;
+        destination[offset..][0..16].* = head;
+    }
+    if (offset < length) {
+        const tail = length - 16;
+        const last: [16]u8 = source[tail..][0..16].*;
+        destination[tail..][0..16].* = last;
+    }
+}

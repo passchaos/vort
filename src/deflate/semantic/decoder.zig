@@ -754,6 +754,11 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
                 const source: *align(1) const [16]u8 = @ptrCast(output[out_pos - distance ..].ptr);
                 const destination: *align(1) [16]u8 = @ptrCast(output[out_pos..].ptr);
                 destination.* = source.*;
+            } else if (distance >= 16 and out_pos + 258 <= output.len) {
+                // Fixed-width inline vector moves with one overlapping tail
+                // store; the 258-byte loop headroom bounds every speculative
+                // byte, so no runtime-length compiler-rt memcpy is needed.
+                shortcopy.copyWide(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
             } else {
                 shortcopy.copy(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
             }
