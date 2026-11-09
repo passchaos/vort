@@ -137,6 +137,14 @@ with 49% more).
   caches to frames with at most 64 trees was required: the ungated optional
   pointer variant regressed `x-ray.1m` q11 +2.12%. See
   [the Brotli matrix](brotli-decode-current-20261109.md).
+- Adopted: select the wider prepared/tail-lookup Brotli kernels by decoded
+  meta-block length instead of compressed stream size. Highly compressible
+  64 KiB inputs (for example `nci.64k` q6 at 4,214 wire bytes) had been locked
+  out of the fast kernels by the 16 KiB wire threshold. The one-shot minimal
+  path shares the large-frame dispatch (inline, gated against caller
+  dictionaries and meta blocks below 64 KiB). 48-row five-round A/B `0.9536`
+  (-4.64%, 95% CI `[-7.80%, -1.77%]`); command-dense 64 KiB rows improve
+  16-32% (`mozilla`/`mr`/`xml`/`nci`), worst control `xml.1m` q11 +1.94%.
 
 ## Remaining structural options
 

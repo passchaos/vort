@@ -17854,6 +17854,11 @@ fn processMinimalCompressedMetaBlockImpl(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
+    // Decoded-size-gated prepared kernels resolve only RFC static-dictionary
+    // references; small meta blocks and frames with a caller shared dictionary
+    // keep the generic dictionary-aware loop.
+    if (dictionary == null and meta_block_len >= external_literal_lookup_meta_block_min)
+        return processPreparedCompressedMetaBlock(reader, output, written, meta_block_len, meta_block_end, last_distances, window_bits, &header);
     var command_tree = try resolveCurrentCommandTree(&header);
     const literals_all_inline = literalTreesAllInline(&header);
     const distances_all_inline = distanceTreesAllInline(&header);
@@ -18018,14 +18023,32 @@ fn processLargeCompressedMetaBlock(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
+    return processPreparedCompressedMetaBlock(reader, output, written, meta_block_len, meta_block_end, last_distances, window_bits, &header);
+}
+
+/// Prepared-lookup kernel dispatch shared by the small-frame and large-frame
+/// one-shot paths. Selection depends on decoded meta-block length and tree
+/// shape, not compressed stream size: highly compressible 64 KiB inputs (for
+/// example four kilobytes of wire for nci) otherwise stayed on the generic
+/// prepared path and skipped the wider lookups.
+inline fn processPreparedCompressedMetaBlock(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) Error!void {
     if (header.literal_tree_count >= clustered_literal_tree_threshold and
         header.literal_tree_count <= inline_literal_tree_count and
-        try processFlatLiteralTailLookupMetaBlock(reader, output, written, meta_block_end, last_distances, window_bits, &header)) return;
+        try processFlatLiteralTailLookupMetaBlock(reader, output, written, meta_block_end, last_distances, window_bits, header)) return;
     if (meta_block_len >= external_literal_lookup_meta_block_min and
         header.literal_tree_count <= external_literal_lookup_tree_limit)
     {
         var literal_lookups: [external_literal_lookup_tree_limit]ExternalLiteralLookup = undefined;
-        try prepareExternalLiteralLookups(&header, &literal_lookups);
+        try prepareExternalLiteralLookups(header, &literal_lookups);
         if (builtin.is_test) test_external_literal_lookup_hits += 1;
         if (header.literal_tree_count == 1 and
             header.literal_block.block_type_count == 1 and
@@ -18051,28 +18074,28 @@ fn processLargeCompressedMetaBlock(
                 meta_block_end,
                 last_distances,
                 window_bits,
-                &header,
+                header,
                 &literal_lookups[0],
                 &command_lookup,
                 &distance_lookup,
             );
         }
-        const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
+        const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
         var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
         defer fast_reader.syncTo(reader);
         if (auxiliary_tail_lookups)
-            return processExternalLiteralLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header, &literal_lookups);
-        return processExternalLiteralLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header, &literal_lookups);
+            return processExternalLiteralLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
+        return processExternalLiteralLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
     }
     if (meta_block_len >= external_literal_lookup_meta_block_min) {
         if (header.literal_tree_count <= external_literal_lookup_middle_tree_limit) {
-            return processWideExternalLiteralLookup9MetaBlock(external_literal_lookup_middle_tree_limit, reader, output, written, meta_block_end, last_distances, window_bits, &header);
+            return processWideExternalLiteralLookup9MetaBlock(external_literal_lookup_middle_tree_limit, reader, output, written, meta_block_end, last_distances, window_bits, header);
         }
-        if (prepareAuxiliaryTailLookups(&header))
-            return processPairedWideLiteralMetaBlock(reader, output, written, meta_block_end, last_distances, window_bits, &header);
-        return processWideExternalLiteralLookupMetaBlock(max_literal_context_trees, reader, output, written, meta_block_end, last_distances, window_bits, &header);
+        if (prepareAuxiliaryTailLookups(header))
+            return processPairedWideLiteralMetaBlock(reader, output, written, meta_block_end, last_distances, window_bits, header);
+        return processWideExternalLiteralLookupMetaBlock(max_literal_context_trees, reader, output, written, meta_block_end, last_distances, window_bits, header);
     }
-    return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, header);
 }
 
 noinline fn processSingleTreeExternalLookupCompressedPayload(

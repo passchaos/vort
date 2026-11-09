@@ -115,8 +115,45 @@ Raw rows: [gated five-round A/B](data/brotli-tree-pointer-20261109/cache-pointer
 [ungated three-round](data/brotli-tree-pointer-20261109/cache-pointer-ab.csv) and
 [ungated five-round](data/brotli-tree-pointer-20261109/cache-pointer-ab-5r.csv).
 
+## Increment: select prepared kernels by decoded meta-block length
+
+Kernel selection for the wider prepared/tail-lookup payloads was keyed on
+compressed stream size (`large_stream_decode_threshold`, 16 KiB of wire).
+Highly compressible 64 KiB inputs produce only a few kilobytes of wire
+(`nci.64k` q6 is 4,214 bytes), so they stayed on the generic prepared-lookup
+loop and never reached the flat/external literal-lookup kernels, despite
+having a 64 KiB decoded meta block. The one-shot minimal path now shares the
+large-frame dispatch, keyed on decoded meta-block length and tree shape;
+frames with a caller shared dictionary and meta blocks below 64 KiB keep the
+generic loop. The shared dispatcher is `inline`; an out-of-line first cut
+regressed `nci.1m` about +2.3% from the extra per-frame call.
+
+A five-round 48-row paired `--vort-only` A/B against the tree-pointer
+increment measures:
+
+| Group | new/old time geomean |
+| --- | ---: |
+| q6, 64 KiB | 0.8895 (-11.05%) |
+| q6, 1 MiB | 0.9988 (-0.12%) |
+| q11, 64 KiB | 0.9272 (-7.28%) |
+| q11, 1 MiB | 1.0038 (+0.38%) |
+| all 48 rows | **0.9536 (-4.64%)** |
+
+Bootstrap 95% interval over rows: `[-7.80%, -1.77%]`. The command-dense
+64 KiB cliff is repaired far past the weak-row bar: `mozilla.64k` q6
+-31.82%, `mr.64k` q6 -30.55%, `xml.64k` q6 -29.07%, `nci.64k` q6 -27.93%,
+q11 rows -15.84% to -23.79%. Worst control is `xml.1m` q11 +1.94%; every
+row stays above the 0.98x floor. An earlier out-of-line dispatch measured
+the same 64 KiB wins but regressed `nci.1m` +2.3%; inlining the dispatcher
+returns that row to -1.53%/+0.06% in eight-round rechecks.
+
+Raw rows: [inline five-round A/B](data/brotli-decoded-size-dispatch-20261109/decoded-size-dispatch-inline-5r.csv)
+and the rejected [out-of-line first cut](data/brotli-decoded-size-dispatch-20261109/decoded-size-dispatch-5r.csv).
+
 ## Next
 
+- Rerun the libbrotli reference matrix so the current gap table reflects the
+  repaired 64 KiB command-dense rows.
 - Longer term, fuse the payload phase dispatch the way libbrotli's decoder does;
   the profile is flat across the per-command helpers, so only a restructure can
   close the remaining 1.2--1.7x gap.
