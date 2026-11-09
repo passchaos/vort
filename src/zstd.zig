@@ -1090,6 +1090,7 @@ const SourceCompressedBlockTestSupport = struct {
 
 const SourceDecodeApiTestSupport = struct {
     pub const decodeInto = decodeSourceFrameInto;
+    pub const decodeAppend = decodeSourceFrameAppend;
     pub const decodeAlloc = decodeSourceFrameAlloc;
     pub const inspect = inspectSourceFrame;
     pub const decodedSize = sourceFrameDecodedSize;

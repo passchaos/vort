@@ -2165,7 +2165,10 @@ API for one complete data frame:
   caller-owned history, staging and two entropy pages; it allocates nothing
   and returns the decoded length plus the exact frame end;
 - `decodeSourceFrameAppend` and `decodeSourceFrameAlloc` provide growable
-  convenience forms; the append form keeps committed output on error;
+  convenience forms; the append form keeps committed output on error. A
+  declared content size reserves the exact destination span once and drains
+  directly into the caller list; frames without a declared size keep the
+  bounded 4 KiB staging path;
 - `sourceFrameDecodedSize` exposes the optional size query.
 
 `SourceFrameDecodeOptions` selects standard or magicless frames, one optional

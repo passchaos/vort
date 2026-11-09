@@ -344,6 +344,43 @@ pub fn Facade(comptime Support: type) type {
                 &history,
                 &state,
             );
+            // A declared content size gives the exact destination span. Grow
+            // the caller list once and drain straight into its spare capacity
+            // instead of copying through a small stack buffer. The list length
+            // is published only after the frame completes; an error keeps the
+            // bytes already drained, matching the existing append contract.
+            if (parsed.frame.header.content_size) |declared| {
+                if (declared > options.frame_decoded_max)
+                    return error.OutputLimitExceeded;
+                if (declared != 0) {
+                    const size = try count.toLocal(declared);
+                    const start = out.items.len;
+                    const needed = std.math.add(usize, start, size) catch
+                        return error.IntegerOverflow;
+                    try out.ensureTotalCapacity(allocator, needed);
+                    var written: usize = 0;
+                    errdefer out.items.len = start + written;
+                    while (executor.snapshot().phase != .done) {
+                        switch (executor.snapshot().phase) {
+                            .drain => {
+                                const result = try executor.drain(
+                                    out.items.ptr[start + written ..][0 .. size - written],
+                                );
+                                written += result.written;
+                                if (result.status == .need_output)
+                                    return error.OutputTooSmall;
+                            },
+                            else => try executor.execute(),
+                        }
+                    }
+                    if (written != size) return error.SizeMismatch;
+                    out.items.len = start + written;
+                    return .{
+                        .decoded_len = state.frame_decoded,
+                        .frame_end_offset = try executor.frameEndOffset(),
+                    };
+                }
+            }
             var buffer: [4096]u8 = undefined;
             while (executor.snapshot().phase != .done) {
                 switch (executor.snapshot().phase) {

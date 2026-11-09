@@ -700,6 +700,44 @@ fn frameDictionarySet(comptime Support: type) !void {
     try std.testing.expectEqualSlices(u8, fixture.expected, fallback);
 }
 
+fn appendContentSizeFrame(comptime Support: type) !void {
+    var payload: [512]u8 = undefined;
+    for (&payload, 0..) |*byte, index| {
+        byte.* = @truncate(index * 17 + index / 7);
+    }
+    var fixture: stream_common.Fixture = .{};
+    stream_common.appendDataHeader(&fixture, 0x60, null, payload.len);
+    stream_common.appendRawBlock(&fixture, &payload, true);
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.bytes() };
+    const view = source.source();
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        1024,
+        1024,
+        0,
+        9,
+    );
+    defer workspace.deinit(std.testing.allocator);
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    try out.appendSlice(std.testing.allocator, "prefix");
+    const result = try Support.decodeAppend(
+        std.testing.allocator,
+        view,
+        workspace.view(),
+        &out,
+        .{},
+    );
+    try std.testing.expectEqual(
+        @as(u64, payload.len),
+        @as(u64, @intCast(result.decoded_len)),
+    );
+    try std.testing.expectEqualStrings("prefix", out.items[0..6]);
+    try std.testing.expectEqualSlices(u8, &payload, out.items[6..]);
+}
+
 fn streamBounds(comptime Support: type) !void {
     var fixture: stream_common.Fixture = .{};
     stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
@@ -1127,6 +1165,7 @@ pub fn contracts(comptime Support: type) !void {
     try streamConcatenation(Support);
     try streamDictionarySet(Support);
     try frameDictionarySet(Support);
+    try appendContentSizeFrame(Support);
     try streamBounds(Support);
     try streamSkippableOnly(Support);
     try streamEmpty(Support);
