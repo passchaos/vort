@@ -212,6 +212,41 @@ Raw rows: [five-round A/B](data/brotli-literal-block-cache-20261109/literal-bloc
 [three-round screen](data/brotli-literal-block-cache-20261109/literal-block-cache-3r.csv),
 [rejected scoped-locals variant](data/brotli-literal-block-cache-20261109/literal-block-cache-scoped-5r.csv).
 
+## Increment: cache active distance block trees (npostfix-zero auxiliary tier)
+
+The auxiliary 10-bit-literal payload decoded every distance symbol through
+the context map, a `current_type * 4` index and a tree reload, even though
+that tier admits only inline-tier distance trees. For `npostfix == 0`
+frames the four context trees and map of the active distance block are now
+pinned and refreshed only at distance block switches. Dispatch chooses the
+cached instantiation comptime per meta block.
+
+A five-round 48-row paired `--vort-only` A/B against the literal-block-cache
+increment measures:
+
+| Group | new/old time geomean |
+| --- | ---: |
+| q6, 64 KiB | 0.9876 (-1.24%) |
+| q6, 1 MiB | 0.9956 (-0.44%) |
+| q11, 64 KiB | 0.9966 (-0.34%) |
+| q11, 1 MiB | 0.9994 (-0.06%) |
+| all 48 rows | **0.9948 (-0.52%)** |
+
+Bootstrap 95% interval over rows: `[-0.84%, -0.21%]`. Strongest rows:
+`nci.64k` q6 -2.97%, `samba.64k` q6 -2.81%, `mr.1m` q6 -2.72%. The
+distance cache had to be gated: applied to every frame it measured
+`0.9941` overall but `mozilla.1m` q11 +2.14% and `osdb.64k` q11 +1.89%;
+grouping the rows by `npostfix` showed npostfix 0 at `0.9899` but
+npostfix 2 at `1.0101` (register pressure from the pinned state), and a
+runtime gate still measured `1.0043` — only the comptime-selected
+instantiation keeps npostfix-zero gains without the regression. Ten-round
+rechecks of the remaining borderline controls (`mozilla.64k` q6 +0.92%,
+`samba.1m` q11 +1.28%) confirmed them under the 2% bar.
+
+Raw rows: [comptime-gated five-round A/B](data/brotli-distance-block-cache-20261109/distance-cache-comptime-5r.csv),
+[ungated five-round](data/brotli-distance-block-cache-20261109/distance-block-cache-5r.csv),
+[runtime-gated five-round](data/brotli-distance-block-cache-20261109/distance-cache-npost0-5r.csv).
+
 ## Next
 
 - Rerun the libbrotli reference matrix so the current gap table reflects the

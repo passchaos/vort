@@ -155,6 +155,13 @@ with 49% more).
   48-row five-round A/B `0.9898` (-1.02%, 95% CI `[-1.32%, -0.72%]`); every
   group improves 0.9-1.2%, worst control `x-ray.64k` q6 +0.89%. A
   branch-scoped-locals variant regressed +0.54% and was rejected.
+- Adopted: pin the active distance block's four context trees and map in
+  the npostfix-zero auxiliary 10-bit payload, refreshing only on distance
+  block switches and selecting the cached instantiation comptime per meta
+  block. 48-row five-round A/B `0.9948` (-0.52%, 95% CI `[-0.84%, -0.21%]`).
+  Gating was required: the ungated cache regressed npostfix-2 rows about
+  +1% (`mozilla.1m` q11 +2.14%), and a runtime gate still measured
+  +0.43% overall; only comptime selection keeps the npostfix-0 gains.
 - Rejected: ten-bit fused external command lookup inside the 10-bit literal
   payload. The external-distance pairing failed `InvalidHuffmanCode` on the
   command-dense rows; the correct command-10-only variant regressed the

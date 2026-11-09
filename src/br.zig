@@ -18083,9 +18083,12 @@ inline fn processPreparedCompressedMetaBlock(
         const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
         var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
         defer fast_reader.syncTo(reader);
-        if (auxiliary_tail_lookups)
-            return processExternalLiteralLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
-        return processExternalLiteralLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
+        if (auxiliary_tail_lookups) {
+            if (header.npostfix == 0)
+                return processExternalLiteralLookupCompressedPayload(true, true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
+            return processExternalLiteralLookupCompressedPayload(true, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
+        }
+        return processExternalLiteralLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
     }
     if (meta_block_len >= external_literal_lookup_meta_block_min) {
         if (header.literal_tree_count <= external_literal_lookup_middle_tree_limit) {
@@ -18792,6 +18795,7 @@ noinline fn processTailLookupCompressedPayload(
 
 noinline fn processExternalLiteralLookupCompressedPayload(
     comptime auxiliary_tail_lookups: bool,
+    comptime distance_block_cache: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -18817,6 +18821,30 @@ noinline fn processExternalLiteralLookupCompressedPayload(
     var active_literal_table: *const huffman.HuffmanTable(256) = &header.literal_trees[active_literal_tree_index].table;
     var active_literal_map: [*]const u8 = @ptrCast(&header.literal_context_map[@as(usize, header.literal_block.current_type) * 64]);
     var active_context_mode: u2 = header.literal_context_modes[header.literal_block.current_type];
+    // The auxiliary tier keeps every distance tree inside the inline tier, so
+    // the active distance block's four context trees and context map can be
+    // pinned and refreshed only when the distance block type switches.
+    const CachedTail9Distance = struct {
+        map: [*]const u8,
+        trees: [4]*PrefixCode(max_distance_alphabet_size),
+    };
+    const refreshCachedDistance = struct {
+        fn refresh(h: *MinimalCompressedHeader, state: *CachedTail9Distance) Error!void {
+            if (h.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+            state.map = @ptrCast(&h.distance_context_map[@as(usize, h.distance_block.current_type) * 4]);
+            for (0..4) |context| {
+                const tree_index = state.map[context];
+                if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
+                state.trees[context] = &h.distance_trees[tree_index];
+            }
+        }
+    }.refresh;
+    var distance_state: CachedTail9Distance = undefined;
+    // npostfix>0 frames regressed with the pinned four-tree state (+1% at
+    // npostfix 2/3 from register pressure without matching the zero-postfix
+    // gains); keep them on the established per-symbol tail-9 path.
+    if (comptime auxiliary_tail_lookups and distance_block_cache)
+        try refreshCachedDistance(header, &distance_state);
     var output_cursor = written.*;
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
@@ -18894,7 +18922,9 @@ noinline fn processExternalLiteralLookupCompressedPayload(
         }
         if (output_cursor == meta_block_end) return;
         var decoded_distance: DecodedBrotliDistance = undefined;
-        if (comptime auxiliary_tail_lookups)
+        if (comptime auxiliary_tail_lookups and distance_block_cache)
+            try readCachedTail9DistanceInto(header, reader, lengths, last_distances, &decoded_distance, &distance_state, refreshCachedDistance)
+        else if (comptime auxiliary_tail_lookups)
             try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
         else
             decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
@@ -23498,6 +23528,41 @@ fn readSummaryMinimalDistanceLargeWindow(
     };
     try recordSummaryDistanceCode(stats, implicit, symbol, header.ndirect);
     return decoded;
+}
+
+/// Distance decode for the external 10-bit literal payload's auxiliary tier.
+/// The four context trees for the active distance block are pinned by the
+/// caller; block switches refresh them through `refresh` instead of reloading
+/// the context map, multiply and tree pointer on every command.
+inline fn readCachedTail9DistanceInto(
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    decoded_distance: *DecodedBrotliDistance,
+    state: anytype,
+    refresh: anytype,
+) Error!void {
+    if (lengths.distance_symbol_zero) {
+        decoded_distance.* = .{ .distance = last_distances[3], .update_ring = false };
+        return;
+    }
+    if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0) {
+        try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+        try refresh(header, state);
+    }
+    const context = distanceContext(lengths.copy_len);
+    const symbol = try state.trees[context].decodeTailLookup9Fixed(reader);
+    if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+    if (symbol < 16) {
+        try resolveShortDistanceInto(symbol, last_distances, &decoded_distance.distance);
+        decoded_distance.update_ring = symbol != 0;
+        return;
+    }
+    decoded_distance.* = .{
+        .distance = try readPreparedDistanceStaged(header, reader, symbol),
+        .update_ring = true,
+    };
 }
 
 inline fn readMinimalDistanceTailLookupInto(
