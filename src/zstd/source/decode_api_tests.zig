@@ -635,6 +635,71 @@ fn streamDictionarySet(comptime Support: type) !void {
     );
 }
 
+fn frameDictionarySet(comptime Support: type) !void {
+    var fixture = try Support.loadFullDictionaryFixture(std.testing.allocator);
+    defer Support.freeFullDictionaryFixture(std.testing.allocator, &fixture);
+
+    const dictionary_bytes = try stream_common.decodeHex(
+        @embedFile("../testdata/libzstd-trained-repeat.dict.hex"),
+    );
+    defer std.testing.allocator.free(dictionary_bytes);
+    const standard = try Support.DecodeDictionary.initFromStandardDictionary(
+        dictionary_bytes,
+    );
+    const dictionaries = [_]Support.DecodeDictionary{standard.dictionary};
+    const set = Support.DecodeDictionarySet.init(&dictionaries);
+    const no_dictionaries = [_]Support.DecodeDictionary{};
+    const empty_set = Support.DecodeDictionarySet.init(&no_dictionaries);
+
+    var source = stream_common.TrackingSource{ .bytes = fixture.frame };
+    const view = source.source();
+    const info = try Support.inspect(view, .{ .dictionary_set = set });
+    try std.testing.expect(info.dictionary_id != 0);
+
+    var workspace = try WorkspaceOwner(Support).init(
+        std.testing.allocator,
+        2304,
+        2304,
+        standard.dictionary.content.len,
+        17,
+    );
+    defer workspace.deinit(std.testing.allocator);
+    const allocated = try Support.decodeAlloc(
+        std.testing.allocator,
+        view,
+        workspace.view(),
+        .{ .dictionary_set = set },
+    );
+    defer std.testing.allocator.free(allocated);
+    try std.testing.expectEqualSlices(u8, fixture.expected, allocated);
+
+    try std.testing.expectError(
+        error.NeedDictionary,
+        Support.inspect(view, .{ .dictionary_set = empty_set }),
+    );
+    try std.testing.expectError(
+        error.NeedDictionary,
+        Support.decodeAlloc(
+            std.testing.allocator,
+            view,
+            workspace.view(),
+            .{ .dictionary_set = empty_set },
+        ),
+    );
+
+    const fallback = try Support.decodeAlloc(
+        std.testing.allocator,
+        view,
+        workspace.view(),
+        .{
+            .dictionary_set = empty_set,
+            .dictionary = standard.dictionary,
+        },
+    );
+    defer std.testing.allocator.free(fallback);
+    try std.testing.expectEqualSlices(u8, fixture.expected, fallback);
+}
+
 fn streamBounds(comptime Support: type) !void {
     var fixture: stream_common.Fixture = .{};
     stream_common.appendDataHeader(&fixture, 0x00, 0x00, null);
@@ -1061,6 +1126,7 @@ pub fn contracts(comptime Support: type) !void {
     try sourceFailureRetry(Support);
     try streamConcatenation(Support);
     try streamDictionarySet(Support);
+    try frameDictionarySet(Support);
     try streamBounds(Support);
     try streamSkippableOnly(Support);
     try streamEmpty(Support);

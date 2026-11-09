@@ -2169,18 +2169,21 @@ API for one complete data frame:
 - `sourceFrameDecodedSize` exposes the optional size query.
 
 `SourceFrameDecodeOptions` selects standard or magicless frames, one optional
-`NativeDictionary` (standard full or raw content), a whole-frame decoded cap
-and explicit checksum ignoring. Dictionary identity is admitted before any
-payload read. A full destination returns `OutputTooSmall` after the committed
-prefix; callers needing all-or-nothing output decode into their own staging
-buffer. `inspect` does not decode entropy or compare the checksum value.
+`NativeDictionary` (standard full or raw content), an optional
+`NativeDictionarySet` that resolves declared nonzero IDs before the fallback,
+a whole-frame decoded cap and explicit checksum ignoring. ID-less frames use
+the fallback dictionary. Dictionary identity is admitted before any payload
+read. A full destination returns `OutputTooSmall` after the committed prefix;
+callers needing all-or-nothing output decode into their own staging buffer.
+`inspect` does not decode entropy or compare the checksum value.
 
 Tests cover raw/RLE and checksum frames, the existing compressed fixtures, the
-full standard dictionary fixture, missing/mismatched dictionary IDs, magicless
-frames, truncated prefixes, trailing suffixes, destination and workspace
-bounds, checksum mismatch/ignore, decoded caps, header-only inspection and
-source-failure retry. Native, Linux x86 and actual WASI runs share the
-`Zstd source` filter, and root exports are covered by a consumer contract.
+full standard dictionary fixture, dictionary-set and fallback selection,
+missing/mismatched dictionary IDs, magicless frames, truncated prefixes,
+trailing suffixes, destination and workspace bounds, checksum mismatch/ignore,
+decoded caps, header-only inspection and source-failure retry. Native, Linux
+x86 and actual WASI runs share the `Zstd source` filter, and root exports are
+covered by a consumer contract.
 No performance or RSS claim follows.
 
 The same facade now exposes a public stream API:

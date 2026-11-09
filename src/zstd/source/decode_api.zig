@@ -45,7 +45,10 @@ pub fn Facade(comptime Support: type) type {
 
         pub const Options = struct {
             format: stream_cursor.FrameFormat = .standard,
+            /// Used for ID-less frames and as a fallback for a declared ID.
             dictionary: ?Support.DecodeDictionary = null,
+            /// Resolves declared nonzero dictionary IDs before the fallback.
+            dictionary_set: ?Support.DecodeDictionarySet = null,
             frame_decoded_max: Count = std.math.maxInt(Count),
             ignore_checksum: bool = false,
         };
@@ -153,6 +156,18 @@ pub fn Facade(comptime Support: type) type {
             };
         }
 
+        fn resolveFrameDictionary(
+            header_id: u32,
+            options: Options,
+        ) Error!?Support.DecodeDictionary {
+            if (header_id == 0) return options.dictionary;
+            if (options.dictionary_set) |set|
+                if (set.find(header_id)) |dictionary| return dictionary;
+            const fallback = options.dictionary orelse return error.NeedDictionary;
+            if (fallback.id != header_id) return error.DictionaryMismatch;
+            return fallback;
+        }
+
         fn parse(source: byte_source.Source, options: Options) Error!Parsed {
             const available = try source_input.Range.init(
                 source,
@@ -163,7 +178,10 @@ pub fn Facade(comptime Support: type) type {
                 available,
                 options.format,
             );
-            return fromLayout(frame, options.dictionary);
+            return fromLayout(
+                frame,
+                try resolveFrameDictionary(frame.header.dictionary_id, options),
+            );
         }
 
         fn inspectFrameLayout(
