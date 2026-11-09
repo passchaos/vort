@@ -162,6 +162,15 @@ with 49% more).
   Gating was required: the ungated cache regressed npostfix-2 rows about
   +1% (`mozilla.1m` q11 +2.14%), and a runtime gate still measured
   +0.43% overall; only comptime selection keeps the npostfix-0 gains.
+- Adopted (shared `src/huffman.zig`, benefits all codecs): direct-indexed
+  Huffman long-code fallback. Table construction records the unreversed
+  first canonical code per width; the fallback converts the reversed peek
+  to canonical and indexes the band entry in O(max_bits) instead of linear
+  scanning every symbol. Brotli 48-row five-round A/B `0.9800` (-2.00%,
+  95% CI `[-2.55%, -1.48%]`); `nci.64k` q6 -8.11%, nci.64k q11 -6.80%.
+  No wider fast-lookup table, so it avoids the quality-11 regression of the
+  rejected 10-bit command tail lookup. Verified with huffman/br/zstd and
+  deflate (670) test suites.
 - Rejected: ten-bit fused external command lookup inside the 10-bit literal
   payload. The external-distance pairing failed `InvalidHuffmanCode` on the
   command-dense rows; the correct command-10-only variant regressed the

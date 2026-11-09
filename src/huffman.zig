@@ -55,6 +55,10 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         /// compact table representation without paying O(symbols * bit_width).
         first_by_bits: [max_code_bits + 1]u16 = @splat(0),
         count_by_bits: [max_code_bits + 1]u16 = @splat(0),
+        /// Canonical (unreversed) first code per bit width, matching the
+        /// per-band entry order. Enables an O(max_bits) long-code fallback
+        /// without growing the table with a wider fast-lookup tail.
+        first_code_by_bits: [max_code_bits + 1]u16 = @splat(0),
 
         const Self = @This();
         pub const Entry = struct {
@@ -200,6 +204,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             for (1..max_code_bits + 1) |bits| {
                 table.first_by_bits[bits] = offset;
                 table.count_by_bits[bits] = counts[bits];
+                table.first_code_by_bits[bits] = next_code[bits];
                 offset += counts[bits];
             }
             std.debug.assert(offset == active_len);
@@ -239,6 +244,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             destination.max_bits = 0;
             destination.first_by_bits = @splat(0);
             destination.count_by_bits = @splat(0);
+            destination.first_code_by_bits = @splat(0);
             if (active_symbols.len == 0) return;
 
             var counts: [max_code_bits + 1]u16 = @splat(0);
@@ -269,6 +275,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 destination.first_by_bits[bits] = offset;
                 write_offsets[bits] = offset;
                 destination.count_by_bits[bits] = counts[bits];
+                destination.first_code_by_bits[bits] = next_code[bits];
                 offset += counts[bits];
             }
             for (active_symbols) |symbol| {
@@ -327,6 +334,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             for (1..max_code_bits + 1) |bits| {
                 table.first_by_bits[bits] = offset;
                 table.count_by_bits[bits] = counts[bits];
+                table.first_code_by_bits[bits] = next_code[bits];
                 offset += counts[bits];
             }
             var write_offsets = table.first_by_bits;
@@ -498,26 +506,29 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return (packed_entry >> 4) - 1;
         }
 
+        /// Long-code fallback after a zero slot in a fixed-width lookup. The
+        /// initial peek arrives in wire (reversed) order; convert it to the
+        /// canonical MSB-first code, then extend one bit at a time. Canonical
+        /// codes of each width are consecutive from `first_code_by_bits`, and
+        /// entries are stored in canonical order, so the code maps directly to
+        /// its entry in O(max_bits) instead of scanning every symbol of each
+        /// width. No wider lookup table is needed.
         pub noinline fn decodeValueLongAfterLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4) Error!u16 {
             if (self.max_bits <= lookup_bits or !hasDecodedBits(reader, lookup_bits))
                 return self.decodeValue(reader);
 
-            var code = reader.peekBitsPadded(u16, lookup_bits);
+            var canonical = reverseBits(reader.peekBitsPadded(u16, lookup_bits), lookup_bits);
             reader.advanceBitsStagedAssumeAvailable(lookup_bits);
             var bits: u4 = lookup_bits + 1;
             while (bits <= self.max_bits) {
-                code |= try reader.readBits(u16, 1) << @intCast(bits - 1);
-                const first = self.first_by_bits[bits];
-                const end = first + self.count_by_bits[bits];
-                var index = first;
-                while (index + 1 < end) : (index += 2) {
-                    const first_entry = self.entries[index];
-                    if (first_entry.code == code) return first_entry.symbol;
-                    const second_entry = self.entries[index + 1];
-                    if (second_entry.code == code) return second_entry.symbol;
+                canonical = (canonical << 1) | @as(u16, try reader.readBits(u16, 1));
+                const count = self.count_by_bits[bits];
+                const first_code = self.first_code_by_bits[bits];
+                if (canonical >= first_code) {
+                    const band_index = canonical - first_code;
+                    if (band_index < count)
+                        return self.entries[@as(usize, self.first_by_bits[bits]) + @as(usize, band_index)].symbol;
                 }
-                if (index < end and self.entries[index].code == code) return self.entries[index].symbol;
-                if (bits == self.max_bits) break;
                 bits += 1;
             }
             return error.InvalidHuffmanCode;

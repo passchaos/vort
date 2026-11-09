@@ -247,6 +247,42 @@ Raw rows: [comptime-gated five-round A/B](data/brotli-distance-block-cache-20261
 [ungated five-round](data/brotli-distance-block-cache-20261109/distance-block-cache-5r.csv),
 [runtime-gated five-round](data/brotli-distance-block-cache-20261109/distance-cache-npost0-5r.csv).
 
+## Increment: O(max_bits) direct-indexed Huffman long-code fallback
+
+The fixed-width lookups (8/9/10 bit) fall through to
+`HuffmanTable.decodeValueLongAfterLookup` for overlong codes. That fallback
+re-read one bit at a time and **linearly scanned every symbol** of each
+width band; the nci.64k profile put 10% of decode time in it (command
+alphabet 704, 138 codes at 12+ bits). The table already stores entries in
+canonical band order, so construction now also records the unreversed
+first canonical code per width (`first_code_by_bits`, 32 bytes per table).
+The fallback reverses the initial peek to canonical MSB-first form, extends
+it, and indexes the band entry directly in O(max_bits), with no wider
+fast-lookup table and therefore none of the 2 KiB command-tail cache cost
+that regressed quality 11 in the earlier rejected experiment.
+
+A five-round 48-row paired `--vort-only` A/B against the distance-cache
+increment measures:
+
+| Group | new/old time geomean |
+| --- | ---: |
+| q6, 64 KiB | 0.9716 (-2.84%) |
+| q6, 1 MiB | 0.9811 (-1.89%) |
+| q11, 64 KiB | 0.9832 (-1.68%) |
+| q11, 1 MiB | 0.9843 (-1.57%) |
+| all 48 rows | **0.9800 (-2.00%)** |
+
+Bootstrap 95% interval over rows: `[-2.55%, -1.48%]`, clearing the 3%
+geomean bar. Strongest rows: `nci.64k` q6 -8.11% (ten-round recheck),
+`nci.64k` q11 -6.80%, `xml.1m` q6 -4.40% (recheck), `webster.1m` q11
+-4.91%. The five-round screen's worst control (`webster.1m` q6 +1.07%)
+rechecked at +0.31% over ten rounds; every row is above the 0.98x floor.
+Verified with `zig test src/huffman.zig` (83/83), `test-br`, `test-zstd`
+and `zig test src/deflate.zig` (670/670), since the fallback is shared by
+all three codecs.
+
+Raw rows: [five-round A/B](data/huffman-direct-long-code-20261109/direct-long-code-5r.csv).
+
 ## Next
 
 - Rerun the libbrotli reference matrix so the current gap table reflects the
