@@ -355,6 +355,9 @@ The library is under active development. Its current capabilities include:
   deletion/replacement plus physical compaction are also available;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+  the best preset's optimal parser also plans against preset dictionary history
+  instead of downgrading to lazy matching (see the
+  [dictionary optimal evidence](docs/performance/deflate-dictionary-optimal.md));
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while

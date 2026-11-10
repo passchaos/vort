@@ -153,6 +153,28 @@ test "raw deflate incremental lazy encoder seeds preset dictionary" {
     try std.testing.expectEqual(dictionary.len + payload.len, encoder.matchFinderSnapshot().absolute_position);
 }
 
+test "raw deflate incremental best encoder uses optimal preset dictionary history" {
+    const dictionary = "best optimal preset dictionary phrase shared across stream blocks";
+    const payload = "optimal preset dictionary phrase shared across stream blocks and repeated blocks " ** 8;
+    var compression = deflate.optionsForLevel(.best);
+    compression.lz77_options.window_len = 1024;
+    compression.lz77_options.max_chain = 64;
+    compression.lz77_options.max_candidates = 16;
+    var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithDictionary(std.testing.allocator, .{
+        .block_len = 31,
+        .compression = compression,
+    }, dictionary);
+    defer encoder.deinit();
+
+    const encoded = try encodeStream(&encoder, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try deflate.decodeRawAutoAllocWithDictionary(std.testing.allocator, encoded, dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(dictionary.len + payload.len, encoder.matchFinderSnapshot().absolute_position);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
 test "raw deflate incremental matcher safely changes parser modes" {
     const first = "hash-mode-prefix-abcdefghijklmnopqrstuvwxyz0123456789" ** 3;
     const second = "lazy-mode-suffix-abcdefghijklmnopqrstuvwxyz0123456789" ** 3;

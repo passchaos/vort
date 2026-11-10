@@ -54,6 +54,7 @@ pub fn main(init: std.process.Init) !void {
     var csv_path: ?[]const u8 = null;
     var markdown_path: ?[]const u8 = null;
     var shared_dictionary: ?[]u8 = null;
+    var options: vort.CompressionOptions = vort.optionsForCompressionLevel(.default);
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| {
@@ -82,6 +83,10 @@ pub fn main(init: std.process.Init) !void {
             shared_dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dict_path, init.gpa, .limited(128 * 1024 * 1024));
             continue;
         }
+        if (std.mem.eql(u8, arg, "--level")) {
+            options = try parseLevelOptions(args.next() orelse return error.MissingCompressionLevel);
+            continue;
+        }
         if (shared_dictionary) |dictionary| {
             try appendSharedDictionaryPath(init, &file_cases, dictionary, arg);
             continue;
@@ -106,7 +111,7 @@ pub fn main(init: std.process.Init) !void {
     var rows: std.ArrayList(ReportRow) = .empty;
     defer rows.deinit(init.gpa);
     for (cases) |case| {
-        const stats = try reportCase(init.gpa, writer, case);
+        const stats = try reportCase(init.gpa, writer, case, options);
         totals.add(stats);
         try rows.append(init.gpa, .{ .name = case.name, .stats = stats });
     }
@@ -195,9 +200,17 @@ fn appendSharedDictionaryFile(init: std.process.Init, cases: *std.ArrayList(Case
     try cases.append(init.gpa, .{ .name = payload_path, .owned_name = owned_name, .dictionary = dictionary, .shared_dictionary = true, .payload = payload, .owned = true });
 }
 
-fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case) !ReportStats {
-    const options = vort.optionsForCompressionLevel(.default);
+fn parseLevelOptions(value: []const u8) !vort.CompressionOptions {
+    if (std.mem.eql(u8, value, "fastest")) return vort.optionsForCompressionLevel(.fastest);
+    if (std.mem.eql(u8, value, "fast")) return vort.optionsForCompressionLevel(.fast);
+    if (std.mem.eql(u8, value, "default")) return vort.optionsForCompressionLevel(.default);
+    if (std.mem.eql(u8, value, "best")) return vort.optionsForCompressionLevel(.best);
+    const level = std.fmt.parseInt(u4, value, 10) catch return error.InvalidCompressionLevel;
+    if (level == 0) return error.InvalidCompressionLevel;
+    return vort.optionsForZlibLevel(level);
+}
 
+fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case, options: vort.CompressionOptions) !ReportStats {
     const raw_plain = try vort.encodeRawBestAlloc(allocator, case.payload, options);
     defer allocator.free(raw_plain);
     const raw_dict = try vort.encodeRawBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);

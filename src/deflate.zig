@@ -1721,6 +1721,18 @@ fn useTinyHashPlan(input: []const u8, options: CompressionOptions) bool {
         options.lz77_options.window_len <= 16 * 1024;
 }
 
+fn planStatsForTokens(tokens: []const lz77.Token) lz77.PlanStats {
+    var stats: lz77.PlanStats = .{};
+    for (tokens) |token| switch (token) {
+        .literal => stats.literals += 1,
+        .match => |match| {
+            stats.matches += 1;
+            stats.matched_bytes += match.length;
+        },
+    };
+    return stats;
+}
+
 fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
     const normalized = normalizeOptionsForStrategy(options);
     if (dictionary.len == 0) return planTokensAlloc(allocator, input, normalized);
@@ -1733,7 +1745,54 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
             else
                 try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
             .greedy => try lz77.greedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
-            .lazy, .optimal => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+            .lazy => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+            // The generic optimal parser indexes one contiguous buffer. Plan
+            // dictionary suffix + input as one stream from the input start, so
+            // matches into preset history survive as real back-references
+            // instead of falling back to the lazy parser or over-charging the
+            // un-emitted history prefix.
+            .optimal => blk: {
+                const window_len = @min(normalized.lz77_options.window_len, lz77.default_window_len);
+                const dictionary_len = @min(dictionary.len, window_len);
+                if (dictionary_len == 0)
+                    break :blk planTokensAlloc(allocator, input, normalized);
+                const combined_len = std.math.add(usize, dictionary_len, input.len) catch
+                    return error.IntegerOverflow;
+                const combined = try allocator.alloc(u8, combined_len);
+                defer allocator.free(combined);
+                @memcpy(combined[0..dictionary_len], dictionary[dictionary.len - dictionary_len ..]);
+                @memcpy(combined[dictionary_len..], input);
+                // The covered BT parser is the production high-quality Deflate
+                // planner. Reuse it whenever the dictionary-prefixed buffer
+                // fits its u16 position domain; larger blocks keep the generic
+                // optimal parser.
+                if (combined_len >= bt_optimal.min_input_len and
+                    combined_len <= bt_optimal.max_input_len)
+                {
+                    var prepared = try bt_optimal.Prepared.init(allocator, combined, normalized.lz77_options);
+                    defer prepared.deinit(allocator);
+                    // Start one maximum match before the suffix so coverage
+                    // suppression cannot hide the match that reaches the first
+                    // payload byte; trimming then turns that crossing match into
+                    // an ordinary dictionary back-reference.
+                    const plan_start = dictionary_len - @min(dictionary_len, lz77.max_match_len);
+                    const seed = try prepared.planFixedAllocFrom(allocator, plan_start);
+                    defer seed.deinit(allocator);
+                    const trimmed = try trimPlanToSuffixAlloc(
+                        allocator,
+                        combined[plan_start..],
+                        seed.tokens,
+                        dictionary_len - plan_start,
+                    );
+                    break :blk .{ .tokens = trimmed, .stats = planStatsForTokens(trimmed) };
+                }
+                break :blk try lz77.optimalPlanAllocFrom(
+                    allocator,
+                    combined,
+                    dictionary_len,
+                    normalized.lz77_options,
+                );
+            },
         },
         .filtered => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
         .huffman_only => try lz77.literalPlanAlloc(allocator, input),
@@ -22437,6 +22496,38 @@ test "raw preset dictionary encoders can reference preset history" {
         // planners should produce a back-reference into the preset history.
         try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, raw));
     }
+}
+
+test "raw best optimal dictionary planner references preset history" {
+    const dictionary = "shared dictionary phrase: the quick brown fox jumps over the lazy dog\n" ** 16;
+    const input = ("shared dictionary phrase: the quick brown fox jumps over the lazy dog\n" ** 48) ++ "tail";
+    const best_options = optionsForLevel(.best);
+    const plan = try planTokensWithDictionaryAlloc(std.testing.allocator, input, dictionary, best_options);
+    defer plan.deinit(std.testing.allocator);
+
+    var consumed: usize = 0;
+    var dictionary_matches: usize = 0;
+    for (plan.tokens) |token| switch (token) {
+        .literal => consumed += 1,
+        .match => |match| {
+            if (match.distance > consumed) dictionary_matches += 1;
+            consumed += match.length;
+        },
+    };
+    try std.testing.expectEqual(input.len, consumed);
+    try std.testing.expect(dictionary_matches != 0);
+
+    const lazy_encoded = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(lazy_encoded);
+    const encoded = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, best_options);
+    defer std.testing.allocator.free(encoded);
+    // Complete-wire arbitration retains the lazy fallback when the covered BT
+    // plan is not smaller, so the optimal preset must never grow the wire.
+    try std.testing.expect(encoded.len <= lazy_encoded.len);
+    const decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, encoded, dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+    try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, encoded));
 }
 
 test "allocating preset dictionary decode bulk-copies history-only matches" {

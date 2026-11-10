@@ -560,6 +560,7 @@ pub const PreparedOptimal = struct {
             &self.scratch,
             allocator,
             self.input,
+            0,
             self.options,
             self.scratch.compact_prev.items,
             optimal_compact_index_empty,
@@ -586,6 +587,7 @@ pub const PreparedOptimal = struct {
             &self.scratch,
             allocator,
             self.input,
+            0,
             self.options,
             self.scratch.compact_prev.items,
             optimal_compact_index_empty,
@@ -1457,6 +1459,38 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
 }
 
+/// Plan only `input[start..]` while allowing matches to reference the prefix
+/// `input[0..start]` as already-known history. The returned tokens cover
+/// exactly the suffix; prefix positions are indexed but never emitted. This is
+/// the dictionary/history form used by format encoders whose preset history is
+/// addressable but not part of the block payload.
+pub fn optimalPlanAllocFrom(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    start: usize,
+    options: GreedyOptions,
+) !GreedyPlan {
+    if (start > input.len) return error.InvalidBlockPlan;
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuseInternalProfiled(
+        &scratch,
+        allocator,
+        input,
+        start,
+        options,
+        true,
+        false,
+        false,
+        true,
+        true,
+        undefined,
+        undefined,
+        undefined,
+    );
+    return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
 /// Run the same bounded hash-chain search as `optimalPlanAlloc`, but score its
 /// literal, match-length, and match-distance choices with a caller model. This
 /// is a proposal API: format encoders should still arbitrate the resulting
@@ -1695,7 +1729,7 @@ inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: us
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, true, true, undefined, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, true, false, false, true, true, undefined, undefined, undefined);
 }
 
 pub fn optimalPlanReuseWithCostModel(
@@ -1706,7 +1740,7 @@ pub fn optimalPlanReuseWithCostModel(
     model: OptimalCostModel,
 ) !PlanStats {
     try model.validate(options.window_len, input.len);
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, false, false, true, true, false, undefined, undefined, model);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, false, false, true, true, false, undefined, undefined, model);
 }
 
 fn optimalPlanReuseInternal(
@@ -1716,7 +1750,7 @@ fn optimalPlanReuseInternal(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
 ) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, false, true, true, undefined, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, enable_prefix_bound, false, false, true, true, undefined, undefined, undefined);
 }
 
 pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !GreedyPlan {
@@ -1724,7 +1758,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
     const total_start = std.Io.Clock.awake.now(io);
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
-    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, false, true, true, io, profile, undefined);
+    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, 0, options, true, true, false, true, true, io, profile, undefined);
     const tokens = try allocator.dupe(Token, scratch.tokens.items);
     profile.total_ns = elapsedNs(total_start, io);
     return .{ .tokens = tokens, .stats = stats };
@@ -1733,7 +1767,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
 pub fn optimalPlanReuseProfiled(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !PlanStats {
     profile.* = .{ .input_bytes = input.len };
     const total_start = std.Io.Clock.awake.now(io);
-    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, true, true, io, profile, undefined);
+    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, true, true, false, true, true, io, profile, undefined);
     profile.total_ns = elapsedNs(total_start, io);
     return stats;
 }
@@ -1742,6 +1776,7 @@ fn optimalPlanReuseInternalProfiled(
     scratch: *OptimalScratch,
     allocator: std.mem.Allocator,
     input: []const u8,
+    start: usize,
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
@@ -1752,6 +1787,7 @@ fn optimalPlanReuseInternalProfiled(
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
+    if (start > input.len) return error.InvalidBlockPlan;
     if (comptime !modeled) try validateFixedOptimalWindow(options.window_len);
     const n = input.len;
     // A literal-only path costs at most nine bits per byte. This bound is far
@@ -1786,13 +1822,13 @@ fn optimalPlanReuseInternalProfiled(
                 profile.index_ns = elapsedNs(index_start, io);
                 profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + (scratch.ordinal.ordinals.items.len + scratch.ordinal.four_prev.items.len) * @sizeOf(u16) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
             }
-            return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, true, io, profile, model);
+            return optimalPlanReuseWithIndex(scratch, allocator, input, start, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, true, io, profile, model);
         }
         if (comptime collect_profile) {
             profile.index_ns = elapsedNs(index_start, io);
             profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
         }
-        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, false, io, profile, model);
+        return optimalPlanReuseWithIndex(scratch, allocator, input, start, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, false, io, profile, model);
     }
     const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     try scratch.index.build(allocator, input);
@@ -1800,13 +1836,14 @@ fn optimalPlanReuseInternalProfiled(
         profile.index_ns = elapsedNs(index_start, io);
         profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
     }
-    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, false, io, profile, model);
+    return optimalPlanReuseWithIndex(scratch, allocator, input, start, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, false, io, profile, model);
 }
 
 inline fn optimalPlanReuseWithIndex(
     scratch: *OptimalScratch,
     allocator: std.mem.Allocator,
     input: []const u8,
+    start: usize,
     options: GreedyOptions,
     prev: anytype,
     comptime empty: @TypeOf(prev[0]),
@@ -1837,7 +1874,7 @@ inline fn optimalPlanReuseWithIndex(
         (if (packed_optimal_length_choices) true else optimal_prefix_bounds.costsFitInputLength(usize, n));
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
-    while (rev_i > 0) {
+    while (rev_i > start) {
         rev_i -= 1;
         if (comptime collect_profile) profile.positions += 1;
         costs[rev_i] = (if (comptime modeled) model.literalCost(rev_i, input) else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
@@ -1985,7 +2022,7 @@ inline fn optimalPlanReuseWithIndex(
     if (comptime collect_profile) profile.search_ns = elapsedNs(search_start, io);
     const reconstruct_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     var stats = PlanStats{};
-    var pos: usize = 0;
+    var pos: usize = start;
     while (pos < n) {
         const token = steps[pos];
         try appendToken(&scratch.tokens, allocator, token);
@@ -3895,6 +3932,54 @@ test "reusable optimal parser preserves tokens and capacities" {
     try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.compact_head.capacity, scratch.compact_prev.capacity, scratch.tokens.capacity });
 }
 
+test "optimal suffix plan references history prefix without emitting it" {
+    const prefix = "dictionary-history-phrase-" ** 16;
+    const suffix = "dictionary-history-phrase-" ** 16;
+    const input = prefix ++ suffix;
+    const options = GreedyOptions{
+        .window_len = 32 * 1024,
+        .max_chain = 64,
+        .nice_len = max_match_len,
+        .max_candidates = 8,
+        .min_match = 3,
+    };
+    const plan = try optimalPlanAllocFrom(std.testing.allocator, input, prefix.len, options);
+    defer plan.deinit(std.testing.allocator);
+    var consumed: usize = 0;
+    var history_match = false;
+    for (plan.tokens) |token| switch (token) {
+        .literal => consumed += 1,
+        .match => |match| {
+            if (consumed == 0) history_match = true;
+            consumed += match.length;
+        },
+    };
+    try std.testing.expectEqual(suffix.len, consumed);
+    try std.testing.expect(history_match);
+
+    // The suffix alone cannot see the prefix, so the history-aware plan must
+    // not be larger under the same fixed cost model.
+    const suffix_only = try optimalPlanAlloc(std.testing.allocator, suffix, options);
+    defer suffix_only.deinit(std.testing.allocator);
+    try std.testing.expect(fixedBitCost(plan.tokens) <= fixedBitCost(suffix_only.tokens));
+
+    // start == 0 is the ordinary whole-input planner.
+    const whole = try optimalPlanAllocFrom(std.testing.allocator, input, 0, options);
+    defer whole.deinit(std.testing.allocator);
+    const reference = try optimalPlanAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    try expectEqualTokenSlices(whole.tokens, reference.tokens);
+    try std.testing.expectEqual(reference.stats, whole.stats);
+
+    const empty = try optimalPlanAllocFrom(std.testing.allocator, input, input.len, options);
+    defer empty.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), empty.tokens.len);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        optimalPlanAllocFrom(std.testing.allocator, input, input.len + 1, options),
+    );
+}
+
 test "prepared optimal matches independent fixed and modeled plans" {
     const input = "abcabcXabcabcYabcabcZabcabcX" ** 16;
     const options = GreedyOptions{
@@ -4994,12 +5079,12 @@ test "optimal prefix bound fixed-cost comparison oracle" {
         pub const costsFitInputLength = optimal_prefix_bounds.costsFitInputLength;
 
         pub fn original(scratch: *PrefixBoundRoot.OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: PrefixBoundRoot.GreedyOptions) !PrefixBoundRoot.PlanStats {
-            return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, false, true, undefined, undefined, undefined);
+            return optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, true, false, false, false, true, undefined, undefined, undefined);
         }
         pub fn originalProfiled(scratch: *PrefixBoundRoot.OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: PrefixBoundRoot.GreedyOptions, io: std.Io, profile: *PrefixBoundRoot.OptimalSearchProfile) !PrefixBoundRoot.PlanStats {
             profile.* = .{ .input_bytes = input.len };
             const start = std.Io.Clock.awake.now(io);
-            const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, false, true, io, profile, undefined);
+            const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, true, true, false, false, true, io, profile, undefined);
             profile.total_ns = elapsedNs(start, io);
             return stats;
         }
@@ -5019,12 +5104,12 @@ test "ordinal optimal index preserves original plan and ownership" {
         pub const optimizedProfiled = Root.optimalPlanReuseProfiled;
         pub const costsFitInputLength = optimal_prefix_bounds.costsFitInputLength;
         pub fn original(scratch: *Root.OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: Root.GreedyOptions) !Root.PlanStats {
-            return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, true, false, undefined, undefined, undefined);
+            return optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, true, false, false, true, false, undefined, undefined, undefined);
         }
         pub fn originalProfiled(scratch: *Root.OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: Root.GreedyOptions, io: std.Io, profile: *Root.OptimalSearchProfile) !Root.PlanStats {
             profile.* = .{ .input_bytes = input.len };
             const start = std.Io.Clock.awake.now(io);
-            const result = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, true, false, io, profile, undefined);
+            const result = try optimalPlanReuseInternalProfiled(scratch, allocator, input, 0, options, true, true, false, true, false, io, profile, undefined);
             profile.total_ns = elapsedNs(start, io);
             return result;
         }
