@@ -33,6 +33,54 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    // Brotli and Zstd share the core decode error set. Feed every fuzz input
+    // through their one-shot allocating decoders too, so malformed entropy
+    // payloads and resource-limit paths get the same coverage as raw Deflate.
+    if (vort.br.decodeStreamAlloc(allocator, data)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.InvalidHuffmanCode,
+        error.InvalidMatch,
+        error.NeedDictionary,
+        error.DictionaryMismatch,
+        error.UnsupportedBrotliFeature,
+        error.TrailingData,
+        error.OutputTooSmall,
+        error.WorkingMemoryLimitExceeded,
+        error.OutputLimitExceeded,
+        error.IntegerOverflow,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.InputTooSmall,
+        error.RangeOutOfBounds,
+        => {},
+        else => return err,
+    }
+    if (vort.zstd.decodeFrameAlloc(allocator, data)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.InvalidHuffmanCode,
+        error.InvalidMatch,
+        error.NeedDictionary,
+        error.DictionaryMismatch,
+        error.UnsupportedZstdFeature,
+        error.TrailingData,
+        error.OutputTooSmall,
+        error.WorkingMemoryLimitExceeded,
+        error.OutputLimitExceeded,
+        error.IntegerOverflow,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.InputTooSmall,
+        error.RangeOutOfBounds,
+        error.InvalidMagic,
+        => {},
+        else => return err,
+    }
     if (vort.parseBgzf(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidBgzfStream,
