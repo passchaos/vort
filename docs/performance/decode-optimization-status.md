@@ -202,6 +202,15 @@ with 49% more).
   experiment measured 0.9998 and was rejected. The libdeflate 1.10
   reference/Vort matrix moves 0.9261 -> 0.9437 overall; `nci.64k` L9
   reaches 0.9930 (near parity, 0.8208 at session start).
+- Zstd decode matrix rerun at current head (2026-11-10, libzstd 1.4.8):
+  reference/Vort 48-row geomean 0.7067 -> 0.7573 (Vort 1.32x slower);
+  L3 64 KiB 0.7815, L3 1 MiB 0.7665, L19 64 KiB 0.7366, L19 1 MiB
+  0.7454; strongest `x-ray.64k` L3 0.9832. Weak-row profile shows the
+  split-dense FSE sequence executor at 43% plus 9.5% FSE table build;
+  IPC 3.29 and branch-miss 0.65% leave no branch-hint headroom, and
+  wider wildcopy tiers remain rejected. Next gain needs executor
+  fusion or FSE build scatter reduction; see
+  [zstd-decode-current-20261110](zstd-decode-current-20261110.md).
 
 ## Remaining structural options
 
