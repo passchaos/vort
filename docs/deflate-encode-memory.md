@@ -97,6 +97,13 @@ rejects an unsupported policy. `writeIncrementalBestPlannedBlock`, the staged
 benchmark instrumentation surface, also explicitly rejects these controls. No
 accepting path silently ignores a requested cap or profile.
 
+Gzip Fixed/Best `nextMemberWithOptions` and `nextMemberExactSizeWithOptions`
+validate raw block controls and reject unsupported one-shot cap/profile before
+installing options, replacing a pledge, or resetting checksum/history state.
+Admission preserves the existing priority: complete and drained member first,
+then cumulative member-counter overflow, then raw options. A rejected transition
+leaves the previous member state intact and permits a valid next-member retry.
+
 Validation is available with:
 
 ```sh

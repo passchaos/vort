@@ -116,6 +116,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMemberWithOptions(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.member_count, 1);
+            try Codec.RawEncoder.validateOptions(options.raw);
             self.options = options;
             self.raw.resetWithOptions(options.raw);
             self.resetMemberWrapper();
@@ -132,6 +133,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMemberExactSizeWithOptions(self: *Self, options: Options, expected_input_len: Count) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.member_count, 1);
+            try Codec.RawEncoder.validateOptions(options.raw);
             self.options = options;
             self.raw.resetWithOptions(options.raw);
             self.resetMemberExactSize(expected_input_len);

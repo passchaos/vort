@@ -23640,3 +23640,7 @@ test "Deflate arena requested heap contracts" {
 test "Deflate arena physical reservation reference and overlap contracts" {
     try @import("deflate/encode/arena_budget/physical_tests.zig").contracts();
 }
+
+test "Deflate gzip next member policy contracts" {
+    try @import("deflate/incremental/tests/gzip_next_policy.zig").contracts(@This());
+}
