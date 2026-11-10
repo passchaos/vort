@@ -194,6 +194,14 @@ with 49% more).
   `[-2.82%, -0.68%]`); 64 KiB groups -2.51%/-2.88%. The libdeflate 1.10
   reference/Vort matrix moves 0.9131 -> 0.9261; `nci.64k` L9 0.8208 ->
   0.9287. deflate.zig tests 670/670.
+- Adopted (Deflate decode): `@branchHint(.unlikely)` on the literal
+  exceptional-flag and distance secondary-table branches in the semantic
+  linear loop, identified by a branch-miss profile. 48-row five-round
+  A/B `0.9817` (-1.83%, 95% CI `[-2.35%, -1.32%]`); all four groups
+  -1.68% to -2.12%, worst control +0.87%. A semantic-table base-pinning
+  experiment measured 0.9998 and was rejected. The libdeflate 1.10
+  reference/Vort matrix moves 0.9261 -> 0.9437 overall; `nci.64k` L9
+  reaches 0.9930 (near parity, 0.8208 at session start).
 
 ## Remaining structural options
 

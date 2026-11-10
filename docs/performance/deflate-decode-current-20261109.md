@@ -76,3 +76,29 @@ The full-matrix ratio moves 0.9131 -> 0.9261. Weak rows improve most:
 `nci.64k` L9 0.8208 -> 0.9287, L6 0.7823 -> 0.8742; `nci.1m` remains
 ahead of libdeflate (1.14x). Raw rows:
 [matrix-post-wide.csv](data/deflate-decode-current-20261109/matrix-post-wide.csv).
+
+## Update: unlikely branch hints on exceptional/secondary paths (2026-11-10)
+
+A branch-miss profile of `nci.64k` L6 showed the literal exceptional-flag
+and distance primary/secondary tests among the hottest mispredicts in the
+semantic linear loop. Marking both slow paths `@branchHint(.unlikely)`
+lays out the common primary-table path without cold-path interleaving.
+The 48-row five-round paired A/B measured 0.9817 new/old (-1.83%,
+bootstrap CI [-2.35%, -1.32%]); see the
+[branch-hint note](deflate-branch-hint-20261110.md). A separate
+table-base-pinning experiment (locals for the semantic lookup arrays)
+measured 0.9998 and was rejected as neutral. Rerunning the
+libdeflate 1.10 reference matrix:
+
+| Level | Prefix | Geometric ref/Vort | Vort slower |
+| --- | --- | ---: | ---: |
+| 6 | 64 KiB | 0.9294 | 1.08x |
+| 6 | 1 MiB | 0.9582 | 1.04x |
+| 9 | 64 KiB | 0.9315 | 1.07x |
+| 9 | 1 MiB | 0.9561 | 1.05x |
+| all 48 rows | | **0.9437** | **1.06x** |
+
+The full-matrix ratio moves 0.9131 -> 0.9261 (wide copy) -> 0.9437.
+`nci.64k` L9 reaches 0.9930 (near parity) from 0.8208 at session start;
+`nci.1m` extends its lead to 1.1595. Raw rows:
+[matrix-post-branch-hint.csv](data/deflate-decode-current-20261109/matrix-post-branch-hint.csv).
