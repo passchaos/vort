@@ -15,6 +15,10 @@ sync-flush append (including scatter input), the reusable
 The arena facade counts actual backing node requests and supports distinct
 physical scratch/output allocators; see
 [its resource contract](deflate-arena-encode-memory.md).
+Chunked sync-flush paths also preserve plaintext and descriptor aliases to the
+whole output allocation using scratch copies of affected original contiguous
+runs; [the alias contract](deflate-sync-flush-alias.md) specifies memory accounting
+and retry ownership.
 `ZlibEncodeOptions` supplies the same fields for every `ZlibFrameEncoder`
 Alloc/Append/Into/Scratch and stored-chunks operation and the one-shot frame
 facades. This includes stored, fixed, dynamic, literal-only dynamic, best,

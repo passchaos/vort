@@ -4018,6 +4018,17 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     );
 }
 
+const SyncFlushChunksCodec = struct {
+    pub const Options = CompressionOptions;
+    pub const Writer = bitstream.BitWriter;
+    pub const history_len = lz77.default_window_len;
+    pub const plan = planTokensWithDictionaryAlloc;
+    pub const writeHeader = writeFixedBlockHeader;
+    pub const writeTokens = writeFixedTokenSequence;
+    pub const writeEnd = writeFixedBlockEnd;
+    pub const writeStored = writeStoredBlock;
+};
+
 fn encodeRawFixedSyncFlushChunksAppendWithAllocators(
     scratch_allocator: std.mem.Allocator,
     output_allocator: std.mem.Allocator,
@@ -4025,34 +4036,7 @@ fn encodeRawFixedSyncFlushChunksAppendWithAllocators(
     chunks: []const []const u8,
     options: CompressionOptions,
 ) !usize {
-    const start = out.items.len;
-    var writer = bitstream.BitWriter{ .bytes = out.* };
-    out.* = .empty;
-    defer out.* = writer.bytes;
-    errdefer writer.bytes.shrinkRetainingCapacity(start);
-    const history_limit = @min(
-        options.lz77_options.window_len,
-        lz77.default_window_len,
-    );
-    var history: std.ArrayList(u8) = .empty;
-    defer history.deinit(scratch_allocator);
-    var wrote_block = false;
-    var index: usize = 0;
-    while (nextNonEmptyChunk(chunks, &index)) |first| {
-        const run = contiguousChunkRun(chunks, first, &index);
-        if (!wrote_block) try writeFixedBlockHeader(output_allocator, &writer, false);
-        const plan = try planTokensWithDictionaryAlloc(scratch_allocator, run, history.items, options);
-        defer plan.deinit(scratch_allocator);
-        try writeFixedTokenSequence(output_allocator, &writer, plan.tokens);
-        try appendRollingHistory(scratch_allocator, &history, run, history_limit);
-        wrote_block = true;
-    }
-    if (!wrote_block) {
-        try writeFixedBlockHeader(output_allocator, &writer, false);
-    }
-    try writeFixedBlockEnd(output_allocator, &writer);
-    try writeStoredBlock(output_allocator, &writer, "", false);
-    return writer.bytes.items.len - start;
+    return @import("deflate/encode/sync_flush_chunks.zig").encode(SyncFlushChunksCodec, scratch_allocator, output_allocator, out, chunks, options);
 }
 
 /// Reuses temporary token/hash/history allocations across independent fixed
@@ -4103,77 +4087,6 @@ test "raw fixed sync flush encoder reuses parser and output storage" {
     _ = try encoder.encodeChunksAppend(&actual, &fragments, options);
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     try std.testing.expectEqual(output_pointer, actual.allocatedSlice().ptr);
-}
-
-const NonEmptyChunk = struct { bytes: []const u8, next_index: usize };
-
-fn peekNonEmptyChunk(
-    chunks: []const []const u8,
-    start: usize,
-) ?NonEmptyChunk {
-    var index = start;
-    while (index < chunks.len) : (index += 1) {
-        if (chunks[index].len != 0) {
-            return .{ .bytes = chunks[index], .next_index = index + 1 };
-        }
-    }
-    return null;
-}
-
-fn nextNonEmptyChunk(
-    chunks: []const []const u8,
-    index: *usize,
-) ?[]const u8 {
-    const next = peekNonEmptyChunk(chunks, index.*) orelse return null;
-    index.* = next.next_index;
-    return next.bytes;
-}
-
-fn contiguousChunkRun(
-    chunks: []const []const u8,
-    first: []const u8,
-    index: *usize,
-) []const u8 {
-    var run_len = first.len;
-    while (peekNonEmptyChunk(chunks, index.*)) |next| {
-        const expected = std.math.add(
-            usize,
-            @intFromPtr(first.ptr),
-            run_len,
-        ) catch break;
-        if (@intFromPtr(next.bytes.ptr) != expected) break;
-        run_len = std.math.add(usize, run_len, next.bytes.len) catch break;
-        index.* = next.next_index;
-    }
-    return first.ptr[0..run_len];
-}
-
-fn appendRollingHistory(
-    allocator: std.mem.Allocator,
-    history: *std.ArrayList(u8),
-    chunk: []const u8,
-    limit: usize,
-) !void {
-    if (limit == 0) {
-        history.clearRetainingCapacity();
-        return;
-    }
-    const required = @min(
-        limit,
-        std.math.add(usize, history.items.len, chunk.len) catch limit,
-    );
-    try history.ensureTotalCapacity(allocator, required);
-    if (chunk.len >= limit) {
-        history.clearRetainingCapacity();
-        history.appendSliceAssumeCapacity(chunk[chunk.len - limit ..]);
-        return;
-    }
-
-    const retained_len = @min(history.items.len, limit - chunk.len);
-    const retained = history.items[history.items.len - retained_len ..];
-    std.mem.copyForwards(u8, history.items[0..retained_len], retained);
-    history.items.len = retained_len;
-    history.appendSliceAssumeCapacity(chunk);
 }
 
 test "raw fixed sync flush round trips after RFC 7692 tail elision" {
@@ -23643,4 +23556,8 @@ test "Deflate arena physical reservation reference and overlap contracts" {
 
 test "Deflate gzip next member policy contracts" {
     try @import("deflate/incremental/tests/gzip_next_policy.zig").contracts(@This());
+}
+
+test "Deflate sync flush chunk alias contracts" {
+    try @import("deflate/encode/sync_flush_chunks/alias_tests.zig").contracts(@This());
 }
