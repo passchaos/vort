@@ -94,3 +94,34 @@ wildcopy loop, whose 16-byte width matches libzstd and was confirmed
 optimal on this corpus. Conclusion: the remaining 1.32x gap is gated on
 the executor/table-representation fusion; no isolated micro-change with
 new evidence is available from the current profile.
+
+## Rejected: default-constructing the initial sequence frame state (2026-11-10)
+
+A frame-pointer call-graph profile attributed 1.71% of `xml.64k` L19
+decode to a 13,440-byte `memcpyFast` emitted right after
+`initialSequenceFrameState` in
+`decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace`: even with
+no dictionary the function returns `.{}` by value, and the caller's
+large stack `SequenceFrameState` (three 2 KiB FSE entry arrays) is
+materialized through a compiler-rt memcpy rather than a zero-latency
+default init.
+
+The experiment replaced the call with an explicit
+`var frame_state: SequenceFrameState = .{}`. The bench build compiled
+and smoke-decoded every Silesia row, but the full `zig test src/zstd.zig`
+suite failed four public dictionary/prefix contract tests with
+`CorruptFrame`: `NativeFrameDecoder.decodeIntoSlice` routes dictionary
+frames through the same workspace entry point, so the no-dictionary
+assumption is invalid there even though the one-shot benchmark never
+exercises it.
+
+A correct version would need to keep `initialSequenceFrameState` for
+dictionary frames and only default-construct on a proven no-dictionary
+path, but that requires threading a runtime flag through the reusable
+decoder's contract; the change is no longer local and the 1.71% ceiling
+does not justify it ahead of the executor-fusion milestone. Reverted;
+baseline suite restored to 1397/1397. The remaining production memcpy
+shares are the raw-block output copy (line 12408, only for raw blocks
+absent from the profiled compressed frames) and the tree-cache
+description stores (`<=128` bytes, only on first block without a cache
+hit).
