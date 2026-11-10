@@ -56,6 +56,7 @@ pub fn main(init: std.process.Init) !void {
     var shared_dictionary: ?[]u8 = null;
     var options: vort.CompressionOptions = vort.optionsForCompressionLevel(.default);
     var chunked_block_len: ?usize = null;
+    var adaptive_split = false;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| {
@@ -96,6 +97,10 @@ pub fn main(init: std.process.Init) !void {
             );
             continue;
         }
+        if (std.mem.eql(u8, arg, "--adaptive-split")) {
+            adaptive_split = true;
+            continue;
+        }
         if (shared_dictionary) |dictionary| {
             try appendSharedDictionaryPath(init, &file_cases, dictionary, arg);
             continue;
@@ -120,7 +125,7 @@ pub fn main(init: std.process.Init) !void {
     var rows: std.ArrayList(ReportRow) = .empty;
     defer rows.deinit(init.gpa);
     for (cases) |case| {
-        const stats = try reportCase(init.gpa, writer, case, options, chunked_block_len);
+        const stats = try reportCase(init.gpa, writer, case, options, chunked_block_len, adaptive_split);
         totals.add(stats);
         try rows.append(init.gpa, .{ .name = case.name, .stats = stats });
     }
@@ -225,23 +230,32 @@ fn reportCase(
     case: Case,
     options: vort.CompressionOptions,
     chunked_block_len: ?usize,
+    adaptive_split: bool,
 ) !ReportStats {
-    const raw_plain = if (chunked_block_len) |block_len|
+    const raw_plain = if (adaptive_split)
+        try vort.encodeRawBestAdaptiveSplitAlloc(allocator, case.payload, options, .{})
+    else if (chunked_block_len) |block_len|
         try vort.encodeRawBestSplitAlloc(allocator, case.payload, block_len, options)
     else
         try vort.encodeRawBestAlloc(allocator, case.payload, options);
     defer allocator.free(raw_plain);
-    const raw_dict = if (chunked_block_len) |block_len|
+    const raw_dict = if (adaptive_split)
+        try vort.encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, case.payload, case.dictionary, options, .{})
+    else if (chunked_block_len) |block_len|
         try vort.encodeRawBestSplitWithDictionaryAlloc(allocator, case.payload, case.dictionary, block_len, options)
     else
         try vort.encodeRawBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);
     defer allocator.free(raw_dict);
-    const zlib_plain = if (chunked_block_len) |block_len|
+    const zlib_plain = if (adaptive_split)
+        try vort.encodeZlibBestAdaptiveSplitAlloc(allocator, case.payload, options, .{})
+    else if (chunked_block_len) |block_len|
         try vort.encodeZlibBestSplitAlloc(allocator, case.payload, block_len, options)
     else
         try vort.encodeZlibBestAlloc(allocator, case.payload, options);
     defer allocator.free(zlib_plain);
-    const zlib_dict = if (chunked_block_len) |block_len|
+    const zlib_dict = if (adaptive_split)
+        try vort.encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator, case.payload, case.dictionary, options, .{})
+    else if (chunked_block_len) |block_len|
         try vort.encodeZlibBestSplitWithDictionaryAlloc(allocator, case.payload, case.dictionary, block_len, options)
     else
         try vort.encodeZlibBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);

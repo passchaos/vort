@@ -83,6 +83,31 @@ optimal plan on every row, not merely a speed trade. Default and fast
 dictionary wires are unchanged: dickens 24,503, xml 4,393 and nci 4,784 raw
 bytes at the default level.
 
+### zlib 1.2.11 ratio reference
+
+Same fixtures, raw deflate with the same 32 KiB preset dictionary, system
+zlib 1.2.11 via Python `compressobj(..., zdict=...)`:
+
+| Vort setting | Reference | Vort total | Reference total | Aggregate |
+| --- | --- | ---: | ---: | ---: |
+| `.best` chunked BT | zlib level 9 | 261,446 | 270,770 | -3.44% |
+| `.default` | zlib level 6 | 271,488 | 273,230 | -0.64% |
+
+`.best` is smaller on all twelve rows (range -1.01% to -6.27%). `.default` is
+smaller on eleven; `mr` is 0.36% larger. This is a ratio comparison only: the
+reference uses a different algorithm, and encode/decode throughput and memory
+were not measured in a matched lifecycle. It does not establish an
+industry-best ranking against zlib-ng or zlib-rs.
+
+### Rejected: adaptive split for the same inputs
+
+`encodeRawBestAdaptiveSplitWithDictionaryAlloc` reuses the same BT chunk
+planner. On dickens/xml/nci 64 KiB dictionary rows it produced the same wires
+as the fixed 32 KiB chunked path (23,428 / 4,071 / 4,270 raw bytes) but took
+19.5/37.1/64.9 s of whole-report wall time versus 3.2/1.9/4.3 s for the fixed
+path. Adaptive split remains opt-in and is not selected by `.best`.
+
+
 ## Tradeoff and follow-ups
 
 - The 32 KiB BT rows are also faster than the generic planner on the same
