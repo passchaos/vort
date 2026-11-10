@@ -35417,6 +35417,26 @@ test "zstd frame encoder round trips and compresses repeated payloads" {
     try std.testing.expect(encoded.len < payload.len);
 }
 
+test "zstd empty content round trips through alloc and into decoders" {
+    // The zero-length frame is a first-class RFC 8478 case: a terminal block
+    // with no sequences. Lock both allocating and caller-owned entry points to
+    // an empty, non-null result and to the exact-size mismatch contract.
+    const encoded = try encodeFrameAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len > 0);
+
+    const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 0), decoded.len);
+
+    var exact: [0]u8 = .{};
+    try std.testing.expectEqual(@as(usize, 0), try decodeFrameInto(encoded, &exact));
+    var oversized: [1]u8 = .{0xa5};
+    try std.testing.expectEqual(@as(usize, 0), try decodeFrameInto(encoded, &oversized));
+    try std.testing.expectEqual(@as(u8, 0xa5), oversized[0]);
+    try std.testing.expectError(error.SizeMismatch, decodeFrameAllocExactSize(std.testing.allocator, encoded, 1));
+}
+
 test "zstd frame options omit content size through pure Zig facade" {
     const payload = "zstd frame options payload" ** 8;
     const encoded = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
