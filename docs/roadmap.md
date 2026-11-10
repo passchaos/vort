@@ -126,11 +126,14 @@ lets level-based callers select btopt at 9-15, btultra at 16-18 and btultra2
 at 19-22 through `FrameOptions.hq_auto`, preserving the default level policy
 and explicit strategy/HQ/fast controls. Public contracts cover native, x86 and
 actual WASI execution, including reusable, dictionary, incremental, seekable
-and parallel settings. Current-source Silesia 64 KiB evidence records twelve
-smaller rows at each of levels 9/19 (geometric reductions 5.89%/7.80% against
-legacy); eleven level-19 rows still exceed libzstd 1.6.0's size, and HQ latency
-is mixed. Extend functional/resource coverage and then remove HQ repeated work
-before claiming full-file, streaming, memory or throughput leadership.
+and parallel settings. The archived Silesia 64 KiB comparison used the later
+rejected 95-state default shortcut; its 5.89%/7.80% size reductions at levels
+9/19 are historical snapshot evidence, not current-default rankings. The
+production resolver again uses the original 96/128/96 budgets, with independent
+historical wires covering levels 4-22 and adaptive input boundaries. Extend
+functional/resource coverage and obtain matched current-default evidence while
+removing HQ repeated work before claiming full-file, streaming, memory or
+throughput leadership.
 
 The [incremental Deflate wrapper increment](formats/deflate-incremental-relaxed.md)
 adds independent Adler/CRC/ISIZE comparison controls while retaining complete
