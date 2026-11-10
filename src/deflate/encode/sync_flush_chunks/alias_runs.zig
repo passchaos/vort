@@ -1,5 +1,11 @@
 //! Preserve original physical run boundaries before output can overwrite source.
 const std = @import("std");
+pub const Error = std.mem.Allocator.Error || error{IntegerOverflow};
+
+/// Validate descriptor span arithmetic without inspecting its pointer or data.
+pub fn validateDescriptorCount(chunks: []const []const u8) error{IntegerOverflow}!void {
+    _ = std.math.mul(usize, chunks.len, @sizeOf([]const u8)) catch return error.IntegerOverflow;
+}
 
 fn overlaps(a: []const u8, b: []const u8) bool {
     if (a.len == 0 or b.len == 0) return false;
@@ -43,7 +49,8 @@ pub const Prepared = struct {
     /// No-alias calls retain the original zero-copy iterator and allocate no
     /// extra heap. Descriptor-only overlap still captures every run before any
     /// output write; each affected full original run gets its own owned copy.
-    pub fn init(allocator: std.mem.Allocator, chunks: []const []const u8, output_allocation: []const u8) std.mem.Allocator.Error!Prepared {
+    pub fn init(allocator: std.mem.Allocator, chunks: []const []const u8, output_allocation: []const u8) Error!Prepared {
+        try validateDescriptorCount(chunks);
         var prepared: Prepared = .{ .original = .{ .chunks = chunks } };
         var alias = overlaps(std.mem.sliceAsBytes(chunks), output_allocation);
         if (!alias) {
@@ -57,7 +64,8 @@ pub const Prepared = struct {
         if (!alias) return prepared;
         var count: usize = 0;
         var original = prepared.original;
-        while (original.next() != null) count += 1;
+        while (original.next() != null) count = std.math.add(usize, count, 1) catch return error.IntegerOverflow;
+        _ = std.math.mul(usize, count, @sizeOf(Run)) catch return error.IntegerOverflow;
         const runs = try allocator.alloc(Run, count);
         for (runs) |*run| run.* = .{};
         prepared.runs = runs;

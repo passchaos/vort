@@ -6,6 +6,11 @@ descriptor array that overlap the caller's output allocation. This includes the
 logical prefix and spare capacity. The output's complete `allocatedSlice()` is
 the overlap domain, rather than only `items`.
 
+Descriptor count times descriptor size is checked before any span conversion,
+descriptor read, heap request or arena reset. Overflow returns `IntegerOverflow`
+and preserves output and workspace state. Run count and metadata byte sizing
+also use checked arithmetic; ordinary iterator boundaries remain unchanged.
+
 Before output descriptors are rebound or any wire bytes are written, the encoder
 checks both plaintext data and the descriptor array. When either overlaps, it
 captures the original non-empty physically contiguous runs in scratch metadata.

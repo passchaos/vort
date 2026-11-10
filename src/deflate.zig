@@ -4008,6 +4008,7 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     chunks: []const []const u8,
     options: CompressionOptions,
 ) !usize {
+    try @import("deflate/encode/sync_flush_chunks/alias_runs.zig").validateDescriptorCount(chunks);
     if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedSyncFlushChunksAppend, .{ allocator, out, chunks, options });
     return encodeRawFixedSyncFlushChunksAppendWithAllocators(
         allocator,
@@ -4046,6 +4047,7 @@ const SyncFlushCodec = struct {
     pub const CompressionOptions = @import("deflate.zig").CompressionOptions;
     pub const append = encodeRawFixedSyncFlushAppendWithAllocators;
     pub const chunksAppend = encodeRawFixedSyncFlushChunksAppendWithAllocators;
+    pub const validateChunks = @import("deflate/encode/sync_flush_chunks/alias_runs.zig").validateDescriptorCount;
 };
 pub const RawFixedSyncFlushEncoder = @import("deflate/encode/sync_flush_encoder.zig").Encoder(SyncFlushCodec);
 
@@ -23560,4 +23562,8 @@ test "Deflate gzip next member policy contracts" {
 
 test "Deflate sync flush chunk alias contracts" {
     try @import("deflate/encode/sync_flush_chunks/alias_tests.zig").contracts(@This());
+}
+
+test "Deflate sync flush descriptor count overflow contracts" {
+    try @import("deflate/encode/sync_flush_chunks/overflow_tests.zig").contracts(@This());
 }

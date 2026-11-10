@@ -21,6 +21,7 @@ pub fn Encoder(comptime C: type) type {
             return self.encode(output, input, options, false);
         }
         pub fn encodeChunksAppend(self: *Self, output: *std.ArrayList(u8), chunks: []const []const u8, options: C.CompressionOptions) budget.Error!usize {
+            try C.validateChunks(chunks);
             return self.encode(output, chunks, options, true);
         }
         fn encode(self: *Self, output: *std.ArrayList(u8), input: anytype, options: C.CompressionOptions, comptime chunks: bool) budget.Error!usize {
