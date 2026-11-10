@@ -61,3 +61,36 @@ per-decode setup rather than amortizable over multiple blocks.
   aggressively for the common probability distributions in L19 blocks.
 
 Raw rows: [matrix.csv](data/zstd-decode-current-20261110/matrix.csv).
+
+## Follow-up analysis: why the FSE build has no safe local win (2026-11-10)
+
+The decode profile tool (`run-zstd-decode-profile`) shows every weak row's
+three sequence tables are no-low-probability 256-state tables built by
+`large/fse_table.buildNoLowProbabilityAssumeValid` (`no_low_probability_tables=3`,
+accuracy log 8 for nci/xml; x-ray L19 uses the generic mapped builder).
+The hottest instructions in that builder are the per-symbol state bitset
+scatter (`or` into four stack words) and the per-entry writes.
+
+Two candidate changes were evaluated against the source and rejected
+without committing:
+
+1. The bitset construction is irreducible scatter: FSE's spread step
+   (163 for 256 states) deliberately produces a permutation, so each
+   symbol's `probability` writes go to distinct modulo-256 positions.
+   The only existing vectorization is the `probability >= 192` dense
+   path's packed 4-entry writes; lowering that threshold would change
+   which symbols qualify without reducing total state visits, and the
+   prior corpus already rejected wider/faster wildcopy-style changes.
+2. The builder runs exactly once per frame on these single-block rows,
+   so there is no reuse or batching opportunity in one-shot decode; any
+   gain must come from doing less work per table (a different table
+   representation the sequence executor can consume directly), which is
+   the same structural executor-fusion work already identified as the
+   next milestone.
+
+The 6.15% `memcpyFast` share is similarly setup-bound (FSE table copy and
+literal-section parse inside the single block), not the hot sequence
+wildcopy loop, whose 16-byte width matches libzstd and was confirmed
+optimal on this corpus. Conclusion: the remaining 1.32x gap is gated on
+the executor/table-representation fusion; no isolated micro-change with
+new evidence is available from the current profile.
