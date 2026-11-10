@@ -59,3 +59,22 @@ smoke reports so local changes can use one command before commit.
 The hosted GitHub Actions workflow in `.github/workflows/ci.yml` also reruns
 the focused fuzz smoke entrypoints explicitly after `ci-smoke`, keeping the
 local and hosted parser-validation surfaces aligned.
+
+## 2026-11-10: Brotli and Zstd join the raw-byte fuzz target
+
+`tools/fuzz_target.zig` previously fed every raw input only to
+`vort.decodeRawDeflateAlloc` and container parsers. It now also calls
+`vort.br.decodeStreamAlloc` and `vort.zstd.decodeFrameAlloc`, accepting
+and freeing valid output and treating every documented decode error
+(including `InvalidMagic` for non-frame inputs) as an expected rejection.
+This gives the coverage-guided (`run-libfuzzer-smoke`,
+`run-afl-smoke`) and deterministic (`run-fuzz-target`) harnesses the
+same malformed-payload reach into the Brotli and Zstd entropy decoders
+that raw Deflate already had. Verified gates:
+
+- `zig build run-fuzz-target` (64 samples)
+- `zig build run-libfuzzer-smoke`, `zig build run-afl-smoke`
+- `zig build run-fuzz-corpus-coverage-smoke` (3 wrapper modes, 22 exact
+  error expectations)
+- `zig build run-native-fuzz-corpus-coverage-smoke` (1 native mode,
+  7 exact error expectations)
