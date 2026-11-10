@@ -187,6 +187,14 @@ with 49% more).
   `single_symbol` (0.9965 five-round but +0.94% to +1.31% on 1 MiB rows in
   ten-round rechecks). The payload is now structurally bound; further gain
   needs a full libbrotli-style phase-machine fusion, not local caching.
+- Design boundary recorded for the Brotli phase-machine fusion
+  milestone: [brotli-phase-machine-fusion-design](brotli-phase-machine-fusion-design.md).
+  Compares the libbrotli `BrotliRunningState` suspend/resume enum with
+  Vort's single-loop three-phase payload, scopes an internal phase enum
+  behind the existing one-shot wrapper, and sets the 48-row A/B and
+  differential correctness gates. Not scheduled for micro-commits; the
+  prior four rejected fusions show isolated caching cannot win without
+  the split.
 - Adopted (Deflate decode): inline fixed-width vector copies for
   non-overlapping matches up to 258 bytes instead of runtime-length
   compiler-rt memcpy (`shortcopy.copyWide`, bounded by the linear loop's
