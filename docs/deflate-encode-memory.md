@@ -74,7 +74,12 @@ A quota refusal returns `WorkingMemoryLimitExceeded`; physical backing allocator
 failure returns `OutOfMemory`. These errors are available as `DeflateEncodeError`
 (`deflate.EncodeError`); the existing decode/base `DeflateError` is unchanged.
 A refused refinement/fallback/split/adaptive
-candidate cannot be skipped to produce a successful different wire. In a tracked
+candidate cannot be skipped to produce a successful different wire. Reusable
+operations also inspect the ledger's sticky refusal before returning an owned
+result or successful append; refused owned results are freed, and append restores
+its prior logical prefix. Scratch and caller-buffer paths inspect the same
+inherited ledger before physical publication, so a caught optional-candidate
+refusal cannot overwrite the previous result or caller bytes. In a tracked
 cap or profile-only operation, physical OOM in a refined-history candidate also
 propagates as `OutOfMemory`; the untracked default keeps the historical optional
 candidate OOM fallback behavior. All owned temporary storage is cleaned up.

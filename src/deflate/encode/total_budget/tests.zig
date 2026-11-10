@@ -85,6 +85,7 @@ fn Failure(comptime C: type) type {
 }
 
 pub fn contracts(comptime C: type) !void {
+    try @import("reusable_refusal_tests.zig").contracts(C);
     const options = try C.optionsForZlibLevel(8);
     inline for (std.meta.tags(Wrapper)) |wrapper| {
         inline for (std.meta.tags(Mode)) |mode| try exact(C, payload, options, mode, wrapper);

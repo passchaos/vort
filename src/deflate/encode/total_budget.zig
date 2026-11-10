@@ -78,6 +78,7 @@ pub fn append(caller: std.mem.Allocator, output: *std.ArrayList(u8), options: an
 /// scratch capacity at entry, use the shared allocator for all growth/free,
 /// then restore physical ownership before closing this operation's ledger.
 /// A cap below warmed capacity is rejected before changing scratch bytes.
+/// Scratch/into callbacks use beforePublish at their physical publication point.
 pub fn reusable(owner: anytype, options: anytype, comptime function: anytype, args: anytype, comptime kind: enum { alloc, append, scratch, into }) Error!switch (kind) {
     .alloc => []u8,
     .append, .into => usize,
@@ -100,20 +101,35 @@ pub fn reusable(owner: anytype, options: anytype, comptime function: anytype, ar
         if (separate_output) lease.releaseToCaller(caller, output.?.capacity) catch unreachable;
         owner.allocator = caller;
     }
+    const original_length = if (output) |out| out.items.len else 0;
+    errdefer if (output) |out| out.shrinkRetainingCapacity(original_length);
     const result = @call(.auto, function, innerArgs(args)) catch |err| return mapError(lease, err);
     if (kind == .alloc) {
         errdefer lease.allocator().free(result);
+        if (lease.snapshot().hit_limit) return error.WorkingMemoryLimitExceeded;
         try lease.releaseToCaller(caller, result.len);
-    }
+    } else if (lease.snapshot().hit_limit) return error.WorkingMemoryLimitExceeded;
     return result;
 }
 
 /// Reserve first so the prior borrowed scratch result survives a refused call.
-pub fn retainScratch(owner: anytype, bytes: []const u8) std.mem.Allocator.Error![]const u8 {
+pub fn retainScratch(owner: anytype, bytes: []const u8) Error![]const u8 {
+    try beforePublish(owner.allocator);
     try owner.scratch.ensureTotalCapacity(owner.allocator, bytes.len);
+    try beforePublish(owner.allocator);
     owner.scratch.clearRetainingCapacity();
     owner.scratch.appendSliceAssumeCapacity(bytes);
     return owner.scratch.items;
+}
+
+/// An optional inner path may have caught an allocator refusal. The operation
+/// remains refused even when later allocations succeed. Call this before any
+/// caller bytes or borrowed scratch contents are changed; an outer result check
+/// alone cannot undo a scratch/into publication.
+pub fn beforePublish(allocator: std.mem.Allocator) Error!void {
+    var inherited = (try Lease.fromAllocator(allocator)) orelse return;
+    defer inherited.deinit();
+    if (inherited.snapshot().hit_limit) return error.WorkingMemoryLimitExceeded;
 }
 
 /// Direct stored emission requests no new heap or ledger control storage.
@@ -122,7 +138,8 @@ pub fn retainScratch(owner: anytype, bytes: []const u8) std.mem.Allocator.Error!
 pub fn direct(caller: std.mem.Allocator, options: anytype, existing: usize) Error!void {
     if (isTracked(caller)) {
         var inherited = try begin(caller, options, 0);
-        inherited.deinit();
+        defer inherited.deinit();
+        if (inherited.snapshot().hit_limit) return error.WorkingMemoryLimitExceeded;
         return;
     }
     if (options.memory_profile) |profile| profile.record(existing, options.max_total_working_memory);

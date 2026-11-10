@@ -71,6 +71,7 @@ pub fn Encoder(comptime C: type) type {
             if (budget.requested(options)) return budget.reusable(self, options, Self.encodeInto, .{ self, input, output }, .into);
             const bytes = try self.encodeAlloc(input);
             defer self.allocator.free(bytes);
+            if (budget.isTracked(self.allocator)) try budget.beforePublish(self.allocator);
             if (output.len < bytes.len) return error.OutputTooSmall;
             @memcpy(output[0..bytes.len], bytes);
             return bytes.len;
@@ -136,6 +137,7 @@ pub fn Encoder(comptime C: type) type {
         }
 
         fn retainScratch(self: *Self, bytes: []const u8) ![]const u8 {
+            if (budget.isTracked(self.allocator)) return budget.retainScratch(self, bytes);
             // Validate/encode and reserve first, keeping the previous borrowed
             // result intact on a rejected window or backing allocation error.
             try self.scratch.ensureTotalCapacity(self.allocator, bytes.len);
