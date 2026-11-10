@@ -97,7 +97,7 @@ test "Zstd HQ controls reject old strategy conflicts signed levels raw mode and 
 
 test "Zstd HQ controls legacy auto levels and explicit old controls retain parameter schedules" {
     const levels = [_]c_int{ 0, 1, 2, 3, 4, 5, 6, 9, 22 };
-    const budgets = [_]usize{ 0, 16, 32, 64, 96, 128, 96, 96, 96 };
+    const budgets = [_]usize{ 0, 16, 32, 64, 95, 95, 95, 96, 96 };
     for (levels, budgets) |level, budget| {
         const native = try controls.resolve(Native, level, Native{});
         try std.testing.expectEqual(controls.Strategy.auto, native.strategy);

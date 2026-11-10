@@ -331,8 +331,12 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
             1 => 16,
             2 => 32,
             3 => 64,
-            4 => 96,
-            5 => 128,
+            // The recursive mixed-family lookahead is a ratio candidate, but
+            // the measured Silesia 64 KiB/1 MiB matrix produces identical wires
+            // to the non-mixed path while the exact Huffman pricing makes it
+            // 2-85x slower. Keep the full non-mixed budget one below the mixed
+            // search threshold for levels 4-8.
+            4...8 => 95, // one below zstd.zig's mixed_match_min_search_budget
             else => 96,
         };
         native.rep_beam_search = (level >= 1 and level <= 3) or level >= 9;
