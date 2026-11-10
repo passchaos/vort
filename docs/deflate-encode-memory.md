@@ -10,7 +10,11 @@ complete wire bytes and tie decisions.
 The supported boundary includes all existing raw/zlib/gzip allocating and append
 functions accepting `CompressionOptions`, the corresponding Alloc/Append/Scratch
 methods of `RawDeflateEncoder`, `ZlibEncoder` and `GzipEncoder`, ordinary fixed
-sync-flush append (including scatter input), and `dynamicPlanStatsAlloc`.
+sync-flush append (including scatter input), the reusable
+`RawFixedSyncFlushEncoder` arena facade, and `dynamicPlanStatsAlloc`.
+The arena facade counts actual backing node requests and supports distinct
+physical scratch/output allocators; see
+[its resource contract](deflate-arena-encode-memory.md).
 `ZlibEncodeOptions` supplies the same fields for every `ZlibFrameEncoder`
 Alloc/Append/Into/Scratch and stored-chunks operation and the one-shot frame
 facades. This includes stored, fixed, dynamic, literal-only dynamic, best,
@@ -85,12 +89,11 @@ propagates as `OutOfMemory`; the untracked default keeps the historical optional
 candidate OOM fallback behavior. All owned temporary storage is cleaned up.
 
 Persistent incremental stream encoders (`Options.compression` or
-`Options.raw.compression`) and `RawFixedSyncFlushEncoder`'s retained arena require a
-separate stream/arena resource contract. Incremental encoders reject non-null cap or profile fields with `InvalidBlockPlan`
+`Options.raw.compression`) require a separate stream resource contract.
+Incremental encoders reject non-null cap or profile fields with `InvalidBlockPlan`
 during validation and before accepting input or publishing headers/output.
 Their existing void reset APIs may install options; the next validation/step
-rejects an unsupported policy. The arena sync-flush encode methods reject before
-resetting the arena. `writeIncrementalBestPlannedBlock`, the staged
+rejects an unsupported policy. `writeIncrementalBestPlannedBlock`, the staged
 benchmark instrumentation surface, also explicitly rejects these controls. No
 accepting path silently ignores a requested cap or profile.
 

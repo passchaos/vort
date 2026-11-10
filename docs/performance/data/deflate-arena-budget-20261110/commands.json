@@ -1,0 +1,66 @@
+[
+  {
+    "argv": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "-Droot-test-filter=Deflate arena",
+      "--summary",
+      "all"
+    ],
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "-Droot-test-filter=deflate",
+      "run-deflate-split-history-interop",
+      "--summary",
+      "all"
+    ],
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "zig",
+      "build",
+      "-j2",
+      "run",
+      "--",
+      "--help"
+    ],
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "zig",
+      "test",
+      "src/deflate.zig",
+      "-target",
+      "wasm32-wasi",
+      "-OReleaseSafe",
+      "-fsingle-threaded",
+      "--test-filter",
+      "Deflate arena",
+      "--test-no-exec",
+      "--stack",
+      "8388608",
+      "-femit-bin=/tmp/vort-deflate-arena-budget-20261110.wasm"
+    ],
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "node",
+      "tools/deflate/clone/wasm_gate.js",
+      "--output",
+      "/tmp/vort-deflate-arena-budget-20261110-wasi.json",
+      "/tmp/vort-deflate-arena-budget-20261110.wasm"
+    ],
+    "exit_code": 0
+  }
+]

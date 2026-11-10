@@ -1913,8 +1913,10 @@ reuse, so production keeps the simpler independently owned plans.
   share an optional requested-heap cap/profile across all candidates, wrappers,
   output growth and borrowed append/warm scratch capacity. Exact D/D-1 tests
   use an independent counting allocator; direct stored into stays zero heap.
-  Arena sync-flush and incremental stream policies explicitly reject these
-  one-shot controls pending a separate persistent stream ledger contract.
+  Reusable arena sync-flush now includes exact backing node/header requests,
+  distinct output allocators, supported/unsupported growth and inherited ledgers.
+  True incremental stream policies still explicitly reject these one-shot
+  controls pending a separate persistent stream ledger contract.
 - [x] Default deflate LZ77 search budget increased modestly (`max_chain=160`,
   `nice_len=80`, `max_candidates=6`) to recover a smaller distance-heavy
   dynamic stream while keeping the production preset below best/optimal cost.

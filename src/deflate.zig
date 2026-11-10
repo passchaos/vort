@@ -4058,56 +4058,12 @@ fn encodeRawFixedSyncFlushChunksAppendWithAllocators(
 /// Reuses temporary token/hash/history allocations across independent fixed
 /// sync-flush streams. Returned bytes remain owned by the caller's output list;
 /// only parser workspace lives in the arena and is invalidated on the next call.
-pub const RawFixedSyncFlushEncoder = struct {
-    allocator: std.mem.Allocator,
-    arena: std.heap.ArenaAllocator,
-
-    pub fn init(allocator: std.mem.Allocator) RawFixedSyncFlushEncoder {
-        return .{
-            .allocator = allocator,
-            .arena = .init(allocator),
-        };
-    }
-
-    pub fn deinit(self: *RawFixedSyncFlushEncoder) void {
-        self.arena.deinit();
-        self.* = undefined;
-    }
-
-    pub fn encodeAppend(
-        self: *RawFixedSyncFlushEncoder,
-        out: *std.ArrayList(u8),
-        input: []const u8,
-        options: CompressionOptions,
-    ) !usize {
-        if (encode_total_budget.requested(options)) return error.InvalidBlockPlan;
-        _ = self.arena.reset(.retain_capacity);
-        return encodeRawFixedSyncFlushAppendWithAllocators(
-            self.arena.allocator(),
-            self.allocator,
-            out,
-            input,
-            options,
-        );
-    }
-
-    pub fn encodeChunksAppend(
-        self: *RawFixedSyncFlushEncoder,
-        out: *std.ArrayList(u8),
-        chunks: []const []const u8,
-        options: CompressionOptions,
-    ) !usize {
-        if (encode_total_budget.requested(options)) return error.InvalidBlockPlan;
-        _ = self.arena.reset(.retain_capacity);
-        return encodeRawFixedSyncFlushChunksAppendWithAllocators(
-            self.arena.allocator(),
-            self.allocator,
-            out,
-            chunks,
-            options,
-        );
-    }
+const SyncFlushCodec = struct {
+    pub const CompressionOptions = @import("deflate.zig").CompressionOptions;
+    pub const append = encodeRawFixedSyncFlushAppendWithAllocators;
+    pub const chunksAppend = encodeRawFixedSyncFlushChunksAppendWithAllocators;
 };
+pub const RawFixedSyncFlushEncoder = @import("deflate/encode/sync_flush_encoder.zig").Encoder(SyncFlushCodec);
 
 test "raw fixed sync flush encoder reuses parser and output storage" {
     const allocator = std.testing.allocator;
@@ -23675,4 +23631,12 @@ test "deflate exact short nonoverlapping copies preserve all lengths alignments 
 
 test "Deflate whole-operation requested heap contracts" {
     try @import("deflate/encode/total_budget/tests.zig").contracts(@This());
+}
+
+test "Deflate arena requested heap contracts" {
+    try @import("deflate/encode/arena_budget/tests.zig").contracts(@This());
+}
+
+test "Deflate arena physical reservation reference and overlap contracts" {
+    try @import("deflate/encode/arena_budget/physical_tests.zig").contracts();
 }

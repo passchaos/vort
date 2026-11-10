@@ -223,7 +223,7 @@ fn refusals(comptime C: type) !void {
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(allocator);
     try output.appendSlice(allocator, "prefix");
-    try std.testing.expectError(error.InvalidBlockPlan, sync.encodeAppend(&output, payload, .{ .memory_profile = &profile }));
+    try std.testing.expectError(error.WorkingMemoryLimitExceeded, sync.encodeAppend(&output, payload, .{ .max_total_working_memory = 0, .memory_profile = &profile }));
     try std.testing.expectEqualSlices(u8, "prefix", output.items);
     var raw = C.RawDeflateIncrementalBestEncoder.initWithOptions(allocator, .{ .compression = .{ .max_total_working_memory = 0 } });
     defer raw.deinit();

@@ -1,0 +1,27 @@
+{
+  "base_commit": "81f6a29ed74fea4d97b9cb2f41a6b3b47213673a",
+  "zig": "0.16.0",
+  "scope": "RawFixedSyncFlushEncoder whole-operation requested heap",
+  "native_tests_passed": 95,
+  "broader_deflate_tests_passed": 628,
+  "libz_version": "1.2.11",
+  "libz_cases": 56,
+  "libz_dictionary_requests": 20,
+  "libz_tiny_inflate_calls": 75842,
+  "native_supporting_resize_peak": 517593,
+  "native_unsupported_fallback_peak": 387689,
+  "native_supporting_cap": 387689,
+  "native_supporting_capped_peak": 387689,
+  "node_header_native": 24,
+  "node_header_wasm32": 12,
+  "source_sha256": {
+    "src/deflate.zig": "c22ffd0682cec75d7a1b22cfa08bfeb76bed53028f957fa3d01a847b21d58d91",
+    "src/deflate/encode/arena_budget.zig": "e22403044e4eac998becba37065a622ada2da582a241b9f8b5248db67af4f0f0",
+    "src/deflate/encode/arena_budget/operation.zig": "a54d0c47fb8a6d33cb541787ced0214acd4020012bd147c72132252f7faea127",
+    "src/deflate/encode/arena_budget/physical.zig": "91cf8d3b6ca538201214c7ab37b2ab0a1ce2215ffbf61f2b7a6b3126324a2790",
+    "src/deflate/encode/arena_budget/physical_tests.zig": "fba24a19e1efce5b6f2f69088b8e5fe1fc0a92c9938542ea2ae377b8e78499d0",
+    "src/deflate/encode/arena_budget/tests.zig": "687472f966a8892c9de590c7372c30c07f8d9efd438631c077a391309246106b",
+    "src/deflate/encode/sync_flush_encoder.zig": "60352fbe5dd4b049702255e6809004b8bffe6714f8682aff928919a99da3445c",
+    "src/deflate/encode/total_budget/tests.zig": "d9a5e284b7f1d844280cb952cd2de0958862698f4469e868180da6652a00c82b"
+  }
+}
