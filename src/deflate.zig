@@ -1951,14 +1951,49 @@ fn sampledHistoryMatch(input: []const u8, history: []const u8) bool {
     return false;
 }
 
-pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+fn useChunkedDictionaryOptimal(input: []const u8, dictionary: []const u8, options: CompressionOptions) bool {
+    if (dictionary.len == 0 or input.len == 0) return false;
+    const normalized = normalizeOptionsForStrategy(options);
+    if (normalized.strategy != .default or
+        normalized.parser != .optimal or
+        normalized.block_selection != .stored_fixed_dynamic)
+        return false;
+    const window_len = normalized.lz77_options.window_len;
+    if (window_len == 0 or window_len > lz77.default_window_len) return false;
+    const dictionary_len = @min(dictionary.len, window_len);
+    const combined_len = std.math.add(usize, dictionary_len, input.len) catch return false;
+    return combined_len > bt_optimal.max_input_len;
+}
+
+fn encodeRawBestWithDictionaryPrimaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    options: CompressionOptions,
+) ![]u8 {
+    // A single dictionary-prefixed BT buffer is limited to 65,536 positions.
+    // Larger inputs use the same bounded chunk planner as split encoding; the
+    // measured Silesia matrix is smaller than the former whole-input generic
+    // optimal plan and avoids its multi-second parse.
+    if (useChunkedDictionaryOptimal(input, dictionary, options))
+        return encodeRawBestSplitWithDictionaryAlloc(
+            allocator,
+            input,
+            dictionary,
+            refined_chunk_len,
+            options,
+        );
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
-    const encoded = try writer.toOwnedSlice(allocator);
+    return writer.toOwnedSlice(allocator);
+}
+
+pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+    const encoded = try encodeRawBestWithDictionaryPrimaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(encoded);
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, fallback_options);
@@ -2155,7 +2190,89 @@ fn planHistoryChunkWithDictionaryAlloc(
     chunk_len: usize,
     options: CompressionOptions,
 ) !lz77.GreedyPlan {
+    const normalized = normalizeOptionsForStrategy(options);
+    if (normalized.strategy == .default and normalized.parser == .optimal) {
+        if (try planHistoryChunkWithBTAlloc(allocator, input, dictionary, chunk_start, chunk_len, options)) |plan|
+            return plan;
+    }
     return split_history.planChunkAlloc(SplitHistoryCodec, allocator, input, dictionary, chunk_start, chunk_len, options);
+}
+
+/// Covered-BT variant of the split-history planner. The effective dictionary
+/// suffix and prior input history stay addressable, but only the current chunk
+/// is emitted. Returns null when the combined buffer is outside the BT parser's
+/// bounded u16 position domain; callers then use the generic optimal planner.
+fn planHistoryChunkWithBTAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: ?[]const u8,
+    chunk_start: usize,
+    chunk_len: usize,
+    options: CompressionOptions,
+) !?lz77.GreedyPlan {
+    if (chunk_len == 0 or
+        options.lz77_options.window_len == 0 or
+        options.lz77_options.window_len > lz77.default_window_len)
+        return null;
+    const view = try split_history.View.init(
+        input,
+        dictionary,
+        chunk_start,
+        chunk_len,
+        options.lz77_options.window_len,
+    );
+    const combined_len = std.math.add(usize, view.dictionary.len, view.input.len) catch
+        return error.IntegerOverflow;
+    if (combined_len < bt_optimal.min_input_len or combined_len > bt_optimal.max_input_len)
+        return null;
+    const combined = if (view.dictionary.len == 0)
+        view.input
+    else blk: {
+        const bytes = try allocator.alloc(u8, combined_len);
+        @memcpy(bytes[0..view.dictionary.len], view.dictionary);
+        @memcpy(bytes[view.dictionary.len..], view.input);
+        break :blk bytes;
+    };
+    defer if (view.dictionary.len != 0) allocator.free(combined);
+
+    const history_len = view.dictionary.len + view.input_history_len;
+    var prepared = try bt_optimal.Prepared.init(allocator, combined, options.lz77_options);
+    defer prepared.deinit(allocator);
+    const plan_start = history_len - @min(history_len, lz77.max_match_len);
+    const seed = try prepared.planFixedAllocFrom(allocator, plan_start);
+    defer seed.deinit(allocator);
+    const seed_trimmed = try trimPlanToSuffixAlloc(
+        allocator,
+        combined[plan_start..],
+        seed.tokens,
+        history_len - plan_start,
+    );
+    defer allocator.free(seed_trimmed);
+
+    const seed_coding = try DynamicCodingPlan.init(seed_trimmed);
+    var model = try dynamic_optimal.Model.init(
+        DeflateDynamicOptimalStrategy,
+        allocator,
+        &seed_coding.lit_lengths_full,
+        &seed_coding.dist_lengths_full,
+        options.lz77_options.window_len,
+    );
+    defer model.deinit(allocator);
+    const candidate = try prepared.planModeledAllocFrom(allocator, plan_start, model.lz77Model());
+    defer candidate.deinit(allocator);
+    const candidate_trimmed = try trimPlanToSuffixAlloc(
+        allocator,
+        combined[plan_start..],
+        candidate.tokens,
+        history_len - plan_start,
+    );
+    defer allocator.free(candidate_trimmed);
+
+    const seed_bits = try dynamicTokenBitCost(seed_trimmed);
+    const candidate_bits = try dynamicTokenBitCost(candidate_trimmed);
+    const selected = if (candidate_bits < seed_bits) candidate_trimmed else seed_trimmed;
+    const tokens = try allocator.dupe(lz77.Token, selected);
+    return .{ .tokens = tokens, .stats = planStatsForTokens(tokens) };
 }
 
 pub const AdaptiveSplitOptions = struct {
@@ -8058,11 +8175,28 @@ pub fn encodeZlibPngUltraFastAllocWithChecksum(
     return png_ultrafast.encodeAllocWithChecksum(allocator, input, adler);
 }
 
-pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
+fn encodeZlibBestWithDictionaryPrimaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    options: CompressionOptions,
+) ![]u8 {
+    if (useChunkedDictionaryOptimal(input, dictionary, options))
+        return encodeZlibBestSplitWithDictionaryAlloc(
+            allocator,
+            input,
+            dictionary,
+            refined_chunk_len,
+            options,
+        );
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
-    const encoded = try encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
+    return encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
+}
+
+pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
+    const encoded = try encodeZlibBestWithDictionaryPrimaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(encoded);
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, fallback_options);
@@ -22528,6 +22662,50 @@ test "raw best optimal dictionary planner references preset history" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
     try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, encoded));
+}
+
+test "raw and zlib best large dictionary inputs use the chunked BT plan" {
+    var dictionary: [32 * 1024]u8 = undefined;
+    var input: [64 * 1024]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x51d1c7);
+    random.random().bytes(&dictionary);
+    for (&input, 0..) |*byte, i| byte.* = dictionary[(i * 7 + 13) % dictionary.len];
+    random.random().bytes(input[16 * 1024 .. 32 * 1024]);
+    const options = optionsForLevel(.best);
+
+    const raw = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, &input, &dictionary, options);
+    defer std.testing.allocator.free(raw);
+    const raw_split = try encodeRawBestSplitWithDictionaryAlloc(
+        std.testing.allocator,
+        &input,
+        &dictionary,
+        refined_chunk_len,
+        options,
+    );
+    defer std.testing.allocator.free(raw_split);
+    try std.testing.expectEqualSlices(u8, raw_split, raw);
+    const raw_decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, raw, &dictionary);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, &input, raw_decoded);
+
+    const zlib = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, &input, &dictionary, options);
+    defer std.testing.allocator.free(zlib);
+    const zlib_split = try encodeZlibBestSplitWithDictionaryAlloc(
+        std.testing.allocator,
+        &input,
+        &dictionary,
+        refined_chunk_len,
+        options,
+    );
+    defer std.testing.allocator.free(zlib_split);
+    try std.testing.expectEqualSlices(u8, zlib_split, zlib);
+    const zlib_decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, zlib, &dictionary);
+    defer std.testing.allocator.free(zlib_decoded);
+    try std.testing.expectEqualSlices(u8, &input, zlib_decoded);
+
+    const lazy = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, &input, &dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(lazy);
+    try std.testing.expect(raw.len <= lazy.len);
 }
 
 test "allocating preset dictionary decode bulk-copies history-only matches" {

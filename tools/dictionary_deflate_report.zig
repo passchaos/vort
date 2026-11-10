@@ -55,6 +55,7 @@ pub fn main(init: std.process.Init) !void {
     var markdown_path: ?[]const u8 = null;
     var shared_dictionary: ?[]u8 = null;
     var options: vort.CompressionOptions = vort.optionsForCompressionLevel(.default);
+    var chunked_block_len: ?usize = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| {
@@ -87,6 +88,14 @@ pub fn main(init: std.process.Init) !void {
             options = try parseLevelOptions(args.next() orelse return error.MissingCompressionLevel);
             continue;
         }
+        if (std.mem.eql(u8, arg, "--chunked-block-len")) {
+            chunked_block_len = try std.fmt.parseInt(
+                usize,
+                args.next() orelse return error.MissingCompressionLevel,
+                10,
+            );
+            continue;
+        }
         if (shared_dictionary) |dictionary| {
             try appendSharedDictionaryPath(init, &file_cases, dictionary, arg);
             continue;
@@ -111,7 +120,7 @@ pub fn main(init: std.process.Init) !void {
     var rows: std.ArrayList(ReportRow) = .empty;
     defer rows.deinit(init.gpa);
     for (cases) |case| {
-        const stats = try reportCase(init.gpa, writer, case, options);
+        const stats = try reportCase(init.gpa, writer, case, options, chunked_block_len);
         totals.add(stats);
         try rows.append(init.gpa, .{ .name = case.name, .stats = stats });
     }
@@ -210,14 +219,32 @@ fn parseLevelOptions(value: []const u8) !vort.CompressionOptions {
     return vort.optionsForZlibLevel(level);
 }
 
-fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case, options: vort.CompressionOptions) !ReportStats {
-    const raw_plain = try vort.encodeRawBestAlloc(allocator, case.payload, options);
+fn reportCase(
+    allocator: std.mem.Allocator,
+    writer: *std.Io.Writer,
+    case: Case,
+    options: vort.CompressionOptions,
+    chunked_block_len: ?usize,
+) !ReportStats {
+    const raw_plain = if (chunked_block_len) |block_len|
+        try vort.encodeRawBestSplitAlloc(allocator, case.payload, block_len, options)
+    else
+        try vort.encodeRawBestAlloc(allocator, case.payload, options);
     defer allocator.free(raw_plain);
-    const raw_dict = try vort.encodeRawBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);
+    const raw_dict = if (chunked_block_len) |block_len|
+        try vort.encodeRawBestSplitWithDictionaryAlloc(allocator, case.payload, case.dictionary, block_len, options)
+    else
+        try vort.encodeRawBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);
     defer allocator.free(raw_dict);
-    const zlib_plain = try vort.encodeZlibBestAlloc(allocator, case.payload, options);
+    const zlib_plain = if (chunked_block_len) |block_len|
+        try vort.encodeZlibBestSplitAlloc(allocator, case.payload, block_len, options)
+    else
+        try vort.encodeZlibBestAlloc(allocator, case.payload, options);
     defer allocator.free(zlib_plain);
-    const zlib_dict = try vort.encodeZlibBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);
+    const zlib_dict = if (chunked_block_len) |block_len|
+        try vort.encodeZlibBestSplitWithDictionaryAlloc(allocator, case.payload, case.dictionary, block_len, options)
+    else
+        try vort.encodeZlibBestWithDictionaryAlloc(allocator, case.payload, case.dictionary, options);
     defer allocator.free(zlib_dict);
 
     const raw_decoded = try vort.decodeRawDeflateAllocWithDictionary(allocator, raw_dict, case.dictionary);
