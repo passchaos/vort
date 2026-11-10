@@ -6147,7 +6147,14 @@ const PngFilter0SemanticSink = struct {
     }
 };
 
-noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
+// Wasm rejects explicit function alignment. Both selected entries use the
+// same semantic engine specialization; host callers retain the aligned entry.
+const decodeSemanticDynamicBlockIntoBufferedReader = if (builtin.target.cpu.arch.isWasm())
+    decodeSemanticDynamicBlockIntoBufferedReaderUnaligned
+else
+    decodeSemanticDynamicBlockIntoBufferedReaderAligned;
+
+noinline fn decodeSemanticDynamicBlockIntoBufferedReaderAligned(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
@@ -6164,6 +6171,54 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
         initial_out_offset,
         decoder,
     );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoBufferedReaderUnaligned(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    return semantic_module.decodeDynamicBlockIntoLinearMode(
+        false,
+        false,
+        false,
+        false,
+        false,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+test "deflate function alignment portability keeps selected semantic decode and reader state" {
+    if (!builtin.target.cpu.arch.isWasm()) {
+        try std.testing.expectEqual(@as(usize, 0), @intFromPtr(&decodeSemanticDynamicBlockIntoBufferedReader) & 63);
+    }
+    var literal_lengths: [286]u4 = @splat(0);
+    literal_lengths['A'] = 1;
+    literal_lengths[256] = 1;
+    const literal_table_ = try huffman.HuffmanTable(286).init(&literal_lengths);
+    const distance_lengths = [_]u4{1};
+    const distance_table_ = try huffman.HuffmanTable(30).init(&distance_lengths);
+    var decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(&literal_table_, &distance_table_));
+    // Literal A followed by EOB. Padding enters the existing buffered engine.
+    const encoded = [_]u8{0b0000_0010} ++ ([_]u8{0} ** 15);
+    var selected = bitstream.BufferedBitReader.init(&encoded);
+    var reference = selected;
+    var selected_output = [_]u8{ 0xcc, 0xdd };
+    var reference_output = selected_output;
+    const selected_written = try decodeSemanticDynamicBlockIntoBufferedReader(&selected, selected_output[0..1], 0, &decoder);
+    const reference_written = try semantic_module.decodeDynamicBlockIntoLinearMode(false, false, false, false, false, &reference, reference_output[0..1], 0, &decoder);
+    try std.testing.expectEqual(@as(usize, 1), selected_written);
+    try std.testing.expectEqual(reference_written, selected_written);
+    try std.testing.expectEqualSlices(u8, &.{ 'A', 0xdd }, &selected_output);
+    try std.testing.expectEqualSlices(u8, &reference_output, &selected_output);
+    try std.testing.expectEqual(reference, selected);
+    var short = bitstream.BufferedBitReader.init(&encoded);
+    try std.testing.expectError(error.OutputTooSmall, decodeSemanticDynamicBlockIntoBufferedReader(&short, &.{}, 0, &decoder));
 }
 
 noinline fn decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
