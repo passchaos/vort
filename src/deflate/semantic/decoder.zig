@@ -545,6 +545,7 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
         var match_bits: u6 = @truncate(entry);
         var length_entry: u32 = entry;
         if ((entry & SemanticDynamicDecoder.exceptional_flag) != 0) {
+            @branchHint(.unlikely);
             if ((entry & SemanticDynamicDecoder.secondary_flag) != 0) {
                 const start: usize = @intCast(entry >> 16);
                 const mask: usize = @intCast(entry & 0xff);
@@ -663,6 +664,7 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
         else
             decoder.distance[@as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))];
         if ((distance_entry & SemanticDynamicDecoder.literal_flag) == 0) {
+            @branchHint(.unlikely);
             if ((distance_entry & SemanticDynamicDecoder.secondary_flag) == 0)
                 return error.InvalidHuffmanCode;
             if (bit_count < distance_start_bits + @as(u6, 15)) {
