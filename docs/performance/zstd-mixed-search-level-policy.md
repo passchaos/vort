@@ -99,10 +99,25 @@ selecting an HQ strategy at level 19.
 ## Follow-up
 
 The auto level 19 wire is still larger than libzstd 1.4.8 on several rows
-(dickens 25,513 versus 24,214; nci 5,248 versus 4,164). That is a separate
-functionality/quality gap: the default auto policy does not select the explicit
-HQ strategies. Closing it requires mapping high auto levels onto HQ parsing and
-revalidating their ratio/throughput envelopes, not another mixed-search change.
+(dickens 25,513 versus 24,214; nci 5,248 versus 4,164). Explicit HQ strategies
+close much of that gap on the same 12-file 64 KiB matrix:
+
+| Strategy at level 19 | Smaller rows | Size range vs auto | Time range |
+| --- | ---: | ---: | ---: |
+| `btopt` | 12/12 | -0.5% to -13.1% | 9.4-65.3 ms |
+| `btultra2` | 12/12 | -0.4% to -16.0% | 18.1-142.3 ms |
+
+`btultra2` matches or beats libzstd on mozilla (8,351 vs 8,503), x-ray (44,624
+vs 45,366), xml (4,329 vs 4,348) and sao (47,760 vs 47,760).
+
+A silent default mapping of levels 19-22 onto `btultra2` was evaluated and
+rejected: it breaks the frozen legacy level wires in
+`controls_tests.expectLegacy` and the HQ search "unchanged default level paths"
+contract, and `ratio levels accept decisive wide primary frame` fails with
+`InvalidBlockPlan` under the HQ validation path. The legacy auto level wires are
+a compatibility contract; offering HQ by default needs a versioned or explicit
+opt-in policy, not a silent default switch. The explicit `strategy`/`hq`
+controls remain the supported HQ route.
 
 mozilla 1 MiB remains slow at levels 3/4 (about 1.0-1.9 s) after the mixed
 search is skipped, so its non-mixed match/search path needs its own profile.
