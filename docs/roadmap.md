@@ -422,6 +422,18 @@ HQ, including retained buffers, dictionaries, aliases and complete candidate
 streams. Independent backing ledgers validate precise limits and ownership
 transfer without changing the older null/default wires.
 
+The [Brotli one-shot decode memory contract](formats/brotli-decode-memory.md)
+adds whole-operation requested-heap admission and profiling for owned, prefix,
+exact-size, chunked and append decoding, including output capacity, moving
+allocation overlap, aliased input snapshots and allocating summary history.
+Caller-buffer and fixed-summary paths retain zero heap, and incremental option
+reuse explicitly rejects this one-shot policy. Independent allocation ledgers,
+reference fixtures and native/x86/WASI consumers validate the functional scope;
+this closes a resource-control gap without a decoder performance claim.
+The [frozen functional gate](performance/brotli-decode-memory-20261110/README.md)
+records exact source identities, 198 decode regressions, 89 counter regressions,
+actual x86/WASI consumers and the 108-frame bidirectional reference matrix.
+
 The [Large Window HQ milestone](performance/brotli-large-window-functional-baseline.md)
 extends explicit encoding through window 30, with safe distance groups, exact
 wire symbols and caller budgets. Independent tests cover real far-history

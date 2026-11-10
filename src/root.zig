@@ -891,6 +891,7 @@ pub const encodeSevenZipStoredInto = seven_zip.encodeStoredInto;
 pub const BrotliError = br.Error;
 pub const BrotliMaxMetadataMetaBlockLen = br.max_metadata_meta_block_len;
 pub const BrotliDecodeOptions = br.DecodeOptions;
+pub const BrotliDecodeMemoryProfile = br.DecodeMemoryProfile;
 pub const BrotliDecodePrefixResult = br.DecodePrefixResult;
 pub const BrotliDecodedPrefixSize = br.DecodedPrefixSize;
 pub const BrotliDecodedPrefix = br.DecodedPrefix;
@@ -4539,6 +4540,7 @@ test "root exports lz4 and zstd codec helpers" {
 
     _ = BrotliError;
     _ = BrotliDecodeOptions;
+    _ = BrotliDecodeMemoryProfile;
     _ = BrotliSerializedSharedDictionary;
     _ = BrotliSerializedSharedDictionaryError;
     _ = BrotliSerializedSharedDictionaryMatcher;

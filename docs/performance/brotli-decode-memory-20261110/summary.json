@@ -1,0 +1,278 @@
+{
+  "base_commit": "28bbbe5159439b638a0cfdfe6ab4264786f3f92d",
+  "gates": [
+    {
+      "command": "zig test src/br.zig --test-filter \"Brotli decode total memory\"",
+      "exit_code": 0,
+      "mode": "Debug",
+      "zig_tests": 24
+    },
+    {
+      "build_steps": 23,
+      "command": "zig build -j2 test-br-decode-memory test-br-decode-memory-wasm run-br-decode-memory-reference -Doptimize=ReleaseFast --summary all",
+      "exit_code": 0,
+      "native_zig_tests": 25,
+      "wasi_zig_tests": 25
+    },
+    {
+      "command": "zig build -j2 test-br-decode-memory -Dtarget=x86-linux-musl -Doptimize=ReleaseFast --summary all",
+      "exit_code": 0,
+      "zig_tests": 25
+    },
+    {
+      "command": "zig build -j2 test-br -Dbr-test-filter=decod -Doptimize=ReleaseFast --summary all",
+      "exit_code": 0,
+      "zig_tests": 198
+    },
+    {
+      "command": "zig build -j2 test-br -Dbr-test-filter=counters -Doptimize=ReleaseFast --summary all",
+      "exit_code": 0,
+      "zig_tests": 89
+    }
+  ],
+  "integration_status": "Independent branch gate only; root agent owns final main integration and whole-build validation",
+  "reference": {
+    "exact_minus_one_refusals": 4752,
+    "frames": 108,
+    "libbrotli": {
+      "decoder_version": "0x1000009",
+      "encoder_version": "0x1000009",
+      "library_sha256": {
+        "dec": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463",
+        "enc": "b88bfc462f83859a0324e2035f10bfd277e6073bb211b8ca29d95d2a5be8290d"
+      },
+      "loaded_paths": {
+        "dec": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+        "enc": "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1.0.9"
+      },
+      "requested_paths": {
+        "dec": "libbrotlidec.so.1",
+        "enc": "libbrotlienc.so.1"
+      }
+    },
+    "mode_executions": 4320,
+    "probe_executions": 216,
+    "probes": [
+      {
+        "elf_bits": 64,
+        "elf_machine": 62,
+        "path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/94c4facdd6e4347271ee771be3160217/vort-br-decode-memory-probe",
+        "sha256": "95eaa4dd6ae98f35b9795c80ca08dfa35294cb73b678c7c5fa2347014eac2cef"
+      },
+      {
+        "elf_bits": 32,
+        "elf_machine": 3,
+        "path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/74903458838123e438d9e8d92d3261d8/vort-br-decode-memory-probe-x86",
+        "sha256": "59c801812eccab9575ceff4936d220cd2d6a875a2985cf6b4556ed1920448a07"
+      }
+    ],
+    "python_brotli_version": "1.0.9",
+    "report_path": "zig-out/br-decode-memory-reference/report.json",
+    "report_sha256": "83b2671ce54b84f0e19f450ba3c0db2875b0eab9c4388c31608919eb885fcaaf",
+    "reverse_cases": 7
+  },
+  "schema": "vort-brotli-decode-memory-functional-baseline-v1",
+  "scope": "Brotli one-shot requested heap and append alias correctness; no performance claim",
+  "source_sha256": {
+    "build/br_decode_memory.zig": "99bdaf4f3e9f505a226b04e6a36a7d8d728d70c3f13d3d975db2f543c3cd8b63",
+    "src/br.zig": "182888c13e7660baefd8e4510d63850a803f3e40310b110abccb6abc08577312",
+    "src/br/decode/alias.zig": "24ea08218d4c4f239d1039e3580389e6ad088aa17f697b82b150a925cc33951b",
+    "src/br/decode/budget.zig": "4e6c872486c1a72541926ab86d7a093e176b1c7f3a24a29feec2523222148b7a",
+    "src/br/decode/budget/append.zig": "29667d33b786a241b7052463ccf591446d2a92cf628fc77b3e848425c1f7abb0",
+    "src/br/decode/budget/entry.zig": "70b46e3f13b77cb434e4c29d3daf4d382307fd2ea6909d6e9b0c0859fcc5f9ac",
+    "src/br/decode/one_shot.zig": "b8733327840a34dd8fa8df9d59d1a3f61f3685026bc945f3847f0721a2b43a59",
+    "src/br/decode/tests.zig": "d639a39c10fb173a1926e5e16b2608b57c0324dce062ec4bec35930054c9a7e3",
+    "src/br/decode/tests/append.zig": "454eee42907e2f5cf6c7f937f77cffa6f333e1db5868dd56c4190f8f64ba7c65",
+    "src/br/decode/tests/dictionary_alias.zig": "b1e70ca0835eaf14f9edce98df281bb9da6b492381d49a7a580b01aa439c0563",
+    "src/br/decode/tests/failures.zig": "0989844d406561de34a9b4f89d9ae5419b3b50c42eca3146c43a4d1de77e0794",
+    "src/br/decode/tests/fixtures.zig": "e804a4b21a26a5725e789ca0900e25ccc96646961bde41e56df2875c39973cb2",
+    "src/br/decode/tests/helpers.zig": "6c7471f123bfbce00c79400ba231fa6f33306ff6a2486d5b28e7f6d4c42ffdcc",
+    "src/br/decode/tests/inheritance.zig": "56c17c209c50907efec2d69bc0d12589f61fd4a95d9e9faaa214043da125d557",
+    "src/br/decode/tests/owned.zig": "cfbcbfa897d9f88e4cf5402aad7efe50fb965777e5eb6d6f4b1b981c48812b4f",
+    "src/br/decode/tests/preflight_observation.zig": "65650fc8b672be22637bc1f2d8d6f026d08ed275311d8d79399a8fd495b4843f",
+    "src/br/decode/tests/summary.zig": "9398127063d975c413962c2149a0b0cd6d922d18ef58abb57ed697eee4607f41",
+    "src/br/decode/tests/zero_heap.zig": "fe93fcdf5cd8779b98e22883d802bf4601120360bea59c72d747809aa4663871",
+    "src/br/incremental/copy_decoder.zig": "e600fef0a06b717f8fe6a9c2ed4817f2bfa38c495eb4055e19f50b6cc919a88b",
+    "src/br/incremental/owned_copy_decoder.zig": "83e5336f5ce671fbe8bf13653306428acd84cbcc94021d7df49a9e10d98bb483",
+    "src/root.zig": "0355712a934e56c59243f46546ed9c2fa4402fb617332c46a9796d9a8fd3051c",
+    "tools/br/decode_memory/README.md": "c7f9bbe0adfa0f23949147e2447f6dcdcbec172fe86e1f13775a0f580c45a57a",
+    "tools/br/decode_memory/driver.py": "bb591424d66283a1395f963a67b86adc94f1a96a7301d99544dd8122431416c6",
+    "tools/br/decode_memory/ledger.zig": "8571a07ad141d19f9a16d103c8a262b2206f83e8cbffb1109ebf47d9ece9ab39",
+    "tools/br/decode_memory/probe.zig": "f901318692c7017bcec7dad7184b53a596e7666310342e2ad68a23e46fa4abf0",
+    "tools/br/decode_memory/wasm_gate.js": "5286493dbe10406d58e7bcc01aa618a753c311d0615646413dd72f3a5988f71d"
+  },
+  "status": "ok",
+  "utc": "2026-11-10T11:43:28.027826+00:00",
+  "wasi": {
+    "build_source_sha256": "99bdaf4f3e9f505a226b04e6a36a7d8d728d70c3f13d3d975db2f543c3cd8b63",
+    "execution": "Zig test runner through WASI _start",
+    "exit_code": 0,
+    "gate_sha256": "5286493dbe10406d58e7bcc01aa618a753c311d0615646413dd72f3a5988f71d",
+    "imports": [
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_time_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "poll_oneoff"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_res_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pwrite"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pread"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_times"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_size"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_sync"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_seek"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_link"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_readlink"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_symlink"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_rename"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_remove_directory"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_readdir"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "path_create_directory"
+      },
+      {
+        "kind": "function",
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read"
+      }
+    ],
+    "library_source_sha256": "182888c13e7660baefd8e4510d63850a803f3e40310b110abccb6abc08577312",
+    "node_version": "v26.10.0",
+    "pointer_bits": 32,
+    "schema": "vort-brotli-decode-memory-wasm-v1",
+    "stack_bytes": 8388608,
+    "status": "ok",
+    "test_filters": [
+      "Brotli decode total memory",
+      "Brotli incremental decode policy"
+    ],
+    "utc": "2026-11-10T11:44:24.389Z",
+    "wasm_bytes": 11327143,
+    "wasm_path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/d74b4dab6b070f6055d9fa9c23271170/vort-br-decode-memory-wasm-tests.wasm",
+    "wasm_sha256": "b2fe93bc4917eb6410b5ecfe368c9d4069b16eef438879e76cb70c5646ffab5c"
+  }
+}

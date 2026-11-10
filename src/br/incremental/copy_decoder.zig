@@ -163,6 +163,8 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn nextFrame(self: *Self, options: Options) Error!void {
             if (self.fatal_error) |err| return err;
             if (self.phase != .done) return error.InvalidBlockPlan;
+            if (@hasDecl(Codec, "validateDecodeOptions"))
+                try Codec.validateDecodeOptions(options.decode);
             var next = options;
             next.max_total_output_len = @min(self.options.max_total_output_len, next.max_total_output_len);
             const read = try stream_count.add(self.operation_input, self.total_input);
@@ -230,6 +232,10 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn finish(self: *Self) Error!void {
             self.last_step_progress = .{};
             if (self.fatal_error) |err| return err;
+            self.validateOptions() catch |err| {
+                self.publishFailure(err);
+                return err;
+            };
             if (self.phase != .done) {
                 const err = self.fail(self.phase, error.TruncatedFrame);
                 self.publishFailure(err);
@@ -286,6 +292,20 @@ pub fn Decoder(comptime Codec: type) type {
             return stepped;
         }
 
+        fn validateOptions(self: *Self) Error!void {
+            if (self.shared_dictionary_validated) return;
+            // Some reference test codecs have only the original dictionary
+            // options. Production codecs also reject unsupported decode policy.
+            if (@hasDecl(Codec, "validateDecodeOptions"))
+                Codec.validateDecodeOptions(self.options.decode) catch |err|
+                    return self.fail(self.phase, err);
+            self.shared_dictionary_size = self.options.decode.shared_dictionary.totalSize() catch |err| switch (err) {
+                error.IntegerOverflow => return self.fail(self.phase, error.IntegerOverflow),
+                error.TooManyRawPrefixes, error.RawDictionaryTooLarge => return self.fail(self.phase, error.CorruptFrame),
+            };
+            self.shared_dictionary_validated = true;
+        }
+
         fn stepImpl(self: *Self, input: []const u8, output: []u8, accepted_input: *usize) Error!core.StepResult {
             if (self.options.expected_output_len) |expected| {
                 if (expected > self.outputLimit()) return self.fail(self.phase, error.OutputLimitExceeded);
@@ -302,13 +322,7 @@ pub fn Decoder(comptime Codec: type) type {
             var input_read: usize = 0;
             var output_written: usize = 0;
             defer accepted_input.* = input_read;
-            if (!self.shared_dictionary_validated) {
-                self.shared_dictionary_size = self.options.decode.shared_dictionary.totalSize() catch |err| switch (err) {
-                    error.IntegerOverflow => return self.fail(self.phase, error.IntegerOverflow),
-                    error.TooManyRawPrefixes, error.RawDictionaryTooLarge => return self.fail(self.phase, error.CorruptFrame),
-                };
-                self.shared_dictionary_validated = true;
-            }
+            try self.validateOptions();
             while (true) switch (self.phase) {
                 .window => {
                     var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);

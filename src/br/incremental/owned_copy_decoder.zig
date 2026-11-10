@@ -171,6 +171,7 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn nextFrame(self: *Self, options: Options) Error!void {
             if (self.fatal_error) |err| return err;
             if (self.phase != .done) return error.InvalidBlockPlan;
+            try Codec.validateDecodeOptions(options.decode);
             var next = options;
             next.max_working_memory = @min(self.options.max_working_memory, next.max_working_memory);
             next.max_total_output_len = @min(self.options.max_total_output_len, next.max_total_output_len);
@@ -258,7 +259,14 @@ pub fn Decoder(comptime Codec: type) type {
             return stepped;
         }
 
+        fn validateOptions(self: *Self) Error!void {
+            if (self.decode_options_validated) return;
+            Codec.validateDecodeOptions(self.options.decode) catch |err|
+                return self.fail(.input, err);
+        }
+
         fn stepImpl(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            try self.validateOptions();
             if (self.phase == .done) {
                 if (input.len != 0 and !self.options.allow_trailing_data)
                     return self.fail(.done, error.TrailingData);
@@ -267,10 +275,6 @@ pub fn Decoder(comptime Codec: type) type {
             if (self.options.expected_output_len) |expected| {
                 if (expected > self.options.max_output_len or expected > self.options.max_total_output_len -| self.total_output)
                     return self.fail(.input, error.OutputLimitExceeded);
-            }
-            if (!self.decode_options_validated) {
-                Codec.validateDecodeOptions(self.options.decode) catch |err|
-                    return self.fail(.input, err);
             }
             if (self.input_finished and input.len != 0) return self.fail(self.phase, error.TrailingData);
             if (self.options.expected_compressed_len) |expected| {
@@ -363,11 +367,13 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn finishImpl(self: *Self) Error!void {
+            try self.validateOptions();
             if (self.phase == .done) return;
             self.checkFrameRoom() catch |err| return self.fail(self.phase, err);
             if (self.options.expected_compressed_len) |expected| {
                 if (self.frame_input_read != expected) return self.fail(.input, error.SizeMismatch);
             }
+            self.decode_options_validated = true;
             self.input_finished = true;
             if (self.last_status == .need_output) return;
             const ready = self.prepareProgressive() catch |err| return self.fail(.input, err);

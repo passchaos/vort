@@ -733,6 +733,13 @@ its zero-heap path; retained scratch, output growth and alias snapshots are
 charged before publication. See the [stored memory contract](docs/formats/brotli-stored-memory.md)
 for ownership, nested quotas and incremental retry behavior.
 
+Brotli one-shot decode options now expose a whole-operation requested-heap cap
+and profile. Owned output capacity, append growth and alias snapshots, and
+allocating summary history share the same budget; caller-buffer and fixed
+summary paths retain zero requested heap. Incremental decoders explicitly
+reject these one-shot policy fields and keep their independent resource options.
+See the [decode memory contract](docs/formats/brotli-decode-memory.md).
+
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
 `ci-smoke`, and repeats the focused fuzz smoke entrypoints. The `ci-smoke`
