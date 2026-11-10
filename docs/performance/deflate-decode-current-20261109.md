@@ -52,3 +52,27 @@ small-frame fixed costs, not in wrapper or checksum work.
 - Brotli decode is the next unmeasured current-source decode surface.
 
 Raw rows: [matrix.csv](data/deflate-decode-current-20261109/matrix.csv).
+
+## Update: inline wide non-overlap copies (2026-11-10)
+
+Non-overlapping matches longer than 16 bytes fell through to a
+runtime-length compiler-rt `memcpy` (7.5% of `nci.64k` L6 decode); a
+bounded fixed-width vector copy (`shortcopy.copyWide`, up to 258 bytes
+under the linear loop's headroom guarantee) replaced it. The 48-row
+paired A/B measured 0.9838 new/old (-1.62%, bootstrap CI
+[-2.82%, -0.68%]); see the
+[wide-copy note](deflate-wide-copy-20261110.md). Rerunning the
+libdeflate 1.10 reference matrix:
+
+| Level | Prefix | Geometric ref/Vort | Vort slower |
+| --- | --- | ---: | ---: |
+| 6 | 64 KiB | 0.9135 | 1.09x |
+| 6 | 1 MiB | 0.9418 | 1.06x |
+| 9 | 64 KiB | 0.9109 | 1.10x |
+| 9 | 1 MiB | 0.9388 | 1.07x |
+| all 48 rows | | **0.9261** | **1.08x** |
+
+The full-matrix ratio moves 0.9131 -> 0.9261. Weak rows improve most:
+`nci.64k` L9 0.8208 -> 0.9287, L6 0.7823 -> 0.8742; `nci.1m` remains
+ahead of libdeflate (1.14x). Raw rows:
+[matrix-post-wide.csv](data/deflate-decode-current-20261109/matrix-post-wide.csv).

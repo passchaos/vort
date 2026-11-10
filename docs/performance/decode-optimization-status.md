@@ -187,6 +187,13 @@ with 49% more).
   `single_symbol` (0.9965 five-round but +0.94% to +1.31% on 1 MiB rows in
   ten-round rechecks). The payload is now structurally bound; further gain
   needs a full libbrotli-style phase-machine fusion, not local caching.
+- Adopted (Deflate decode): inline fixed-width vector copies for
+  non-overlapping matches up to 258 bytes instead of runtime-length
+  compiler-rt memcpy (`shortcopy.copyWide`, bounded by the linear loop's
+  258-byte headroom). 48-row three-round A/B `0.9838` (-1.62%, 95% CI
+  `[-2.82%, -0.68%]`); 64 KiB groups -2.51%/-2.88%. The libdeflate 1.10
+  reference/Vort matrix moves 0.9131 -> 0.9261; `nci.64k` L9 0.8208 ->
+  0.9287. deflate.zig tests 670/670.
 
 ## Remaining structural options
 
