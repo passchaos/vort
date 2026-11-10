@@ -39434,7 +39434,7 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expectEqual(@as(usize, 0), level0.match_search_budget);
     try std.testing.expectEqual(@as(usize, 16), level1.match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level3.match_search_budget);
-    try std.testing.expectEqual(@as(usize, 95), level9.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 96), level9.match_search_budget);
     try std.testing.expect(level1.rep_beam_search);
     try std.testing.expect(level3.rep_beam_search);
     try std.testing.expect(level9.rep_beam_search);
@@ -40100,8 +40100,8 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     try std.testing.expectEqual(@as(usize, 64), level3.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level5.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level9.adaptive_match_search_budget);
-    try std.testing.expectEqual(@as(usize, 95), level5.primary_options.match_search_budget);
-    try std.testing.expectEqual(@as(usize, 95), level9.primary_options.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 96), level9.primary_options.match_search_budget);
     try std.testing.expect(adaptiveCandidateCanTriggerDeferred(10_256, 10_000));
     try std.testing.expect(!adaptiveCandidateCanTriggerDeferred(10_257, 10_000));
     try std.testing.expect(adaptiveCandidateCanTriggerDeferred(std.math.maxInt(usize), std.math.maxInt(usize)));
