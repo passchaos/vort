@@ -6791,6 +6791,10 @@ pub fn build(b: *std.Build) void {
     zstd_common_hq_bench_smoke.addArtifactArg(zstd_encode_bench_exe);
     if (b.args) |args| zstd_common_hq_bench_smoke.addArgs(args);
     b.step("test-zstd-common-hq-bench", "Validate aligned requested HQ controls, raw rounds and rejected evidence").dependOn(&zstd_common_hq_bench_smoke.step);
+    const zstd_hq_auto_bench_smoke = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_auto_bench_smoke.py" });
+    zstd_hq_auto_bench_smoke.addArtifactArg(zstd_encode_bench_exe);
+    if (b.args) |args| zstd_hq_auto_bench_smoke.addArgs(args);
+    b.step("test-zstd-hq-auto-bench", "Validate opt-in HQ levels, explicit overrides and legacy benchmark policy").dependOn(&zstd_hq_auto_bench_smoke.step);
     const run_zstd_fast_compressed_bench = b.addRunArtifact(zstd_encode_bench_exe);
     run_zstd_fast_compressed_bench.addArgs(&.{
         "--native-selection", "fast_compressed",

@@ -36,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
             \\  --strategy NAME              Choose one of the strategies listed below.
             \\  --fast-acceleration N        Choose acceleration from 1 through 131072.
             \\  --fast-long-matches          Enable the opt-in fast long-match table.
+            \\  --hq-auto                   Use Vort HQ strategies at auto levels 9-22.
             \\  --native-selection fast_compressed
             \\  --case NAME --path FILE --limit BYTES
             \\  --iterations N --rounds N --csv FILE --libzstd FILE
@@ -182,7 +183,10 @@ pub fn main(init: std.process.Init) !void {
         try pair.verify(init.gpa, case.payload, vort_encoded, reference_encoded);
         const reference_parameters = try pair.referenceParameters();
         const requested_controls_match = try pair.checkRequestedControls(reference_parameters);
-        const control_profile = if (options.match_hq) try pair.profile(init.gpa, case.payload, vort_encoded) else null;
+        const control_profile = if (native_options != null and (options.match_hq or options.hq_auto))
+            try pair.profile(init.gpa, case.payload, vort_encoded)
+        else
+            null;
         const raw_rounds: ?[]encode_samples.Round = if (options.samples_json_path != null)
             try init.gpa.alloc(encode_samples.Round, options.rounds)
         else

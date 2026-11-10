@@ -1795,6 +1795,12 @@ pub const FrameOptions = struct {
     fast_long_matches: bool = false,
     /// Optional caller-owned counters, accumulated across operations.
     control_profile: ?*EncoderControlProfile = null,
+    /// Opt-in Vort HQ mapping for level-based encoding. Levels 9-15 use
+    /// btopt, 16-18 btultra and 19-22 btultra2 with the level-derived HQ
+    /// search defaults. Explicit strategy, HQ and fast controls take
+    /// precedence. Levels below 9 and false retain the legacy level policy.
+    /// This is independent of the libzstd canonical parameter query.
+    hq_auto: bool = false,
     hq: ?HqOptions = null,
 };
 
@@ -2524,6 +2530,7 @@ test {
     _ = @import("zstd/match/controlled_search_tests.zig");
     _ = @import("zstd/match/controlled_source_tests.zig");
     _ = @import("zstd/encode/controls_hq_tests.zig");
+    _ = @import("zstd/encode/hq_level_policy_tests.zig");
     _ = @import("zstd/encode/hq_contract_tests.zig");
     _ = @import("zstd/encode/hq_resource_tests.zig");
     _ = @import("zstd/encode/hq_transaction_tests.zig");

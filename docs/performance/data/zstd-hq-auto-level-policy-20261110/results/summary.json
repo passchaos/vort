@@ -1,0 +1,235 @@
+{
+  "scope": "Silesia 64 KiB prefixes; allocating level presets; no performance acceptance",
+  "levels": {
+    "9": {
+      "geomean_hq_over_legacy_size": 0.9411080988085591,
+      "smaller_rows": 12,
+      "at_or_below_reference_rows": 12,
+      "rows": [
+        {
+          "case": "dickens",
+          "legacy_bytes": 25898,
+          "hq_bytes": 25463,
+          "reference_bytes": 25800,
+          "hq_over_legacy_size": 0.9832033361649548,
+          "legacy_median_ns": 39406504,
+          "hq_median_ns": 17031724
+        },
+        {
+          "case": "mozilla",
+          "legacy_bytes": 17118,
+          "hq_bytes": 13839,
+          "reference_bytes": 14861,
+          "hq_over_legacy_size": 0.80844724851034,
+          "legacy_median_ns": 10644084,
+          "hq_median_ns": 18175148
+        },
+        {
+          "case": "mr",
+          "legacy_bytes": 16806,
+          "hq_bytes": 16401,
+          "reference_bytes": 16739,
+          "hq_over_legacy_size": 0.9759014637629418,
+          "legacy_median_ns": 28182041,
+          "hq_median_ns": 20817918
+        },
+        {
+          "case": "nci",
+          "legacy_bytes": 4728,
+          "hq_bytes": 4082,
+          "reference_bytes": 4286,
+          "hq_over_legacy_size": 0.8633671742808798,
+          "legacy_median_ns": 36134854,
+          "hq_median_ns": 50129016
+        },
+        {
+          "case": "ooffice",
+          "legacy_bytes": 32276,
+          "hq_bytes": 30812,
+          "reference_bytes": 32050,
+          "hq_over_legacy_size": 0.954641219481968,
+          "legacy_median_ns": 29300790,
+          "hq_median_ns": 13552290
+        },
+        {
+          "case": "osdb",
+          "legacy_bytes": 26901,
+          "hq_bytes": 26508,
+          "reference_bytes": 26566,
+          "hq_over_legacy_size": 0.9853908776625404,
+          "legacy_median_ns": 26160641,
+          "hq_median_ns": 15037464
+        },
+        {
+          "case": "reymont",
+          "legacy_bytes": 18720,
+          "hq_bytes": 17685,
+          "reference_bytes": 18475,
+          "hq_over_legacy_size": 0.9447115384615384,
+          "legacy_median_ns": 13907535,
+          "hq_median_ns": 21606392
+        },
+        {
+          "case": "samba",
+          "legacy_bytes": 22048,
+          "hq_bytes": 21591,
+          "reference_bytes": 21917,
+          "hq_over_legacy_size": 0.979272496371553,
+          "legacy_median_ns": 30660246,
+          "hq_median_ns": 18735705
+        },
+        {
+          "case": "sao",
+          "legacy_bytes": 49140,
+          "hq_bytes": 48582,
+          "reference_bytes": 49286,
+          "hq_over_legacy_size": 0.9886446886446887,
+          "legacy_median_ns": 22662736,
+          "hq_median_ns": 10257784
+        },
+        {
+          "case": "webster",
+          "legacy_bytes": 22669,
+          "hq_bytes": 22221,
+          "reference_bytes": 22646,
+          "hq_over_legacy_size": 0.9802373285103004,
+          "legacy_median_ns": 41439468,
+          "hq_median_ns": 17587080
+        },
+        {
+          "case": "x-ray",
+          "legacy_bytes": 50370,
+          "hq_bytes": 47405,
+          "reference_bytes": 50184,
+          "hq_over_legacy_size": 0.941135596585269,
+          "legacy_median_ns": 17430707,
+          "hq_median_ns": 8841888
+        },
+        {
+          "case": "xml",
+          "legacy_bytes": 5078,
+          "hq_bytes": 4611,
+          "reference_bytes": 4786,
+          "hq_over_legacy_size": 0.9080346593146909,
+          "legacy_median_ns": 9074491,
+          "hq_median_ns": 38302420
+        }
+      ]
+    },
+    "19": {
+      "geomean_hq_over_legacy_size": 0.9220295949241298,
+      "smaller_rows": 12,
+      "at_or_below_reference_rows": 1,
+      "rows": [
+        {
+          "case": "dickens",
+          "legacy_bytes": 25898,
+          "hq_bytes": 25199,
+          "reference_bytes": 24902,
+          "hq_over_legacy_size": 0.9730094988029964,
+          "legacy_median_ns": 39902088,
+          "hq_median_ns": 33050920
+        },
+        {
+          "case": "mozilla",
+          "legacy_bytes": 17118,
+          "hq_bytes": 13431,
+          "reference_bytes": 13347,
+          "hq_over_legacy_size": 0.7846126883981773,
+          "legacy_median_ns": 10122095,
+          "hq_median_ns": 54765235
+        },
+        {
+          "case": "mr",
+          "legacy_bytes": 16806,
+          "hq_bytes": 16002,
+          "reference_bytes": 15696,
+          "hq_over_legacy_size": 0.9521599428775437,
+          "legacy_median_ns": 26033071,
+          "hq_median_ns": 118760302
+        },
+        {
+          "case": "nci",
+          "legacy_bytes": 4728,
+          "hq_bytes": 3891,
+          "reference_bytes": 3884,
+          "hq_over_legacy_size": 0.8229695431472082,
+          "legacy_median_ns": 34811254,
+          "hq_median_ns": 139738441
+        },
+        {
+          "case": "ooffice",
+          "legacy_bytes": 32276,
+          "hq_bytes": 30391,
+          "reference_bytes": 30095,
+          "hq_over_legacy_size": 0.941597471805676,
+          "legacy_median_ns": 27669989,
+          "hq_median_ns": 28082645
+        },
+        {
+          "case": "osdb",
+          "legacy_bytes": 26901,
+          "hq_bytes": 26522,
+          "reference_bytes": 26376,
+          "hq_over_legacy_size": 0.9859113044124753,
+          "legacy_median_ns": 24665789,
+          "hq_median_ns": 30027746
+        },
+        {
+          "case": "reymont",
+          "legacy_bytes": 18720,
+          "hq_bytes": 17541,
+          "reference_bytes": 17263,
+          "hq_over_legacy_size": 0.9370192307692308,
+          "legacy_median_ns": 13672397,
+          "hq_median_ns": 43037132
+        },
+        {
+          "case": "samba",
+          "legacy_bytes": 22048,
+          "hq_bytes": 21435,
+          "reference_bytes": 21205,
+          "hq_over_legacy_size": 0.9721970246734397,
+          "legacy_median_ns": 29758973,
+          "hq_median_ns": 65065334
+        },
+        {
+          "case": "sao",
+          "legacy_bytes": 49140,
+          "hq_bytes": 48087,
+          "reference_bytes": 48074,
+          "hq_over_legacy_size": 0.9785714285714285,
+          "legacy_median_ns": 22020382,
+          "hq_median_ns": 19741089
+        },
+        {
+          "case": "webster",
+          "legacy_bytes": 22669,
+          "hq_bytes": 22101,
+          "reference_bytes": 21905,
+          "hq_over_legacy_size": 0.9749437557898452,
+          "legacy_median_ns": 41284486,
+          "hq_median_ns": 37099662
+        },
+        {
+          "case": "x-ray",
+          "legacy_bytes": 50370,
+          "hq_bytes": 44746,
+          "reference_bytes": 44094,
+          "hq_over_legacy_size": 0.8883462378399841,
+          "legacy_median_ns": 17483502,
+          "hq_median_ns": 17838365
+        },
+        {
+          "case": "xml",
+          "legacy_bytes": 5078,
+          "hq_bytes": 4471,
+          "reference_bytes": 4473,
+          "hq_over_legacy_size": 0.880464749901536,
+          "legacy_median_ns": 8956013,
+          "hq_median_ns": 92778980
+        }
+      ]
+    }
+  }
+}

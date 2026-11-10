@@ -1,0 +1,16 @@
+{
+  "base_commit": "084cb361bc0f80e57a6f4722d5642540bbef13b2",
+  "executable_sha256": "8cc045a12de79c2aba59fca53bf4755a798a73438accd09771091442b4a07f9d",
+  "library_path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+  "library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+  "files": {
+    "build.zig": "953a789cae5245e4693afbca7fc5a6c04ee57a8be1a36fd605f4162aa11198c7",
+    "src/zstd.zig": "d1d954bb694b4d4f87149b9cf19cbbc6eb479d09565c2b5ef1199058b54be0be",
+    "src/zstd/encode/controls.zig": "2aba329db0ba4801d8bc65722836691b29f8e9777ad4f3afa7ab702b0c0ba415",
+    "src/zstd/encode/hq_level_policy_tests.zig": "c52bbb957bc33fcbbaebbdf0153985d6d1266b940591be4ebc55dd24d9a2f2eb",
+    "tools/zstd/encode_bench.zig": "c0a41f98edf7f74aed6e7c8e9813ef290935038c250de84bc6ced8c39a1256a4",
+    "tools/zstd/encode_bench_options.zig": "fcefcd706912eb51989d762a33970ff0ecaaec245a03550d8b271a9edd095417",
+    "tools/zstd/hq_auto_bench_smoke.py": "9e3922a2b2ee7e3e5f895a0bb7880691f5e9b11981c12d10988bc943d844c814"
+  },
+  "overlay_sha256": "5c058b5e404377190172f02969c208029ce262869c8410685421f96b0dab6fd0"
+}

@@ -17,6 +17,7 @@ pub const Options = struct {
     show_help: bool = false,
     reference_library_path: ?[]const u8 = null,
     match_hq: bool = false,
+    hq_auto: bool = false,
     window_log: ?u6 = null,
     block_size: ?usize = null,
     content_checksum: ?bool = null,
@@ -41,6 +42,7 @@ pub fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameO
         .strategy = options.strategy orelse .auto,
         .fast_acceleration = options.fast_acceleration,
         .fast_long_matches = options.fast_long_matches,
+        .hq_auto = options.hq_auto,
     });
     if (options.match_hq) {
         if (options.strategy != .btopt and options.strategy != .btultra and options.strategy != .btultra2)
@@ -73,7 +75,7 @@ pub fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameO
     }
     // Retain the existing positive-level selection gate. New engine controls
     // and negative magnitudes always use the shared library level resolver.
-    if (level > 0 and (options.strategy orelse .auto) == .auto and options.fast_acceleration == null) {
+    if (level > 0 and resolved.strategy == .auto and resolved.fast_acceleration == null) {
         if (options.native_selection) |selection| return .{ .selection = selection, .content_checksum = false };
         return null;
     }
@@ -144,6 +146,9 @@ pub fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterat
         else if (std.mem.eql(u8, arg, "--match-hq")) {
             if (options.match_hq) return error.DuplicateZstdOption;
             options.match_hq = true;
+        } else if (std.mem.eql(u8, arg, "--hq-auto")) {
+            if (options.hq_auto) return error.DuplicateZstdOption;
+            options.hq_auto = true;
         } else if (try optionValue("--window-log", arg, args)) |value| {
             if (options.window_log != null) return error.DuplicateZstdOption;
             options.window_log = try std.fmt.parseInt(u6, value, 10);

@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "commands": 14,
+  "rows": 14,
+  "hq_auto_levels": [
+    9,
+    16,
+    19,
+    22
+  ],
+  "explicit_overrides": 4,
+  "cli_rejections": 10,
+  "explicit_libzstd": true,
+  "scope": "CLI and sample metadata; no performance gate"
+}

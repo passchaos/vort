@@ -342,6 +342,23 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
         };
         native.rep_beam_search = (level >= 1 and level <= 3) or level >= 9;
     }
+    // Opt-in Vort HQ mapping. The legacy auto level wires remain the
+    // default; callers that want high-level HQ behavior without selecting a
+    // strategy explicitly can enable this policy.
+    if (@hasField(@TypeOf(options), "hq_auto") and options.hq_auto and
+        level >= 9 and !active(native))
+    {
+        if (@hasField(NativeOptions, "hq")) {
+            const auto_strategy: Strategy = if (level >= 19)
+                .btultra2
+            else if (level >= 16)
+                .btultra
+            else
+                .btopt;
+            native.strategy = auto_strategy;
+            native.hq = try resolvedHqDefaults(auto_strategy, level);
+        }
+    }
     if (active(native)) {
         native.strategy = strategy(native);
         native.selection = .fast_compressed;

@@ -77,6 +77,10 @@ The library is under active development. Its current capabilities include:
   mixed-family lookahead off because the measured corpus produces identical
   wires at a fraction of the cost; see the
   [mixed-search level policy](docs/performance/zstd-mixed-search-level-policy.md)),
+  an opt-in `hq_auto` policy maps levels 9-22 to btopt/btultra/btultra2 with
+  explicit strategy and fast controls taking precedence,
+  while preserving the default level policy (see the
+  [HQ auto level policy](docs/performance/zstd-hq-auto-level-policy.md)),
   and optional caller-owned work
   profiles with transactional emission and deterministic parallel merge,
   a versioned canonical parameter query and

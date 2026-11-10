@@ -121,6 +121,17 @@ budget boundaries, ownership handoff, refusal/retry and zero-heap size queries.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 
+The [opt-in Zstd HQ level policy](performance/zstd-hq-auto-level-policy.md)
+lets level-based callers select btopt at 9-15, btultra at 16-18 and btultra2
+at 19-22 through `FrameOptions.hq_auto`, preserving the default level policy
+and explicit strategy/HQ/fast controls. Public contracts cover native, x86 and
+actual WASI execution, including reusable, dictionary, incremental, seekable
+and parallel settings. Current-source Silesia 64 KiB evidence records twelve
+smaller rows at each of levels 9/19 (geometric reductions 5.89%/7.80% against
+legacy); eleven level-19 rows still exceed libzstd 1.6.0's size, and HQ latency
+is mixed. Extend functional/resource coverage and then remove HQ repeated work
+before claiming full-file, streaming, memory or throughput leadership.
+
 The [incremental Deflate wrapper increment](formats/deflate-incremental-relaxed.md)
 adds independent Adler/CRC/ISIZE comparison controls while retaining complete
 footers, strict header and dictionary checks, and cumulative output limits.
