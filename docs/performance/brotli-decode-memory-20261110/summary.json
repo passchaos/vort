@@ -30,8 +30,9 @@
       "zig_tests": 89
     }
   ],
-  "integration_status": "Independent branch gate only; root agent owns final main integration and whole-build validation",
+  "integration_status": "Rebased with Deflate budget commits; reference sources and receipts verified. Final main gate pending.",
   "reference": {
+    "archived_receipts": "reference-receipts.tar.xz",
     "exact_minus_one_refusals": 4752,
     "frames": 108,
     "libbrotli": {
@@ -56,19 +57,19 @@
       {
         "elf_bits": 64,
         "elf_machine": 62,
-        "path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/94c4facdd6e4347271ee771be3160217/vort-br-decode-memory-probe",
+        "path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/fbac02f7a32631cca5f2a5a7e258f6cf/vort-br-decode-memory-probe",
         "sha256": "95eaa4dd6ae98f35b9795c80ca08dfa35294cb73b678c7c5fa2347014eac2cef"
       },
       {
         "elf_bits": 32,
         "elf_machine": 3,
-        "path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/74903458838123e438d9e8d92d3261d8/vort-br-decode-memory-probe-x86",
+        "path": "/home/passchaos/project-z/vort-brotli-decode-budget-20261110/.zig-cache/o/fbb54e40450a0011d6a82fc7828d235f/vort-br-decode-memory-probe-x86",
         "sha256": "59c801812eccab9575ceff4936d220cd2d6a875a2985cf6b4556ed1920448a07"
       }
     ],
     "python_brotli_version": "1.0.9",
     "report_path": "zig-out/br-decode-memory-reference/report.json",
-    "report_sha256": "83b2671ce54b84f0e19f450ba3c0db2875b0eab9c4388c31608919eb885fcaaf",
+    "report_sha256": "ced0b7b902508f6bec4e980e0855e33be12826ee37bee5ad63d8cb94ca31610a",
     "reverse_cases": 7
   },
   "schema": "vort-brotli-decode-memory-functional-baseline-v1",
@@ -94,7 +95,7 @@
     "src/br/decode/tests/zero_heap.zig": "fe93fcdf5cd8779b98e22883d802bf4601120360bea59c72d747809aa4663871",
     "src/br/incremental/copy_decoder.zig": "e600fef0a06b717f8fe6a9c2ed4817f2bfa38c495eb4055e19f50b6cc919a88b",
     "src/br/incremental/owned_copy_decoder.zig": "83e5336f5ce671fbe8bf13653306428acd84cbcc94021d7df49a9e10d98bb483",
-    "src/root.zig": "0355712a934e56c59243f46546ed9c2fa4402fb617332c46a9796d9a8fd3051c",
+    "src/root.zig": "ae5fd95220cfb3a0778c5d2b4692df72959580ab749683fed5a38a2ed8e83fb6",
     "tools/br/decode_memory/README.md": "c7f9bbe0adfa0f23949147e2447f6dcdcbec172fe86e1f13775a0f580c45a57a",
     "tools/br/decode_memory/driver.py": "bb591424d66283a1395f963a67b86adc94f1a96a7301d99544dd8122431416c6",
     "tools/br/decode_memory/ledger.zig": "8571a07ad141d19f9a16d103c8a262b2206f83e8cbffb1109ebf47d9ece9ab39",

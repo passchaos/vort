@@ -28,10 +28,11 @@ The reference matrix uses system libbrotli 1.0.9 and Python Brotli 1.0.9,
 qualities 0/5/11, generic/text/font, and empty/tiny/random/repetitive/source/run
 payloads. Artifact hashes, loaded library hashes and paths, commands, source
 identities, and actual WASI execution provenance are retained in the summary.
-Full generated plain/frame/suffix fixtures and API receipts remain in
-`zig-out/br-decode-memory-reference/`; rerun the checked-in driver to reproduce
-them. This package records their full-report hash without committing generated
-corpus files or build binaries.
+Full generated plain/frame/suffix fixtures and API receipts are archived in
+`reference-receipts.tar.xz`, with checksums in `SHA256SUMS`. The matrix was
+re-run after combining the Deflate commits and verified against every recorded
+source hash. Re-run the checked-in driver to reproduce the working copies under
+`zig-out/br-decode-memory-reference/`. Build binaries remain identified by hash.
 
 The independent allocator forces moving growth and observes real requested
 bytes. Measured peak D succeeds with and without instrumentation; D-1 refuses
