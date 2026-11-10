@@ -121,6 +121,11 @@ controls remain the supported HQ route.
 
 mozilla 1 MiB remains slow at levels 3/4 (about 1.0-1.9 s) after the mixed
 search is skipped, so its non-mixed match/search path needs its own profile.
+Removing the redundant `frequencies` zero-initialization in
+`sequenceLiteralsPayloadSectionLenFromHistogram` was measured and reverted:
+mozilla 1 MiB level 4 stayed at 1.87 s and dickens 64 KiB moved 32.5 -> 31.5 ms
+(noise). The remaining hotspot is the repeated Huffman code-length build
+(`treeCodeLengthsDenseKnownActive`), not that memset.
 
 This change is a level-policy performance fix, not a wire-format change or a
 current competitor parity claim. Broader corpora and explicit-HQ levels still
