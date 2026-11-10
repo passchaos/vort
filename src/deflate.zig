@@ -76,6 +76,9 @@ const pngImageOutputLen = png.pngImageOutputLen;
 const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
+pub const EncodeError = Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+const encode_total_budget = @import("deflate/encode/total_budget.zig");
+pub const EncodeMemoryProfile = encode_total_budget.EncodeMemoryProfile;
 /// Copy failures are local to Deflate ownership APIs, separate from codecs.
 pub const CloneError = std.mem.Allocator.Error || @import("deflate/incremental/clone_storage.zig").Error;
 /// Internal copy-contract surface for standalone native and WASI validation.
@@ -386,6 +389,7 @@ pub fn writeIncrementalBestPlannedBlock(
     options: CompressionOptions,
     stats: *const incremental_dynamic_stats.Stats,
 ) !void {
+    if (encode_total_budget.requested(options)) return error.InvalidBlockPlan;
     return writeBestTokensBlockWithStats(allocator, writer, plain, tokens, final, options, stats);
 }
 
@@ -709,6 +713,12 @@ pub const DeflateAlgorithmFamily = enum {
 pub const BlockSelection = enum { stored_fixed, stored_fixed_dynamic };
 
 pub const CompressionOptions = struct {
+    /// Whole-operation requested heap, including all candidates and output.
+    /// Caller input/dictionary/into slices and allocator bookkeeping are excluded.
+    /// Existing append and reusable scratch capacity is counted while borrowed.
+    /// Null preserves the allocator and existing codec choices exactly.
+    max_total_working_memory: ?usize = null,
+    memory_profile: ?*EncodeMemoryProfile = null,
     parser: ParserMode = .greedy,
     strategy: CompressionStrategy = .default,
     lz77_options: lz77.GreedyOptions = .{},
@@ -1604,13 +1614,17 @@ fn encodeRefinedHistoryChunksAlloc(
     var offset: usize = 0;
     while (offset < input.len) {
         const n = @min(chunk_len, input.len - offset);
-        const tokens = planRefinedHistoryChunkAlloc(allocator, input, offset, n, history_cap, options) catch {
+        const tokens = planRefinedHistoryChunkAlloc(allocator, input, offset, n, history_cap, options) catch |err| {
+            if (encode_total_budget.isTracked(allocator) and
+                (err == error.OutOfMemory or err == error.WorkingMemoryLimitExceeded)) return err;
             writer.deinit(allocator);
             return null;
         };
         defer allocator.free(tokens);
         const final = offset + n == input.len;
-        writeBestTokensBlock(allocator, &writer, input[offset..][0..n], tokens, final, options) catch {
+        writeBestTokensBlock(allocator, &writer, input[offset..][0..n], tokens, final, options) catch |err| {
+            if (encode_total_budget.isTracked(allocator) and
+                (err == error.OutOfMemory or err == error.WorkingMemoryLimitExceeded)) return err;
             writer.deinit(allocator);
             return null;
         };
@@ -1808,6 +1822,7 @@ fn encodeRawBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tok
 }
 
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawBestAlloc, .{ allocator, input, options });
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
         return @call(.never_inline, encodeRawBestWithStatsAlloc, .{ allocator, input, options });
@@ -1841,7 +1856,7 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     return encoded;
 }
 
-noinline fn encodeRawBestRefinedAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) (Error || std.mem.Allocator.Error)![]u8 {
+noinline fn encodeRawBestRefinedAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) EncodeError![]u8 {
     var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
     defer plans.deinit(allocator);
     var encoded = try encodeRawBestTokensAlloc(allocator, input, plans.seed.tokens, options);
@@ -1992,6 +2007,7 @@ fn encodeRawBestWithDictionaryPrimaryAlloc(
 }
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawBestWithDictionaryAlloc, .{ allocator, input, dictionary, options });
     if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const encoded = try encodeRawBestWithDictionaryPrimaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(encoded);
@@ -2007,14 +2023,14 @@ pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []c
     return encoded;
 }
 
-pub fn encodeRawLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
+pub fn encodeRawLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) (Error || std.mem.Allocator.Error)![]u8 {
     if (level == 0) return encodeRawStoredAlloc(allocator, input);
-    return encodeRawBestAlloc(allocator, input, try optionsForZlibLevel(level));
+    return encodeRawBestAlloc(allocator, input, try optionsForZlibLevel(level)) catch |err| return @errorCast(err);
 }
 
-pub fn encodeRawLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
+pub fn encodeRawLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: u4) (Error || std.mem.Allocator.Error)![]u8 {
     if (level == 0) return encodeRawStoredAlloc(allocator, input);
-    return encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, try optionsForZlibLevel(level));
+    return encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, try optionsForZlibLevel(level)) catch |err| return @errorCast(err);
 }
 
 pub const DynamicPlanStats = struct {
@@ -2051,6 +2067,7 @@ pub const DynamicPlanStats = struct {
 };
 
 pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !DynamicPlanStats {
+    if (encode_total_budget.requested(options)) return encode_total_budget.value(allocator, options, dynamicPlanStatsAlloc, .{ allocator, input, options }, DynamicPlanStats);
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     const dynamic_plan = try DynamicCodingPlan.init(plan.tokens);
@@ -2125,6 +2142,7 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
 
 pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawBestSplitAlloc, .{ allocator, input, block_len, options });
     if (usesStoredSplitFastPath(input, null, block_len, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -2134,6 +2152,7 @@ pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
 pub fn encodeRawBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawBestSplitWithDictionaryAlloc, .{ allocator, input, dictionary, block_len, options });
     if (usesStoredSplitFastPath(input, dictionary, block_len, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -2290,6 +2309,7 @@ const adaptive_drift_proposal_limit: usize = 2;
 
 pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawBestAdaptiveSplitAlloc, .{ allocator, input, options, split_options });
     if (usesStoredSplitFastPath(input, null, split_options.max_block_len, options)) return encodeRawStoredAlloc(allocator, input);
     const one_shot = try encodeRawBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
@@ -2302,6 +2322,7 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
 
 pub fn encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawBestAdaptiveSplitWithDictionaryAlloc, .{ allocator, input, dictionary, options, split_options });
     if (usesStoredSplitFastPath(input, dictionary, split_options.max_block_len, options)) return encodeRawStoredAlloc(allocator, input);
     const one_shot = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
@@ -3000,6 +3021,10 @@ fn writeStoredBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, 
 }
 
 pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawFixedSplitAlloc, .{ allocator, input, block_len, options });
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeFixedSplitBlocks(allocator, &writer, input, null, block_len, options);
@@ -3007,6 +3032,10 @@ pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn encodeRawFixedSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawFixedSplitWithDictionaryAlloc, .{ allocator, input, dictionary, block_len, options });
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeFixedSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
@@ -3041,12 +3070,14 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
 }
 
 pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawDynamicWithOptionsAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
 
 pub fn encodeRawDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawDynamicWithDictionaryAlloc, .{ allocator, input, dictionary, options });
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
@@ -3703,6 +3734,10 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
 }
 
 pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawDynamicSplitAlloc, .{ allocator, input, block_len, options });
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeDynamicSplitBlocks(allocator, &writer, input, null, block_len, options);
@@ -3710,6 +3745,10 @@ pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u
 }
 
 pub fn encodeRawDynamicSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawDynamicSplitWithDictionaryAlloc, .{ allocator, input, dictionary, block_len, options });
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeDynamicSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
@@ -3842,12 +3881,14 @@ pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u
 }
 
 pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawFixedWithOptionsAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeRawFixedTokensAlloc(allocator, plan.tokens);
 }
 
 pub fn encodeRawFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeRawFixedWithDictionaryAlloc, .{ allocator, input, dictionary, options });
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeRawFixedTokensAlloc(allocator, plan.tokens);
@@ -3921,6 +3962,7 @@ pub fn encodeRawFixedSyncFlushAppend(
     input: []const u8,
     options: CompressionOptions,
 ) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedSyncFlushAppend, .{ allocator, out, input, options });
     return encodeRawFixedSyncFlushAppendWithAllocators(
         allocator,
         allocator,
@@ -3966,6 +4008,7 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     chunks: []const []const u8,
     options: CompressionOptions,
 ) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedSyncFlushChunksAppend, .{ allocator, out, chunks, options });
     return encodeRawFixedSyncFlushChunksAppendWithAllocators(
         allocator,
         allocator,
@@ -4037,6 +4080,7 @@ pub const RawFixedSyncFlushEncoder = struct {
         input: []const u8,
         options: CompressionOptions,
     ) !usize {
+        if (encode_total_budget.requested(options)) return error.InvalidBlockPlan;
         _ = self.arena.reset(.retain_capacity);
         return encodeRawFixedSyncFlushAppendWithAllocators(
             self.arena.allocator(),
@@ -4053,6 +4097,7 @@ pub const RawFixedSyncFlushEncoder = struct {
         chunks: []const []const u8,
         options: CompressionOptions,
     ) !usize {
+        if (encode_total_budget.requested(options)) return error.InvalidBlockPlan;
         _ = self.arena.reset(.retain_capacity);
         return encodeRawFixedSyncFlushChunksAppendWithAllocators(
             self.arena.allocator(),
@@ -5788,42 +5833,58 @@ pub fn encodeRawFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8
 }
 
 pub fn encodeRawFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedWithOptionsAppend, .{ allocator, out, input, options });
     return appendOwnedEncoded(allocator, out, try encodeRawFixedWithOptionsAlloc(allocator, input, options));
 }
 
 pub fn encodeRawFixedWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedWithDictionaryAppend, .{ allocator, out, input, dictionary, options });
     return appendOwnedEncoded(allocator, out, try encodeRawFixedWithDictionaryAlloc(allocator, input, dictionary, options));
 }
 
 pub fn encodeRawFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedSplitAppend, .{ allocator, out, input, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeRawFixedSplitAlloc(allocator, input, block_len, options));
 }
 
 pub fn encodeRawFixedSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawFixedSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeRawFixedSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
 pub fn encodeRawBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawBestAppend, .{ allocator, out, input, options });
     return appendOwnedEncoded(allocator, out, try encodeRawBestAlloc(allocator, input, options));
 }
 
 pub fn encodeRawBestWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawBestWithDictionaryAppend, .{ allocator, out, input, dictionary, options });
     return appendOwnedEncoded(allocator, out, try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options));
 }
 
 pub fn encodeRawBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawBestSplitAppend, .{ allocator, out, input, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeRawBestSplitAlloc(allocator, input, block_len, options));
 }
 
 pub fn encodeRawBestSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawBestSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeRawBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
 pub fn encodeRawBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    if (encode_total_budget.requested(options) and (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawBestAdaptiveSplitAppend, .{ allocator, out, input, options, split_options });
     return appendOwnedEncoded(allocator, out, try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options));
 }
 
 pub fn encodeRawBestAdaptiveSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    if (encode_total_budget.requested(options) and (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawBestAdaptiveSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, options, split_options });
     return appendOwnedEncoded(allocator, out, try encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options));
 }
 
@@ -5840,18 +5901,24 @@ pub fn encodeRawDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.Arr
 }
 
 pub fn encodeRawDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawDynamicWithOptionsAppend, .{ allocator, out, input, options });
     return appendOwnedEncoded(allocator, out, try encodeRawDynamicWithOptionsAlloc(allocator, input, options));
 }
 
 pub fn encodeRawDynamicWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawDynamicWithDictionaryAppend, .{ allocator, out, input, dictionary, options });
     return appendOwnedEncoded(allocator, out, try encodeRawDynamicWithDictionaryAlloc(allocator, input, dictionary, options));
 }
 
 pub fn encodeRawDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawDynamicSplitAppend, .{ allocator, out, input, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeRawDynamicSplitAlloc(allocator, input, block_len, options));
 }
 
 pub fn encodeRawDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeRawDynamicSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeRawDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
@@ -7932,42 +7999,58 @@ pub fn encodeZlibFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u
 }
 
 pub fn encodeZlibFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibFixedWithOptionsAppend, .{ allocator, out, input, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibFixedWithOptionsAlloc(allocator, input, options));
 }
 
 pub fn encodeZlibFixedWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibFixedWithDictionaryAppend, .{ allocator, out, input, dictionary, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibFixedWithDictionaryAlloc(allocator, input, dictionary, options));
 }
 
 pub fn encodeZlibFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibFixedSplitAppend, .{ allocator, out, input, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibFixedSplitAlloc(allocator, input, block_len, options));
 }
 
 pub fn encodeZlibFixedSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibFixedSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibFixedSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
 pub fn encodeZlibBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibBestAppend, .{ allocator, out, input, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibBestAlloc(allocator, input, options));
 }
 
 pub fn encodeZlibBestWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibBestWithDictionaryAppend, .{ allocator, out, input, dictionary, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options));
 }
 
 pub fn encodeZlibBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibBestSplitAppend, .{ allocator, out, input, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibBestSplitAlloc(allocator, input, block_len, options));
 }
 
 pub fn encodeZlibBestSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibBestSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
 pub fn encodeZlibBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    if (encode_total_budget.requested(options) and (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibBestAdaptiveSplitAppend, .{ allocator, out, input, options, split_options });
     return appendOwnedEncoded(allocator, out, try encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, split_options));
 }
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    if (encode_total_budget.requested(options) and (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibBestAdaptiveSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, options, split_options });
     return appendOwnedEncoded(allocator, out, try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options));
 }
 
@@ -7984,18 +8067,24 @@ pub fn encodeZlibDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.Ar
 }
 
 pub fn encodeZlibDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibDynamicWithOptionsAppend, .{ allocator, out, input, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibDynamicWithOptionsAlloc(allocator, input, options));
 }
 
 pub fn encodeZlibDynamicWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibDynamicWithDictionaryAppend, .{ allocator, out, input, dictionary, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibDynamicWithDictionaryAlloc(allocator, input, dictionary, options));
 }
 
 pub fn encodeZlibDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibDynamicSplitAppend, .{ allocator, out, input, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitAlloc(allocator, input, block_len, options));
 }
 
 pub fn encodeZlibDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeZlibDynamicSplitWithDictionaryAppend, .{ allocator, out, input, dictionary, block_len, options });
     return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
@@ -8021,22 +8110,32 @@ pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibFixedWithOptionsAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeZlibFixedTokensAlloc(allocator, input, null, plan.tokens);
 }
 
 pub fn encodeZlibFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibFixedWithDictionaryAlloc, .{ allocator, input, dictionary, options });
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeZlibFixedTokensAlloc(allocator, input, dictionary, plan.tokens);
 }
 
 pub fn encodeZlibFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibFixedSplitAlloc, .{ allocator, input, block_len, options });
     return encodeZlibFixedSplitDirectAlloc(allocator, input, null, block_len, options);
 }
 
 pub fn encodeZlibFixedSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibFixedSplitWithDictionaryAlloc, .{ allocator, input, dictionary, block_len, options });
     return encodeZlibFixedSplitDirectAlloc(allocator, input, dictionary, block_len, options);
 }
 
@@ -8055,22 +8154,32 @@ pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibDynamicWithOptionsAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeZlibDynamicTokensAlloc(allocator, input, null, plan.tokens);
 }
 
 pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibDynamicWithDictionaryAlloc, .{ allocator, input, dictionary, options });
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeZlibDynamicTokensAlloc(allocator, input, dictionary, plan.tokens);
 }
 
 pub fn encodeZlibDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibDynamicSplitAlloc, .{ allocator, input, block_len, options });
     return encodeZlibDynamicSplitDirectAlloc(allocator, input, null, block_len, options);
 }
 
 pub fn encodeZlibDynamicSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibDynamicSplitWithDictionaryAlloc, .{ allocator, input, dictionary, block_len, options });
     return encodeZlibDynamicSplitDirectAlloc(allocator, input, dictionary, block_len, options);
 }
 
@@ -8083,6 +8192,7 @@ fn encodeZlibDynamicSplitDirectAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibBestAlloc, .{ allocator, input, options });
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
         return @call(.never_inline, encodeZlibBestWithStatsAlloc, .{ allocator, input, options });
@@ -8118,7 +8228,7 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return encoded;
 }
 
-noinline fn encodeZlibBestRefinedAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) (Error || std.mem.Allocator.Error)![]u8 {
+noinline fn encodeZlibBestRefinedAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) EncodeError![]u8 {
     var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
     defer plans.deinit(allocator);
     var encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plans.seed.tokens, options);
@@ -8195,6 +8305,7 @@ fn encodeZlibBestWithDictionaryPrimaryAlloc(
 }
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibBestWithDictionaryAlloc, .{ allocator, input, dictionary, options });
     if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const encoded = try encodeZlibBestWithDictionaryPrimaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(encoded);
@@ -8210,28 +8321,37 @@ pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []
     return encoded;
 }
 
-pub fn encodeZlibLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
+pub fn encodeZlibLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) (Error || std.mem.Allocator.Error)![]u8 {
     if (level == 0) return encodeZlibStoredAlloc(allocator, input);
-    return encodeZlibBestAlloc(allocator, input, try optionsForZlibLevel(level));
+    return encodeZlibBestAlloc(allocator, input, try optionsForZlibLevel(level)) catch |err| return @errorCast(err);
 }
 
-pub fn encodeZlibLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
+pub fn encodeZlibLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: u4) (Error || std.mem.Allocator.Error)![]u8 {
     if (level == 0) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
-    return encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, try optionsForZlibLevel(level));
+    return encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, try optionsForZlibLevel(level)) catch |err| return @errorCast(err);
 }
 
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibBestSplitAlloc, .{ allocator, input, block_len, options });
     if (usesStoredSplitFastPath(input, null, block_len, options)) return encodeZlibStoredSplitAlloc(allocator, input, block_len);
     return encodeZlibBestSplitDirectAlloc(allocator, input, null, block_len, options);
 }
 
 pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibBestSplitWithDictionaryAlloc, .{ allocator, input, dictionary, block_len, options });
     if (usesStoredSplitFastPath(input, dictionary, block_len, options)) return encodeZlibStoredSplitWithDictionaryAlloc(allocator, input, dictionary, block_len);
     return encodeZlibBestSplitDirectAlloc(allocator, input, dictionary, block_len, options);
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibBestAdaptiveSplitAlloc, .{ allocator, input, options, split_options });
     if (usesStoredSplitFastPath(input, null, split_options.max_block_len, options)) return encodeZlibStoredAlloc(allocator, input);
     const one_shot = try encodeZlibBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
@@ -8241,6 +8361,7 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeZlibBestAdaptiveSplitWithDictionaryAlloc, .{ allocator, input, dictionary, options, split_options });
     if (usesStoredSplitFastPath(input, dictionary, split_options.max_block_len, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const one_shot = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
@@ -8849,1155 +8970,11 @@ fn crc32Chunks(chunks: []const []const u8) u32 {
     return crc.digest();
 }
 
-pub const RawDeflateEncoder = struct {
-    allocator: std.mem.Allocator,
-    scratch: std.ArrayList(u8) = .empty,
+pub const RawDeflateEncoder = @import("deflate/encode/raw_encoder.zig").Encoder(@This());
 
-    pub fn init(allocator: std.mem.Allocator) RawDeflateEncoder {
-        return .{ .allocator = allocator };
-    }
+pub const ZlibEncoder = @import("deflate/encode/zlib_encoder.zig").Encoder(@This());
 
-    pub fn deinit(self: *RawDeflateEncoder) void {
-        self.scratch.deinit(self.allocator);
-        self.* = undefined;
-    }
-
-    pub fn encodeStoredAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
-        return try encodeRawStoredAlloc(self.allocator, input);
-    }
-
-    pub fn encodeStoredChunksAlloc(self: *RawDeflateEncoder, chunks: []const []const u8) ![]u8 {
-        return try encodeRawStoredChunksAlloc(self.allocator, chunks);
-    }
-
-    pub fn encodeFixedAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
-        return try self.encodeFixedWithOptionsAlloc(input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeRawFixedWithOptionsAlloc(self.allocator, input, options);
-    }
-
-    pub fn encodeFixedWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeRawFixedWithDictionaryAlloc(self.allocator, input, dictionary, options);
-    }
-
-    pub fn encodeFixedSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeRawFixedSplitAlloc(self.allocator, input, block_len, options);
-    }
-
-    pub fn encodeFixedSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeRawFixedSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
-    }
-
-    pub fn encodeBestAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeRawBestAlloc(self.allocator, input, options);
-    }
-
-    pub fn encodeBestWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeRawBestWithDictionaryAlloc(self.allocator, input, dictionary, options);
-    }
-
-    pub fn encodeBestSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeRawBestSplitAlloc(self.allocator, input, block_len, options);
-    }
-
-    pub fn encodeBestSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeRawBestSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
-    }
-
-    pub fn encodeBestAdaptiveSplitAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-        return try encodeRawBestAdaptiveSplitAlloc(self.allocator, input, options, split_options);
-    }
-
-    pub fn encodeBestAdaptiveSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-        return try encodeRawBestAdaptiveSplitWithDictionaryAlloc(self.allocator, input, dictionary, options, split_options);
-    }
-
-    pub fn encodeLevelAlloc(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]u8 {
-        return try encodeRawLevelAlloc(self.allocator, input, level);
-    }
-
-    pub fn encodeLevelWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
-        return try encodeRawLevelWithDictionaryAlloc(self.allocator, input, dictionary, level);
-    }
-
-    pub fn encodeDynamicLiteralAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
-        return try encodeRawDynamicLiteralAlloc(self.allocator, input);
-    }
-
-    pub fn encodeDynamicWithOptionsAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeRawDynamicWithOptionsAlloc(self.allocator, input, options);
-    }
-
-    pub fn encodeDynamicWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeRawDynamicWithDictionaryAlloc(self.allocator, input, dictionary, options);
-    }
-
-    pub fn encodeDynamicSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeRawDynamicSplitAlloc(self.allocator, input, block_len, options);
-    }
-
-    pub fn encodeDynamicSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeRawDynamicSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
-    }
-
-    pub fn encodeStoredScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredAppend(&self.scratch, input);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredChunksScratch(self: *RawDeflateEncoder, chunks: []const []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
-        return try self.encodeFixedWithOptionsScratch(input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedWithOptionsAppend(&self.scratch, input, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedWithDictionaryAppend(&self.scratch, input, dictionary, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedSplitAppend(&self.scratch, input, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAppend(&self.scratch, input, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestWithDictionaryAppend(&self.scratch, input, dictionary, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestSplitAppend(&self.scratch, input, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestAdaptiveSplitScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAdaptiveSplitAppend(&self.scratch, input, options, split_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestAdaptiveSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAdaptiveSplitWithDictionaryAppend(&self.scratch, input, dictionary, options, split_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeLevelScratch(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeLevelAppend(&self.scratch, input, level);
-        return self.scratch.items;
-    }
-
-    pub fn encodeLevelWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeLevelWithDictionaryAppend(&self.scratch, input, dictionary, level);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicLiteralScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicLiteralAppend(&self.scratch, input);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicWithOptionsScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicWithOptionsAppend(&self.scratch, input, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicWithDictionaryAppend(&self.scratch, input, dictionary, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicSplitAppend(&self.scratch, input, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try encodeRawStoredAppend(self.allocator, out, input);
-    }
-
-    pub fn encodeStoredChunksAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
-        return try encodeRawStoredChunksAppend(self.allocator, out, chunks);
-    }
-
-    pub fn encodeFixedAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try self.encodeFixedWithOptionsAppend(out, input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedWithOptionsAlloc(input, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedWithDictionaryAlloc(input, dictionary, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedSplitAlloc(input, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedSplitWithDictionaryAlloc(input, dictionary, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestAlloc(input, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestWithDictionaryAlloc(input, dictionary, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestSplitAlloc(input, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestSplitWithDictionaryAlloc(input, dictionary, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAdaptiveSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
-        const encoded = try self.encodeBestAdaptiveSplitAlloc(input, options, split_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAdaptiveSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
-        const encoded = try self.encodeBestAdaptiveSplitWithDictionaryAlloc(input, dictionary, options, split_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeLevelAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
-        const encoded = try self.encodeLevelAlloc(input, level);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeLevelWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
-        const encoded = try self.encodeLevelWithDictionaryAlloc(input, dictionary, level);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicLiteralAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        const encoded = try self.encodeDynamicLiteralAlloc(input);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicWithOptionsAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicWithOptionsAlloc(input, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicWithDictionaryAlloc(input, dictionary, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicSplitAlloc(input, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicSplitWithDictionaryAlloc(input, dictionary, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeStoredIntoSlice(self: *RawDeflateEncoder, input: []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeRawStored(input, output);
-    }
-
-    pub fn encodeStoredChunksIntoSlice(self: *RawDeflateEncoder, chunks: []const []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeRawStoredChunks(chunks, output);
-    }
-};
-
-pub const ZlibEncoder = struct {
-    allocator: std.mem.Allocator,
-    scratch: std.ArrayList(u8) = .empty,
-
-    pub fn init(allocator: std.mem.Allocator) ZlibEncoder {
-        return .{ .allocator = allocator };
-    }
-
-    pub fn deinit(self: *ZlibEncoder) void {
-        self.scratch.deinit(self.allocator);
-        self.* = undefined;
-    }
-
-    pub fn encodeStoredAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
-        return try encodeZlibStoredAlloc(self.allocator, input);
-    }
-
-    pub fn encodeStoredWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8) ![]u8 {
-        return try encodeZlibStoredWithDictionaryAlloc(self.allocator, input, dictionary);
-    }
-
-    pub fn encodeStoredChunksAlloc(self: *ZlibEncoder, chunks: []const []const u8) ![]u8 {
-        return try encodeZlibStoredChunksAlloc(self.allocator, chunks);
-    }
-
-    pub fn encodeStoredChunksWithDictionaryAlloc(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8) ![]u8 {
-        return try encodeZlibStoredWithDictionaryChunksAlloc(self.allocator, chunks, dictionary);
-    }
-
-    pub fn encodeFixedAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
-        return try self.encodeFixedWithOptionsAlloc(input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeZlibFixedWithOptionsAlloc(self.allocator, input, options);
-    }
-
-    pub fn encodeFixedWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeZlibFixedWithDictionaryAlloc(self.allocator, input, dictionary, options);
-    }
-
-    pub fn encodeFixedSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeZlibFixedSplitAlloc(self.allocator, input, block_len, options);
-    }
-
-    pub fn encodeFixedSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeZlibFixedSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
-    }
-
-    pub fn encodeBestAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeZlibBestAlloc(self.allocator, input, options);
-    }
-
-    pub fn encodeBestWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeZlibBestWithDictionaryAlloc(self.allocator, input, dictionary, options);
-    }
-
-    pub fn encodeBestSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeZlibBestSplitAlloc(self.allocator, input, block_len, options);
-    }
-
-    pub fn encodeBestSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeZlibBestSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
-    }
-
-    pub fn encodeBestAdaptiveSplitAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-        return try encodeZlibBestAdaptiveSplitAlloc(self.allocator, input, options, split_options);
-    }
-
-    pub fn encodeBestAdaptiveSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-        return try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(self.allocator, input, dictionary, options, split_options);
-    }
-
-    pub fn encodeLevelAlloc(self: *ZlibEncoder, input: []const u8, level: u4) ![]u8 {
-        return try encodeZlibLevelAlloc(self.allocator, input, level);
-    }
-
-    pub fn encodeLevelWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
-        return try encodeZlibLevelWithDictionaryAlloc(self.allocator, input, dictionary, level);
-    }
-
-    pub fn encodeDynamicLiteralAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
-        return try encodeZlibDynamicLiteralAlloc(self.allocator, input);
-    }
-
-    pub fn encodeDynamicWithOptionsAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeZlibDynamicWithOptionsAlloc(self.allocator, input, options);
-    }
-
-    pub fn encodeDynamicWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-        return try encodeZlibDynamicWithDictionaryAlloc(self.allocator, input, dictionary, options);
-    }
-
-    pub fn encodeDynamicSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeZlibDynamicSplitAlloc(self.allocator, input, block_len, options);
-    }
-
-    pub fn encodeDynamicSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try encodeZlibDynamicSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
-    }
-
-    pub fn encodeStoredScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredAppend(&self.scratch, input);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredWithDictionaryAppend(&self.scratch, input, dictionary);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredChunksScratch(self: *ZlibEncoder, chunks: []const []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredChunksWithDictionaryScratch(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredChunksWithDictionaryAppend(&self.scratch, chunks, dictionary);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
-        return try self.encodeFixedWithOptionsScratch(input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedWithOptionsAppend(&self.scratch, input, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedWithDictionaryAppend(&self.scratch, input, dictionary, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedSplitAppend(&self.scratch, input, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAppend(&self.scratch, input, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestWithDictionaryAppend(&self.scratch, input, dictionary, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestSplitAppend(&self.scratch, input, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestAdaptiveSplitScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAdaptiveSplitAppend(&self.scratch, input, options, split_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestAdaptiveSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAdaptiveSplitWithDictionaryAppend(&self.scratch, input, dictionary, options, split_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeLevelScratch(self: *ZlibEncoder, input: []const u8, level: u4) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeLevelAppend(&self.scratch, input, level);
-        return self.scratch.items;
-    }
-
-    pub fn encodeLevelWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeLevelWithDictionaryAppend(&self.scratch, input, dictionary, level);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicLiteralScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicLiteralAppend(&self.scratch, input);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicWithOptionsScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicWithOptionsAppend(&self.scratch, input, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicWithDictionaryAppend(&self.scratch, input, dictionary, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicSplitAppend(&self.scratch, input, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try encodeZlibStoredAppend(self.allocator, out, input);
-    }
-
-    pub fn encodeStoredWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
-        return try encodeZlibStoredWithDictionaryAppend(self.allocator, out, input, dictionary);
-    }
-
-    pub fn encodeStoredChunksAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
-        return try encodeZlibStoredChunksAppend(self.allocator, out, chunks);
-    }
-
-    pub fn encodeStoredChunksWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
-        return try encodeZlibStoredWithDictionaryChunksAppend(self.allocator, out, chunks, dictionary);
-    }
-
-    pub fn encodeFixedAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try self.encodeFixedWithOptionsAppend(out, input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedWithOptionsAlloc(input, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedWithDictionaryAlloc(input, dictionary, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedSplitAlloc(input, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeFixedSplitWithDictionaryAlloc(input, dictionary, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestAlloc(input, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestWithDictionaryAlloc(input, dictionary, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestSplitAlloc(input, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeBestSplitWithDictionaryAlloc(input, dictionary, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAdaptiveSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
-        const encoded = try self.encodeBestAdaptiveSplitAlloc(input, options, split_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAdaptiveSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
-        const encoded = try self.encodeBestAdaptiveSplitWithDictionaryAlloc(input, dictionary, options, split_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeLevelAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
-        const encoded = try self.encodeLevelAlloc(input, level);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeLevelWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
-        const encoded = try self.encodeLevelWithDictionaryAlloc(input, dictionary, level);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicLiteralAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        const encoded = try self.encodeDynamicLiteralAlloc(input);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicWithOptionsAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicWithOptionsAlloc(input, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicWithDictionaryAlloc(input, dictionary, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicSplitAlloc(input, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        const encoded = try self.encodeDynamicSplitWithDictionaryAlloc(input, dictionary, block_len, options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeStoredIntoSlice(self: *ZlibEncoder, input: []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeZlibStored(input, output);
-    }
-
-    pub fn encodeStoredWithDictionaryIntoSlice(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeZlibStoredWithDictionary(input, output, dictionary);
-    }
-
-    pub fn encodeStoredChunksIntoSlice(self: *ZlibEncoder, chunks: []const []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeZlibStoredChunks(chunks, output);
-    }
-
-    pub fn encodeStoredChunksWithDictionaryIntoSlice(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeZlibStoredWithDictionaryChunks(chunks, output, dictionary);
-    }
-};
-
-pub const GzipEncoder = struct {
-    allocator: std.mem.Allocator,
-    scratch: std.ArrayList(u8) = .empty,
-
-    pub fn init(allocator: std.mem.Allocator) GzipEncoder {
-        return .{ .allocator = allocator };
-    }
-
-    pub fn deinit(self: *GzipEncoder) void {
-        self.scratch.deinit(self.allocator);
-        self.* = undefined;
-    }
-
-    pub fn encodeStoredAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
-        return try encodeGzipStoredAlloc(self.allocator, input);
-    }
-
-    pub fn encodeStoredWithHeaderAlloc(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipStoredWithHeaderAlloc(self.allocator, input, header_options);
-    }
-
-    pub fn encodeStoredChunksAlloc(self: *GzipEncoder, chunks: []const []const u8) ![]u8 {
-        return try encodeGzipStoredChunksAlloc(self.allocator, chunks);
-    }
-
-    pub fn encodeStoredChunksWithHeaderAlloc(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipStoredChunksWithHeaderAlloc(self.allocator, chunks, header_options);
-    }
-
-    pub fn encodeFixedAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
-        return try self.encodeFixedWithOptionsAlloc(input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try self.encodeFixedWithHeaderAlloc(input, options, .{});
-    }
-
-    pub fn encodeFixedWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipFixedWithHeaderAlloc(self.allocator, input, options, header_options);
-    }
-
-    pub fn encodeFixedSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try self.encodeFixedSplitWithHeaderAlloc(input, block_len, options, .{});
-    }
-
-    pub fn encodeFixedSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipFixedSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
-    }
-
-    pub fn encodeBestAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try self.encodeBestWithHeaderAlloc(input, options, .{});
-    }
-
-    pub fn encodeBestWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipBestWithHeaderAlloc(self.allocator, input, options, header_options);
-    }
-
-    pub fn encodeBestSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try self.encodeBestSplitWithHeaderAlloc(input, block_len, options, .{});
-    }
-
-    pub fn encodeBestSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipBestSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
-    }
-
-    pub fn encodeBestAdaptiveSplitAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-        return try self.encodeBestAdaptiveSplitWithHeaderAlloc(input, options, split_options, .{});
-    }
-
-    pub fn encodeBestAdaptiveSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipBestAdaptiveSplitWithHeaderAlloc(self.allocator, input, options, split_options, header_options);
-    }
-
-    pub fn encodeLevelAlloc(self: *GzipEncoder, input: []const u8, level: u4) ![]u8 {
-        return try self.encodeLevelWithHeaderAlloc(input, level, .{});
-    }
-
-    pub fn encodeLevelWithHeaderAlloc(self: *GzipEncoder, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipLevelWithHeaderAlloc(self.allocator, input, level, header_options);
-    }
-
-    pub fn encodeDynamicLiteralAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
-        return try self.encodeDynamicLiteralWithHeaderAlloc(input, .{});
-    }
-
-    pub fn encodeDynamicLiteralWithHeaderAlloc(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipDynamicLiteralWithHeaderAlloc(self.allocator, input, header_options);
-    }
-
-    pub fn encodeDynamicWithOptionsAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
-        return try self.encodeDynamicWithHeaderAlloc(input, options, .{});
-    }
-
-    pub fn encodeDynamicWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipDynamicWithHeaderAlloc(self.allocator, input, options, header_options);
-    }
-
-    pub fn encodeDynamicSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-        return try self.encodeDynamicSplitWithHeaderAlloc(input, block_len, options, .{});
-    }
-
-    pub fn encodeDynamicSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-        return try encodeGzipDynamicSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
-    }
-
-    pub fn encodeStoredScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredAppend(&self.scratch, input);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredWithHeaderScratch(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredWithHeaderAppend(&self.scratch, input, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredChunksScratch(self: *GzipEncoder, chunks: []const []const u8) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredChunksWithHeaderScratch(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeStoredChunksWithHeaderAppend(&self.scratch, chunks, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
-        return try self.encodeFixedWithOptionsScratch(input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        return try self.encodeFixedWithHeaderScratch(input, options, .{});
-    }
-
-    pub fn encodeFixedWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedWithHeaderAppend(&self.scratch, input, options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeFixedSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        return try self.encodeFixedSplitWithHeaderScratch(input, block_len, options, .{});
-    }
-
-    pub fn encodeFixedSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeFixedSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        return try self.encodeBestWithHeaderScratch(input, options, .{});
-    }
-
-    pub fn encodeBestWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestWithHeaderAppend(&self.scratch, input, options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        return try self.encodeBestSplitWithHeaderScratch(input, block_len, options, .{});
-    }
-
-    pub fn encodeBestSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeBestAdaptiveSplitScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
-        return try self.encodeBestAdaptiveSplitWithHeaderScratch(input, options, split_options, .{});
-    }
-
-    pub fn encodeBestAdaptiveSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeBestAdaptiveSplitWithHeaderAppend(&self.scratch, input, options, split_options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeLevelScratch(self: *GzipEncoder, input: []const u8, level: u4) ![]const u8 {
-        return try self.encodeLevelWithHeaderScratch(input, level, .{});
-    }
-
-    pub fn encodeLevelWithHeaderScratch(self: *GzipEncoder, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeLevelWithHeaderAppend(&self.scratch, input, level, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicLiteralScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
-        return try self.encodeDynamicLiteralWithHeaderScratch(input, .{});
-    }
-
-    pub fn encodeDynamicLiteralWithHeaderScratch(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicLiteralWithHeaderAppend(&self.scratch, input, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicWithOptionsScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
-        return try self.encodeDynamicWithHeaderScratch(input, options, .{});
-    }
-
-    pub fn encodeDynamicWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicWithHeaderAppend(&self.scratch, input, options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeDynamicSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
-        return try self.encodeDynamicSplitWithHeaderScratch(input, block_len, options, .{});
-    }
-
-    pub fn encodeDynamicSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        _ = try self.encodeDynamicSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
-        return self.scratch.items;
-    }
-
-    pub fn encodeStoredAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try encodeGzipStoredAppend(self.allocator, out, input);
-    }
-
-    pub fn encodeStoredWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
-        return try encodeGzipStoredWithHeaderAppend(self.allocator, out, input, header_options);
-    }
-
-    pub fn encodeStoredChunksAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
-        return try encodeGzipStoredChunksAppend(self.allocator, out, chunks);
-    }
-
-    pub fn encodeStoredChunksWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, header_options: GzipHeaderOptions) !usize {
-        return try encodeGzipStoredChunksWithHeaderAppend(self.allocator, out, chunks, header_options);
-    }
-
-    pub fn encodeFixedAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try self.encodeFixedWithOptionsAppend(out, input, .{});
-    }
-
-    pub fn encodeFixedWithOptionsAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        return try self.encodeFixedWithHeaderAppend(out, input, options, .{});
-    }
-
-    pub fn encodeFixedWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeFixedWithHeaderAlloc(input, options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeFixedSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        return try self.encodeFixedSplitWithHeaderAppend(out, input, block_len, options, .{});
-    }
-
-    pub fn encodeFixedSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeFixedSplitWithHeaderAlloc(input, block_len, options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        return try self.encodeBestWithHeaderAppend(out, input, options, .{});
-    }
-
-    pub fn encodeBestWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeBestWithHeaderAlloc(input, options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        return try self.encodeBestSplitWithHeaderAppend(out, input, block_len, options, .{});
-    }
-
-    pub fn encodeBestSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeBestSplitWithHeaderAlloc(input, block_len, options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeBestAdaptiveSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
-        return try self.encodeBestAdaptiveSplitWithHeaderAppend(out, input, options, split_options, .{});
-    }
-
-    pub fn encodeBestAdaptiveSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeBestAdaptiveSplitWithHeaderAlloc(input, options, split_options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeLevelAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
-        return try self.encodeLevelWithHeaderAppend(out, input, level, .{});
-    }
-
-    pub fn encodeLevelWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeLevelWithHeaderAlloc(input, level, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicLiteralAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
-        return try self.encodeDynamicLiteralWithHeaderAppend(out, input, .{});
-    }
-
-    pub fn encodeDynamicLiteralWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeDynamicLiteralWithHeaderAlloc(input, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicWithOptionsAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
-        return try self.encodeDynamicWithHeaderAppend(out, input, options, .{});
-    }
-
-    pub fn encodeDynamicWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeDynamicWithHeaderAlloc(input, options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeDynamicSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
-        return try self.encodeDynamicSplitWithHeaderAppend(out, input, block_len, options, .{});
-    }
-
-    pub fn encodeDynamicSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
-        const encoded = try self.encodeDynamicSplitWithHeaderAlloc(input, block_len, options, header_options);
-        defer self.allocator.free(encoded);
-        const start = out.items.len;
-        try out.appendSlice(self.allocator, encoded);
-        return out.items.len - start;
-    }
-
-    pub fn encodeStoredIntoSlice(self: *GzipEncoder, input: []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeGzipStored(input, output);
-    }
-
-    pub fn encodeStoredWithHeaderIntoSlice(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions, output: []u8) !usize {
-        _ = self;
-        return try encodeGzipStoredWithHeader(input, output, header_options);
-    }
-
-    pub fn encodeStoredChunksIntoSlice(self: *GzipEncoder, chunks: []const []const u8, output: []u8) !usize {
-        _ = self;
-        return try encodeGzipStoredChunks(chunks, output);
-    }
-
-    pub fn encodeStoredChunksWithHeaderIntoSlice(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions, output: []u8) !usize {
-        _ = self;
-        return try encodeGzipStoredChunksWithHeader(chunks, output, header_options);
-    }
-};
+pub const GzipEncoder = @import("deflate/encode/gzip_encoder.zig").Encoder(@This());
 
 /// Reusable, caller-owned raw DEFLATE decoder facade.
 ///
@@ -16818,42 +15795,58 @@ pub fn encodeGzipFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u
 }
 
 pub fn encodeGzipFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipFixedWithOptionsAppend, .{ allocator, out, input, options });
     return encodeGzipFixedWithHeaderAppend(allocator, out, input, options, .{});
 }
 
 pub fn encodeGzipFixedWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipFixedWithHeaderAppend, .{ allocator, out, input, options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipFixedWithHeaderAlloc(allocator, input, options, header_options));
 }
 
 pub fn encodeGzipFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipFixedSplitAppend, .{ allocator, out, input, block_len, options });
     return encodeGzipFixedSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
 }
 
 pub fn encodeGzipFixedSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipFixedSplitWithHeaderAppend, .{ allocator, out, input, block_len, options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipFixedSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
 }
 
 pub fn encodeGzipBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipBestAppend, .{ allocator, out, input, options });
     return encodeGzipBestWithHeaderAppend(allocator, out, input, options, .{});
 }
 
 pub fn encodeGzipBestWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipBestWithHeaderAppend, .{ allocator, out, input, options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options));
 }
 
 pub fn encodeGzipBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipBestSplitAppend, .{ allocator, out, input, block_len, options });
     return encodeGzipBestSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
 }
 
 pub fn encodeGzipBestSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipBestSplitWithHeaderAppend, .{ allocator, out, input, block_len, options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipBestSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
 }
 
 pub fn encodeGzipBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    if (encode_total_budget.requested(options) and (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipBestAdaptiveSplitAppend, .{ allocator, out, input, options, split_options });
     return encodeGzipBestAdaptiveSplitWithHeaderAppend(allocator, out, input, options, split_options, .{});
 }
 
 pub fn encodeGzipBestAdaptiveSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options) and (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipBestAdaptiveSplitWithHeaderAppend, .{ allocator, out, input, options, split_options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator, input, options, split_options, header_options));
 }
 
@@ -16874,18 +15867,24 @@ pub fn encodeGzipDynamicLiteralWithHeaderAppend(allocator: std.mem.Allocator, ou
 }
 
 pub fn encodeGzipDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipDynamicWithOptionsAppend, .{ allocator, out, input, options });
     return encodeGzipDynamicWithHeaderAppend(allocator, out, input, options, .{});
 }
 
 pub fn encodeGzipDynamicWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipDynamicWithHeaderAppend, .{ allocator, out, input, options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipDynamicWithHeaderAlloc(allocator, input, options, header_options));
 }
 
 pub fn encodeGzipDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipDynamicSplitAppend, .{ allocator, out, input, block_len, options });
     return encodeGzipDynamicSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
 }
 
 pub fn encodeGzipDynamicSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    if (encode_total_budget.requested(options) and (block_len == 0)) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.append(allocator, out, options, encodeGzipDynamicSplitWithHeaderAppend, .{ allocator, out, input, block_len, options, header_options });
     return appendOwnedEncoded(allocator, out, try encodeGzipDynamicSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
 }
 
@@ -16907,20 +15906,30 @@ pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipFixedWithOptionsAlloc, .{ allocator, input, options });
     return encodeGzipFixedWithHeaderAlloc(allocator, input, options, .{});
 }
 
 pub fn encodeGzipFixedWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipFixedWithHeaderAlloc, .{ allocator, input, options, header_options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeGzipFixedTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
 }
 
 pub fn encodeGzipFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipFixedSplitAlloc, .{ allocator, input, block_len, options });
     return encodeGzipFixedSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
 }
 
 pub fn encodeGzipFixedSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipFixedSplitWithHeaderAlloc, .{ allocator, input, block_len, options, header_options });
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
@@ -16939,20 +15948,30 @@ pub fn encodeGzipDynamicLiteralWithHeaderAlloc(allocator: std.mem.Allocator, inp
 }
 
 pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipDynamicWithOptionsAlloc, .{ allocator, input, options });
     return encodeGzipDynamicWithHeaderAlloc(allocator, input, options, .{});
 }
 
 pub fn encodeGzipDynamicWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipDynamicWithHeaderAlloc, .{ allocator, input, options, header_options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeGzipDynamicTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
 }
 
 pub fn encodeGzipDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipDynamicSplitAlloc, .{ allocator, input, block_len, options });
     return encodeGzipDynamicSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
 }
 
 pub fn encodeGzipDynamicSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipDynamicSplitWithHeaderAlloc, .{ allocator, input, block_len, options, header_options });
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
@@ -16961,10 +15980,12 @@ pub fn encodeGzipDynamicSplitWithHeaderAlloc(allocator: std.mem.Allocator, input
 }
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipBestAlloc, .{ allocator, input, options });
     return encodeGzipBestWithHeaderAlloc(allocator, input, options, .{});
 }
 
 pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipBestWithHeaderAlloc, .{ allocator, input, options, header_options });
     if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
         return @call(.never_inline, encodeGzipBestWithStatsAlloc, .{ allocator, input, options, header_options });
@@ -17000,7 +16021,7 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
     return encoded;
 }
 
-noinline fn encodeGzipBestRefinedWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) (Error || std.mem.Allocator.Error)![]u8 {
+noinline fn encodeGzipBestRefinedWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) EncodeError![]u8 {
     var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
     defer plans.deinit(allocator);
     var encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plans.seed.tokens, options, header_options);
@@ -17036,30 +16057,43 @@ fn encodeGzipBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8,
     return finishGzipFrame(allocator, &writer, input);
 }
 
-pub fn encodeGzipLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
-    return encodeGzipLevelWithHeaderAlloc(allocator, input, level, .{});
+pub fn encodeGzipLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) (Error || std.mem.Allocator.Error)![]u8 {
+    return encodeGzipLevelWithHeaderAlloc(allocator, input, level, .{}) catch |err| return @errorCast(err);
 }
 
-pub fn encodeGzipLevelWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]u8 {
+pub fn encodeGzipLevelWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4, header_options: GzipHeaderOptions) (Error || std.mem.Allocator.Error)![]u8 {
     if (level == 0) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
-    return encodeGzipBestWithHeaderAlloc(allocator, input, try optionsForZlibLevel(level), header_options);
+    return encodeGzipBestWithHeaderAlloc(allocator, input, try optionsForZlibLevel(level), header_options) catch |err| return @errorCast(err);
 }
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipBestSplitAlloc, .{ allocator, input, block_len, options });
     return encodeGzipBestSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
 }
 
 pub fn encodeGzipBestSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (block_len == 0) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipBestSplitWithHeaderAlloc, .{ allocator, input, block_len, options, header_options });
     if (usesStoredSplitFastPath(input, null, block_len, options)) return encodeGzipStoredSplitWithHeaderAlloc(allocator, input, block_len, header_options);
     return encodeGzipBestSplitDirectWithHeaderAlloc(allocator, input, block_len, options, header_options);
 }
 
 pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (encode_total_budget.requested(options)) {
+        if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    }
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipBestAdaptiveSplitAlloc, .{ allocator, input, options, split_options });
     return encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator, input, options, split_options, .{});
 }
 
 pub fn encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (encode_total_budget.requested(options)) return encode_total_budget.alloc(allocator, options, encodeGzipBestAdaptiveSplitWithHeaderAlloc, .{ allocator, input, options, split_options, header_options });
     if (usesStoredSplitFastPath(input, null, split_options.max_block_len, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
     const one_shot = try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options);
     errdefer allocator.free(one_shot);
@@ -24637,4 +23671,8 @@ test "deflate portable secondary lookups decode the guarded reference OSDB dynam
 
 test "deflate exact short nonoverlapping copies preserve all lengths alignments and guards" {
     try @import("deflate/decoder/shortcopy_tests.zig").check();
+}
+
+test "Deflate whole-operation requested heap contracts" {
+    try @import("deflate/encode/total_budget/tests.zig").contracts(@This());
 }

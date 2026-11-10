@@ -3,6 +3,7 @@ const std = @import("std");
 const checksum = @import("../../checksum.zig");
 const window = @import("window.zig");
 const settings = @import("frame_options.zig");
+const budget = @import("../encode/total_budget.zig");
 const backends = @import("frame_backends.zig");
 
 pub const Mode = settings.Mode;
@@ -32,6 +33,7 @@ pub fn Encoder(comptime C: type) type {
 
         pub fn encodeAlloc(self: *Self, input: []const u8) ![]u8 {
             const options = try self.options.resolved();
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeAlloc, .{ self, input }, .alloc);
             // Preserve every established default-window codec choice, tie and
             // dictionary-presence rule by calling the corresponding old API.
             if (options.window_bits == window.default_bits and
@@ -43,6 +45,8 @@ pub fn Encoder(comptime C: type) type {
         }
 
         pub fn encodeAppend(self: *Self, output: *std.ArrayList(u8), input: []const u8) !usize {
+            const options = try self.options.resolved();
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeAppend, .{ self, output, input }, .append);
             const bytes = try self.encodeAlloc(input);
             defer self.allocator.free(bytes);
             try output.appendSlice(self.allocator, bytes);
@@ -55,12 +59,16 @@ pub fn Encoder(comptime C: type) type {
                 const raw_size = try C.rawStoredEncodedSize(input.len);
                 const required = try wrappedSize(raw_size, options.dictionary);
                 if (output.len < required) return error.OutputTooSmall;
+                // Direct stored emission uses only caller storage: no ledger
+                // control allocation, including cap=0 and profile-only calls.
+                try budget.direct(self.allocator, options, self.scratch.capacity);
                 const header_len = window.headerLen(options.dictionary);
                 _ = try C.encodeRawStored(input, output[header_len..][0..raw_size]);
                 try window.writeHeader(output[0..header_len], options.dictionary, options.window_bits);
                 std.mem.writeInt(u32, output[header_len + raw_size ..][0..4], checksum.adler32(input), .big);
                 return required;
             }
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeInto, .{ self, input, output }, .into);
             const bytes = try self.encodeAlloc(input);
             defer self.allocator.free(bytes);
             if (output.len < bytes.len) return error.OutputTooSmall;
@@ -69,6 +77,8 @@ pub fn Encoder(comptime C: type) type {
         }
 
         pub fn encodeScratch(self: *Self, input: []const u8) ![]const u8 {
+            const options = try self.options.resolved();
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeScratch, .{ self, input }, .scratch);
             const bytes = try self.encodeAlloc(input);
             defer self.allocator.free(bytes);
             return self.retainScratch(bytes);
@@ -80,6 +90,7 @@ pub fn Encoder(comptime C: type) type {
             var requested = self.options;
             requested.mode = .stored;
             const options = try requested.resolved();
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeStoredChunksAlloc, .{ self, chunks }, .alloc);
             const block_len = options.block_len orelse C.max_stored_block_len;
             const raw_size = try C.rawStoredChunksEncodedSizeWithBlockLen(chunks, block_len);
             const required = try wrappedSize(raw_size, options.dictionary);
@@ -97,6 +108,7 @@ pub fn Encoder(comptime C: type) type {
             const raw_size = try C.rawStoredChunksEncodedSizeWithBlockLen(chunks, block_len);
             const required = try wrappedSize(raw_size, options.dictionary);
             if (output.len < required) return error.OutputTooSmall;
+            try budget.direct(self.allocator, options, self.scratch.capacity);
             const header_len = window.headerLen(options.dictionary);
             _ = try C.encodeRawStoredChunksWithBlockLen(chunks, output[header_len..][0..raw_size], block_len);
             try window.writeHeader(output[0..header_len], options.dictionary, options.window_bits);
@@ -107,6 +119,8 @@ pub fn Encoder(comptime C: type) type {
         }
 
         pub fn encodeStoredChunksAppend(self: *Self, output: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+            const options = try self.options.resolved();
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeStoredChunksAppend, .{ self, output, chunks }, .append);
             const bytes = try self.encodeStoredChunksAlloc(chunks);
             defer self.allocator.free(bytes);
             try output.appendSlice(self.allocator, bytes);
@@ -114,6 +128,8 @@ pub fn Encoder(comptime C: type) type {
         }
 
         pub fn encodeStoredChunksScratch(self: *Self, chunks: []const []const u8) ![]const u8 {
+            const options = try self.options.resolved();
+            if (budget.requested(options)) return budget.reusable(self, options, Self.encodeStoredChunksScratch, .{ self, chunks }, .scratch);
             const bytes = try self.encodeStoredChunksAlloc(chunks);
             defer self.allocator.free(bytes);
             return self.retainScratch(bytes);

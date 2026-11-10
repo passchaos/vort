@@ -196,6 +196,10 @@ pub fn Encoder(comptime Codec: type) type {
 
         pub fn step(self: *Self, input: []const u8, caller_output: []u8) Error!core.StepResult {
             const limit = try self.validateWindow();
+            if (self.raw.options.compression.max_total_working_memory != null or
+                self.raw.options.compression.memory_profile != null or
+                self.options.raw.compression.max_total_working_memory != null or
+                self.options.raw.compression.memory_profile != null) return error.InvalidBlockPlan;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };

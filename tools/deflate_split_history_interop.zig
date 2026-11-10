@@ -83,6 +83,21 @@ pub fn main(init: std.process.Init) !void {
 fn encode(allocator: std.mem.Allocator, comptime wrapper: Wrapper, comptime mode: Mode, case: Case) ![]u8 {
     var options = codec.optionsForLevel(.default);
     options.lz77_options.window_len = case.window_len;
+    const plain = try encodeWithOptions(allocator, wrapper, mode, case, options);
+    defer allocator.free(plain);
+    var profile: codec.EncodeMemoryProfile = .{};
+    options.memory_profile = &profile;
+    const instrumented = try encodeWithOptions(allocator, wrapper, mode, case, options);
+    defer allocator.free(instrumented);
+    if (!std.mem.eql(u8, plain, instrumented)) return error.ProfileChangedWire;
+    options.max_total_working_memory = profile.peak_requested_bytes;
+    const bounded = try encodeWithOptions(allocator, wrapper, mode, case, options);
+    errdefer allocator.free(bounded);
+    if (!std.mem.eql(u8, plain, bounded)) return error.BudgetChangedWire;
+    return bounded;
+}
+
+fn encodeWithOptions(allocator: std.mem.Allocator, comptime wrapper: Wrapper, comptime mode: Mode, case: Case, options: codec.CompressionOptions) ![]u8 {
     const split = codec.AdaptiveSplitOptions{
         .min_block_len = case.block_len,
         .max_block_len = case.block_len * 2,

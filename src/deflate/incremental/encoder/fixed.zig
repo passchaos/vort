@@ -132,6 +132,11 @@ pub fn Encoder(comptime Codec: type) type {
         /// allocating. Adapters that publish an outer header before calling
         /// `step` use this to reject deterministic configuration errors first.
         pub fn validateOptions(options: Options) Error!void {
+            // A stream owns buffers across calls. Its whole-stream resource
+            // policy is a separate contract; do not silently accept one-shot
+            // CompressionOptions instrumentation or caps here.
+            if (options.compression.max_total_working_memory != null or
+                options.compression.memory_profile != null) return error.InvalidBlockPlan;
             _ = try baseBlockTarget(options);
             _ = try maxBufferedInput(options);
         }
@@ -323,6 +328,8 @@ pub fn Encoder(comptime Codec: type) type {
         /// Validate a wrapper's proposed cap before binding it, so a Count or
         /// configuration error cannot trim owned history or invalidate indexes.
         pub fn validateInputWithWindowLimit(self: *const Self, input_len: usize, limit: usize) Error!void {
+            if (self.options.compression.max_total_working_memory != null or
+                self.options.compression.memory_profile != null) return error.InvalidBlockPlan;
             if (self.done) {
                 if (input_len != 0) return error.TrailingData;
                 return;
@@ -362,6 +369,8 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            if (self.options.compression.max_total_working_memory != null or
+                self.options.compression.memory_profile != null) return error.InvalidBlockPlan;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };

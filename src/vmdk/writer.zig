@@ -191,10 +191,10 @@ fn encodeStreamOptimized(
         const cluster = try makeGrain(allocator, input, grain_index, grain_size);
         defer allocator.free(cluster);
         if (allZero(cluster)) continue;
-        const compressed = try deflate.encodeZlibBestAlloc(
+        const compressed = try deflate.encodeZlibLevelAlloc(
             allocator,
             cluster,
-            deflate.optionsForLevel(.default),
+            6,
         );
         defer allocator.free(compressed);
         grain_table[grain_index] = try castU32(output.items.len / format.sector_size);

@@ -340,10 +340,10 @@ fn appendChunkGroup(
         const compressed = if (options.compression == .none)
             null
         else
-            try deflate.encodeZlibBestAlloc(
+            try deflate.encodeZlibLevelAlloc(
                 allocator,
                 chunk,
-                deflate.optionsForLevel(.default),
+                6,
             );
         defer if (compressed) |bytes| allocator.free(bytes);
         const use_compressed = if (compressed) |bytes|

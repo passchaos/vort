@@ -361,6 +361,10 @@ The library is under active development. Its current capabilities include:
   and deterministic stored/XPRESS/LZX/LZMS one-/multi-image, packed LZMS/ESD,
   SWM, pipable and pipable-SWM writing plus ordinary/solid image append and
   deletion/replacement plus physical compaction are also available;
+- raw/zlib/gzip options encoding has an optional whole-operation requested-heap
+  cap/profile covering every candidate, wrapper and output allocation, including
+  existing append/warm scratch capacity; direct stored `into` remains zero heap
+  ([resource contract](docs/deflate-encode-memory.md));
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
   the best preset's optimal parser also plans against preset dictionary history

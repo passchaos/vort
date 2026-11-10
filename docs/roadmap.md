@@ -1894,6 +1894,12 @@ reuse, so production keeps the simpler independently owned plans.
 - [x] Stored-only allocating wrapper decode validates block headers first and
   then computes Adler-32/CRC-32 while copying validated payload bytes, avoiding
   a second full payload read before returning the owned output slice.
+- [x] Deflate raw/zlib/gzip options encode and reusable frame/facade operations
+  share an optional requested-heap cap/profile across all candidates, wrappers,
+  output growth and borrowed append/warm scratch capacity. Exact D/D-1 tests
+  use an independent counting allocator; direct stored into stays zero heap.
+  Arena sync-flush and incremental stream policies explicitly reject these
+  one-shot controls pending a separate persistent stream ledger contract.
 - [x] Default deflate LZ77 search budget increased modestly (`max_chain=160`,
   `nice_len=80`, `max_candidates=6`) to recover a smaller distance-heavy
   dynamic stream while keeping the production preset below best/optimal cost.
