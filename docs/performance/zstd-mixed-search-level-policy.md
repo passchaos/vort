@@ -152,6 +152,14 @@ adaptive boundaries. Equal sizes on a finite corpus do not justify deleting a
 winning default candidate. Explicit native budgets below 96 remain available
 for callers choosing that separate search policy.
 
+The [historical oracle archive](data/zstd-mixed-search-rejection-20261110/historical-wire-oracle.tar.xz)
+retains the probe, commands, 95 raw rows and checksums. It independently captures
+`cade5b5860aca55e7809b2ff1b758939dd6025c6` (`b6fcb895^`), covering all levels
+4-22 on both padded hunks and 8192/8193/16384-byte adaptive inputs. Restored
+current results match every historical row; the 95-state negative control grows
+the tail from 81 to 82 bytes at every level. The archive distinguishes the
+execution revisions from a later source snapshot.
+
 ## Validation
 
 Historical screen validation (insufficient for acceptance):
