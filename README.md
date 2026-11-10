@@ -73,9 +73,9 @@ The library is under active development. Its current capabilities include:
   with complete-prefix binary-tree search, integer/fractional entropy costs,
   conditional re-parsing, exact offset emission and search/parser memory budgets
   over dictionary and frame history, a shared public level resolver across
-  one-shot/reusable/incremental/seekable APIs (auto levels keep the recursive
-  mixed-family lookahead off because the measured corpus produces identical
-  wires at a fraction of the cost; see the
+  one-shot/reusable/incremental/seekable APIs (auto levels retain
+  their legacy mixed-family candidates after a small-hunk wire regression
+  invalidated the earlier corpus-only shortcut; see the
   [mixed-search level policy](docs/performance/zstd-mixed-search-level-policy.md)),
   an opt-in `hq_auto` policy maps levels 9-22 to btopt/btultra/btultra2 with
   explicit strategy and fast controls taking precedence,

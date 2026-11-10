@@ -2531,6 +2531,7 @@ test {
     _ = @import("zstd/match/controlled_source_tests.zig");
     _ = @import("zstd/encode/controls_hq_tests.zig");
     _ = @import("zstd/encode/hq_level_policy_tests.zig");
+    _ = @import("zstd/encode/legacy_auto_wire_tests.zig");
     _ = @import("zstd/encode/hq_contract_tests.zig");
     _ = @import("zstd/encode/hq_resource_tests.zig");
     _ = @import("zstd/encode/hq_transaction_tests.zig");
@@ -40156,7 +40157,7 @@ test "zstd small blocks defer dominated multi-duplicate search" {
     try std.testing.expect(selected.items.len <= multi.items.len);
 }
 
-test "zstd low and mid latency levels defer mixed-family match search" {
+test "zstd legacy auto levels retain mixed candidates above the low latency presets" {
     const level1 = try nativeFrameOptionsForLevel(1, .{});
     const level2 = try nativeFrameOptionsForLevel(2, .{});
     const level3 = try nativeFrameOptionsForLevel(3, .{});
@@ -40167,12 +40168,11 @@ test "zstd low and mid latency levels defer mixed-family match search" {
     try std.testing.expect(level1.match_search_budget < multi_duplicate_min_search_budget);
     try std.testing.expect(level2.match_search_budget >= multi_duplicate_min_search_budget);
     try std.testing.expect(level3.match_search_budget < mixed_match_min_search_budget);
-    // The measured Silesia and built-in matrices produce identical wires with
-    // and without the recursive mixed search at every auto level, while its
-    // exact Huffman pricing is 2-85x slower. Keep auto levels one state below
-    // the mixed threshold; explicit budgets at or above it still enable it.
-    try std.testing.expect(level4.match_search_budget < mixed_match_min_search_budget);
-    try std.testing.expect(level9.match_search_budget < mixed_match_min_search_budget);
+    // The higher auto levels must retain their legacy candidates. A blanket
+    // 95-state cutoff changes the CHD default hunk wire despite identical
+    // selected sizes on the earlier Silesia screen.
+    try std.testing.expectEqual(mixed_match_min_search_budget, level4.match_search_budget);
+    try std.testing.expectEqual(mixed_match_min_search_budget, level9.match_search_budget);
 }
 
 test "zstd adaptive block candidate never expands the selected frame" {

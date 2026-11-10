@@ -331,14 +331,12 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
             1 => 16,
             2 => 32,
             3 => 64,
-            // The recursive mixed-family lookahead is a ratio candidate, but
-            // the measured Silesia 64 KiB/1 MiB matrix produces identical wires
-            // to the non-mixed path at every auto level while the exact Huffman
-            // pricing makes it 2-85x slower. Keep the full non-mixed budget one
-            // below the mixed search threshold; explicit HQ strategies replace
-            // this budget with the legacy sentinel and still enable the mixed
-            // planner when requested.
-            else => 95, // one below zstd.zig's mixed_match_min_search_budget
+            // These are the legacy auto budgets. A 95-state shortcut skipped
+            // a winning mixed candidate on CHD hunks, so corpus-only equality
+            // cannot justify removing the search from default level paths.
+            4 => 96,
+            5 => 128,
+            else => 96,
         };
         native.rep_beam_search = (level >= 1 and level <= 3) or level >= 9;
     }

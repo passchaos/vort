@@ -2,6 +2,12 @@
 
 Date: 2026-11-10.
 
+Status: **rejected default policy**. The 95-state shortcut was removed after
+the full repository gate found a default CHD wire regression: the frozen
+level-6 image grew from 312 to 313 bytes. `controls.resolve` again uses the
+original budgets (4: 96, 5: 128, 6-22: 96). The measurements below describe
+the rejected screen, not the current default or a supported performance win.
+
 ## Problem
 
 The public auto level policy enabled the recursive mixed-family lookahead
@@ -19,17 +25,18 @@ and 128 KiB block paid for the recursive search. A call-graph profile of a
 literal plan for each candidate path. The same shape dominated 1 MiB inputs
 and levels 9/19.
 
-## Change
+## Rejected change
 
-Every auto level from 4 through 22 now resolves to `match_search_budget = 95`,
+The screened auto levels 4 through 22 resolved to `match_search_budget = 95`,
 one state below the mixed search threshold. This skips the recursive mixed
 candidate while retaining nearly the complete non-mixed beam budget. The mixed
 planner itself is unchanged and remains available whenever a caller explicitly
 requests a budget at or above 96. Explicit HQ strategies replace this budget
 with the legacy sentinel and still enable the mixed planner when requested.
 
-The policy tests now assert that auto levels defer the mixed search and explicit
-budgets still enable it. The HQ controls test records the new 95 budgets.
+The screen's policy tests asserted that auto levels defer the mixed search.
+Those expectations have been restored to the legacy schedule, together with
+the existing CHD positive-level golden and additional core wire regressions.
 
 ## Evidence
 
@@ -55,7 +62,7 @@ trend evidence, not a dedicated performance-host ranking.
 | x-ray | 50,671 | 50,671 | 18.8 ms | 18.6 ms | 1.0x |
 | xml | 4,940 | 4,940 | 14.3 ms | 14.2 ms | 1.0x |
 
-Sizes are byte-identical on all twelve rows. The two largest cliffs are
+Emitted sizes are equal on all twelve reported rows. The two largest cliffs are
 dickens and samba; the remaining rows are unchanged or within noise.
 
 ### 1 MiB Silesia, level 4
@@ -91,7 +98,7 @@ also produced identical sizes with and without the mixed search.
 | 19 mozilla | 9,946 | 9,946 | 284.7 ms | 78.2 ms | 3.6x |
 | 19 samba | 18,890 | 18,890 | 151.5 ms | 10.4 ms | 14.6x |
 
-All twelve Silesia sources keep byte-identical wires at both levels. The
+All twelve reported Silesia sources keep equal emitted sizes at both levels. The
 remaining rows are unchanged or within noise. Level 9 and level 19 auto also
 produce the same Vort size on every row, confirming that the auto path is not
 selecting an HQ strategy at level 19.
@@ -127,14 +134,36 @@ mozilla 1 MiB level 4 stayed at 1.87 s and dickens 64 KiB moved 32.5 -> 31.5 ms
 (noise). The remaining hotspot is the repeated Huffman code-length build
 (`treeCodeLengthsDenseKnownActive`), not that memset.
 
-This change is a level-policy performance fix, not a wire-format change or a
-current competitor parity claim. Broader corpora and explicit-HQ levels still
-need matched ratio/throughput validation.
+The screen proposed a level-policy performance change. Broader corpora and
+explicit-HQ levels still need matched ratio/throughput validation.
+
+That proposed acceptance was contradicted by the CHD consumer. Its fixture is
+7,296 bytes of 57-byte periodic text, split into two 4,096-byte hunks; the tail
+contains 3,200 data bytes and 896 zero-padding bytes. At budget 96 the mixed
+candidate participates in actual wire-length arbitration. Budget 95 omits it
+and produces the larger image. The historical golden was introduced in
+`250d4d01`, and `docs/formats/chd.md` explicitly promises to retain default
+level 6's old wire. Its 312-byte SHA-256 remains
+`83a22f50cd79ece1478d23c96ef5fade3d6917d4a4285356de73cb9f54e4dabf`.
+
+Future removal of mixed search needs an input-level dominance proof, together
+with positive and negative controls across small/padded hunks and the public
+adaptive boundaries. Equal sizes on a finite corpus do not justify deleting a
+winning default candidate. Explicit native budgets below 96 remain available
+for callers choosing that separate search policy.
 
 ## Validation
+
+Historical screen validation (insufficient for acceptance):
 
 - `zig test src/zstd.zig --test-filter "level"`: 68/68 tests.
 - `zig build test-zstd`: exit 0 over the complete 1,399-test suite.
 - Policy tests updated: auto levels defer the mixed search, explicit budgets
   still enable it, and the HQ controls test records the new 95 budgets.
 - `run-zstd-encode-bench` matrices above.
+
+The subsequent full Debug gate on `28bbbe51` returned exit 1: root tests were
+5,497 passed, two skipped and one failed out of 5,500. The sole failure was
+`CHD signed Zstd levels preserve default positive wire` (312 expected,
+313 actual). This negative whole-repository evidence supersedes the earlier
+focused green checks.

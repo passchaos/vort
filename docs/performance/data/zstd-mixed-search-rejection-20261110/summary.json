@@ -1,0 +1,26 @@
+{
+  "schema": "vort.zstd.mixed-search-rejection.v1",
+  "source_commit": "28bbbe5159439b638a0cfdfe6ab4264786f3f92d",
+  "test_binary_sha256": "8945aba088fb0ed9c2efe67ed03e49b083a4d6f7f9234f24524ce4a4f1c56517",
+  "command": "zig build -j2 test check check-wasm test-zstd-hq-auto-bench --summary failures",
+  "whole_gate_exit_code": 1,
+  "root_tests": {
+    "passed": 5497,
+    "skipped": 2,
+    "failed": 1,
+    "total": 5500
+  },
+  "failure": "CHD signed Zstd levels preserve default positive wire",
+  "expected_image_bytes": 312,
+  "actual_image_bytes": 313,
+  "historical_image_sha256": "83a22f50cd79ece1478d23c96ef5fade3d6917d4a4285356de73cb9f54e4dabf",
+  "introduced_by": "b6fcb89521a5f6abf7df024cddde7d34aaa0cfda",
+  "historical_contract_commit": "250d4d01cba46596b709232675ab31341720c6fc",
+  "correction": "Restore original global auto budgets: level4=96, level5=128, levels6-22=96.",
+  "restored_chd_gate": {
+    "command": "zig build -j2 test -Droot-test-filter=\"CHD signed Zstd levels\" -Doptimize=ReleaseSafe --summary all",
+    "exit_code": 0,
+    "tests_passed": 107
+  },
+  "scope": "Compatibility counterexample and historical whole-gate failure; no performance claim"
+}

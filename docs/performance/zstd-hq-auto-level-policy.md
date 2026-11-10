@@ -6,8 +6,7 @@ the overall Deflate/Zstd/Brotli leadership goal remains open.
 ## Problem and behavior
 
 The legacy auto level policy does not select Vort's implemented HQ parsers.
-Levels 9 and 19 still produce identical output on the twelve 64 KiB Silesia
-prefixes tested here. Callers previously needed an explicit parser strategy
+Callers previously needed an explicit parser strategy
 to obtain the higher quality behavior.
 
 `FrameOptions.hq_auto` enables a documented Vort level policy:
@@ -56,7 +55,13 @@ the flag below level 9 therefore retains the public level policy instead of
 bypassing adaptive candidate selection. Explicit fast controls also retain
 their original paths and exact wires.
 
-## Current-source evidence
+## Recorded snapshot evidence
+
+The matrix below uses the 95-state auto policy at the recorded source snapshot.
+That default shortcut has since been rejected because it changes a frozen CHD
+hunk wire; the production resolver again uses legacy budgets 96/128/96.
+The HQ strategies and their level-derived effort remain unchanged. These
+relative legacy/HQ numbers are snapshot evidence, not current-default rankings.
 
 The [evidence package](data/zstd-hq-auto-level-policy-20261110/results/summary.json)
 contains 48 bidirectional reference rows: twelve Silesia 64 KiB prefixes,
