@@ -73,7 +73,7 @@ The library is under active development. Its current capabilities include:
   with complete-prefix binary-tree search, integer/fractional entropy costs,
   conditional re-parsing, exact offset emission and search/parser memory budgets
   over dictionary and frame history, a shared public level resolver across
-  one-shot/reusable/incremental/seekable APIs (levels 4-8 keep the recursive
+  one-shot/reusable/incremental/seekable APIs (auto levels keep the recursive
   mixed-family lookahead off because the measured corpus produces identical
   wires at a fraction of the cost; see the
   [mixed-search level policy](docs/performance/zstd-mixed-search-level-policy.md)),
