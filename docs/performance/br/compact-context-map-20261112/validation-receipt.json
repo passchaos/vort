@@ -1,0 +1,33 @@
+{
+  "archive_members": 192,
+  "archives": 4,
+  "external_fixture_bytes_checked": true,
+  "immutable093_git_checked": true,
+  "initial_noexec_excluded": true,
+  "original_bytes_checked": true,
+  "previous_executable_alias_mode": "0755",
+  "ratios": {
+    "brotli/mozilla/1048576/11": {
+      "main_over_compact": 0.9998991100630439,
+      "previous_over_compact": 1.005779525638996
+    },
+    "brotli/mozilla/full/11": {
+      "main_over_compact": 0.98981748715836,
+      "previous_over_compact": 0.9977163950729292
+    },
+    "brotli/mozilla/full/6": {
+      "main_over_compact": 0.9752812702549858,
+      "previous_over_compact": 1.0136873179649009
+    }
+  },
+  "schema": "vort.br.compact-context-map-validation.v1",
+  "scope": "Offline raw/source/hash/median/permutation verification only; no codec/test/measurement rerun; candidate rejected; no acceptance or leadership claim",
+  "six_orders_each_row": true,
+  "source_registries": {
+    "compact": 2066,
+    "main": 2062,
+    "previous": 2066
+  },
+  "source_reuse_verified": true,
+  "valid_events": 54
+}

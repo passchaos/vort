@@ -1,0 +1,30 @@
+{
+  "archives": {
+    "baseline-source.tar.gz": {
+      "sha256": "c795e762c7c496f4db202fe3a4ec167cc04dbe6d0699f5256dacceb35f19e30d"
+    },
+    "cold-fallback-v2-source.tar.gz": {
+      "sha256": "32c9f1cf0a58fc88d4dca8e213a595629ac1ad3881e0f1eb8ef73672118b0e4a"
+    },
+    "probe-binaries.tar.gz": {
+      "sha256": "336ac3d42018c3c851f43e425d6db86a1ee4bc08ed69482a76314543dc3e7565"
+    },
+    "shared-dispatch-source.tar.gz": {
+      "sha256": "84a9c1d9b2946fba4cb80921dd4f7a625242fe7c319eea6f536b13265ea0baba"
+    }
+  },
+  "main_binary_member": "shared-dispatch/semantic-compare",
+  "previous_alias": {
+    "bytes": 8805288,
+    "mode": 493,
+    "path": "/tmp/vort-brotli-compact-map-20261112.093d5b9c/bin/previous-compare",
+    "sha256": "f5074d03b6dbb214c773b0842184e89ea8fcd5cc90e60477ac6b1ff448e6dca9"
+  },
+  "previous_binary_member": "cold-fallback-v2/semantic-compare",
+  "prior_bindings_sha256": "97274fe3d057900c00e10c5c5fd6c425552dd4110b63865d8d392143437071a9",
+  "prior_package": "decode-mozilla-distributions-20261112",
+  "reference_reuse_sha256": "6897648b33a8954c6d53ee2d45dce96a7ee84af57751c021c50f079a28582468",
+  "schema": "vort.br.compact-context-map-reuse.v1",
+  "scope": "Reuse prior immutable219 source, previous8 overlay, identical093 main source/binary bytes and reference SO/fixture hash bindings; no duplicate full package or previous executable",
+  "validator_sha256": "f5a37656abd3f703fb696d537a203bbe8dbd2b50397b4d92ce3bf0b4e4dd5ff6"
+}

@@ -59,6 +59,14 @@ is the shared prepared dispatcher plus bounded per-meta diagnostic replay and
 the whole-stream counter tool; no acceleration or new complete ranking is
 claimed. Further work should reduce hot live state and measure complete calls.
 
+The [compact context-map screen](br/compact-context-map-20261112/README.md)
+retains all six permutations of main/previous/compact across three Mozilla rows,
+with 54 successful child events and a separate excluded non-executable attempt.
+Packing the four validated distance context bytes into a u32 passes the 23/23
+ReleaseSafe oracle, but compact/main throughput is 0.989817x on full q11,
+0.999899x on 1 MiB q11 and 0.975281x on full q6. It is rejected; no production
+codec acceleration is adopted from this screen.
+
 ## 2026-11-11 checked dictionary seeding and provision
 
 The later [dictionary seed/provision correction](deflate-dictionary-borrows-20261111/README.md)

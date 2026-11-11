@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "0",
+    "python3",
+    "docs/performance/br/compact-context-map-20261112/verify.py",
+    "--original-bytes",
+    "--git-repo",
+    ".",
+    "--external-fixtures",
+    "--receipt",
+    "docs/performance/br/compact-context-map-20261112/validation-receipt.json"
+  ],
+  "cwd": "/home/passchaos/project-z/vort",
+  "raw_stderr_saved": false,
+  "raw_stdout_saved": false,
+  "result_sha256": "044072182243ee77403377b0c8f92e158379ae315f68386f4a0e749af74b7ff2",
+  "returncode": 0,
+  "scope": "Completed offline archive verification only; result file written by validator, no codec/tests/measurement rerun",
+  "tool_result_origin": "tools.write_stdin session74192 chunk5b06ee; exit_code0"
+}
