@@ -5,12 +5,13 @@ const std = @import("std");
 const contexts = @import("literal_context_split.zig");
 const literal_context = @import("literal_context.zig");
 const profile = @import("quality_profile.zig");
+const code_sections = @import("../format/code_sections.zig");
 
 pub noinline fn encode(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options) S.Error!S.Result {
     return encodeCore(S, false, traced, trace, allocator, input, commands, io, stats, options, primary_options, null);
 }
 
-pub noinline fn encodePreparedPrimary(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options) linksection(".vort_br_counted_context") S.Error!S.Result {
+pub noinline fn encodePreparedPrimary(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options) linksection(code_sections.counted_context) S.Error!S.Result {
     const proposals = try S.proposals(traced, trace, allocator, input, commands);
     const count_primary = blk: {
         for ([3]?contexts.Candidate{ proposals.suffix, proposals.up_to_16, proposals.full }) |optional| {
@@ -25,7 +26,7 @@ pub noinline fn encodePreparedPrimary(comptime S: type, comptime traced: bool, t
     return encodeCore(S, true, traced, trace, allocator, input, commands, io, stats, options, primary_options, &proposals);
 }
 
-noinline fn encodeCore(comptime S: type, comptime prepare_primary: bool, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options, precomputed: ?*const contexts.Proposals) linksection(".vort_br_counted_context") S.Error!S.Result {
+noinline fn encodeCore(comptime S: type, comptime prepare_primary: bool, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options, precomputed: ?*const contexts.Proposals) linksection(code_sections.counted_context) S.Error!S.Result {
     const initial_stats = stats.*;
     var primary_stats = initial_stats;
     var selected_state: S.State = undefined;

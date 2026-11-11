@@ -41,3 +41,10 @@ pub const wide_literal_lookup10_auxiliary = switch (builtin.object_format) {
     .coff => ".text$vort_br_wide10_aux",
     else => ".text",
 };
+
+pub const counted_context = switch (builtin.object_format) {
+    .elf => ".vort_br_counted_context",
+    .macho => "__TEXT,__vort_br_cntx",
+    .coff => ".text$vort_br_counted_context",
+    else => ".text",
+};

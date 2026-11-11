@@ -7,6 +7,7 @@ const core = @import("../../core.zig");
 const command_plan = @import("command_plan.zig");
 const distance = @import("distance.zig");
 const huffman = @import("../../huffman.zig");
+const code_sections = @import("../format/code_sections.zig");
 
 pub const command_capacity: usize = 704;
 pub const distance_capacity: usize = 79;
@@ -129,7 +130,7 @@ pub const Prepared = struct {
         distance_lengths: *const [distance_capacity]u4,
         extra_bits: @import("../../io/bit_count.zig").BitCount,
         symbols: ?*const [symbol_capacity]u16,
-    ) linksection(".vort_br_counted_context") !void {
+    ) linksection(code_sections.counted_context) !void {
         self.ready = false;
         const command_encoder = if (command_alphabet.len <= 4)
             huffman.HuffmanTable(command_capacity).Encoder{}
