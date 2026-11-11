@@ -1,0 +1,66 @@
+{
+  "schema": "vort.zstd-generic-split-inline-audit.v1",
+  "source_base_commit": "093d5b9c2793e31a5c23c0913af66ef0c22a5ac5",
+  "method": "Read-only static review of frozen source; no compilation, benchmark, or test execution by this reviewer.",
+  "frozen_source_root": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/inline-source",
+  "source_sha256": {
+    "src/zstd/sequence/generic_split.zig": "b82cf0095b0f1b9a6297848ce6fbeefdcf4ccf9e43a6d28d3ab546772f1c2c9c",
+    "src/zstd/sequence/generic_split_tests.zig": "0041e804018cf94ffbdceb877153f467ad5bfab88c2056c4e803ab968913654b",
+    "src/zstd.zig": "949108f49fe510d219fb4f928956b5c885f9896b184770dee414775c8eb7ae45"
+  },
+  "live_source_matches_frozen": true,
+  "binary": {
+    "path": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/inline-compare",
+    "sha256": "52906617c95f9b23adeed423349bb9ba240d58ddfc7e11601fd545b357f24160"
+  },
+  "valid_wire_static_conclusion": {
+    "status": "No hard-constraint mismatch found for validated Zstandard mapped tables.",
+    "domain": "Resolved LL/OF/ML compressed modes; extras bounded by LL16/OF31/ML16 and transitions by LL9/OF8/ML9; valid bounded reader.",
+    "preserved": [
+      "LL/OF/ML checked symbol lookup order",
+      "OF/ML/LL extra read order",
+      "remaining_bits commits at each individual field boundary",
+      "match/literal checked addition before subsequent field reads or offset resolution",
+      "repeat offset resolution before remaining decrement",
+      "LL/ML/OF transition order and per-field state commits",
+      "last-sequence transition omission and final expectEnd order",
+      "unchanged private literal staging, copying, continuation commit and output guards"
+    ],
+    "fast_group_initializer": "Group.initProven loads a suffix without consuming reader progress; manual decrements follow successful field extraction."
+  },
+  "test_coverage": {
+    "group_fast_exercised_by": "Current normalized multi-sequence chains and real long fixtures contain fast-path inputs; reviewed statically, no new branch-hit counts captured.",
+    "fallback_exercised_by": "Short logical bitstreams, total groups above 56, and stratified truncated chains/fixtures.",
+    "extra_transactions": "remaining=1 with exactly extra payload, so fast condition cannot hold: payload>=64 implies total_bits>56. These transactions only exercise fallback.",
+    "repcode_error_transactions": "Explicit repcode failure and missing-ML fixture use at most 47 logical bits and do not specifically exercise group-fast errors.",
+    "physical_padding": "Appending bytes while leaving remaining_bits unchanged does not force fast-path admission.",
+    "missing_dedicated_fast_errors": [
+      "repeat-offset InvalidMatch with a long suffix",
+      "32-bit checked arithmetic failure after OF/ML or OF/ML/LL field commits",
+      "last-sequence expectEnd failure with a long suffix",
+      "explicit fast/fallback branch-hit assertions"
+    ],
+    "reported_13_of_13_limit": "Reported prior 13/13 pass is not proof of every group-fast error ordering or transaction. This reviewer did not rerun that suite."
+  },
+  "strict_private_domain_caveat": {
+    "location": "src/zstd/sequence/generic_split.zig:42-45",
+    "issue": "u8 width sums can overflow on invalid private metadata; total_bits<=56 does not prove each Group.read width<=32.",
+    "example": "LL(base=1,extra=0), OF(base=1,extra=33), ML(base=3,extra=0), zero state widths, remaining=2, nine zero bytes ending in 01 => remaining_bits=64.",
+    "generic_behavior": "64-bit generic reader accepts the 33-bit field; 32-bit generic reader returns CorruptFrame without consuming it.",
+    "specialized_behavior": "ReleaseSafe Group.read(33) violates its width assertion; a zero-valued 33-bit field can pass in 32-bit ReleaseFast instead of the generic error.",
+    "reachable_from_valid_wire": false,
+    "followup": "Encode the validated-mapping capability or safely widen/check sums and individual field widths before claiming strict equality on arbitrary private mapped entries."
+  },
+  "performance_decision": {
+    "status": "not_adopted",
+    "basis": "Main screened candidate did not meet the 20-percent target-row improvement. No new measurement by this reviewer."
+  },
+  "further_optimization_prerequisite": "Add dedicated group-fast failure transactions and explicit coverage before treating a future faster reader as fully proven.",
+  "reviewer_actions": {
+    "source_edits": false,
+    "test_edits": false,
+    "compilations": false,
+    "benchmarks": false,
+    "artifact_generated_in_memory": true
+  }
+}

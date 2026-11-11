@@ -1,0 +1,34 @@
+{
+  "base_revision": "093d5b9c2793e31a5c23c0913af66ef0c22a5ac5",
+  "source_sha256": {
+    "src/zstd.zig": "949108f49fe510d219fb4f928956b5c885f9896b184770dee414775c8eb7ae45",
+    "src/zstd/sequence/generic_split.zig": "e35fe6848c19c27539f8dd54cf96b75c4910e3cc4be1f58fff4da669e4bd687f",
+    "src/zstd/sequence/generic_split_tests.zig": "9d95115d714fef374677ae87be2c8c848db286ce9aa9baea5bc23caa685f74ed"
+  },
+  "before_source": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-before-source",
+  "before_log_sha256": "44f288588cfede171f30f3d69d9f4ec6b05b06c75fab9fdf9b13a6171b5af16b",
+  "before_exit_code": 1,
+  "before_result": "12 pass / 1 crash on private mapped field wider than Group.read bound",
+  "after": {
+    "safe": {
+      "exit_code": 0,
+      "tests_passed": 13,
+      "log": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-after-safe.log",
+      "log_sha256": "a392a9cb073abd49e327938b790b61cba282754f74f7407a32d144fd2433b4c2"
+    },
+    "debug": {
+      "exit_code": 0,
+      "tests_passed": 13,
+      "log": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-after-debug.log",
+      "log_sha256": "865f1899440bb6fa9b342e4ac2f68a7de24bf971c37c171a136f1850666f11f0"
+    },
+    "x86": {
+      "exit_code": 0,
+      "tests_passed": 13,
+      "log": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-after-x86.log",
+      "log_sha256": "71fd32085307e26948d88f21cb1c28b21133f5c48f28debd6c4b2e6307f2503b"
+    }
+  },
+  "scope": "Independent guarded proof-only epoch; not benchmarked or adopted; no production main changes. Original inline timing source/binary remain frozen and separate.",
+  "coverage": "long-suffix InvalidMatch and terminal end progress, x86 arithmetic overflow commits, private fields 33/64/65/255 and u8 aggregate overflow; oracle state/reader/rep comparisons"
+}

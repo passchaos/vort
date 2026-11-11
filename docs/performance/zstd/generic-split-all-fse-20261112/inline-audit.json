@@ -1,0 +1,47 @@
+{
+  "artifact_kind": "Main-authored derived summary of read-only audit_zstd messages; no pre-existing agent audit file is claimed.",
+  "timing_epoch": {
+    "source_sha256": {
+      "src/zstd.zig": "949108f49fe510d219fb4f928956b5c885f9896b184770dee414775c8eb7ae45",
+      "src/zstd/sequence/generic_split.zig": "b82cf0095b0f1b9a6297848ce6fbeefdcf4ccf9e43a6d28d3ab546772f1c2c9c",
+      "src/zstd/sequence/generic_split_tests.zig": "0041e804018cf94ffbdceb877153f467ad5bfab88c2056c4e803ab968913654b"
+    },
+    "binary_sha256": "52906617c95f9b23adeed423349bb9ba240d58ddfc7e11601fd545b357f24160",
+    "valid_wire_static_conclusion": "Checked symbol lookup, OF/ML/LL extras, rep resolution, remaining decrement, LL/ML/OF transitions and expectEnd preserve generic ordering.",
+    "private_mapped_limit": "u8 aggregate and absent individual-width gate could enter Group.read with 33-bit extra metadata; legal public wire mappings never produce this extra width.",
+    "coverage_limit": "Original extraTransactions/repcode/error witnesses used the fallback; normalized chains and real fixtures reached grouped success paths; no explicit branch-hit counter."
+  },
+  "guarded_proof_epoch": {
+    "source_sha256": {
+      "src/zstd.zig": "949108f49fe510d219fb4f928956b5c885f9896b184770dee414775c8eb7ae45",
+      "src/zstd/sequence/generic_split.zig": "e35fe6848c19c27539f8dd54cf96b75c4910e3cc4be1f58fff4da669e4bd687f",
+      "src/zstd/sequence/generic_split_tests.zig": "9d95115d714fef374677ae87be2c8c848db286ce9aa9baea5bc23caa685f74ed"
+    },
+    "scope": "Not benchmarked or adopted.",
+    "static_conclusion": "u16 aggregate safely represents at most 6*255 bits; extras at most 32 and nonterminal transitions at most 15 match group and generic readSmall bounds. Wide metadata uses original checked fallback.",
+    "new_witnesses": "Deterministic 64-bit suffixes reach grouped InvalidMatch/terminal-end and 32-bit ML/LL arithmetic failures; private 33/64/65/255 fields and 765-bit aggregate match generic fallback.",
+    "remaining_limit": "No explicit branch-hit counters; current deterministic predicates were statically verified to reach the group.",
+    "observed_logs": {
+      "safe": {
+        "exit_code": 0,
+        "tests_passed": 13,
+        "log": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-after-safe.log",
+        "log_sha256": "a392a9cb073abd49e327938b790b61cba282754f74f7407a32d144fd2433b4c2"
+      },
+      "debug": {
+        "exit_code": 0,
+        "tests_passed": 13,
+        "log": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-after-debug.log",
+        "log_sha256": "865f1899440bb6fa9b342e4ac2f68a7de24bf971c37c171a136f1850666f11f0"
+      },
+      "x86": {
+        "exit_code": 0,
+        "tests_passed": 13,
+        "log": "/tmp/vort-zstd-generic-fse-20261112.093d5b9c/private-wide-after-x86.log",
+        "log_sha256": "71fd32085307e26948d88f21cb1c28b21133f5c48f28debd6c4b2e6307f2503b"
+      }
+    }
+  },
+  "before_log_sha256": "44f288588cfede171f30f3d69d9f4ec6b05b06c75fab9fdf9b13a6171b5af16b",
+  "audit_method": "Static source review and existing log reads only; the audit agent did not edit files, compile, test or measure. Primary agent performed the recorded executions."
+}

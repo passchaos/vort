@@ -67,6 +67,67 @@ ReleaseSafe oracle, but compact/main throughput is 0.989817x on full q11,
 0.999899x on 1 MiB q11 and 0.975281x on full q6. It is rejected; no production
 codec acceleration is adopted from this screen.
 
+## 2026-11-12 Zstd generic split known all-FSE screen
+
+The [sao profile and three reader screens](zstd/generic-split-all-fse-20261112/README.md)
+bind a clean `093d5b9c` baseline to isolated candidates. The frozen full-file L3
+wire has 306 compressed blocks, 4,464,797 Huffman literal bytes and 429,839
+sequences; every sequence mode byte is `0xa8`, with no repeat-mode blocks.
+The existing generic four-stream literal layout is selected before later
+all-FSE executors on this shape. A block-owned proof can therefore remove
+repeated mode dispatch without changing the 128 KiB literal staging, thresholds,
+literal/match copies, table borrowing or continuation policy.
+
+Each variant runs six cold/prepared rows and four interleaved process pairs per
+row, retaining 48 successful child events. Values below are whole public-call
+speedups, `baseline Vort time / candidate Vort time`; reference timings are not
+used to calculate these candidate speedups.
+
+| sao L3 row | Mode-only | Grouped noinline | Grouped inline |
+| --- | ---: | ---: | ---: |
+| 64 KiB cold | 1.005951x | 1.008656x | 0.984864x |
+| 64 KiB prepared | 1.003452x | 1.005741x | 0.999808x |
+| 1 MiB cold | 1.002814x | 1.091796x | 1.120794x |
+| 1 MiB prepared | 1.006664x | 1.095120x | 1.119647x |
+| Full cold | 0.996572x | 1.096195x | 1.138106x |
+| Full prepared | 0.996921x | 1.092837x | 1.116525x |
+
+The grouped reader keeps three checked symbol lookups and commits reverse-bit
+progress at each original OF/ML/LL extra and LL/ML/OF transition boundary. The
+timing variants group at most 56 requested bits with at least 64 remaining.
+Short input and larger total requests retain the checked sequential reader.
+Independent oracle tests pass 13/13 in Debug/ReleaseSafe for the original
+specialization and 13/13 ReleaseSafe for both grouped variants. Timing and later test-adapter source
+epochs remain distinct in the archive.
+
+The later private mapped-entry audit found a limit in the grouped timing
+variants:
+an individual 33-bit extra field could pass the total-bit group gate and trap
+in ReleaseSafe, although public wire mappings never produce that field width.
+An isolated proof-only correction widens width aggregation to u16, checks each
+group field's bound and retains the generic fallback for private wide entries.
+The before probe passes 12 tests and crashes in the new contract; guarded native
+Debug/ReleaseSafe and 32-bit x86 ReleaseSafe runs all pass 13/13. New long-suffix
+witnesses cover grouped InvalidMatch/end progress and 32-bit arithmetic failures.
+Private 33/64/65/255-bit fields exercise the checked fallback. This corrected
+source is not benchmarked or adopted; its checks are not backdated to the timing
+source.
+
+None is adopted. Mode-only is nearly neutral; grouped noinline improves the
+large weak rows by about 9–10% and grouped inline by about 12–14%, both below
+the predeclared 20% cliff-repair gate. The inline 64 KiB cold screen contains
+substantial process-pair variation. No complete Zstd acceptance matrix or
+dedicated-host gate was run. These local gains do not update the complete
+76.56% cold or 77.73% prepared modern-reference ranking above.
+
+The same frozen perf recording supports the dispatch diagnosis, with 62 reader
+self samples whose physical caller is generic split. The incomplete outer
+call chains do not establish a complete public-decoder sampling denominator;
+diagnostic sample shares are not throughput gains. Output-tail literal storage
+was deferred because it still materializes all literals and copies most literal
+runs, with additional output-suffix, alias and padding constraints. It was not
+implemented in these candidates.
+
 ## 2026-11-11 checked dictionary seeding and provision
 
 The later [dictionary seed/provision correction](deflate-dictionary-borrows-20261111/README.md)

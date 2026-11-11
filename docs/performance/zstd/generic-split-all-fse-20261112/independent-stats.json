@@ -1,0 +1,206 @@
+{
+  "method": "Independent standard-library median of raw measured Vort batches; baseline/candidate ratios; geometric mean over four process pairs. No reference normalization or warmups.",
+  "variants": {
+    "screen": {
+      "events_sha256": "19dc6bc0391c66dc573c3b8ece908225cb6d333ddbf1739c565bf30e60a41f71",
+      "event_count": 48,
+      "compiler_observation_count": 0,
+      "rows": {
+        "zstd_sao_65536_3_cold": {
+          "speed_ratios": [
+            0.9915597523137012,
+            1.000079658301184,
+            1.000141965807334,
+            1.0325053721896633
+          ],
+          "geomean": 1.0059510856470946,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_65536_3_prepared": {
+          "speed_ratios": [
+            1.0120351377410977,
+            0.9944522434613384,
+            0.9981735833451346,
+            1.0092547278058919
+          ],
+          "geomean": 1.0034519862996287,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_1048576_3_cold": {
+          "speed_ratios": [
+            1.010006206213216,
+            0.9997791167783593,
+            1.002722636388396,
+            0.9987875396424798
+          ],
+          "geomean": 1.00281427985266,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_1048576_3_prepared": {
+          "speed_ratios": [
+            1.0146490232405287,
+            1.0010892024108893,
+            1.003420851534033,
+            1.0075503864772288
+          ],
+          "geomean": 1.0066642104736079,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_full_3_cold": {
+          "speed_ratios": [
+            0.998207334945704,
+            1.0037626608126544,
+            0.9825233779844805,
+            1.0019352556817704
+          ],
+          "geomean": 0.9965717823683027,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_full_3_prepared": {
+          "speed_ratios": [
+            1.0072783680922968,
+            1.0179678849870442,
+            0.9684688284032004,
+            0.9946596541287531
+          ],
+          "geomean": 0.9969214336542043,
+          "matches_raw_summary": true
+        }
+      }
+    },
+    "group-screen": {
+      "events_sha256": "c8c5da9adb1fe5778cad56b056ed29a67aa102759f4adb9118d32e998201e3ab",
+      "event_count": 48,
+      "compiler_observation_count": 0,
+      "rows": {
+        "zstd_sao_65536_3_cold": {
+          "speed_ratios": [
+            1.0001243243674027,
+            1.0108753588559691,
+            1.003229502819865,
+            1.020517077445476
+          ],
+          "geomean": 1.008655922903579,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_65536_3_prepared": {
+          "speed_ratios": [
+            1.017140121474859,
+            1.0029661106808796,
+            1.0011553218157871,
+            1.0017871298431529
+          ],
+          "geomean": 1.00574061379095,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_1048576_3_cold": {
+          "speed_ratios": [
+            1.0952547701161468,
+            1.0808130830254614,
+            1.0962323279032404,
+            1.0949577837459836
+          ],
+          "geomean": 1.091795831241793,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_1048576_3_prepared": {
+          "speed_ratios": [
+            1.0966509395398936,
+            1.1105072751609057,
+            1.083514240211168,
+            1.0899914689921735
+          ],
+          "geomean": 1.0951204434726731,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_full_3_cold": {
+          "speed_ratios": [
+            1.0948601260711024,
+            1.0850908332155034,
+            1.1067961292509971,
+            1.0981429358855181
+          ],
+          "geomean": 1.0961949814098972,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_full_3_prepared": {
+          "speed_ratios": [
+            1.0728125299079865,
+            1.0969299716820993,
+            1.095432076022734,
+            1.1064530816601243
+          ],
+          "geomean": 1.0928367702807285,
+          "matches_raw_summary": true
+        }
+      }
+    },
+    "inline-screen": {
+      "events_sha256": "8d1a8e983c6562d157e79dd90e7ed813cb27f822d9c47e0de71e20e2f30ab113",
+      "event_count": 48,
+      "compiler_observation_count": 0,
+      "rows": {
+        "zstd_sao_65536_3_cold": {
+          "speed_ratios": [
+            0.9947901482640624,
+            0.994704108971283,
+            0.817116703741318,
+            1.1635790262519268
+          ],
+          "geomean": 0.9848641752675072,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_65536_3_prepared": {
+          "speed_ratios": [
+            0.9982108015360965,
+            0.9981727075508527,
+            1.0027172219255247,
+            1.0001392935354592
+          ],
+          "geomean": 0.9998082823329265,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_1048576_3_cold": {
+          "speed_ratios": [
+            1.1129247749188302,
+            1.132048851937511,
+            1.118067705539383,
+            1.1202228905869978
+          ],
+          "geomean": 1.1207942166364528,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_1048576_3_prepared": {
+          "speed_ratios": [
+            1.1051181581755234,
+            1.1076153189389824,
+            1.1092069458191116,
+            1.1574799895176124
+          ],
+          "geomean": 1.1196465214560416,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_full_3_cold": {
+          "speed_ratios": [
+            1.1629549183580015,
+            1.1273157544368384,
+            1.1338203477256708,
+            1.128697763670755
+          ],
+          "geomean": 1.1381056827036526,
+          "matches_raw_summary": true
+        },
+        "zstd_sao_full_3_prepared": {
+          "speed_ratios": [
+            1.10813092417549,
+            1.116845076072454,
+            1.1186352130110397,
+            1.1225390497106487
+          ],
+          "geomean": 1.1165250934596642,
+          "matches_raw_summary": true
+        }
+      }
+    }
+  }
+}
