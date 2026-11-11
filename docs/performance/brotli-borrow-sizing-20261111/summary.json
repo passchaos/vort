@@ -1,0 +1,136 @@
+{
+  "schema": "vort.brotli.borrow-sizing.v1",
+  "base_revision": "f6a9b7137b170a6e5144f92c68d1be2ed18fea9e",
+  "change_kind": "functional borrowed-storage and checked append-length contract",
+  "paired_borrow_repro": {
+    "command": "zig test -OReleaseFast --test-filter 'borrow pre-fix' --dep br -Mroot=/tmp/vort-br-chunk-borrows-before-20261111.zig -Mbr=src/br.zig",
+    "harness": "/tmp/vort-br-chunk-borrows-before-20261111.zig",
+    "harness_sha256": "de41b0d7dca4a4d3f3dacdd985c683806f8cbc790134a04fdd62e075673584d6",
+    "before": {
+      "exit_code": 1,
+      "passed": 0,
+      "failed": 2,
+      "log": "/tmp/vort-br-chunk-borrows-before-20261111.log",
+      "artifact": ".zig-cache/o/0c794f75f3c778453b23ef11ae6024a4/root",
+      "artifact_sha256": "6ef825903a3e9f264e6d178acd852a6ed63797eb2d3fc624fbb63c847cbdfd3a",
+      "observation": "Real pre-integration public decode calls changed the cyclic compressed source and replaced the first 11 RAW dictionary bytes with compressed input."
+    },
+    "after": {
+      "exit_code": 0,
+      "passed": 2,
+      "failed": 0,
+      "log": "/tmp/vort-br-chunk-borrows-after-20261111.log"
+    }
+  },
+  "append_size_before": {
+    "command": "zig build -j2 test-br -Dbr-test-filter='Brotli decode total memory append size' -Doptimize=Debug --summary all",
+    "exit_code": 1,
+    "expected_error": "IntegerOverflow",
+    "actual_error": "OutOfMemory"
+  },
+  "pending": [],
+  "source_sha256": {
+    "src/br.zig": "b9ee42bce9fe0dc1a8acd9fe164cd722a70735dfc8f8e74fcbcf661d4d4de165",
+    "src/br/decode/chunk_join.zig": "65bfbe62565447df56cf462de25ce55ecc0d1bacf0283e8223965eccdc30c822",
+    "src/br/decode/output_size.zig": "42439ffe23e11573aa92a350ff1668d0616fa95d775491041a0f3e31178d21bb",
+    "src/br/decode/one_shot.zig": "2e6e5c0d4f9af2369e066c7a72fe7c48037defbd529c3503a14ed8f04feb6a8e",
+    "src/br/decode/budget/append.zig": "5389a038a3a044d0fc892b81efe92518bacbb2a926ace57a1ca3ca54ad2d06d1",
+    "src/br/decode/tests/append_sizing.zig": "26d8715e4295cb557c9075d9b9969d258eb2920be5c83bb41e4b514fbc64e3e4",
+    "src/br/decode/tests/chunk_borrows.zig": "9c3770ef0d9048c46dfbd06f7fdd697a30a3cc214fbb29c120b4c9a934d0cc9c",
+    "src/br/decode/tests/chunk_alias.zig": "6bcb48098103c3ea28e7f648f125c0ae16d9423b0dd72c530e7cbbdfc62136bb",
+    "build/br_decode_memory.zig": "2a6c437715c529a65633c73324fc9643e350f67ec1cf020578319a62a9d78658"
+  },
+  "final_debug": {
+    "command": "zig build -j2 test-br-decode-memory -Doptimize=Debug --summary all",
+    "exit_code": 0,
+    "tests": 27
+  },
+  "final_gates": {
+    "native_decode": {
+      "passed": 220,
+      "exit_code": 0
+    },
+    "native_memory": {
+      "passed": 27,
+      "exit_code": 0
+    },
+    "x86_memory": {
+      "passed": 27,
+      "exit_code": 0
+    },
+    "wasi_memory": {
+      "passed": 27,
+      "exit_code": 0
+    },
+    "decode_wasi_compile": {
+      "steps": 78,
+      "passed_native_tests": 247,
+      "exit_code": 0
+    },
+    "reference": {
+      "cases": 108,
+      "probe_executions": 216,
+      "reverse_cases": 7,
+      "steps": 12,
+      "exit_code": 0
+    }
+  },
+  "observer_review": {
+    "scope": "frozen checked chunk join, observer binding, and detached dictionary contracts",
+    "recorded_at_utc": "2026-11-11 02:45:56 UTC",
+    "frozen": true,
+    "source_sha256": {
+      "src/br/decode/chunk_join.zig": "65bfbe62565447df56cf462de25ce55ecc0d1bacf0283e8223965eccdc30c822",
+      "src/br/decode/tests/chunk_borrows.zig": "9c3770ef0d9048c46dfbd06f7fdd697a30a3cc214fbb29c120b4c9a934d0cc9c"
+    },
+    "source_lines": {
+      "chunk_join": 134,
+      "chunk_borrows": 635
+    },
+    "unit_debug": {
+      "command": "zig build -j2 test-br -Dbr-test-filter='Brotli compressed chunk join borrow contracts' -Doptimize=Debug --summary all",
+      "exit_code": 0,
+      "passed": 20,
+      "run_ms": 6,
+      "log": "/tmp/vort-br-chunk-join-debug-review-20261111.log",
+      "classification": "Preliminary focused smoke before the final table16 and public fixture refinements. The current joinContracts function was reexecuted by the final 27-test Debug gate below."
+    },
+    "final_debug": {
+      "command": "zig build -j2 test-br-decode-memory -Doptimize=Debug --summary all",
+      "exit_code": 0,
+      "passed": 27,
+      "failed": 0,
+      "steps_succeeded": 5,
+      "steps_total": 5,
+      "run_ms": 348,
+      "run_max_rss": "24M",
+      "compile_max_rss": "288M",
+      "log": "/tmp/vort-br-decode-memory-debug-observer-final-20261111.log"
+    },
+    "contracts": [
+      "Combined explicit RAW count plus serialized RAW-prefix presence uses checked addition before the count limit; maxInt plus a nonempty serialized prefix returns IntegerOverflow without traversing RAW descriptors.",
+      "Active detached word data and transform prefix_suffix, transforms, and params are protected. Word, transform, and dictionary counts exceeding their 64-slot arrays return CorruptFrame before traversal.",
+      "validateObserver runs before observation and compares chunk/protected tables, sources, the available actual joined scratch span, protected spans, RAW tables/data, serialized view/encoded/raw_prefix, and bounded nested backing.",
+      "A representable RAW descriptor-table span remains protected even for count16; entries are traversed only for a safe count. Unrepresentable invalid table extents are skipped by geometry so scalar join mapping remains authoritative.",
+      "Direct Into, PrefixInto, Append and chunk APIs reject destructive observer aliases before writing the observer. The aligned observer at scratch offset64 succeeds when the joined span is only 24 bytes.",
+      "No new heap allocation, snapshots, or quadratic source scans are introduced."
+    ],
+    "integration_and_fixture_corrections": [
+      "Main added the initially missed profile validation to both pub noinline direct Into and PrefixInto observer boundaries; the direct source/output regressions retained InvalidBlockPlan expectations.",
+      "The direct Append output fixture reinitializes its observer and spare bytes after FixedBufferAllocator allocation, because safety-mode allocation poisons caller storage.",
+      "The unused-tail fixture now uses an aligned byte buffer and explicit observer offset64. Executed diagnostics showed the prior auto-layout struct had observer_offset=0, joined_len=24, scratch_len=72, so the production refusal was correct.",
+      "Main corrected the existing chunk_alias.joinedSpan fixture to capture its baseline after allocator poisoning."
+    ],
+    "layout_diagnostic": "/tmp/vort-br-chunk-observer-tail-layout-debug-20261111.log",
+    "format_and_diff_checks": "passed",
+    "comprehensive_gates": "Current Safe native/x86/WASI, decoder, and reference gates are owned by the main agent. This worker claims only the final Debug result above."
+  },
+  "validated_code_revision": "3bb656a248abc87e23868ef391e334a00cf8cb2d",
+  "post_rebase": {
+    "exit_code": 0,
+    "steps": 78,
+    "native_tests": 247,
+    "wasi_resource_tests": 27,
+    "command": "zig build -j2 test-br-decode test-br-decode-memory test-br-decode-memory-wasm check-wasm -Doptimize=ReleaseSafe --summary all"
+  }
+}
