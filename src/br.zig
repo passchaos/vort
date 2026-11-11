@@ -19,6 +19,8 @@ const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
 const dictionary_copy = @import("br/dictionary_copy.zig");
 const single_command_lookup = @import("br/single_command_lookup.zig");
+const prepared_dispatch = @import("br/decoder/prepared_dispatch.zig");
+const meta_block_diagnostics = @import("br/diagnostics/meta_blocks.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const br_length = @import("br/length.zig");
@@ -18325,6 +18327,95 @@ fn processLargeCompressedMetaBlock(
 /// shape, not compressed stream size: highly compressible 64 KiB inputs (for
 /// example four kilobytes of wire for nci) otherwise stayed on the generic
 /// prepared path and skipped the wider lookups.
+pub const DecodeMetaBlockDiagnosticOptions = meta_block_diagnostics.Options;
+pub const DecodeMetaBlockDiagnosticReport = meta_block_diagnostics.Report;
+
+pub fn diagnoseMetaBlocksAlloc(io: std.Io, allocator: std.mem.Allocator, stream: []const u8, options: DecodeMetaBlockDiagnosticOptions) Error!DecodeMetaBlockDiagnosticReport {
+    return meta_block_diagnostics.inspect(MetaBlockDiagnosticCodec, io, allocator, stream, options);
+}
+
+const MetaBlockDiagnosticCodec = struct {
+    pub const Error = br.Error;
+    pub const Reader = bitstream.BitReader;
+    pub const Header = MinimalCompressedHeader;
+    pub const History = LiteralHistory;
+    pub const initial_distances = initial_last_distances;
+    pub const readWindow = readWindowBitsValue;
+    pub const readMeta = readStreamMetaBlockHeader;
+    pub const finish = ensureZeroPaddingAndEnd;
+    pub const skipMetadata = skipMetadataMetaBlock;
+    pub const consumePadding = consumeZeroPaddingToByte;
+    pub const readHeader = readMinimalCompressedHeaderInto;
+    pub fn pushHistory(history: *History, bytes: []const u8) void {
+        history.pushSlice(bytes);
+    }
+    pub fn smallGeneric(stream_len: usize, meta_len: usize) bool {
+        return stream_len < large_stream_decode_threshold and meta_len < external_literal_lookup_meta_block_min;
+    }
+    pub fn execute(reader: *Reader, compressed_start: Reader, output: []u8, written: *usize, meta_len: usize, end: usize, recent: *[4]usize, window_bits: u5, header: *Header, route: *prepared_dispatch.Route, small: bool) br.Error!void {
+        if (small) {
+            route.* = .small_generic;
+            reader.* = compressed_start;
+            return processMinimalCompressedMetaBlock(reader, output, written, meta_len, recent, window_bits);
+        }
+        return prepared_dispatch.execute(PreparedDispatchCodec, reader, output, written, meta_len, end, recent, window_bits, header, route);
+    }
+    pub fn replay(reader: *Reader, start: usize, end: usize, recent: *[4]usize, history: *History, stats: *StreamSummaryMetaBlockStats, window_bits: u5, header: *Header) br.Error!void {
+        return skipDecodedCompressedPayload(false, false, reader, start, end, recent, history, stats, window_bits, header, null) catch |err| switch (err) {
+            error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+            else => |public_err| public_err,
+        };
+    }
+    pub fn historyMatches(history: *const History, output: []const u8) bool {
+        const storage = history.external.?;
+        const len = @min(storage.len, output.len);
+        if (history.tail_len != len) return false;
+        const expected = output[output.len - len ..];
+        const first = @min(len, storage.len - history.tail_start);
+        if (!std.mem.eql(u8, expected[0..first], storage[history.tail_start..][0..first]) or
+            !std.mem.eql(u8, expected[first..], storage[0 .. len - first])) return false;
+        const previous = [2]u8{
+            if (output.len < 2) 0 else output[output.len - 2],
+            if (output.len == 0) 0 else output[output.len - 1],
+        };
+        return std.mem.eql(u8, &previous, &history.previous) and history.known_suffix_len == 2;
+    }
+};
+
+test "br meta-block diagnostic contracts" {
+    try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
+}
+
+const PreparedDispatchCodec = struct {
+    pub const Error = br.Error;
+    pub const Reader = bitstream.BitReader;
+    pub const Header = MinimalCompressedHeader;
+    pub const ExternalLiteralLookup = br.ExternalLiteralLookup;
+    pub const ExternalDistanceLookup = br.ExternalDistanceLookup;
+    pub const SingleCommandLookup = single_command_lookup.Lookup;
+    pub const processFlatLiteralTailLookupMetaBlock = br.processFlatLiteralTailLookupMetaBlock;
+    pub const prepareExternalLiteralLookups = br.prepareExternalLiteralLookups;
+    pub const processSingleTreeExternalLookupCompressedPayload = br.processSingleTreeExternalLookupCompressedPayload;
+    pub const prepareAuxiliaryTailLookups = br.prepareAuxiliaryTailLookups;
+    pub const processExternalLiteralLookupCompressedPayload = br.processExternalLiteralLookupCompressedPayload;
+    pub const processWideExternalLiteralLookup9MetaBlock = br.processWideExternalLiteralLookup9MetaBlock;
+    pub const processPairedWideLiteralMetaBlock = br.processPairedWideLiteralMetaBlock;
+    pub const processWideExternalLiteralLookupMetaBlock = br.processWideExternalLiteralLookupMetaBlock;
+    pub const processDecodedCompressedPayload = br.processDecodedCompressedPayload;
+    pub const clustered_literal_tree_threshold = br.clustered_literal_tree_threshold;
+    pub const inline_literal_tree_count = br.inline_literal_tree_count;
+    pub const external_literal_lookup_meta_block_min = br.external_literal_lookup_meta_block_min;
+    pub const external_literal_lookup_tree_limit = br.external_literal_lookup_tree_limit;
+    pub const external_literal_lookup_middle_tree_limit = br.external_literal_lookup_middle_tree_limit;
+    pub const max_literal_context_trees = br.max_literal_context_trees;
+    pub fn recordExternalLiteralLookup() void {
+        test_external_literal_lookup_hits += 1;
+    }
+    pub fn recordSingleTreeExternalLookup() void {
+        test_single_tree_external_lookup_hits += 1;
+    }
+};
+
 inline fn processPreparedCompressedMetaBlock(
     reader: *bitstream.BitReader,
     output: []u8,
@@ -18335,64 +18426,7 @@ inline fn processPreparedCompressedMetaBlock(
     window_bits: u5,
     header: *MinimalCompressedHeader,
 ) Error!void {
-    if (header.literal_tree_count >= clustered_literal_tree_threshold and
-        header.literal_tree_count <= inline_literal_tree_count and
-        try processFlatLiteralTailLookupMetaBlock(reader, output, written, meta_block_end, last_distances, window_bits, header)) return;
-    if (meta_block_len >= external_literal_lookup_meta_block_min and
-        header.literal_tree_count <= external_literal_lookup_tree_limit)
-    {
-        var literal_lookups: [external_literal_lookup_tree_limit]ExternalLiteralLookup = undefined;
-        try prepareExternalLiteralLookups(header, &literal_lookups);
-        if (builtin.is_test) test_external_literal_lookup_hits += 1;
-        if (header.literal_tree_count == 1 and
-            header.literal_block.block_type_count == 1 and
-            header.command_block.block_type_count == 1 and
-            header.distance_tree_count == 1 and
-            header.distance_block.block_type_count == 1)
-        {
-            if (builtin.is_test) test_single_tree_external_lookup_hits += 1;
-            var command_lookup = if (header.insert_copy_trees[0].single_symbol) |symbol|
-                try single_command_lookup.Lookup.initSingle(symbol)
-            else
-                try single_command_lookup.Lookup.init(&header.insert_copy_trees[0].table);
-            var distance_lookup = if (header.distance_trees[0].single_symbol) |symbol|
-                try ExternalDistanceLookup.initSingle(symbol)
-            else
-                try ExternalDistanceLookup.init(&header.distance_trees[0].table);
-            var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
-            defer fast_reader.syncTo(reader);
-            return processSingleTreeExternalLookupCompressedPayload(
-                &fast_reader,
-                output,
-                written,
-                meta_block_end,
-                last_distances,
-                window_bits,
-                header,
-                &literal_lookups[0],
-                &command_lookup,
-                &distance_lookup,
-            );
-        }
-        const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
-        var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
-        defer fast_reader.syncTo(reader);
-        if (auxiliary_tail_lookups) {
-            if (header.npostfix == 0)
-                return processExternalLiteralLookupCompressedPayload(true, true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
-            return processExternalLiteralLookupCompressedPayload(true, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
-        }
-        return processExternalLiteralLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
-    }
-    if (meta_block_len >= external_literal_lookup_meta_block_min) {
-        if (header.literal_tree_count <= external_literal_lookup_middle_tree_limit) {
-            return processWideExternalLiteralLookup9MetaBlock(external_literal_lookup_middle_tree_limit, reader, output, written, meta_block_end, last_distances, window_bits, header);
-        }
-        if (prepareAuxiliaryTailLookups(header))
-            return processPairedWideLiteralMetaBlock(reader, output, written, meta_block_end, last_distances, window_bits, header);
-        return processWideExternalLiteralLookupMetaBlock(max_literal_context_trees, reader, output, written, meta_block_end, last_distances, window_bits, header);
-    }
-    return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, header);
+    return prepared_dispatch.execute(PreparedDispatchCodec, reader, output, written, meta_block_len, meta_block_end, last_distances, window_bits, header, null);
 }
 
 noinline fn processSingleTreeExternalLookupCompressedPayload(
