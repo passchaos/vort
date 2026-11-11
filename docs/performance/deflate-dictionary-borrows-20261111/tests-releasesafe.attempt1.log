@@ -1,0 +1,8 @@
+src/deflate/incremental/tests/dictionary_borrows/helpers.zig:42:88: error: optional type '?core.Progress' does not support field access
+    try std.testing.expectEqual(@as(usize, 6), decoder.diagnostics().last_step_progress.input_read);
+                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+src/deflate/incremental/tests/dictionary_borrows/helpers.zig:42:88: note: consider using '.?', 'orelse', or 'if'
+referenced by:
+    overlappingProvision__anon_43140: src/deflate/incremental/tests/dictionary_borrows/wrappers.zig:13:22
+    test.dictionary borrows zlib and auto provision snapshots overlaps and preserves mismatch retries: src/deflate/incremental/tests/dictionary_borrows/wrappers.zig:125:72
+    8 reference(s) hidden; use '-freference-trace=10' to see all references

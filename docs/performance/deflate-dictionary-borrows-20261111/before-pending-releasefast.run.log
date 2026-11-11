@@ -1,0 +1,6 @@
+source_revision=9a41b4e43e6258f8e10d602b3d7d5312cd683d1f public_module=src/root.zig mode=ReleaseFast operation=pending_match_short_seed
+pending_phase=match_copy distance=10 remaining=10 input_read=3 history_len=10 history_pos=10
+nonoverlapping_short_seed=12345 expected_refusal=InvalidStreamState expected_preserved_output=ABCDEFGHIJ
+accepted_short_seed history_len=5 history_pos=5
+actual_status=need_output actual_input=0 actual_output=10 actual_bytes={ 165, 165, 165, 165, 165, 49, 50, 51, 52, 53 }
+error: PendingHistoryCorrupted

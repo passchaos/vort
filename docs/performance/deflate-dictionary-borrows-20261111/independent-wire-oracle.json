@@ -1,0 +1,36 @@
+{
+  "wire_source": "independent RFC 1951 fixed match bit writer",
+  "rfc_match": {
+    "length_symbol": 264,
+    "length": 10,
+    "distance_symbol": 6,
+    "distance_extra": 1,
+    "distance": 10
+  },
+  "raw_hex": "43b000",
+  "dictionary_hex": "4142434445464748494a",
+  "zlib_hex": "78200ea602b843b0000ea602b8",
+  "empty_zlib_hex": "782000000001030000000001",
+  "oracle": {
+    "library": "Python zlib",
+    "runtime_version": "1.2.11",
+    "without_dictionary_error": "Error -3 while decompressing data: invalid distance too far back",
+    "dict_output_hex": "4142434445464748494a"
+  },
+  "repeat_match": {
+    "raw_hex": "430000",
+    "length_symbol": 264,
+    "length": 10,
+    "distance_symbol": 0,
+    "distance": 1,
+    "dictionary_hex": "41",
+    "output_hex": "41414141414141414141"
+  },
+  "partial_fixed_header": {
+    "raw_hex": "9a3061c2840980390200",
+    "first_block_bits": 55,
+    "stop_after_bytes": 7,
+    "next_header_buffered_bits": 1,
+    "output_hex": "909090909041"
+  }
+}

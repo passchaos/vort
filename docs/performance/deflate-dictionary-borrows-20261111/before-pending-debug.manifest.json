@@ -1,0 +1,17 @@
+{
+  "command": [
+    "zig",
+    "build-exe",
+    "-ODebug",
+    "--dep",
+    "vort",
+    "-Mroot=/tmp/vort-dictionary-borrows-20261111/before-pending.zig",
+    "-Mvort=/tmp/vort-dictionary-borrows-20261111/before-source/src/root.zig",
+    "-femit-bin=/tmp/vort-dictionary-borrows-20261111/before-pending-debug"
+  ],
+  "source_probe_sha256": "961a76266ed48fe822f4adb1050e2177c3e23ba9630c934fdd90b2e33b7b7e4e",
+  "build_exit_code": 0,
+  "exe_sha256": "d9b8fe6ca9302620910dce481d8a7ff81fa286f6dcf74269540cc41214843c9c",
+  "run_exit_code": -6,
+  "run_log_sha256": "c992c4186cfdbfa77670506b2970bae14f547266be55bd7d1e68253ed6edcb81"
+}

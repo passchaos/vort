@@ -1,0 +1,69 @@
+{
+  "utc": "2026-11-11T14:20:23.929775+00:00",
+  "named_tests": 14,
+  "import_aggregators": 90,
+  "total_per_mode": 104,
+  "results": {
+    "debug": {
+      "exit_code": 0,
+      "exe_sha256": "303fa8c32d19d82e6ef6d5fc1873033d7b4c0fa4ada559160d5607aeb581b173",
+      "log_sha256": "bb7b0fb6f64bb48bbf1f4a52d24ae152a7b73c5100a0e6fd7e89d5e00b37763a"
+    },
+    "releasesafe": {
+      "exit_code": 0,
+      "exe_sha256": "fca7164348712c072ba0e4670aba3827256f9d8625389837eaa353bb22a1a69c",
+      "log_sha256": "bb7b0fb6f64bb48bbf1f4a52d24ae152a7b73c5100a0e6fd7e89d5e00b37763a"
+    },
+    "before-pending-debug": {
+      "command": [
+        "zig",
+        "build-exe",
+        "-ODebug",
+        "--dep",
+        "vort",
+        "-Mroot=/tmp/vort-dictionary-borrows-20261111/before-pending.zig",
+        "-Mvort=/tmp/vort-dictionary-borrows-20261111/before-source/src/root.zig",
+        "-femit-bin=/tmp/vort-dictionary-borrows-20261111/before-pending-debug"
+      ],
+      "source_probe_sha256": "961a76266ed48fe822f4adb1050e2177c3e23ba9630c934fdd90b2e33b7b7e4e",
+      "build_exit_code": 0,
+      "exe_sha256": "d9b8fe6ca9302620910dce481d8a7ff81fa286f6dcf74269540cc41214843c9c",
+      "run_exit_code": -6,
+      "run_log_sha256": "c992c4186cfdbfa77670506b2970bae14f547266be55bd7d1e68253ed6edcb81"
+    },
+    "before-pending-releasefast": {
+      "command": [
+        "zig",
+        "build-exe",
+        "-OReleaseFast",
+        "--dep",
+        "vort",
+        "-Mroot=/tmp/vort-dictionary-borrows-20261111/before-pending.zig",
+        "-Mvort=/tmp/vort-dictionary-borrows-20261111/before-source/src/root.zig",
+        "-femit-bin=/tmp/vort-dictionary-borrows-20261111/before-pending-releasefast"
+      ],
+      "source_probe_sha256": "961a76266ed48fe822f4adb1050e2177c3e23ba9630c934fdd90b2e33b7b7e4e",
+      "build_exit_code": 0,
+      "exe_sha256": "59dcd825360321feef744a7758f42648b0ce84143abfda591d5098013b640969",
+      "run_exit_code": 1,
+      "run_log_sha256": "616f968eee871084f099a747729e503724232c86aeabcca5110e4635bdeeded5"
+    },
+    "after-pending-debug": {
+      "command": [
+        "zig",
+        "build-exe",
+        "-ODebug",
+        "--dep",
+        "vort",
+        "-Mroot=/tmp/vort-dictionary-borrows-20261111/after-pending.zig",
+        "-Mvort=/tmp/vort-dictionary-borrows-20261111/after-source/src/root.zig",
+        "-femit-bin=/tmp/vort-dictionary-borrows-20261111/after-pending-debug"
+      ],
+      "source_probe_sha256": "5e174be39ddbef480a92bdb3c7cc35fb2189167770e7c5790ebc37b1ee2af7ac",
+      "build_exit_code": 0,
+      "exe_sha256": "efe2572a1f5e597d97119e4c9346f2117894bef371bb3463900240cea4529cb6",
+      "run_exit_code": 0,
+      "run_log_sha256": "9482f155398a3dafbdacda87d3595e42a49f8ceb05a7a8d790ad3a6a445faf29"
+    }
+  }
+}

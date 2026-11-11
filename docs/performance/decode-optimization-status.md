@@ -36,6 +36,20 @@ compares full q11 with its near-parity 1 MiB control and attributes the actual
 multi-block kernel/header/setup paths. Existing single-final-block clustered
 profilers cannot directly attribute that full-file cliff.
 
+## 2026-11-11 checked dictionary seeding and provision
+
+The later [dictionary seed/provision correction](deflate-dictionary-borrows-20261111/README.md)
+binds `7d846abe` to two real before defects: overlap memcpy aborts and compact
+pending-match reseeding that reads stale slots in ReleaseFast. Checked seeding
+uses memmove and rejects insufficient pending history before state mutation,
+while retaining receiver/workspace/second-window sources and benign stopped
+states. Its [fallible seed contract](../formats/deflate-dictionary-borrows.md)
+requires callers to handle `Error!void`. Full Deflate/Deflate64 passes 733 tests,
+native x86/actual WASI contracts pass, and 40 decoder clone events validate
+independent history/reset/dictionary ownership against libz. Debug whole-library
+compilation passes 380 steps. This is functional evidence outside the frozen
+performance epoch; no throughput improvement is claimed.
+
 ## 2026-11-11 earlier modern reference epoch
 
 The [new frozen raw-pair matrix](modern-decode-current-20261111.md) executes

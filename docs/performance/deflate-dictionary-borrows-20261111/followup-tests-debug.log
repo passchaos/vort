@@ -1,0 +1,105 @@
+1/104 root.test_0...OK
+2/104 deflate.test_0...OK
+3/104 bitstream.test_0...OK
+4/104 lz77.test_0...OK
+5/104 lz77.test_1...OK
+6/104 dictionary.test_0...OK
+7/104 lz4.test_0...OK
+8/104 lz4_legacy.test_0...OK
+9/104 zstd.test_0...OK
+10/104 cab.test_0...OK
+11/104 zip.test_0...OK
+12/104 bzip2.test_0...OK
+13/104 xz.test_0...OK
+14/104 lzma.test_0...OK
+15/104 tar.test_0...OK
+16/104 cpio.test_0...OK
+17/104 rar.test_0...OK
+18/104 compress_z.test_0...OK
+19/104 lzip.test_0...OK
+20/104 lzf.test_0...OK
+21/104 lha.test_0...OK
+22/104 ar.test_0...OK
+23/104 arj.test_0...OK
+24/104 arc.test_0...OK
+25/104 zoo.test_0...OK
+26/104 lzo1x.test_0...OK
+27/104 lzop.test_0...OK
+28/104 seven_zip.test_0...OK
+29/104 decmpfs.test_0...OK
+30/104 dmg.test_0...OK
+31/104 pbzx.test_0...OK
+32/104 xar.test_0...OK
+33/104 zfs.test_0...OK
+34/104 qcow2.test_0...OK
+35/104 vmdk.test_0...OK
+36/104 ewf.test_0...OK
+37/104 chd.test_0...OK
+38/104 vhd.test_0...OK
+39/104 vhdx.test_0...OK
+40/104 cso.test_0...OK
+41/104 dax.test_0...OK
+42/104 gcz.test_0...OK
+43/104 wia.test_0...OK
+44/104 wbfs.test_0...OK
+45/104 wdf.test_0...OK
+46/104 wux.test_0...OK
+47/104 android_sparse.test_0...OK
+48/104 android_ota.test_0...OK
+49/104 erofs.test_0...OK
+50/104 wim.test_0...OK
+51/104 erofs.reader.tests.test_0...OK
+52/104 erofs.codec.test_0...OK
+53/104 chd.writer.test_0...OK
+54/104 zfs.block.test_0...OK
+55/104 seven_zip.ppmd7.test_0...OK
+56/104 lzip.container.test_0...OK
+57/104 tar.incremental_compressed_reader.test_0...OK
+58/104 tar.incremental_auto_reader.test_0...OK
+59/104 tar.incremental_compressed_writer.test_0...OK
+60/104 tar.incremental_reader.test_0...OK
+61/104 tar.incremental_writer.test_0...OK
+62/104 lzma.match_finder.test_0...OK
+63/104 lzma.encoder.test_0...OK
+64/104 xz.container.test_0...OK
+65/104 xz.lzma2_incremental_decoder.test_0...OK
+66/104 xz.lzma2_incremental_encoder.test_0...OK
+67/104 xz.writer.test_0...OK
+68/104 cab.quantum.test_0...OK
+69/104 cab.writer.test_0...OK
+70/104 cab.lzx.encoder.test_0...OK
+71/104 zstd.decode.budget.test_0...OK
+72/104 io.requested_heap_budget.test_0...OK
+73/104 tests.zstd_stream_counter_contracts.test_0...OK
+74/104 tests.zstd_large_history_contracts.test_0...OK
+75/104 zstd.incremental.encoder.frame.test_0...OK
+76/104 tests.zstd_hq_search_contracts.test_0...OK
+77/104 zstd.match.hq_tree.test_0...OK
+78/104 zstd.match.hq_parser.test_0...OK
+79/104 zstd.match.lazy2.test_0...OK
+80/104 zstd.match.hq_parser.tests.test_0...OK
+81/104 zstd.match.hq_parser.frontier_parser.test_0...OK
+82/104 tests.lz4_fast_controls_contracts.test_0...OK
+83/104 tests.lz4_fast_controls_transactions.test_0...OK
+84/104 deflate.bt_optimal.test_0...OK
+85/104 deflate.incremental.tests.test_0...OK
+86/104 deflate.incremental.tests.step_borrows.test_0...OK
+87/104 deflate.incremental.tests.dictionary_borrows.test_0...OK
+88/104 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+89/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 initialization snapshots overlapping sources...OK
+90/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 reseeding snapshots overlapping sources...OK
+91/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 clip long overlapping dictionaries to each window...OK
+92/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 accept consumed receiver bytes and empty dictionaries...OK
+93/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 refuse short pending match seeds atomically and resume...OK
+94/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 validate the actual receiver destination prefix...OK
+95/104 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows active semantic generations reject reseeding without changing state...OK
+96/104 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto provision snapshots overlaps and preserves mismatch retries...OK
+97/104 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto validate full IDs before clipping overlapping windows...OK
+98/104 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto accept consumed receiver dictionaries and empty overrides...OK
+99/104 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto release overrides for output reuse and request again after reset...OK
+100/104 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto reject writes into the enclosing receiver atomically...OK
+101/104 deflate.incremental.tests.dictionary_borrows.stopped.test.dictionary borrows raw and Deflate64 preserve partial headers stored payloads and pending symbols...OK
+102/104 deflate.incremental.tests.dictionary_borrows.stopped.test.dictionary borrows inactive attached workspaces and second history windows remain valid sources...OK
+103/104 deflate.semantic.rolling_window.test_0...OK
+104/104 deflate64.test_0...OK
+All 104 tests passed.

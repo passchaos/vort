@@ -1,0 +1,740 @@
+1/733 deflate.test.zlib incremental relaxed footer and member boundary contracts...OK
+2/733 deflate.test.gzip incremental relaxed footer and member boundary contracts...OK
+3/733 deflate.test.relaxed concatenated wrapper commitment and tail probe contracts...OK
+4/733 deflate.test.Deflate wide encode stream counters and overflow transactions...OK
+5/733 deflate.test.Deflate wide decode stream counters and overflow transactions...OK
+6/733 deflate.test.Deflate clone safe copy contracts...OK
+7/733 deflate.test.gzip direct chunk consumer contracts...OK
+8/733 deflate.test.zlib or gzip auto wrapper contracts...OK
+9/733 deflate.test_0...OK
+10/733 deflate.test.zlib explicit window header contracts...OK
+11/733 deflate.test.zlib explicit window frame contracts...OK
+12/733 deflate.test.zlib explicit window candidate contracts...zlib candidate token audit: fallback_wires=18 refined_seeds=3 refined_candidates=3 history_candidates=3 history_blocks=9 adaptive_candidates=9 adaptive_blocks=144 matches=2389 dictionary_matches=18 cross_block_matches=138 max_distance=1024
+OK
+13/733 deflate.test.incremental zlib encoder window contracts...OK
+14/733 deflate.test.fixed bit planning matches emitted length and distance boundaries...OK
+15/733 deflate.test.raw fixed sync flush encoder reuses parser and output storage...OK
+16/733 deflate.test.raw fixed sync flush round trips after RFC 7692 tail elision...OK
+17/733 deflate.test.raw fixed sync flush chunks preserve split input...OK
+18/733 deflate.test.raw fixed sync flush chunks use bounded cross-slice history...OK
+19/733 deflate.test.raw fixed sync flush chunks preserve non-adjacent input...OK
+20/733 deflate.test.fast length and distance code selection matches RFC tables...OK
+21/733 deflate.test.fused dynamic match writer matches field-by-field reference...OK
+22/733 deflate.test.Deflate raw decode buffer alias contracts...OK
+23/733 deflate.test.Deflate chunk decode borrow contracts...OK
+24/733 deflate.test.Deflate wrapped chunk decode borrow contracts...OK
+25/733 deflate.test.Deflate zlib chunk decode borrow contracts...OK
+26/733 deflate.test.Deflate contiguous wrapper borrow contracts...OK
+27/733 deflate.test.Deflate contiguous PNG borrow contracts...OK
+28/733 deflate.test.Deflate direct chunk borrow contracts...OK
+29/733 deflate.test.deflate fused reader metadata keeps wide bits and local reservoir offsets...OK
+30/733 deflate.test.semantic literal-pair store preserves packed byte order and guards...OK
+31/733 deflate.test.PNG windowed decoder crosses deferred dynamic EOB into stored block...OK
+32/733 deflate.test.png filter0 dynamic direct decode matches general reconstruction and rejects fallback shapes...OK
+33/733 deflate.test.png filter0 linear RLE block matches compact fallback and restores reader...OK
+34/733 deflate.test.semantic RLE1 primary table covers 12-bit literals...OK
+35/733 deflate.test.semantic decoder proves only exact one-bit RLE258 pair tables...OK
+36/733 deflate.test.compact RLE258 policy proves only the complete two-bit token tree...OK
+37/733 deflate.test.compact RLE258 two-bit loop matches generic distance-one and distance-two decode...OK
+38/733 deflate.test.compact RLE258 final block dispatch matches token replay...OK
+39/733 deflate.test.semantic RLE258 pair shortcut matches generic decode...OK
+40/733 deflate.test.semantic RLE258 window resumes only at token boundaries...OK
+41/733 deflate.test.semantic non-overlap window matches generic mixed-match state...OK
+42/733 deflate.test.semantic non-overlap full-output loop matches public decode...OK
+43/733 deflate.test.png parallel reconstruction matches scalar mixed filters...OK
+44/733 deflate.test.raw stored deflate matches zlib level-0 vectors...OK
+45/733 deflate.test.raw deflate header parser exposes first block metadata...OK
+46/733 deflate.test.raw stored deflate round trips across block boundary...OK
+47/733 deflate.test.raw stored deflate reports malformed blocks...OK
+48/733 deflate.test.raw deflate chunk helpers decode split input and dictionaries...OK
+49/733 deflate.test.stored deflate decoders ignore byte-alignment padding bits...OK
+50/733 deflate.test.stored deflate alloc decoders enforce output limits...OK
+51/733 deflate.test.stored deflate exact-size alloc decoders validate exact lengths...OK
+52/733 deflate.test.zlib stored wrapper matches level-0 vectors...OK
+53/733 deflate.test.zlib header metadata parser exposes wrapper fields...OK
+54/733 deflate.test.zlib decoder accepts smaller advertised CINFO window metadata...OK
+55/733 deflate.test.zlib stored wrapper validates checksum header and trailing data...OK
+56/733 deflate.test.zlib relaxed decode options ignore Adler and trailing bytes...OK
+57/733 deflate.test.zlib decoder drains PNG-like payload from caller scratch...OK
+58/733 deflate.test.zlib decoder drains varied PNG-like chunks from caller scratch...OK
+59/733 deflate.test.zlib decoder drains PNG scanlines from chunked IDAT scratch...OK
+60/733 deflate.test.png adam7 zlib image helper reconstructs interlaced RGB chunks...OK
+61/733 deflate.test.png adam7 zlib image helper reconstructs interlaced sub-byte chunks...OK
+62/733 deflate.test.png adam7 zlib image helper reconstructs interlaced RGBA16 chunks...OK
+63/733 deflate.test.png adam7 zlib image helper rejects corrupt logical payloads...OK
+64/733 deflate.test.png image helpers reject corrupt zlib wrappers...OK
+65/733 deflate.test.zlib decoder reconstructs PNG scanlines from chunked IDAT scratch...OK
+66/733 deflate.test.png zlib scanline decoder reconstructs rows from chunked IDAT scratch...OK
+67/733 deflate.test.png stored zlib scanline decoder streams without zlib scratch...OK
+68/733 deflate.test.png streaming zlib scanline decoder reconstructs fixed and dynamic rows without zlib scratch...OK
+69/733 deflate.test.png streaming zlib decoder batches pending matches into row buffers...OK
+70/733 deflate.test.png streaming repeated byte recording matches Adler and retained history...OK
+71/733 deflate.test.png streaming history recording keeps only retained tail window...OK
+72/733 deflate.test.png streaming zlib scanline decoder reports wrapper and logical errors...OK
+73/733 deflate.test.png zlib image helper reconstructs full image from IDAT chunks...OK
+74/733 deflate.test.png zlib image helper covers sub-byte indexed rows...OK
+75/733 deflate.test.zlib decoder supports preset dictionary streams...OK
+76/733 deflate.test.zlib chunked one-shot helpers cover relaxed and dictionary paths...OK
+77/733 deflate.test.zlib decoder diagnostics cover wrapper errors...OK
+78/733 deflate.test.zlib concatenated streams decode in sequence...OK
+79/733 deflate.test.zlib concatenated decode options ignore adler and allow trailing data...OK
+80/733 deflate.test.zlib concatenated stored streams decode and validate per-member trailers...OK
+81/733 deflate.test.zlib concatenated stored decode options preflight relaxed failures before allocation...OK
+82/733 deflate.test.zlib concatenated streams reject empty and corrupt later members...OK
+83/733 deflate.test.zlib concatenated streams decode preset dictionary members...OK
+84/733 deflate.test.zlib concatenated stored streams honor preset dictionary headers...OK
+85/733 deflate.test.zlib stream inspector reports deflate length and adler diagnostics...OK
+86/733 deflate.test.zlib stream inspector validates preset dictionary IDs...OK
+87/733 deflate.test.gzip stored wrapper matches level-0 vectors...OK
+88/733 deflate.test.gzip encoders can emit metadata-rich headers with FHCRC...OK
+89/733 deflate.test.gzip header option validation rejects unterminated field ambiguity...OK
+90/733 deflate.test.gzip stored wrapper validates crc size header and trailing data...OK
+91/733 deflate.test.gzip decoder drains bounded output from caller scratch...OK
+92/733 deflate.test.gzip decoder drains concatenated members from caller scratch...OK
+93/733 deflate.test.gzip decoder diagnostics cover wrapper errors...OK
+94/733 deflate.test.dynamic literal lookup policy separates tiny and complex alphabets...OK
+95/733 deflate.test.dynamic decode profile counts literals and matches...OK
+96/733 deflate.test.deflate profile walks stored fixed and dynamic blocks...OK
+97/733 deflate.test.raw fixed Huffman literal/match inflate matches zlib fixed vectors...OK
+98/733 deflate.test.single-block fixed Huffman decoder rejects non-final blocks...OK
+99/733 deflate.test.raw fixed Huffman inflate decodes back references and rejects wrong block types...OK
+100/733 deflate.test.overlapping match copy doubles initialized output window...OK
+101/733 deflate.test.preset dictionary overlapping match copy doubles seeded dictionary window...OK
+102/733 deflate.test.allocating fixed inflate reuses doubled copy for overlapping append matches...OK
+103/733 deflate.test.fixed Huffman decoder rejects reserved distance symbols...OK
+104/733 deflate.test.fixed Huffman decoder rejects reserved literal length symbols...OK
+105/733 deflate.test.zlib and gzip fixed Huffman wrappers decode zlib fixed vectors...OK
+106/733 deflate.test.auto raw decoder dispatches stored and fixed blocks...OK
+107/733 deflate.test.auto raw decoder rejects truncated streams after non-final blocks...OK
+108/733 deflate.test.raw dynamic Huffman inflate decodes zlib dynamic vectors...OK
+109/733 deflate.test.dynamic Huffman decoder rejects matches without distance codes...OK
+110/733 deflate.test.dynamic Huffman decoder rejects oversubscribed code-length alphabets...OK
+111/733 deflate.test.dynamic Huffman decoder rejects missing end-of-block codes...OK
+112/733 deflate.test.zlib and gzip wrappers propagate malformed dynamic code-length repeats...OK
+113/733 deflate.test.zlib and gzip dynamic Huffman wrappers decode dynamic vectors...OK
+114/733 deflate.test.raw zlib and gzip decoders handle multi-block streams...OK
+115/733 deflate.test.small raw allocating decode uses exact owned output...OK
+116/733 deflate.test.small raw allocating decode uses stack fast path for source-sized frames...OK
+117/733 deflate.test.small raw allocating decode falls back when scratch is too small...OK
+118/733 deflate.test.large raw allocating decode uses bounded reserved caller buffer...OK
+119/733 deflate.test.zlib and gzip wrappers reject truncated non-final raw deflate streams...OK
+120/733 deflate.test.gzip decoder accepts optional extra name comment and header crc fields...OK
+121/733 deflate.test.gzip relaxed decode options ignore trailer checks and trailing bytes...OK
+122/733 deflate.test.gzip decoder rejects truncated optional headers...OK
+123/733 deflate.test.wrapper footer validators report exact boundary errors...OK
+124/733 deflate.test.raw fixed Huffman encoder round trips through decoder...OK
+125/733 deflate.test.raw fixed Huffman encoder emits zlib-compatible hello vector...OK
+126/733 deflate.test.zlib and gzip fixed encoders round trip through wrappers...OK
+127/733 deflate.test.zlib and gzip fixed encoders emit known hello frames...OK
+128/733 deflate.test.zlib and gzip wrappers decode multi-block stream ending in dynamic block...OK
+129/733 deflate.test.gzip FHCRC is validated when present...OK
+130/733 deflate.test.gzip allocation validates header before footer-size allocation...OK
+131/733 deflate.test.zlib header rejects bad method window check and dictionary flag...OK
+132/733 deflate.test.zlib preset dictionary streams decode with caller dictionary...OK
+133/733 deflate.test.zlib preset dictionary streams cover stored and dynamic blocks...OK
+134/733 deflate.test.zlib preset dictionary encoders set FDICT and DICTID...OK
+135/733 deflate.test.raw preset dictionary encoders can reference preset history...OK
+136/733 deflate.test.raw best optimal dictionary planner references preset history...OK
+137/733 deflate.test.raw and zlib best large dictionary inputs use the chunked BT plan...OK
+138/733 deflate.test.allocating preset dictionary decode bulk-copies history-only matches...OK
+139/733 deflate.test.raw zlib gzip exact-size alloc decoders enforce declared output length...OK
+140/733 deflate.test.dictionary exact-size alloc decoders enforce declared output length...OK
+141/733 deflate.test.raw deflate preset dictionary streams decode fixed and dynamic blocks...OK
+142/733 deflate.test.one-shot deflate wrappers enforce output limits...OK
+143/733 deflate.test.gzip header rejects reserved flags and bad method...OK
+144/733 deflate.test.compression strategy normalization adjusts parser knobs...OK
+145/733 deflate.test.fixed encoder supports compression strategies...OK
+146/733 deflate.test.fixed encoder supports parser strategy options...OK
+147/733 deflate.test.dynamic literal encoder round trips through raw zlib and gzip decoders...OK
+148/733 deflate.test.dynamic literal encoder omits unused distance alphabet...OK
+149/733 deflate.test.zlib and gzip dynamic literal wrappers preserve literal-only raw stream...OK
+150/733 deflate.test.single-block dynamic Huffman decoder rejects non-final blocks...OK
+151/733 deflate.test.dynamic code length RLE emits repeat symbols...OK
+152/733 deflate.test.dynamic code length RLE preserves literal distance boundary runs...OK
+153/733 deflate.test.best encoder selects a valid smallest raw block...OK
+154/733 deflate.test.best encoder skips invalid single stored block for large inputs...OK
+155/733 deflate.test.stored fast path does not mask repeated binary structure...OK
+156/733 deflate.test.stored fast-path hash set matches sorted reference...OK
+157/733 deflate.test.compression level presets round trip...OK
+158/733 deflate.test.compression level presets configure match windows and lazy thresholds...OK
+159/733 deflate.test.fastest preset can choose dynamic blocks for source-like payloads...OK
+160/733 deflate.test.best preset can keep filtered parser output when it is smaller...OK
+161/733 deflate.test.best preset falls back when default parser writes smaller frames...OK
+162/733 deflate.test.zlib numeric compression levels map to stable Vort presets...OK
+163/733 deflate.test.runtime deflate parameters resolve the complete zlib domain...OK
+164/733 deflate.test.incremental deflate codec capabilities include stored-only emission...OK
+165/733 deflate.test.zlib numeric level encoders round trip raw zlib and gzip wrappers...OK
+166/733 deflate.test.best level uses production optimal parser with full strategy wrappers...OK
+167/733 deflate.test.gzip concatenated members decode in sequence...OK
+168/733 deflate.test.gzip concatenated stored members decode and validate per-member trailers...OK
+169/733 deflate.test.gzip concatenated decoders preserve later members after an empty member...OK
+170/733 deflate.test.gzip concatenated decoders reject corrupt third member after empty middle member...OK
+171/733 deflate.test.gzip concatenated decoders reject empty input...OK
+172/733 deflate.test.gzip member inspector reports concatenated offsets and trailer diagnostics...OK
+173/733 deflate.test.gzip member inspector reports trailer mismatches without rejecting payload...OK
+174/733 deflate.test.gzip concatenated members keep match history isolated...OK
+175/733 deflate.test.fast level skips dynamic block candidate...OK
+176/733 deflate.test.one-shot lazy hash-head policy targets diverse full-table inputs...OK
+177/733 deflate.test.one-shot lazy hash head preserves full-table tokens and wire...OK
+178/733 deflate.test.split raw fixed encoder emits multi-block deflate stream...OK
+179/733 deflate.test.split raw dynamic encoder emits multi-block deflate stream...OK
+180/733 deflate.test.split raw best encoder selects block modes independently...OK
+181/733 deflate.test.fixed bit cost model predicts fixed token byte length...OK
+182/733 deflate.test.dynamic bit cost model predicts dynamic token byte length...OK
+183/733 deflate.test.reserved dynamic block writer matches checked writer...OK
+184/733 deflate.test.reserved Deflate bit writer matches checked writes across reservoir boundaries...OK
+185/733 deflate.test.cached Deflate block costs match token-scan references...OK
+186/733 deflate.test.one-shot hash dynamic stats preserve plans and wrapped bytes...OK
+187/733 deflate.test.inflate output capacity hint expands compressed frames but stays capped...OK
+188/733 deflate.test.dynamic code-length alphabet uses weighted tree lengths...OK
+189/733 deflate.test.dynamic HCLEN trimming keeps required code-length alphabet...OK
+190/733 deflate.test.dynamic HLIT and HDIST trimming keep required minimums...OK
+191/733 deflate.test.split raw best encoder can emit stored block after compressed block...OK
+192/733 deflate.test.zlib and gzip split-best wrappers round trip...OK
+193/733 deflate.test.adaptive split best wrappers round trip...OK
+194/733 deflate.test.Deflate split effective history and ownership contracts...OK
+195/733 deflate.test.adaptive split token-distribution proposals...OK
+196/733 deflate.test.adaptive split bit-state score matches production writer...OK
+197/733 deflate.test.adaptive split complete horizon scoring and resource contracts...OK
+198/733 deflate.test.dynamic optimal refinement complete-wire and resource contracts...OK
+199/733 deflate.test.split plan suffix trimming preserves straddling matches...OK
+200/733 deflate.test.refined history chunk configuration stays within BT input limit...OK
+201/733 deflate.test.adaptive split falls back to one-shot when smaller...OK
+202/733 deflate.test.adaptive split skips full-window search for small production inputs...OK
+203/733 deflate.test.PNG ultrafast zlib streams round trip through general decoder...OK
+204/733 deflate.test.deflate portable secondary lookups decode the guarded reference OSDB dynamic block...OK
+205/733 deflate.test.deflate exact short nonoverlapping copies preserve all lengths alignments and guards...OK
+206/733 deflate.test.Deflate whole-operation requested heap contracts...OK
+207/733 deflate.test.Deflate arena requested heap contracts...arena physical resize: unlimited supporting peak=517593, unsupported fallback D=387689, supporting cap=D peak=387689
+OK
+208/733 deflate.test.Deflate arena physical reservation reference and overlap contracts...OK
+209/733 deflate.test.Deflate gzip next member policy contracts...OK
+210/733 deflate.test.Deflate sync flush chunk alias contracts...OK
+211/733 deflate.test.Deflate sync flush descriptor count overflow contracts...OK
+212/733 io.requested_heap_budget.test_0...OK
+213/733 lz77.test_0...OK
+214/733 lz77.test.dictionary greedy scratch ignores stale head entries...OK
+215/733 lz77.test.reusable dictionary lazy planner preserves allocating plans...OK
+216/733 lz77.test.reusable dictionary lazy planner ignores stale head entries...OK
+217/733 lz77.test.reusable dictionary lazy planner retains all capacity...OK
+218/733 lz77.test.reusable dictionary lazy planner recovers after allocation failure...OK
+219/733 lz77.test.optimal length extension buckets cover exact boundaries...OK
+220/733 lz77.test.optimal length prefix choices match descending reference...OK
+221/733 lz77.test.repeat beam keeps stable distance across local length gain...OK
+222/733 lz77.test.compile-time fixed length costs match scalar range...OK
+223/733 lz77.test.rep beam keeps near-cost alternate recent-offset state...OK
+224/733 lz77.test.rep beam known-valid transition matches guarded reference...OK
+225/733 lz77.test.rep beam recent-offset prefix guard matches scalar acceptance...OK
+226/733 lz77.test.rep beam materializes the initial recent offset...OK
+227/733 lz77.test.rep beam reusable scratch preserves tokens and capacity...OK
+228/733 lz77.test.Zstd-specialized rep beam matches generic plans...OK
+229/733 lz77.test.rep beam compact index matches reference beyond u16 positions...OK
+230/733 lz77.test.Zstd rep beam prefix filter preserves scalar compact-index matches...OK
+231/733 lz77.test.rep beam compact index initializes the four-byte tail...OK
+232/733 lz77.test.rep beam emits literal tail shorter than minimum match...OK
+233/733 lz77.test.rep beam deduplicates indexed recent offset matches...OK
+234/733 lz77.test.compile-time fixed distance costs match scalar range...OK
+235/733 lz77.test.shared match length vector path matches byte reference...OK
+236/733 lz77.test.combined dictionary/input match length uses word and tail paths...OK
+237/733 lz77.test.lazy parser scan preference separates repetitive from source-like blocks...OK
+238/733 lz77.test.tiny lazy hash planner round trips source-like blocks...OK
+239/733 lz77.test.literal-only LZ77 planner emits no matches...OK
+240/733 lz77.test.filtered LZ77 planner suppresses short low-value matches...OK
+241/733 lz77.test.run-length LZ77 planner limits matches to byte runs...OK
+242/733 lz77.test.greedy LZ77 planner round trips literals and matches...OK
+243/733 lz77.test.greedy LZ77 planner respects incompressible input...OK
+244/733 lz77.test.replay rejects invalid match distance...OK
+245/733 lz77.test.lazy LZ77 planner round trips and keeps token count bounded...OK
+246/733 lz77.test.lazy parser honors minimum gain threshold...OK
+247/733 lz77.test.parser honors configurable minimum match length...OK
+248/733 lz77.test.parser honors minimum savings threshold...OK
+249/733 lz77.test.parser honors configurable maximum match length...OK
+250/733 lz77.test.optimal LZ77 prototype round trips and is no worse by fixed bit cost...OK
+251/733 lz77.test.modeled optimal parser follows caller entropy costs...OK
+252/733 lz77.test.modeled optimal parser validates complete nonzero costs...OK
+253/733 lz77.test.reusable optimal parser preserves tokens and capacities...OK
+254/733 lz77.test.optimal suffix plan references history prefix without emitting it...OK
+255/733 lz77.test.prepared optimal matches independent fixed and modeled plans...OK
+256/733 lz77.test.prepared optimal cleans up every allocation failure...OK
+257/733 lz77.test.optimal prefix bound preserves reference tokens...OK
+258/733 lz77.test.profiled optimal parser preserves tokens and search accounting...OK
+259/733 lz77.test.compact optimal hash index matches reference beyond u16 positions...OK
+260/733 lz77.test.reusable optimal parser recovers after compact-index allocation failure...OK
+261/733 lz77.test.optimal fourth-byte rejection preserves exact four-byte matches...OK
+262/733 lz77.test.reusable hash index exposes deterministic position matches...OK
+263/733 lz77.test.hash index candidate distances preserve validated match order...OK
+264/733 lz77.test.optimal LZ77 considers multiple match distances...OK
+265/733 lz77.test.optimal parser token count is bounded by candidate limit...OK
+266/733 lz77.test.best optimal parser budget leaves room for custom deep searches...OK
+267/733 lz77.test.fixed bit cost accounts for literals matches and end marker...OK
+268/733 lz77.test.hash greedy planner round trips repeated data...OK
+269/733 lz77.test.hash planner skips non-viable prefixes before spending match budget...OK
+270/733 lz77.test.hash planner with zero chain budget emits only literals...OK
+271/733 lz77.test.tiny hash greedy planner round trips small repeated data...OK
+272/733 lz77.test.automatic hash anchor preserves three-byte match configurations...OK
+273/733 lz77.test.reusable tiny hash planner preserves tokens and capacity...OK
+274/733 lz77.test.reusable tiny hash scratch preserves tokens across inputs...OK
+275/733 lz77.test.reusable tiny hash scratch covers maximum input position...OK
+276/733 lz77.test.one-shot tiny hash planner covers maximum three-byte position...OK
+277/733 lz77.test.reusable tiny lazy hash planner preserves tokens and capacity...OK
+278/733 lz77.test.reusable lazy planner preserves production scan and hash policies...OK
+279/733 lz77.test.automatic hash anchor selects four-byte planner and round trips...OK
+280/733 lz77.test.hash greedy table variants share token and stats accounting...OK
+281/733 lz77.test.hash greedy compact position boundary...OK
+282/733 lz77.test.64 KiB lazy hash u16 positions match i32 reference...OK
+283/733 lz77.test.lazy hash compact positions match isize reference...OK
+284/733 lz77.test.hash greedy predecessor ring matches full-table reference...OK
+285/733 lz77.test.dictionary-backed hash and lazy planners can emit preset-history matches...OK
+286/733 lz77.test.dictionary-backed planners cover the complete 16-bit distance range...OK
+287/733 lz77.test.scan dictionary planner emits preset-history matches...OK
+288/733 lz77.test.dictionary hash planner skips non-viable prefix collisions...OK
+289/733 lz77.test.matchLength compares word chunks and tails...OK
+290/733 lz77.test.hash search returns the insertion bucket...OK
+291/733 lz77.test.hash match fast acceptance is a sufficient condition...OK
+292/733 lz77.test.constant-time hash match acceptance matches exhaustive length scan...OK
+293/733 lz77.test_1...OK
+294/733 lz77.test.optimal prefix bound fixed distance prices are nondecreasing...OK
+295/733 lz77.test.optimal prefix bound fixed-cost comparison oracle...optimal_prefix cases=110 bound_rejections=132007 prefix_rejections=31420 matches=10886 alloc_failures=6 warm_reuses=220 safety_neighbors=22 checked_slacks=18 targeted_bounds=53357
+OK
+296/733 lz77.test.ordinal optimal index preserves original plan and ownership...ordinal_plan cases=110 bound_rejections=132007 prefix_rejections=31420 matches=10886 alloc_failures=12 warm_reuses=220 safety_neighbors=22 checked_slacks=18 targeted_bounds=53357
+OK
+297/733 core.test.streaming diagnostics keep cumulative counts wide and caller progress local...OK
+298/733 core.test.Progress add checks overflow...OK
+299/733 bitstream.test.buffered bit reader matches scalar reader across mixed operations...OK
+300/733 bitstream.test.buffered bit reader word prefetch preserves logical offsets and tail reads...OK
+301/733 bitstream.test.buffered bit reader aligned reads discard prefetched bytes without skipping input...OK
+302/733 bitstream.test.buffered bit reader word prefetch keeps padded peeks strict on truncation...OK
+303/733 bitstream.test.BitReader consumes LSB-first deflate bits...OK
+304/733 bitstream.test.BitReader exact bit length rejects high padding bits...OK
+305/733 bitstream.test.BitWriter bulk packing matches scalar bit packing...OK
+306/733 bitstream.test.BitWriter reserved-capacity packing matches checked packing...OK
+307/733 bitstream.test.BitReader skipBits advances without reading values...OK
+308/733 bitstream.test.BitReader hasBits and unchecked advance match skipBits...OK
+309/733 bitstream.test.BitReader peekBitsPadded uses zero padding past input...OK
+310/733 bitstream.test.ChunkedBitReader skips empty chunks and keeps a forward cursor...OK
+311/733 bitstream.test.ChunkedBitReader matches contiguous bit and aligned-byte reads...OK
+312/733 bitstream.test.ChunkedBitReader known-total initializer matches initAt...OK
+313/733 bitstream.test.ChunkedSpanBitReader matches ChunkedBitReader across chunk boundaries...OK
+314/733 bitstream.test.ChunkedBitReader hasBits and unchecked advance match skipBits...OK
+315/733 bitstream.test.BitWriter emits LSB-first bytes readable by BitReader...OK
+316/733 bitstream.test_0...OK
+317/733 deflate.bt_optimal.test_0...OK
+318/733 lz77.ordinal_index.test.ordinal index candidate and admission contracts...OK
+319/733 huffman.test.sparse trusted encoder matches dense canonical codes...OK
+320/733 huffman.test.sparse trusted decoder matches dense canonical table...OK
+321/733 huffman.test.explicit-symbol decoder matches dense simple trees...OK
+322/733 huffman.test.explicit-symbol decoder rejects malformed lists...OK
+323/733 huffman.test.sparse trusted decoder rejects invalid active sets...OK
+324/733 huffman.test.sparse trusted decoder matches dense randomized tables...OK
+325/733 huffman.test.sparse trusted encoder matches dense randomized alphabets...OK
+326/733 huffman.test.sparse trusted encoder rejects invalid active sets...OK
+327/733 huffman.test.mapped packed lookups preserve fixed-width symbols and slots...OK
+328/733 huffman.test.Zstd medium known-active back-reference workspace preserves exact lengths...OK
+329/733 huffman.test.fixed Huffman tables expose expected boundary code lengths...OK
+330/733 huffman.test.canonical Huffman decoder handles a small RFC-style tree...OK
+331/733 huffman.test.tail lookup decoder matches compact decoder...OK
+332/733 huffman.test.external packed lookup covers dense tables and long-code fallback...OK
+333/733 huffman.test.fast Huffman decoder falls back for long codes...OK
+334/733 huffman.test.fast Huffman decoder checks staged bits after padded lookup...OK
+335/733 huffman.test.fast Huffman decoder reports lookup coverage...OK
+336/733 huffman.test.Huffman table records maximum active code length...OK
+337/733 huffman.test.canonical Huffman decoder rejects oversubscribed trees...OK
+338/733 huffman.test.fixed literal table decodes end-of-block code...OK
+339/733 huffman.test.dynamic header parser reads RFC1951 fields...OK
+340/733 huffman.test.dynamic length parser expands repeat symbols...OK
+341/733 huffman.test.dynamic length parser rejects invalid repeat symbols...OK
+342/733 huffman.test.fixed Huffman encoder writes symbols decoded by fixed table...OK
+343/733 huffman.test.dynamic parser rejects non-dynamic block type and truncated header...OK
+344/733 huffman.test.simple Huffman length builder creates decodable table...OK
+345/733 huffman.test.weighted Huffman length builder favors frequent symbols...OK
+346/733 huffman.test.tree Huffman length builder favors frequent symbols and decodes...OK
+347/733 huffman.test.package-merge Huffman length builder preserves canonical code space...OK
+348/733 huffman.test.package-merge naturally ordered pairs match sorted reference...OK
+349/733 huffman.test.compact sparse package-merge matches full-width reference...OK
+350/733 huffman.test.known-active package-merge matches scanned builder...OK
+351/733 huffman.test.dense back-reference package-merge preserves optimal weighted cost...OK
+352/733 huffman.test.dense Deflate unbounded tree matches package-merge cost...OK
+353/733 huffman.test.dense Deflate leaf ordering matches generic total order...OK
+354/733 huffman.test.linear back-reference recovery matches root traversal...OK
+355/733 huffman.test.dense known-active fast paths match comparison sort...OK
+356/733 huffman.test.package-merge Huffman lengths match small optimal costs...OK
+357/733 huffman.test.package-merge Huffman length builder covers deflate alphabet sizes...OK
+358/733 huffman.test.direct Huffman encoder matches canonical decoder table entries...OK
+359/733 huffman.test.tree Huffman length limiter preserves skewed short codes...OK
+360/733 huffman.test.fast decoder sparse-clears long prefixes...OK
+361/733 huffman.test.fixed literal fast lookup matches table decoder...OK
+362/733 huffman.test.fixed distance fast lookup decodes all symbols...OK
+363/733 io.bit_count.test.bit addresses cross the 32-bit bit boundary without allocating input...OK
+364/733 io.bit_count.test.bit address rounding and narrowing check geometry at integer boundaries...OK
+365/733 br.fast_bit_reader.test.Brotli fast bit reader absolute cursors cross narrow bit boundaries...OK
+366/733 br.fast_bit_reader.test.Brotli fast bit reader matches scalar mixed reads and cursors...OK
+367/733 br.fast_bit_reader.test.Brotli fast bit reader preserves truncated bit length...OK
+368/733 br.fast_bit_reader.test.Brotli fast bit reader loads complete short tails...OK
+369/733 br.fast_bit_reader.test.Brotli fast bit reader specialized fixed-width peeks match generic reads...OK
+370/733 br.fast_bit_reader.test.Brotli fast bit reader full-word refills honor every logical tail...OK
+371/733 br.fast_bit_reader.test.Brotli fast bit reader padded peeks match independent logical bit oracle...OK
+372/733 deflate.bt_optimal.tests.test.bt frontier independent recursive matcher and exhaustive suffix cost oracle...OK
+373/733 deflate.bt_optimal.tests.test.bt frontier RFC classes and packed evidence full boundaries...OK
+374/733 deflate.bt_optimal.tests.test.bt frontier distance one overlap, final three/four bytes and u16 max input...OK
+375/733 deflate.bt_optimal.tests.test.bt frontier exact distance 32768 survives full input links and window cutoff...OK
+376/733 deflate.bt_optimal.tests.test.bt frontier rejects ineligible ownership and arbitrary same class costs...OK
+377/733 deflate.bt_optimal.tests.test.bt frontier shorter farther cheap class survives against nearer long class...OK
+378/733 deflate.bt_optimal.tests.test.bt frontier word extension equals scalar from every proven prefix...OK
+379/733 deflate.bt_optimal.tests.test.bt frontier maximum u16 modeled arithmetic at maximum eligible input...OK
+380/733 deflate.bt_optimal.tests.test.bt frontier covered graph leaves exact full budget tree state unchanged...OK
+381/733 deflate.bt_optimal.tests.test.bt frontier natural 65536 model maximum u16 costs retain finite literal path...OK
+382/733 deflate.bt_optimal.tests.test.bt frontier threshold exact covered interval never extends from an omitted match...OK
+383/733 deflate.bt_optimal.ownership_tests.test.bt frontier owner releases tree before DP and cleans every allocation failure...OK
+384/733 deflate.bt_optimal.ownership_tests.test.bt frontier measured owner lifetime and sparse density...bt frontier fixture n=4096 records=22528 capacity=25137 evidence_bytes=79507 prepared_live=145047 peak_requested=211614 token_bytes=12
+OK
+385/733 deflate.bt_optimal.layout_tests.test.bt frontier selected three byte records cover exact bounds and little endian bytes...OK
+386/733 deflate.bt_optimal.layout_tests.test.bt frontier selected frozen covered graph all costs selected tokens and ties agree...OK
+387/733 deflate.bt_optimal.layout_tests.test.bt frontier selected maximum model finite suffix bound and literal endpoint...OK
+388/733 deflate.bt_optimal.layout_tests.test.bt frontier selected owner recovers after result allocation failure...OK
+389/733 deflate.bt_optimal.layout_tests.test.bt frontier selected invalid model leaves owner reusable...OK
+390/733 bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment...OK
+391/733 bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries...OK
+392/733 bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width...OK
+393/733 bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged...OK
+394/733 bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors...OK
+395/733 bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain...OK
+396/733 bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation...OK
+397/733 io.stream_count.test.stream count preserves native types and crosses the 32-bit byte boundary...OK
+398/733 io.stream_count.test.stream count overflow refuses an advance without changing state...OK
+399/733 io.stream_count.test.stream count narrows only after checking a physical bound...OK
+400/733 lz77.zero_window_cost_model_tests.test.modeled optimal zero window validates prices and returns literal-only plans...OK
+401/733 lz77.optimal_cost_model_window_tests.test.modeled optimal window must fit token distance even with complete prices...OK
+402/733 lz77.fixed_optimal_window_tests.test.fixed optimal window rejects unsupported options before any allocation...OK
+403/733 lz77.fixed_optimal_window_tests.test.fixed optimal window rejection preserves reusable and prepared initialized state...OK
+404/733 lz77.fixed_optimal_window_tests.test.fixed optimal zero and maximum windows replay while prepared wide modeled remains supported...OK
+405/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal rollback restores exact arrays and retry equals unlogged baseline...OK
+406/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal committed batch continues with the same history and tokens...OK
+407/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal repeated bucket and ring slot writes undo in reverse order...OK
+408/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal capacity failure never writes an unlogged insertion...OK
+409/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal owners move and reservation failure preserve reusable capacity...OK
+410/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal inactive nested and zero allocation lifecycle contracts...OK
+411/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal keeps full i64 positions and the largest ring slot...OK
+412/733 lz77.streaming_hash_journal_tests.test.Streaming hash journal releases all state log token and rollback allocation failures...OK
+413/733 io.requested_heap_budget.tests.test.requested heap budget default zero and control allocation semantics...OK
+414/733 io.requested_heap_budget.tests.test.requested heap budget exact cap and profile only count actual requested bytes...OK
+415/733 io.requested_heap_budget.tests.test.requested heap budget borrowed policy and operation classification cannot change owner...OK
+416/733 io.requested_heap_budget.tests.test.requested heap budget sibling refusal remains sticky after concurrent successful allocation...OK
+417/733 io.requested_heap_budget.tests.test.requested heap budget physical OOM remains OOM in a new owner operation...OK
+418/733 io.requested_heap_budget.tests.test.requested heap budget concurrent admissions cannot exceed one shared cap...OK
+419/733 io.requested_heap_budget.tests.test.requested heap budget move and final lease close allow exact late frees...OK
+420/733 io.requested_heap_budget.tests.test.requested heap budget adopts exact capacity and transfers owned bytes to backing...OK
+421/733 io.requested_heap_budget.tests.test.requested heap budget cross allocator reservations count successful physical heap only...OK
+422/733 io.requested_heap_budget.tests.test.requested heap budget reservation retains control after owner move and close...OK
+423/733 io.requested_heap_budget.tests.test.requested heap budget resize remap and fallback realloc count physical overlapping payload...OK
+424/733 io.requested_heap_budget.tests.test.requested heap budget profile snapshots merge in observation order...OK
+425/733 io.requested_heap_budget.tests.test.requested heap budget each control and payload failure releases all ownership...OK
+426/733 deflate.semantic.decoder.test.linear reader accounting supports a preloaded reservoir...OK
+427/733 deflate.semantic.decoder.test.semantic window packed literals pause before a non-fitting match...OK
+428/733 deflate.semantic.decoder.test.semantic window restages before a maximum length distance token...OK
+429/733 deflate.decoder.secondary_index.test.deflate secondary lookup suffix discards high reservoir bits before narrowing...OK
+430/733 deflate.incremental.encoder.fixed.test.saturated unique byte count handles uniform and mixed inputs...OK
+431/733 checksum.test.Adler-32 combine matches one-shot and is associative...OK
+432/733 checksum.test.CRC-32 known IEEE vectors...OK
+433/733 checksum.test.CRC-32 streaming matches one-shot...OK
+434/733 checksum.test.CRC-32C known Castagnoli vectors...OK
+435/733 checksum.test.CRC-32C streaming matches one-shot...OK
+436/733 checksum.test.CRC-32C slice-by-8 slice-by-16 and slice-by-32 match scalar...OK
+437/733 checksum.test.CRC implementations match Zig std catalog...OK
+438/733 checksum.test.CRC-32 slice-by-4 slice-by-8 slice-by-16 and slice-by-32 match scalar...OK
+439/733 checksum.test.CRC combine matches one-shot for IEEE and Castagnoli...OK
+440/733 checksum.test.CRC combine is associative across block boundaries...OK
+441/733 checksum.test.CRC-32 best dispatch matches scalar...OK
+442/733 checksum.test.CPU feature report selects validated IEEE CRC32 hardware paths...OK
+443/733 checksum.test.CRC-32 PCLMUL path matches slicing across lengths offsets and updates...OK
+444/733 checksum.test.CRC-32 ARM path matches slicing across lengths offsets and updates...OK
+445/733 checksum.test.CRC-32C hardware path matches table path...OK
+446/733 deflate.incremental.encoder.match_finder.rolling_hash.test.rolling match length vector path matches byte reference...OK
+447/733 deflate.incremental.encoder.match_finder.rolling_hash.test.rolling matcher reuses and resets borrowed dynamic stats...OK
+448/733 deflate.incremental.encoder.match_finder.rolling_hash.test_0...OK
+449/733 deflate.incremental.encoder.match_finder.dynamic_stats.test.incremental dynamic stats match DEFLATE symbol metadata...OK
+450/733 deflate.incremental.encoder.match_finder.dynamic_stats.test.incremental dynamic stats expose active symbols without stale entries...OK
+451/733 deflate.incremental.decoder.member_prefix.test.wrapper member prefix agrees with complete zlib header recognition...OK
+452/733 deflate.incremental.decoder.member_prefix.test.wrapper member prefix preserves rejected current suffix and accepted previous byte...OK
+453/733 deflate.incremental.encoder.match_finder.hash.test.block and joined hashes agree across boundary layouts...OK
+454/733 deflate.dynamic.code_length_rle.test.code-length RLE fuses frequency and extra-bit accounting...OK
+455/733 deflate.dynamic.code_length_rle.test.code-length RLE 318 capacity preserves alternating worst case and ordinary wrapper...OK
+456/733 deflate.dynamic.code_length_rle.test.code-length RLE 318 repeats fuse across literal and distance alphabets...OK
+457/733 deflate.dynamic.code_length_rle.test.code-length RLE generalized run boundaries and empty alphabets expand exactly...OK
+458/733 deflate.incremental.encoder.match_finder.profitability.test.profitability fixed match costs equal the RFC emission model...OK
+459/733 deflate.incremental.encoder.match_finder.profitability.test.profitability bounds equal a full literal scan...OK
+460/733 deflate.dynamic_optimal.test.dynamic optimal symbol cost uses dynamic widths and fixed unseen priors...OK
+461/733 deflate.incremental.encoder.match_finder.rolling_hash_counter_tests.test.rolling matcher wide counters preserve native types and local indexes...OK
+462/733 deflate.incremental.encoder.match_finder.rolling_hash_counter_tests.test.rolling matcher wide counters retain real chain nodes across four GiB...OK
+463/733 deflate.incremental.encoder.match_finder.rolling_hash_counter_tests.test.rolling matcher wide counters refuse overflow before token or index changes...OK
+464/733 deflate.incremental.encoder.match_finder.rolling_hash_counter_tests.test.rolling matcher wide counters recover logical position after token growth OOM...OK
+465/733 checksum.adler.test.known zlib vectors...OK
+466/733 checksum.adler.test.streaming matches one-shot across reduction boundary...OK
+467/733 checksum.adler.test.fragmented streaming updates match scalar oracle...OK
+468/733 checksum.adler.test.optimized and portable folds match scalar oracle at boundaries...OK
+469/733 deflate.zlib.window.test.zlib window headers preserve default bytes and encode every declared cap...OK
+470/733 png_ultrafast.test.static PNG ultrafast header carries the trained tree...OK
+471/733 png_ultrafast.test.PNG ultrafast length lookup matches RFC range reference...OK
+472/733 png_ultrafast.test.batched PNG ultrafast literals match scalar writer...OK
+473/733 png_ultrafast.test.direct full PNG ultrafast chunks match scalar writer...OK
+474/733 png_ultrafast.test.direct boundary literal prefixes match scalar writer...OK
+475/733 png_ultrafast.test.direct literals after a carried zero run match scalar writer...OK
+476/733 png_ultrafast.test.PNG ultrafast output matches fdeflate 0.3.7 goldens...OK
+477/733 png_ultrafast.test.caller-supplied checksum matches recomputed ultrafast bytes...OK
+478/733 deflate.gzip.alloc_hint.test.gzip allocation hint saturates the conservative token geometry on every host...OK
+479/733 deflate.semantic.rolling_window.test_0...OK
+480/733 deflate.semantic.rolling_decoder.test.rolling semantic independent token and window oracle...rolling_semantic linear_pairs=105 observed_pause=4 observed_errors=4 truncated_reservoirs=10
+OK
+481/733 deflate.incremental.decoder.semantic_bits.test.semantic window rewind clears empty shadow bits and preserves the next stream bits...OK
+482/733 deflate.semantic.rolling_window_tests.test.rolling window metadata bounds are pure and permit a full logical cycle...OK
+483/733 deflate.semantic.rolling_window_tests.test.rolling window every physical base supports literal pair overlapping match and exact drain...OK
+484/733 deflate.semantic.rolling_window_tests.test.rolling window checked matches agree with an independent linear byte walker...OK
+485/733 deflate.semantic.rolling_window_tests.test.rolling window error priority and zero length preserve every byte...OK
+486/733 deflate.semantic.rolling_window_tests.test.rolling window mixed generative token sequences never change prefix or guard...OK
+487/733 deflate.semantic.rolling_window_tests.test.rolling window drain can copy an exact full cycle without touching guards...OK
+488/733 deflate.semantic.rolling_window_tests.test.rolling window normalization preserves wrapped source and changes only compact destination...OK
+489/733 deflate.semantic.rolling_window_tests.test.rolling window every physical start normalizes a tiny cyclic tail...OK
+490/733 deflate.semantic.rolling_window_tests.test.rolling window complete copy drain and wrapped normalization contract works at comptime...OK
+491/733 png.test.png scanline reconstruction filters round trip...OK
+492/733 png.test.stb Paeth predictor matches PNG reference over the full byte domain...OK
+493/733 png.test.png scanline reconstruction Paeth bpp1 supports in-place rows...OK
+494/733 png.test.png scanline reconstruction Sub fixed bpp supports in-place rows...OK
+495/733 png.test.png scanline reconstruction Sub bpp3 matches scalar reference...OK
+496/733 png.test.png scanline reconstruction Paeth fixed bpp supports in-place rows...OK
+497/733 png.test.png scanline reconstruction Average fixed bpp supports in-place and tail rows...OK
+498/733 png.test.png scanline reconstruction Average fixed bpp matches scalar reference...OK
+499/733 png.test.png image info computes scanline metadata...OK
+500/733 png.test.png adam7 metadata plans passes and buffers...OK
+501/733 png.test.png adam7 placement scatters byte-aligned passes...OK
+502/733 png.test.png adam7 placement scatters sub-byte packed pixels...OK
+503/733 png.up_dominant.test.Up prefix policy selects only the intended shape...OK
+504/733 png.up_dominant.test.Up-dominant reconstruction matches scalar mixed rows and tails...OK
+505/733 deflate.png.non_overlap.test.deep-distance PNG non-overlap policy has an exact threshold...OK
+506/733 deflate.png.non_overlap.test.short non-overlapping window match matches reference and bounds speculation...OK
+507/733 deflate.png.windowed_history.test.windowed history releases and compacts complete rows only...OK
+508/733 deflate.png.windowed_history.test.windowed history compacts only at an output boundary...OK
+509/733 deflate.zlib.dictionary_set.test.zlib dictionary set resolves borrowed entries...OK
+510/733 deflate.sync.test.deflate sync scanner handles overlaps and fragmented markers...OK
+511/733 deflate.sync.test.deflate sync scanner rejects partial and can reset...OK
+512/733 deflate.zlib.frame_window_oracle.test.zlib independent RFC token oracle controls...OK
+513/733 deflate.incremental.tests.test_0...OK
+514/733 deflate.incremental.tests.test.raw deflate incremental stored encoder splits flushes and resumes...OK
+515/733 deflate.incremental.tests.test.raw deflate incremental stored encoder enforces sizes and plan...OK
+516/733 deflate.incremental.tests.test.raw deflate incremental fixed encoder retains history and sync flushes...OK
+517/733 deflate.incremental.tests.test.raw deflate incremental fixed encoder handles empty and exact streams...OK
+518/733 deflate.incremental.tests.test.zlib incremental fixed encoder wraps checksum flush and exact size...OK
+519/733 deflate.incremental.tests.test.zlib incremental fixed encoder supports preset dictionary...OK
+520/733 deflate.incremental.tests.test.gzip incremental fixed encoder wraps crc isize and sync flush...OK
+521/733 deflate.incremental.tests.test.gzip incremental fixed encoder emits metadata header...OK
+522/733 deflate.incremental.tests.test.raw deflate incremental best encoder selects dynamic blocks...OK
+523/733 deflate.incremental.tests.test.raw deflate incremental best encoder falls back to stored and sync flushes...OK
+524/733 deflate.incremental.tests.test.zlib incremental best encoder selects dynamic blocks by level...OK
+525/733 deflate.incremental.tests.test.gzip incremental best encoder selects stored and preserves metadata...OK
+526/733 deflate.incremental.tests.test.raw deflate incremental best encoder adapts block boundaries...OK
+527/733 deflate.incremental.tests.test.incremental adaptive wrappers retain cross-block history under fragmentation...OK
+528/733 deflate.incremental.tests.test.raw deflate incremental adaptive plan validates bounds...OK
+529/733 deflate.incremental.tests.test.raw deflate incremental direct blocks match buffered input...OK
+530/733 deflate.incremental.tests.test.raw deflate incremental direct path preserves low entropy coalescing...OK
+531/733 deflate.incremental.tests.test.raw deflate incremental lookahead preserves boundary matches...OK
+532/733 deflate.incremental.tests.test.raw deflate incremental lookahead validates capacity...OK
+533/733 deflate.incremental.tests.test.raw deflate incremental stored decoder streams split input and tiny output...OK
+534/733 deflate.incremental.tests.test.raw deflate incremental stored decoder validates hostile streams...OK
+535/733 deflate.incremental.tests.test.raw deflate incremental fixed literal decoder streams bit splits...OK
+536/733 deflate.incremental.tests.test.raw deflate incremental fixed literal decoder streams matches and truncation...OK
+537/733 deflate.incremental.tests.test.raw deflate incremental fixed decoder requires history for matches...OK
+538/733 deflate.incremental.tests.test.raw deflate incremental decoder can stop before wrapper data...OK
+539/733 deflate.incremental.tests.test.raw deflate incremental fixed decoder handles mixed stored blocks...OK
+540/733 deflate.incremental.tests.test.raw deflate incremental bulk stored copy seeds wrapped match history...OK
+541/733 deflate.incremental.tests.test.raw deflate incremental mixed decoder validates stored lengths...OK
+542/733 deflate.incremental.tests.test.raw deflate incremental decoder parses split dynamic prefix...OK
+543/733 deflate.incremental.tests.test.raw deflate incremental decoder validates dynamic counts...OK
+544/733 deflate.incremental.tests.test.raw deflate incremental decoder expands dynamic repeat codes...OK
+545/733 deflate.incremental.tests.test.zlib incremental decoder streams dynamic input and validates adler...OK
+546/733 deflate.incremental.tests.test.zlib incremental decoder consumes footer after exact output fill...OK
+547/733 deflate.incremental.tests.test.zlib incremental decoder rejects checksum dictionary and truncation...OK
+548/733 deflate.incremental.tests.test.zlib incremental decoder validates and uses preset dictionary...OK
+549/733 deflate.incremental.tests.test.zlib incremental decoder resolves split DICTID from dictionary set...OK
+550/733 deflate.incremental.tests.test.gzip incremental decoder streams dynamic input and validates footer...OK
+551/733 deflate.incremental.tests.test.gzip incremental decoder bulk matches survive history wrap and backpressure...OK
+552/733 deflate.incremental.tests.test.gzip incremental decoder consumes footer after exact output fill...OK
+553/733 deflate.incremental.tests.test.gzip incremental decoder parses optional header metadata...OK
+554/733 deflate.incremental.tests.test.gzip incremental decoder rejects header crc and bad footer...OK
+555/733 deflate.gzip.alloc_hint_tests.test.gzip allocation hint rejects impossible ISIZE before requesting huge output...OK
+556/733 deflate.gzip.alloc_hint_tests.test.gzip allocation hint missing dynamic footer returns truncation without speculative giant output...OK
+557/733 deflate.gzip.alloc_hint_tests.test.gzip allocation hint undersized output is released before raw fallback and quota refusal...OK
+558/733 deflate.gzip.alloc_hint_tests.test.gzip allocation hint retains legal longest matches and propagates actual allocator refusal...OK
+559/733 deflate.gzip.alloc_hint_tests.test.gzip allocation hint fallback releases every injected allocation failure...OK
+560/733 deflate.incremental.decoder.wrapper_count.test.wrapper counter prefix keeps the final accepted byte on overflow...OK
+561/733 deflate.incremental.tests.block_flush.test.fixed block flush matches audited libz raw zlib and gzip fixtures...OK
+562/733 deflate.incremental.tests.block_flush.test.best block flush retains history while full flush resets it...OK
+563/733 deflate.incremental.tests.block_flush.test.stored block flush exposes one explicit non-final stored boundary...OK
+564/733 deflate.incremental.tests.block_flush.test.empty repeated block flush requests are idempotent...OK
+565/733 deflate.incremental.tests.block_flush.test.block flush survives zero-output and one-byte backpressure...OK
+566/733 deflate.incremental.tests.block_flush.test.pending block flush upgrades to sync flush without duplicate markers...OK
+567/733 deflate.incremental.tests.block_flush.test.pending block flush upgrades to full flush and resets best history...OK
+568/733 deflate.incremental.tests.block_flush.test.finish honors an undrained block flush request...OK
+569/733 deflate.incremental.tests.block_flush.test.zlib and gzip best block flush preserve continuous wrapper checksums...OK
+570/733 deflate.incremental.tests.block_boundary.test.raw deflate stepToBlockBoundary pauses at multiple blocks...OK
+571/733 deflate.incremental.tests.block_boundary.test.zlib incremental stepToBlockBoundary pauses at multiple blocks...OK
+572/733 deflate.incremental.tests.block_boundary.test.gzip incremental stepToBlockBoundary pauses at multiple blocks...OK
+573/733 deflate.incremental.tests.block_boundary.test.stored deflate stepToBlockBoundary pauses at multiple blocks...OK
+574/733 deflate.incremental.tests.compact_tables.test.compact lookup matches complete short canonical alphabets...OK
+575/733 deflate.incremental.tests.compact_tables.test.compact lookup matches incomplete singleton canonical alphabets...OK
+576/733 deflate.incremental.tests.compact_tables.test.compact lookup matches sparse canonical alphabets with 15-bit tails...OK
+577/733 deflate.incremental.tests.compact_tables.test.compact lookup reuse clears poisoned and previous alphabet slots...OK
+578/733 deflate.incremental.tests.gzip_concatenated.test.gzip incremental concatenation streams mixed members cumulatively...OK
+579/733 deflate.incremental.tests.gzip_concatenated.test.gzip incremental concatenation keeps strict default and cumulative limits...OK
+580/733 deflate.incremental.tests.gzip_concatenated.test.gzip incremental concatenation diagnoses corrupt and truncated later members...OK
+581/733 deflate.incremental.tests.gzip_concatenated.test.gzip incremental concatenation snapshots member boundaries and reset...OK
+582/733 deflate.incremental.tests.full_flush.test.raw fixed and best full flush create independently decodable suffixes...OK
+583/733 deflate.incremental.tests.full_flush.test.raw stored full flush exposes the same stream boundary API...OK
+584/733 deflate.incremental.tests.full_flush.test.raw full flush drops a preset dictionary for the following segment...OK
+585/733 deflate.incremental.tests.full_flush.test.full flush is idempotent and upgrades a completed sync boundary...OK
+586/733 deflate.incremental.tests.full_flush.test.finish preserves a pending full flush history reset...OK
+587/733 deflate.incremental.tests.full_flush.test.zlib and gzip full flush preserve wrapper checksums...OK
+588/733 deflate.incremental.tests.params.test.incremental best request params covers levels zero through nine...OK
+589/733 deflate.incremental.tests.params.test.incremental best request params covers all five strategies...OK
+590/733 deflate.incremental.tests.params.test.incremental stored params split data beyond the stored block limit...OK
+591/733 deflate.incremental.tests.params.test.cross-family request params matches an explicit block boundary...OK
+592/733 deflate.incremental.tests.params.test.same-family level changes do not force a block boundary...OK
+593/733 deflate.incremental.tests.params.test.pre-input parameter replacement never queues an empty boundary...OK
+594/733 deflate.incremental.tests.params.test.parameter requests are idempotent replaceable and cancellable...OK
+595/733 deflate.incremental.tests.params.test.direct compression option mutation invalidates managed params identity...OK
+596/733 deflate.incremental.tests.params.test.wrapped direct raw mutation cancels stale queued params before input...OK
+597/733 deflate.incremental.tests.params.test.parameter boundary commits under zero and one-byte output backpressure...OK
+598/733 deflate.incremental.tests.params.test.pending parameter changes compose with sync and full flush...OK
+599/733 deflate.incremental.tests.params.test.finish honors a pending parameter boundary exactly once...OK
+600/733 deflate.incremental.tests.params.test.parameter boundaries retain history and preset dictionary...OK
+601/733 deflate.incremental.tests.params.test.raw zlib and gzip params wires ignore chunking and preserve wrapper checksums...OK
+602/733 deflate.incremental.tests.params.test.zlib and gzip reset preserve active params and cancel queued changes...OK
+603/733 deflate.incremental.tests.params.test.invalid and terminal parameter requests do not mutate encoder state...OK
+604/733 deflate.incremental.tests.partial_flush.test.fixed partial flush matches audited libz raw zlib and gzip fixtures...OK
+605/733 deflate.incremental.tests.partial_flush.test.stored partial flush continues from the non-byte-aligned fixed marker...OK
+606/733 deflate.incremental.tests.partial_flush.test.empty partial flush is idempotent and upgrades to sync flush...OK
+607/733 deflate.incremental.tests.partial_flush.test.partial flush survives zero and one-byte output backpressure...OK
+608/733 deflate.incremental.tests.partial_flush.test.pending block flush upgrades to partial without duplicate boundaries...OK
+609/733 deflate.incremental.tests.partial_flush.test.finish honors an undrained partial flush request...OK
+610/733 deflate.incremental.tests.partial_flush.test.partial flush retains best history while full upgrade resets it...OK
+611/733 deflate.incremental.tests.partial_flush.test.zlib and gzip partial flush preserve wrapper checksums...OK
+612/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental hash encoder persists index across blocks and reset...OK
+613/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental hash encoder retains preset dictionary index...OK
+614/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental hash and rebuilt split planner retain dictionary history...OK
+615/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental lazy encoder persists dense chains...OK
+616/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental lazy encoder seeds preset dictionary...OK
+617/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental best encoder uses optimal preset dictionary history...OK
+618/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental matcher safely changes parser modes...OK
+619/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental matcher preserves offsets across unindexed mode...OK
+620/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental stored probe preserves repeated binary history...OK
+621/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental low entropy blocks amortize dynamic headers...OK
+622/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental low entropy decision resets after block...OK
+623/733 deflate.incremental.tests.rolling_hash.test.raw deflate incremental low entropy block limit validates bounds...OK
+624/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic four routes preserve every step across multiple private windows...OK
+625/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic dynamic fixed stored transitions preserve distance 32768 and suffix...OK
+626/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic fragmented transactions discard private output before compact fallback...OK
+627/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic all short dynamic prefixes and transaction boundary truncations agree...OK
+628/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic dictionary prefixes preserve zero-copy chronological bootstrap...OK
+629/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic rotated compact ring bootstrap stays chronological before multiple windows...OK
+630/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic limits diagnostics and reset preserve ordinary observed parity...OK
+631/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic public capacity regression pauses after packed pair and single literal...OK
+632/733 deflate.incremental.tests.rolling_semantic.test.rolling semantic invalid singleton distance preserves advanced committed prefix on fallback...OK
+633/733 deflate.incremental.tests.semantic_window.test.raw deflate incremental semantic window drains bounded output and records hits...OK
+634/733 deflate.incremental.tests.semantic_window.test.raw deflate incremental semantic window falls back on fragmented input...OK
+635/733 deflate.incremental.tests.semantic_window.test.raw deflate incremental semantic window rebuilds changed alphabets after backpressure and reuse...OK
+636/733 deflate.incremental.tests.semantic_window.test.zlib incremental semantic window preserves footer ownership...OK
+637/733 deflate.incremental.tests.step_borrows.test_0...OK
+638/733 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows reject transactionally and retry...OK
+639/733 deflate.incremental.tests.step_borrows.test.zlib incremental step borrows reject before raw empty-input drain...OK
+640/733 deflate.incremental.tests.step_borrows.test.gzip incremental step borrows reject before raw empty-input drain...OK
+641/733 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows clip an unused output tail at the limit...OK
+642/733 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows permit zero limit with aliased unused output...OK
+643/733 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows protect pending output after limits are lowered...OK
+644/733 deflate.incremental.tests.step_borrows.test.incremental step borrows preserve ordinary malformed wrapper partial progress...OK
+645/733 deflate.incremental.tests.step_borrows.semantic.test.incremental step borrows keep colliding optional semantic storage inactive...OK
+646/733 deflate.incremental.tests.step_borrows.semantic.test.incremental step borrows protect active semantic generations and retry...OK
+647/733 deflate.incremental.tests.step_borrows.semantic.test.zlib incremental step borrows keep semantic storage disjoint from retained dictionaries...OK
+648/733 deflate.incremental.tests.sync_recovery.test.raw deflate sync recovery decodes the independent suffix...OK
+649/733 deflate.incremental.tests.sync_recovery.test.raw deflate sync recovery enforces marker and output limits...OK
+650/733 deflate.incremental.tests.sync_recovery.test.raw deflate sync scanner preserves offsets across arbitrary chunks...OK
+651/733 deflate.incremental.tests.sync_recovery.test.incremental raw decoder resumes after an external sync scan...OK
+652/733 deflate.incremental.tests.wrapper_continuation.test.gzip incremental best encoder emits concatenated members...OK
+653/733 deflate.incremental.tests.wrapper_continuation.test.gzip incremental fixed encoder emits concatenated members...OK
+654/733 deflate.incremental.tests.wrapper_continuation.test.gzip incremental encoder rejects member transition before drain...OK
+655/733 deflate.incremental.tests.wrapper_continuation.test.gzip incremental encoder snapshot reports pending member output...OK
+656/733 deflate.incremental.tests.wrapper_continuation.test.gzip incremental next member enforces its pledged size...OK
+657/733 deflate.incremental.tests.wrapper_continuation.test.gzip incremental members switch compression options...OK
+658/733 deflate.incremental.tests.wrapper_continuation.test.zlib incremental best encoder emits concatenated streams...OK
+659/733 deflate.incremental.tests.wrapper_continuation.test.zlib incremental encoder rejects early stream transition...OK
+660/733 deflate.incremental.tests.wrapper_continuation.test.zlib incremental encoder snapshot reports pending output...OK
+661/733 deflate.incremental.tests.wrapper_continuation.test.zlib concatenated dictionary set resolves each stream DICTID...OK
+662/733 deflate.incremental.tests.wrapper_continuation.test.zlib incremental decoder streams concatenated dictionary-set streams...OK
+663/733 deflate.incremental.tests.wrapper_continuation.test.zlib incremental concatenation diagnoses corrupt later stream...OK
+664/733 deflate.incremental.tests.wrapper_continuation.test.zlib incremental concatenation enforces cumulative sizes and reset...OK
+665/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary request waits for complete DICTID and resumes in place...OK
+666/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary whole input request exposes a safe unconsumed suffix...OK
+667/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary provision requires a full unresolved FDICT request...OK
+668/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary set miss and invalid entry allow an explicit current member override...OK
+669/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary provided bytes need only survive the call and full ID covers the long dictionary...OK
+670/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary configured storage is revalidated on reset and ignores streams without FDICT...OK
+671/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary empty dictionary ID one can be explicitly provided...OK
+672/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary no FDICT cannot reference externally configured bytes...OK
+673/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary waiting finish defers EOF and preserves suffix recovery...OK
+674/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary concat request reports the prior member output and current header...OK
+675/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary new member clears old request and uses its own DICTID...OK
+676/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary recovery retains cumulative quotas and reset restores operation allowance...OK
+677/733 deflate.incremental.decoder.zlib_dictionary_tests.test.zlib incremental dictionary diagnostics count raw error input output and Adler prefix exactly...OK
+678/733 deflate.incremental.tests.dictionary_borrows.test_0...OK
+679/733 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+680/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast v2 fused Adler matches scalar recurrences for worst values and mixed zero words...OK
+681/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast v2 direct and queued outputs preserve published52 bytes flush cuts resources and snapshots...OK
+682/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast accepted zero checksum recurrence matches portable across chunk and prior state boundaries...OK
+683/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast batched words checksum and overlapping queue stores match frozen scalar for equal flush schedules...OK
+684/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast literal batch checks every channel code and preserves caller output guards...OK
+685/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast matches actual fdeflate payload with independently parsed final block framing...OK
+686/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast is partition independent across zero and word boundaries without heap allocations...OK
+687/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast sync flush continues one stream across partial word and zero runs...OK
+688/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast zero output empty finish and limits return exact progress and preflight errors...OK
+689/733 deflate.incremental.encoder.png_ultrafast.tests.test.incremental PNG ultrafast repeated empty sync flush drains without ending zlib...OK
+690/733 deflate.incremental.encoder.png_ultrafast.tests.test.oneshot framing matches the full-slice ultrafast stream...OK
+691/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 initialization snapshots overlapping sources...OK
+692/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 reseeding snapshots overlapping sources...OK
+693/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 clip long overlapping dictionaries to each window...OK
+694/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 accept consumed receiver bytes and empty dictionaries...OK
+695/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 refuse short pending match seeds atomically and resume...OK
+696/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 validate the actual receiver destination prefix...OK
+697/733 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows active semantic generations reject reseeding without changing state...OK
+698/733 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto provision snapshots overlaps and preserves mismatch retries...OK
+699/733 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto validate full IDs before clipping overlapping windows...OK
+700/733 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto accept consumed receiver dictionaries and empty overrides...OK
+701/733 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto release overrides for output reuse and request again after reset...OK
+702/733 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto reject writes into the enclosing receiver atomically...OK
+703/733 deflate.incremental.tests.dictionary_borrows.stopped.test.dictionary borrows raw and Deflate64 preserve partial headers stored payloads and pending symbols...OK
+704/733 deflate.incremental.tests.dictionary_borrows.stopped.test.dictionary borrows inactive attached workspaces and second history windows remain valid sources...OK
+705/733 deflate.incremental.encoder.png_ultrafast.zero_scan.test.PNG zero word prefix matches scalar for every dirty word and byte at all alignments...OK
+706/733 deflate64.test_0...OK
+707/733 deflate64.decoder.test.Deflate64 fixed block decodes extended length code 285...OK
+708/733 deflate64.decoder.test.Deflate64 fixed block reaches the 64 KiB distance boundary...OK
+709/733 deflate64.decoder.test.Deflate64 decoder enforces corruption and output limits...OK
+710/733 deflate64.encoder.test.Deflate64 fixed codes cover extended length and distance boundaries...OK
+711/733 deflate64.encoder.test.Deflate64 encoder round trips empty, stored, and fixed streams...OK
+712/733 deflate64.encoder.test.Deflate64 encoder emits matches beyond the Deflate window...OK
+713/733 deflate64.encoder.test.Deflate64 stored encoder splits blocks and preserves caller buffers...OK
+714/733 deflate64.encoder.test.Deflate64 one-shot full range and transactional output contracts...OK
+715/733 deflate64.incremental_tests.test.Deflate64 incremental decoder streams extended distances and leaves suffix...OK
+716/733 deflate64.incremental_tests.test.Deflate64 incremental decoder handles backpressure limits and truncation...OK
+717/733 deflate64.incremental_tests.test.Deflate64 incremental decoder accepts a 7-Zip reference stream...OK
+718/733 deflate64.incremental_tests.test.Deflate64 incremental decoder requires the complete history ring...OK
+719/733 deflate64.incremental_encoder_tests.test.Deflate64 incremental stored encoder is split independent...OK
+720/733 deflate64.incremental_encoder_tests.test.Deflate64 incremental stored encoder handles empty backpressure and limits...OK
+721/733 deflate64.stream_encoder.test.Deflate64 incremental compressed encoder complete contracts...OK
+722/733 deflate64.stream_encoder.test.Deflate64 incremental wide encoder contracts...OK
+723/733 deflate64.stream_blocks.test.Deflate64 dynamic block exact plan and continuous bitstream contracts...OK
+724/733 deflate64.stream_match.test.Deflate64 match index bounded capacity and full-window reference contracts...OK
+725/733 deflate64.test_wire.test.Deflate64 test wire canonical dynamic header handles all repeat symbols and rejects overruns...OK
+726/733 deflate64.test_wire.test.Deflate64 test wire rejects incomplete multiple symbol trees and preserves legal singleton policy...OK
+727/733 deflate64.block_choice.test.Deflate64 block ties preserve format order including final padding...OK
+728/733 deflate.incremental.tests.step_borrows.dictionaries.test.zlib incremental step borrows protect configured dictionary bytes and set entries...OK
+729/733 deflate.incremental.tests.step_borrows.dictionaries.test.zlib incremental step borrows protect dictionary readers inside decoder storage...OK
+730/733 deflate.incremental.tests.step_borrows.dictionaries.test.zlib incremental step borrows release provideDictionary override after return...OK
+731/733 deflate.incremental.tests.step_borrows.adjacent.test.stored incremental step borrows reject whole calls before header progress...OK
+732/733 deflate.incremental.tests.step_borrows.adjacent.test.automatic wrapper incremental step borrows reject before detection and dispatch...OK
+733/733 deflate.incremental.tests.step_borrows.adjacent.test.deflate64 incremental step borrows reject stored input output and receiver overlap...OK
+All 733 tests passed.

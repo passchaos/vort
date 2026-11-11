@@ -1,0 +1,5 @@
+source_revision=working_tree_from_9a41b4e43e6258f8e10d602b3d7d5312cd683d1f public_module=src/root.zig mode=Debug operation=pending_match_short_seed
+pending_phase=match_copy distance=10 remaining=10 input_read=3 history_len=10 history_pos=10
+nonoverlapping_short_seed=12345 expected_refusal=InvalidStreamState expected_preserved_output=ABCDEFGHIJ
+actual_seed_error=InvalidStreamState history_len=10 history_pos=10
+actual_status=need_output actual_input=0 actual_output=10 actual_bytes={ 65, 66, 67, 68, 69, 70, 71, 72, 73, 74 }

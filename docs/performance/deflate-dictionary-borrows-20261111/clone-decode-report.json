@@ -1,0 +1,3273 @@
+{
+  "schema": "vort.deflate.clone-gate.v1",
+  "status": "ok",
+  "utc": "2026-11-11T14:22:55.314654+00:00",
+  "command": [
+    "/usr/bin/python3",
+    "tools/deflate/clone/driver.py",
+    "--probe-native",
+    "./.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+    "--probe-x86",
+    "./.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+    "--output-dir",
+    "zig-out/deflate-clone",
+    "--only",
+    "decode"
+  ],
+  "actual_fixtures_bounded": true,
+  "physical_four_gib_decoded": false,
+  "logical_model_scope": "only raw_best counts are seeded; every reported physical byte is independently decoded",
+  "python_version": "3.10.12 (main, Aug 15 2025, 14:32:43) [GCC 11.4.0]",
+  "zlib_runtime_version": "1.2.11",
+  "driver_sha256": "00ba1195e9a01509a8a4d51b0d6f5cfbf8e2a2516a6f325a7726f90ae01fdb18",
+  "reference_sha256": "afd01f6f1c7a082c59e269ad4ad19043ebf5793f8a1f8e474601167401dd46fa",
+  "preflight": false,
+  "cases": 40,
+  "events": [
+    {
+      "name": "decode-raw-header-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-header-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "header",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 1,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "dynamic_counts",
+            "raw_phase": "dynamic_counts",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52808,
+              "output_written": 69560,
+              "actual_input": 52808,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52807,
+              "output_written": 69227,
+              "actual_input": 52807,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125736,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-header-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-header-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-dynamic-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-dynamic-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "dynamic",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 3,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "dynamic_code_lengths",
+            "raw_phase": "dynamic_code_lengths",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52808,
+              "output_written": 69560,
+              "actual_input": 52808,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52807,
+              "output_written": 69227,
+              "actual_input": 52807,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125736,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-dynamic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-dynamic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-match-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-match-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 17,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "match_copy",
+            "raw_phase": "match_copy",
+            "match_remaining": 253,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 191,
+              "output_written": 29560,
+              "actual_input": 191,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 190,
+              "output_written": 29227,
+              "actual_input": 190,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125736,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-match-w15.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-match-w15.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-semantic-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-semantic-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "semantic",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 14429,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "fast_dynamic_block",
+            "raw_phase": "fast_dynamic_block",
+            "match_remaining": 0,
+            "semantic_active": true,
+            "semantic_generated": 16443,
+            "semantic_delivered": 7,
+            "history_len": 65536,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52808,
+              "output_written": 69560,
+              "actual_input": 52808,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 6,
+              "eof": true
+            },
+            {
+              "input_read": 52807,
+              "output_written": 69227,
+              "actual_input": 52807,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 16,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 282528,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-semantic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-semantic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-trailer-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-trailer-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "trailer",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 240,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "symbols",
+            "raw_phase": "symbols",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 241,
+              "output_written": 43521,
+              "actual_input": 241,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 2,
+              "eof": true
+            },
+            {
+              "input_read": 241,
+              "output_written": 43521,
+              "actual_input": 241,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 389,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125736,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-trailer-w15.decoded",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-trailer-w15.decoded.b",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-header-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-header-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "header",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 1,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "header",
+            "raw_phase": "block_header",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52814,
+              "output_written": 69560,
+              "actual_input": 52814,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52813,
+              "output_written": 69227,
+              "actual_input": 52813,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126600,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-header-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-header-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-dynamic-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-dynamic-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "dynamic",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 5,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "dynamic_code_lengths",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52814,
+              "output_written": 69560,
+              "actual_input": 52814,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52813,
+              "output_written": 69227,
+              "actual_input": 52813,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126600,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-dynamic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-dynamic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-match-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-match-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 19,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 253,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 197,
+              "output_written": 29560,
+              "actual_input": 197,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 196,
+              "output_written": 29227,
+              "actual_input": 196,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126600,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-match-w15.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-match-w15.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-semantic-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-semantic-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "semantic",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 14431,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "fast_dynamic_block",
+            "match_remaining": 0,
+            "semantic_active": true,
+            "semantic_generated": 16443,
+            "semantic_delivered": 7,
+            "history_len": 65536,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52814,
+              "output_written": 69560,
+              "actual_input": 52814,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 4,
+              "eof": true
+            },
+            {
+              "input_read": 52813,
+              "output_written": 69227,
+              "actual_input": 52813,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 10,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 283392,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-semantic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-semantic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-trailer-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-trailer-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "trailer",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 246,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "footer",
+            "raw_phase": "done",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 247,
+              "output_written": 43521,
+              "actual_input": 247,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 2,
+              "eof": true
+            },
+            {
+              "input_read": 247,
+              "output_written": 43521,
+              "actual_input": 247,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 389,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126600,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-trailer-w15.decoded",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-trailer-w15.decoded.b",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-header-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-gzip-header-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "header",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 1,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "header",
+            "raw_phase": "block_header",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52826,
+              "output_written": 69560,
+              "actual_input": 52826,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52825,
+              "output_written": 69227,
+              "actual_input": 52825,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126552,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-header-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-header-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-dynamic-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-gzip-dynamic-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "dynamic",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 13,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "dynamic_code_lengths",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52826,
+              "output_written": 69560,
+              "actual_input": 52826,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52825,
+              "output_written": 69227,
+              "actual_input": 52825,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126552,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-dynamic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-dynamic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-match-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-gzip-match-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 27,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 253,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 209,
+              "output_written": 29560,
+              "actual_input": 209,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 208,
+              "output_written": 29227,
+              "actual_input": 208,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126552,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-match-w15.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-match-w15.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-semantic-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-gzip-semantic-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "semantic",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 14439,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "fast_dynamic_block",
+            "match_remaining": 0,
+            "semantic_active": true,
+            "semantic_generated": 16443,
+            "semantic_delivered": 7,
+            "history_len": 65536,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52826,
+              "output_written": 69560,
+              "actual_input": 52826,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 4,
+              "eof": true
+            },
+            {
+              "input_read": 52825,
+              "output_written": 69227,
+              "actual_input": 52825,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 10,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 283344,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-semantic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-semantic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-trailer-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-gzip-trailer-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "trailer",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 258,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "footer",
+            "raw_phase": "done",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 259,
+              "output_written": 43521,
+              "actual_input": 259,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 2,
+              "eof": true
+            },
+            {
+              "input_read": 259,
+              "output_written": 43521,
+              "actual_input": 259,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 389,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126552,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-trailer-w15.decoded",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-gzip-trailer-w15.decoded.b",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-pending-w15",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-pending-w15.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "pending",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 43531,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "block_header",
+            "raw_phase": "block_header",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 0,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 53096,
+              "output_written": 53081,
+              "actual_input": 53096,
+              "actual_output": 53081,
+              "crc32": 3413028782,
+              "calls": 86,
+              "eof": true
+            },
+            {
+              "input_read": 52763,
+              "output_written": 52748,
+              "actual_input": 52763,
+              "actual_output": 52748,
+              "crc32": 1086732968,
+              "calls": 638,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 27432,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-pending-w15.decoded",
+          "sha256": "11fffe42ae1073ac53f3270a51c1f80817544eb564327692aa6c3d2f16ee37dc",
+          "decoded_bytes": 53081,
+          "decoded_sha256": "11fffe42ae1073ac53f3270a51c1f80817544eb564327692aa6c3d2f16ee37dc",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-pending-w15.decoded.b",
+          "sha256": "8cb25bd79da01ea8eacc59934d38dbd2976d61e806c13f98baccd5092d4285d3",
+          "decoded_bytes": 52748,
+          "decoded_sha256": "8cb25bd79da01ea8eacc59934d38dbd2976d61e806c13f98baccd5092d4285d3",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-match-w9-dictionary",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-match-w9-dictionary.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 17,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "match_copy",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 191,
+              "output_written": 29560,
+              "actual_input": 191,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 190,
+              "output_written": 29227,
+              "actual_input": 190,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125736,
+          "dictionary_ownership": "dictionary bytes seeded into independent caller history; reset harness retains immutable dictionary",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-match-w9-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-match-w9-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-match-w15-dictionary",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-raw-match-w15-dictionary.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 17,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "match_copy",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 136,
+              "output_written": 29560,
+              "actual_input": 136,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 134,
+              "output_written": 29227,
+              "actual_input": 134,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125736,
+          "dictionary_ownership": "dictionary bytes seeded into independent caller history; reset harness retains immutable dictionary",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-match-w15-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-raw-match-w15-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-match-w9-dictionary",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-match-w9-dictionary.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 23,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 201,
+              "output_written": 29560,
+              "actual_input": 201,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 200,
+              "output_written": 29227,
+              "actual_input": 200,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126600,
+          "dictionary_ownership": "immutable configured dictionary shared by both clones until resets finish",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-match-w9-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-match-w9-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-match-w15-dictionary",
+      "label": "native",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/96fa369636ff085a88ad94952675821c/vort-deflate-clone-probe",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/native/decode-zlib-match-w15-dictionary.config.json"
+      ],
+      "probe_sha256": "d9659a80df2df29e25f02ee0d91d5baf4f1ca2049e86d9891a5820a6fb8a08df",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 64,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 23,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 146,
+              "output_written": 29560,
+              "actual_input": 146,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 144,
+              "output_written": 29227,
+              "actual_input": 144,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126600,
+          "dictionary_ownership": "immutable configured dictionary shared by both clones until resets finish",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-match-w15-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/native/decode-zlib-match-w15-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-header-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-header-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "header",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 1,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "dynamic_counts",
+            "raw_phase": "dynamic_counts",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52808,
+              "output_written": 69560,
+              "actual_input": 52808,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52807,
+              "output_written": 69227,
+              "actual_input": 52807,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125388,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-header-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-header-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-dynamic-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-dynamic-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "dynamic",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 3,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "dynamic_code_lengths",
+            "raw_phase": "dynamic_code_lengths",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52808,
+              "output_written": 69560,
+              "actual_input": 52808,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52807,
+              "output_written": 69227,
+              "actual_input": 52807,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125388,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-dynamic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-dynamic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-match-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-match-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 17,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "match_copy",
+            "raw_phase": "match_copy",
+            "match_remaining": 253,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 191,
+              "output_written": 29560,
+              "actual_input": 191,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 190,
+              "output_written": 29227,
+              "actual_input": 190,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125388,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-match-w15.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-match-w15.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-semantic-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-semantic-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "semantic",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 14429,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "fast_dynamic_block",
+            "raw_phase": "fast_dynamic_block",
+            "match_remaining": 0,
+            "semantic_active": true,
+            "semantic_generated": 16443,
+            "semantic_delivered": 7,
+            "history_len": 65536,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52808,
+              "output_written": 69560,
+              "actual_input": 52808,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 6,
+              "eof": true
+            },
+            {
+              "input_read": 52807,
+              "output_written": 69227,
+              "actual_input": 52807,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 16,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 282120,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-semantic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-semantic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-trailer-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-trailer-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "trailer",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 240,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "symbols",
+            "raw_phase": "symbols",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 241,
+              "output_written": 43521,
+              "actual_input": 241,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 2,
+              "eof": true
+            },
+            {
+              "input_read": 241,
+              "output_written": 43521,
+              "actual_input": 241,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 389,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125388,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-trailer-w15.decoded",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-trailer-w15.decoded.b",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-header-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-header-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "header",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 1,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "header",
+            "raw_phase": "block_header",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52814,
+              "output_written": 69560,
+              "actual_input": 52814,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52813,
+              "output_written": 69227,
+              "actual_input": 52813,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126012,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-header-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-header-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-dynamic-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-dynamic-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "dynamic",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 5,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "dynamic_code_lengths",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52814,
+              "output_written": 69560,
+              "actual_input": 52814,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52813,
+              "output_written": 69227,
+              "actual_input": 52813,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126012,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-dynamic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-dynamic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-match-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-match-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 19,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 253,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 197,
+              "output_written": 29560,
+              "actual_input": 197,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 196,
+              "output_written": 29227,
+              "actual_input": 196,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126012,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-match-w15.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-match-w15.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-semantic-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-semantic-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "semantic",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 14431,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "fast_dynamic_block",
+            "match_remaining": 0,
+            "semantic_active": true,
+            "semantic_generated": 16443,
+            "semantic_delivered": 7,
+            "history_len": 65536,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52814,
+              "output_written": 69560,
+              "actual_input": 52814,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 4,
+              "eof": true
+            },
+            {
+              "input_read": 52813,
+              "output_written": 69227,
+              "actual_input": 52813,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 10,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 282744,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-semantic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-semantic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-trailer-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-trailer-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "trailer",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 246,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "footer",
+            "raw_phase": "done",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 247,
+              "output_written": 43521,
+              "actual_input": 247,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 2,
+              "eof": true
+            },
+            {
+              "input_read": 247,
+              "output_written": 43521,
+              "actual_input": 247,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 389,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126012,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-trailer-w15.decoded",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-trailer-w15.decoded.b",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-header-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-gzip-header-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "header",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 1,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "header",
+            "raw_phase": "block_header",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52826,
+              "output_written": 69560,
+              "actual_input": 52826,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52825,
+              "output_written": 69227,
+              "actual_input": 52825,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126000,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-header-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-header-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-dynamic-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-gzip-dynamic-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "dynamic",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 13,
+            "output_written": 0,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "dynamic_code_lengths",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52826,
+              "output_written": 69560,
+              "actual_input": 52826,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 617,
+              "eof": true
+            },
+            {
+              "input_read": 52825,
+              "output_written": 69227,
+              "actual_input": 52825,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 1846,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126000,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-dynamic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-dynamic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-match-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-gzip-match-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 27,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 253,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 209,
+              "output_written": 29560,
+              "actual_input": 209,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 208,
+              "output_written": 29227,
+              "actual_input": 208,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126000,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-match-w15.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-match-w15.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-semantic-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-gzip-semantic-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "semantic",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 14439,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "fast_dynamic_block",
+            "match_remaining": 0,
+            "semantic_active": true,
+            "semantic_generated": 16443,
+            "semantic_delivered": 7,
+            "history_len": 65536,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 52826,
+              "output_written": 69560,
+              "actual_input": 52826,
+              "actual_output": 69560,
+              "crc32": 265091498,
+              "calls": 4,
+              "eof": true
+            },
+            {
+              "input_read": 52825,
+              "output_written": 69227,
+              "actual_input": 52825,
+              "actual_output": 69227,
+              "crc32": 239590394,
+              "calls": 10,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 282732,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-semantic-w15.decoded",
+          "sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "decoded_bytes": 69560,
+          "decoded_sha256": "0e5f3dbe415ddd8c6cace7004f1f14b7f52b1ad485c0c8b736602710b479eda0",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-semantic-w15.decoded.b",
+          "sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "decoded_bytes": 69227,
+          "decoded_sha256": "f9b4007963b015cee7080a4d0edd008ddfe247af29953950de1481706ba3a259",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-gzip-trailer-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-gzip-trailer-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "gzip",
+        "direction": "decode",
+        "stage": "trailer",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 258,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "footer",
+            "raw_phase": "done",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 259,
+              "output_written": 43521,
+              "actual_input": 259,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 2,
+              "eof": true
+            },
+            {
+              "input_read": 259,
+              "output_written": 43521,
+              "actual_input": 259,
+              "actual_output": 43521,
+              "crc32": 2249587416,
+              "calls": 389,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126000,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-trailer-w15.decoded",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-gzip-trailer-w15.decoded.b",
+          "sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "decoded_bytes": 43521,
+          "decoded_sha256": "b0db86abe3fed9ec7b2d9ddc9c435c21dd243609bb90063e7533b6570a2d67c6",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-pending-w15",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-pending-w15.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "pending",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 43531,
+            "output_written": 43521,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "block_header",
+            "raw_phase": "block_header",
+            "match_remaining": 0,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 0,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 53096,
+              "output_written": 53081,
+              "actual_input": 53096,
+              "actual_output": 53081,
+              "crc32": 3413028782,
+              "calls": 86,
+              "eof": true
+            },
+            {
+              "input_read": 52763,
+              "output_written": 52748,
+              "actual_input": 52763,
+              "actual_output": 52748,
+              "crc32": 1086732968,
+              "calls": 638,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 27084,
+          "dictionary_ownership": "none",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-pending-w15.decoded",
+          "sha256": "11fffe42ae1073ac53f3270a51c1f80817544eb564327692aa6c3d2f16ee37dc",
+          "decoded_bytes": 53081,
+          "decoded_sha256": "11fffe42ae1073ac53f3270a51c1f80817544eb564327692aa6c3d2f16ee37dc",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-pending-w15.decoded.b",
+          "sha256": "8cb25bd79da01ea8eacc59934d38dbd2976d61e806c13f98baccd5092d4285d3",
+          "decoded_bytes": 52748,
+          "decoded_sha256": "8cb25bd79da01ea8eacc59934d38dbd2976d61e806c13f98baccd5092d4285d3",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-match-w9-dictionary",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-match-w9-dictionary.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 17,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "match_copy",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 191,
+              "output_written": 29560,
+              "actual_input": 191,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 190,
+              "output_written": 29227,
+              "actual_input": 190,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125388,
+          "dictionary_ownership": "dictionary bytes seeded into independent caller history; reset harness retains immutable dictionary",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-match-w9-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-match-w9-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-raw-match-w15-dictionary",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-raw-match-w15-dictionary.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "raw",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 17,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "match_copy",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 136,
+              "output_written": 29560,
+              "actual_input": 136,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 134,
+              "output_written": 29227,
+              "actual_input": 134,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 125388,
+          "dictionary_ownership": "dictionary bytes seeded into independent caller history; reset harness retains immutable dictionary",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-match-w15-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-raw-match-w15-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-match-w9-dictionary",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-match-w9-dictionary.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 23,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 201,
+              "output_written": 29560,
+              "actual_input": 201,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 200,
+              "output_written": 29227,
+              "actual_input": 200,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126012,
+          "dictionary_ownership": "immutable configured dictionary shared by both clones until resets finish",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-match-w9-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-match-w9-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    },
+    {
+      "name": "decode-zlib-match-w15-dictionary",
+      "label": "x86",
+      "exit_code": 0,
+      "command": [
+        "/home/passchaos/project-z/vort/.zig-cache/o/73c1649d521ad6578e35211d1a9f7f4f/vort-deflate-clone-probe-x86",
+        "/home/passchaos/project-z/vort/zig-out/deflate-clone/x86/decode-zlib-match-w15-dictionary.config.json"
+      ],
+      "probe_sha256": "b625a5ac0091f68519c29745c22e171762e9eb669501bb575e275cc7bc2a55ac",
+      "report": {
+        "schema": "vort.deflate.clone-probe.v1",
+        "family": "zlib",
+        "direction": "decode",
+        "stage": "match",
+        "pointer_bits": 32,
+        "counter_bits": 64,
+        "build_mode": "ReleaseFast",
+        "receipt": {
+          "fork": {
+            "input_read": 23,
+            "output_written": 7,
+            "pending_output": 0,
+            "pending_bits": 0,
+            "phase": "raw",
+            "raw_phase": "match_copy",
+            "match_remaining": 252,
+            "semantic_active": false,
+            "semantic_generated": 0,
+            "semantic_delivered": 0,
+            "history_len": 32768,
+            "params_queued": false,
+            "flushing": false,
+            "footer_written": false
+          },
+          "branches": [
+            {
+              "input_read": 146,
+              "output_written": 29560,
+              "actual_input": 146,
+              "actual_output": 29560,
+              "crc32": 1565289538,
+              "calls": 263,
+              "eof": true
+            },
+            {
+              "input_read": 144,
+              "output_written": 29227,
+              "actual_input": 144,
+              "actual_output": 29227,
+              "crc32": 2039908620,
+              "calls": 784,
+              "eof": true
+            }
+          ],
+          "source_destroyed_first": true,
+          "branch_a_reset_before_b": true,
+          "heap_live_after_free": 0,
+          "heap_peak": 126012,
+          "dictionary_ownership": "immutable configured dictionary shared by both clones until resets finish",
+          "input_ownership": "immutable fixture buffers remain valid until both branches finish",
+          "logical_counter_base": 0,
+          "physical_four_gib_decoded": false
+        }
+      },
+      "branches": [
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-match-w15-dictionary.decoded",
+          "sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "decoded_bytes": 29560,
+          "decoded_sha256": "de378853a409a83aab25bb7b6aa1b2ca78c925c5c7b89480136b1baf909d19fa",
+          "oracle": null
+        },
+        {
+          "artifact": "zig-out/deflate-clone/x86/decode-zlib-match-w15-dictionary.decoded.b",
+          "sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "decoded_bytes": 29227,
+          "decoded_sha256": "614981f057b705a6aa7b81a9b48933a6e86bce76fa5a007c94c8d74cb0054062",
+          "oracle": null
+        }
+      ]
+    }
+  ],
+  "reference": {
+    "status": "not_run",
+    "reason": "no encoder copy cases selected; every decoder fixture still uses the independent libz utility"
+  },
+  "reference_wire_equality_required": false
+}

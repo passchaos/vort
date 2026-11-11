@@ -1,0 +1,10 @@
+{
+  "init": {
+    "returncode": -6,
+    "log": "before.run-init.log"
+  },
+  "seed": {
+    "returncode": -6,
+    "log": "before.run-seed.log"
+  }
+}

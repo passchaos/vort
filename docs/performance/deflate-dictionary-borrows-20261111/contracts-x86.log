@@ -1,0 +1,24 @@
+1/23 deflate.test_0...OK
+2/23 deflate.bt_optimal.test_0...OK
+3/23 deflate.incremental.tests.test_0...OK
+4/23 deflate.incremental.tests.step_borrows.test_0...OK
+5/23 deflate.incremental.tests.dictionary_borrows.test_0...OK
+6/23 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+7/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 initialization snapshots overlapping sources...OK
+8/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 reseeding snapshots overlapping sources...OK
+9/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 clip long overlapping dictionaries to each window...OK
+10/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 accept consumed receiver bytes and empty dictionaries...OK
+11/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 refuse short pending match seeds atomically and resume...OK
+12/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows raw and Deflate64 validate the actual receiver destination prefix...OK
+13/23 deflate.incremental.tests.dictionary_borrows.raw.test.dictionary borrows active semantic generations reject reseeding without changing state...OK
+14/23 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto provision snapshots overlaps and preserves mismatch retries...OK
+15/23 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto validate full IDs before clipping overlapping windows...OK
+16/23 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto accept consumed receiver dictionaries and empty overrides...OK
+17/23 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto release overrides for output reuse and request again after reset...OK
+18/23 deflate.incremental.tests.dictionary_borrows.wrappers.test.dictionary borrows zlib and auto reject writes into the enclosing receiver atomically...OK
+19/23 deflate.incremental.tests.dictionary_borrows.stopped.test.dictionary borrows raw and Deflate64 preserve partial headers stored payloads and pending symbols...OK
+20/23 deflate.incremental.tests.dictionary_borrows.stopped.test.dictionary borrows inactive attached workspaces and second history windows remain valid sources...OK
+21/23 deflate.semantic.rolling_window.test_0...OK
+22/23 bitstream.test_0...OK
+23/23 deflate64.test_0...OK
+All 23 tests passed.

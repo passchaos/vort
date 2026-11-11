@@ -1,0 +1,10 @@
+{
+  "zlib_runtime": "1.2.11",
+  "partial_header_hex": "9a3061c2840980390200",
+  "first_block_bits": 55,
+  "stop_bytes": 7,
+  "buffered_next_header_bits": 1,
+  "partial_header_output_hex": "909090909041",
+  "literal_hex": "730400",
+  "stored_hex": "010300fcff616263"
+}

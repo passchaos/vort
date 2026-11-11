@@ -1,0 +1,10 @@
+{
+  "revision": "9a41b4e43e6258f8e10d602b3d7d5312cd683d1f",
+  "utc": "2026-11-11T14:07:10.362848+00:00",
+  "zig_version": "0.16.0",
+  "source_archive_sha256": "0b6b9e64f56f09079d1eccd19aa542a4b4a9eba417e12dcbc68175dc0fb1bdbb",
+  "probe_sha256": "ff263c11c6f117e3a72be438aa7613863b09ef136b4fc350f62f20ebdddc5c6e",
+  "public_root_sha256": "9d1481b56e518cf5b61aaac2e7d4457b0e2e4a8bcfb47db1f02753c70e3dbddc",
+  "raw_decoder_sha256": "0360231b152fc39a93d15c2397f80b9c810af0271da04663b4121653f940e358",
+  "exe_sha256": "32816d4bd0a03f5c547e3f6b7dd653460719d879acc8e1bfde039882240d9e2d"
+}

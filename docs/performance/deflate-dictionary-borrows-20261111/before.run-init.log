@@ -1,0 +1,18 @@
+source_revision=9a41b4e43e6258f8e10d602b3d7d5312cd683d1f public_module=src/root.zig mode=Debug operation=init source=H[5..15] destination=H[0..10]
+expected_bytes={ 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }
+thread 704016 panic: @memcpy arguments alias
+/tmp/vort-dictionary-borrows-20261111/before-source/src/deflate/incremental/decoder/fixed_literals.zig:323:33: 0x11dfc13 in seedDictionary (root.zig)
+            @memcpy(self.history[0..keep], source);
+                                ^
+/tmp/vort-dictionary-borrows-20261111/before-source/src/deflate/incremental/decoder/fixed_literals.zig:179:35: 0x11e0743 in initWithDictionary (root.zig)
+            decoder.seedDictionary(dictionary);
+                                  ^
+/tmp/vort-dictionary-borrows-20261111/before.zig:15:77: 0x11d75b6 in main (before.zig)
+        try vort.RawDeflateIncrementalFixedLiteralDecoder.initWithDictionary(.{}, &history, history[5..15])
+                                                                            ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:737:30: 0x11d85ae in callMain (std.zig)
+    return wrapMain(root.main(.{
+                             ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:190:5: 0x11d7201 in _start (std.zig)
+    asm volatile (switch (native_arch) {
+    ^

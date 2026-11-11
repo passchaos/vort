@@ -1,0 +1,23 @@
+{
+  "wire_source": "independent RFC 1951 fixed match bit writer",
+  "python_zlib_runtime_version": "1.2.11",
+  "tail_match": {
+    "raw_hex": "43b000",
+    "zlib_hex": "78200ea602b843b0000ea602b8",
+    "dictionary_hex": "4142434445464748494a",
+    "output_hex": "4142434445464748494a"
+  },
+  "repeat_match": {
+    "raw_hex": "430000",
+    "zlib_hex": "7820004200424300000e01028b",
+    "dictionary_hex": "41",
+    "output_hex": "41414141414141414141"
+  },
+  "empty": {
+    "raw_hex": "0300",
+    "zlib_hex": "782000000001030000000001",
+    "dictionary_hex": "",
+    "output_hex": ""
+  },
+  "no_dictionary_error": "Error -3 while decompressing data: invalid distance too far back"
+}

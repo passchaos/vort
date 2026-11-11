@@ -1,0 +1,9 @@
+[
+  "zig",
+  "test",
+  "-ODebug",
+  "src/root.zig",
+  "--test-filter",
+  "dictionary borrows",
+  "-femit-bin=/tmp/vort-dictionary-borrows-20261111/tests-debug"
+]

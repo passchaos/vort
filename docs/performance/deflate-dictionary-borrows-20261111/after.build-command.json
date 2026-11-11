@@ -1,0 +1,10 @@
+[
+  "zig",
+  "build-exe",
+  "-ODebug",
+  "--dep",
+  "vort",
+  "-Mroot=/tmp/vort-dictionary-borrows-20261111/after.zig",
+  "-Mvort=/tmp/vort-dictionary-borrows-20261111/after-source/src/root.zig",
+  "-femit-bin=/tmp/vort-dictionary-borrows-20261111/after"
+]

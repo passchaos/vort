@@ -1,0 +1,15 @@
+{
+  "utc": "2026-11-11T14:19:59.402733+00:00",
+  "named_tests": 14,
+  "import_aggregators": 90,
+  "source_sha256": {
+    "src/deflate/incremental/tests/dictionary_borrows.zig": "19034b2249f75489c8b6ce695501f7ccc35e354b2e191e5e57ff25a8d4665e56",
+    "src/deflate/incremental/tests/dictionary_borrows/fixtures.zig": "a49d45cf6e4b3d324d7b59d0fe838f42ec25387ea6ce1bda3135742856ce20c7",
+    "src/deflate/incremental/tests/dictionary_borrows/helpers.zig": "114447263d4553adaf812215fad083cfaaf42c5e9b290613140e209fc0272a1f",
+    "src/deflate/incremental/tests/dictionary_borrows/raw.zig": "dd97f3e14bf84fa31d29cc37939c82222b5364594d81d3fa47db2ec781ce19b4",
+    "src/deflate/incremental/tests/dictionary_borrows/stopped.zig": "c65db22b28364545f486b2a5ead2713e0d97c675e39b39161ad453cb64fe7280",
+    "src/deflate/incremental/tests/dictionary_borrows/wrappers.zig": "735a0673cba1a44d54963847a5bba837b205ef122d9ae13e719855473f3cb58f"
+  },
+  "production_raw_sha256": "a2926174b0819e2b43a7da29aa0c1e61625d9973af2ecbaca8a2d3988e05013b",
+  "zero_remaining_observation": "Both compact match completion paths normalize phase to symbols before a public return. Natural exhausted symbols state is tested with an empty seed."
+}

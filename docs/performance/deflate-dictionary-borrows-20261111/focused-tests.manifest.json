@@ -1,0 +1,25 @@
+{
+  "utc": "2026-11-11T14:14:06.246131+00:00",
+  "focused_named_tests": 12,
+  "import_aggregators": 90,
+  "total_tests_each_mode": 102,
+  "modes": {
+    "debug": {
+      "exit_code": 0,
+      "executable_sha256": "616248b6551f82e29e2dc3d6b5d4cc61f5578f7e6e88e27440d51154e4b61a99",
+      "log_sha256": "7287a492c2adf38bf1ec930bcd277619b82891deefd7004f1c329fc75b1c84c0"
+    },
+    "releasesafe": {
+      "exit_code": 0,
+      "executable_sha256": "68e40357795a5234c5d96157f72872413422ed0d66d940072ffdec9fbb02a447",
+      "log_sha256": "7287a492c2adf38bf1ec930bcd277619b82891deefd7004f1c329fc75b1c84c0"
+    }
+  },
+  "owned_test_files_sha256": {
+    "src/deflate/incremental/tests/dictionary_borrows.zig": "cfb84beea08b87070919fa80f252b3b237e2da84652f26f0e46653da6c32c6cb",
+    "src/deflate/incremental/tests/dictionary_borrows/fixtures.zig": "6f1967194f429f4aef7e31206cdaa19d80e9560bc173b56e46553852eaef9eb7",
+    "src/deflate/incremental/tests/dictionary_borrows/helpers.zig": "114447263d4553adaf812215fad083cfaaf42c5e9b290613140e209fc0272a1f",
+    "src/deflate/incremental/tests/dictionary_borrows/raw.zig": "7327e2c5752f9ba2af70ce154c899ad1649b0a794e229f95fbb40234e614b89e",
+    "src/deflate/incremental/tests/dictionary_borrows/wrappers.zig": "735a0673cba1a44d54963847a5bba837b205ef122d9ae13e719855473f3cb58f"
+  }
+}

@@ -1,0 +1,1479 @@
+check
++- check-zstd-source-reverse
+   +- test-zstd-source-reverse-wasm
+      +- install generated to zstd-source-reverse-wasm.json
+         +- run node w
+1/43 zstd.test.Zstd source reverse consumer contracts...OK
+2/43 zstd.test.Zstd source literals metadata contracts...OK
+3/43 zstd.test.Zstd source sequence metadata contracts...OK
+4/43 zstd.test.Zstd source sequence reverse execution contracts...OK
+5/43 zstd.test.Zstd source frame and block layout contracts...OK
+6/43 zstd.test.Zstd source Huffman tree preparation contracts...OK
+7/43 zstd.test.Zstd source Huffman literal execution contracts...OK
+8/43 zstd.test.Zstd source literal stream execution contracts...OK
+9/43 zstd.test.Zstd source compressed block execution contracts...OK
+10/43 zstd.test.Zstd source frame execution contracts...OK
+11/43 zstd.test.Zstd source stream cursor contracts...OK
+12/43 zstd.test.Zstd source frame decode API contracts...OK
+13/43 zstd.test.Zstd source output alias contracts...OK
+14/43 zstd.test_0...OK
+15/43 zstd.decode.budget.test_0...OK
+16/43 io.requested_heap_budget.test_0...OK
+17/43 tests.zstd_stream_counter_contracts.test_0...OK
+18/43 tests.zstd_large_history_contracts.test_0...OK
+19/43 zstd.incremental.encoder.frame.test_0...OK
+20/43 tests.zstd_hq_search_contracts.test_0...OK
+21/43 zstd.source.input.test.Zstd source range enforces absolute and relative bounds...OK
+22/43 zstd.source.forward_cursor.test.Zstd source forward cursor does not prefetch its remaining range...OK
+23/43 zstd.source.literals.test.Zstd source literals raw layout skips payload bytes...OK
+24/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader matches slice reads across page boundaries...OK
+25/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader checkpoint restores across page refills...OK
+26/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader rejects bit-count overflow before callback...OK
+27/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse exhaustive pages alignments markers and widths match slice reader...OK
+28/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse random mixed operations match slice reader on every page size...OK
+29/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse fields refill across page boundaries without retaining the range...OK
+30/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse completes one two and three byte callback reads...OK
+31/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse rejects undersized page before any source callback...OK
+32/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse uses nonzero synthetic offsets beyond four GiB...OK
+33/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse maps zero excessive and failed callbacks...OK
+34/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse range rejects overflow and every out of bounds access...OK
+35/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse page is poison safe reusable and canary bounded...OK
+36/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse poisoned stale page is fully replaced on descending refill...OK
+37/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse reports marker truncation corruption and width errors...OK
+38/43 zstd.match.hq_tree.test_0...OK
+39/43 zstd.match.hq_parser.test_0...OK
+40/43 zstd.match.lazy2.test_0...OK
+41/43 zstd.match.hq_parser.tests.test_0...OK
+42/43 zstd.match.hq_parser.frontier_parser.test_0...OK
+43/43 checksum.xxh64_stream.test_0...OK
+All 43 tests passed.
+(node:714371) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed command: node tools/zstd/source_reverse_wasm_gate.js ./.zig-cache/o/108096005c8b16e38527332e0832b407/vort-zstd-source-reverse-wasm-tests.wasm
+
+Build Summary: 380/380 steps succeeded; 86/86 tests passed
+check success
++- compile exe vort-decode-compare ReleaseFast native success 34s MaxRSS:896M
+|  +- WriteFile cached
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native cached 4ms MaxRSS:41M
+|  +- WriteFile cached
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 4ms MaxRSS:41M
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- check-br-prefix-decode success
+|  +- check-br-prefix-decode-wasm success
+|  |  +- compile test vort-br-prefix-decode-wasm-tests Debug wasm32-wasi cached 7ms MaxRSS:47M
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-br-prefix-decode-object-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:47M
+|  |  |  +- compile obj vort-br-prefix-decode-object-wasm32 Debug wasm32-wasi (reused)
+|  |  +- compile test vort-br-prefix-decode-wasm-public-tests ReleaseFast wasm32-wasi success 11s MaxRSS:575M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi cached 7ms MaxRSS:47M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi cached 7ms MaxRSS:47M
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  +- compile test vort-br-prefix-decode-tests Debug native cached 7ms MaxRSS:53M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-br-prefix-decode-object-x86_64 Debug native cached 5ms MaxRSS:53M
+|  |  +- compile obj vort-br-prefix-decode-object-x86_64 Debug native (reused)
+|  +- compile test vort-br-prefix-decode-public-tests ReleaseFast native success 21s MaxRSS:648M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-br-prefix-decode-x86-tests Debug x86-linux cached 7ms MaxRSS:55M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-br-prefix-decode-object-x86 Debug x86-linux cached 5ms MaxRSS:54M
+|  |  +- compile obj vort-br-prefix-decode-object-x86 Debug x86-linux (reused)
+|  +- compile test vort-br-prefix-decode-x86-public-tests ReleaseFast x86-linux success 20s MaxRSS:644M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:53M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:53M
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  +- compile exe vort-br-prefix-decode-probe ReleaseFast native success 21s MaxRSS:658M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile exe vort-br-prefix-decode-probe-x86 ReleaseFast x86-linux success 20s MaxRSS:646M
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
++- check-zlib-or-gzip-auto success
+|  +- check-zlib-or-gzip-auto-wasm success
+|  |  +- compile test vort-zlib-or-gzip-auto-wasm-tests Debug wasm32-wasi success 5s MaxRSS:745M
+|  |  +- compile test vort-zlib-or-gzip-auto-wasm-public-tests ReleaseFast wasm32-wasi success 9s MaxRSS:578M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi cached 5ms MaxRSS:45M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi cached 4ms MaxRSS:45M
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  +- compile test vort-zlib-or-gzip-auto-tests Debug native success 2s MaxRSS:212M
+|  +- compile test vort-zlib-or-gzip-auto-public-tests ReleaseFast native success 19s MaxRSS:649M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-zlib-or-gzip-auto-x86-tests Debug x86-linux success 6s MaxRSS:530M
+|  +- compile test vort-zlib-or-gzip-auto-x86-public-tests ReleaseFast x86-linux success 17s MaxRSS:630M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:48M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux cached 5ms MaxRSS:48M
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  +- compile exe vort-zlib-or-gzip-auto-probe ReleaseFast native success 17s MaxRSS:633M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile exe vort-zlib-or-gzip-auto-probe-x86 ReleaseFast x86-linux success 15s MaxRSS:583M
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
++- check-gzip-direct-chunks success
+|  +- check-gzip-direct-chunks-wasm success
+|  |  +- compile test vort-gzip-direct-chunks-wasm-tests Debug wasm32-wasi success 4s MaxRSS:528M
+|  |  +- compile test vort-gzip-direct-chunks-wasm-public-tests ReleaseFast wasm32-wasi success 3s MaxRSS:359M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi cached 5ms MaxRSS:46M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi cached 4ms MaxRSS:46M
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  +- compile test vort-gzip-direct-chunks-tests Debug native success 2s MaxRSS:211M
+|  +- compile test vort-gzip-direct-chunks-public-tests ReleaseFast native success 13s MaxRSS:573M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-gzip-direct-chunks-x86-tests Debug x86-linux success 5s MaxRSS:450M
+|  +- compile test vort-gzip-direct-chunks-x86-public-tests ReleaseFast x86-linux success 12s MaxRSS:526M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux cached 5ms MaxRSS:61M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux cached 5ms MaxRSS:61M
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  +- compile exe vort-gzip-direct-chunks-probe ReleaseFast native success 13s MaxRSS:555M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile exe vort-gzip-direct-chunks-probe-x86 ReleaseFast x86-linux success 12s MaxRSS:522M
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
++- check-zstd-prefix-stable success
+|  +- check-zstd-prefix-stable-wasm success
+|  |  +- compile test vort-zstd-prefix-lifecycle-wasm-tests Debug wasm32-wasi success 10s MaxRSS:1G
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:44M
+|  |  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-wasm32 Debug wasm32-wasi (reused)
+|  |  +- compile test vort-zstd-prefix-lifecycle-wasm-public-tests ReleaseFast wasm32-wasi success 22s MaxRSS:979M
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi cached 5ms MaxRSS:43M
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi cached 4ms MaxRSS:43M
+|  |  |  +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |  |  +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |  +- compile test vort-zstd-stable-output-wasm-tests Debug wasm32-wasi success 4s MaxRSS:839M
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:44M
+|  |  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-wasm32 Debug wasm32-wasi (reused)
+|  |  +- compile test vort-zstd-stable-output-wasm-public-tests ReleaseFast wasm32-wasi success 8s MaxRSS:570M
+|  |     +- WriteFile (reused)
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- WriteFile (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  +- compile test vort-zstd-prefix-lifecycle-tests Debug native success 2s MaxRSS:296M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86_64 Debug native cached 5ms MaxRSS:58M
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86_64 Debug native (reused)
+|  +- compile test vort-zstd-prefix-lifecycle-public-tests ReleaseFast native success 36s MaxRSS:968M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-zstd-prefix-lifecycle-x86-tests Debug x86-linux success 9s MaxRSS:874M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86 Debug x86-linux cached 5ms MaxRSS:58M
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86 Debug x86-linux (reused)
+|  +- compile test vort-zstd-prefix-lifecycle-x86-public-tests ReleaseFast x86-linux success 32s MaxRSS:883M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:56M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux cached 5ms MaxRSS:56M
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  +- compile exe vort-zstd-prefix-lifecycle-probe ReleaseFast native success 44s MaxRSS:1G
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile exe vort-zstd-prefix-lifecycle-probe-x86 ReleaseFast x86-linux success 41s MaxRSS:1G
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  +- compile test vort-zstd-stable-output-tests Debug native success 639ms MaxRSS:246M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86_64 Debug native cached 5ms MaxRSS:58M
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86_64 Debug native (reused)
+|  +- compile test vort-zstd-stable-output-public-tests ReleaseFast native success 19s MaxRSS:697M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-zstd-stable-output-x86-tests Debug x86-linux success 4s MaxRSS:583M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86 Debug x86-linux cached 5ms MaxRSS:59M
+|  |  +- compile obj vort-zstd-prefix-stable-huffman-x2-x86 Debug x86-linux (reused)
+|  +- compile test vort-zstd-stable-output-x86-public-tests ReleaseFast x86-linux success 17s MaxRSS:656M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|  |  +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|  +- compile exe vort-zstd-stable-output-probe ReleaseFast native success 20s MaxRSS:701M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile exe vort-zstd-stable-output-probe-x86 ReleaseFast x86-linux success 19s MaxRSS:689M
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- WriteFile (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
++- check-zstd-compressed-workspace success
+|  +- check-zstd-compressed-workspace-wasm success
+|  |  +- compile test vort-zstd-compressed-workspace-wasm-tests Debug wasm32-wasi success 9s MaxRSS:1G
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-zstd-compressed-workspace-huffman-x2-wasm32 Debug wasm32-wasi cached 4ms MaxRSS:42M
+|  |  |  +- compile obj vort-zstd-compressed-workspace-huffman-x2-wasm32 Debug wasm32-wasi (reused)
+|  |  +- compile test vort-zstd-compressed-workspace-wasm-public-tests ReleaseFast wasm32-wasi success 23s MaxRSS:1G
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi cached 4ms MaxRSS:43M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi cached 5ms MaxRSS:43M
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  +- compile test vort-zstd-compressed-workspace-tests Debug native success 2s MaxRSS:286M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-compressed-workspace-huffman-x2-x86_64 Debug native cached 4ms MaxRSS:52M
+|  |  +- compile obj vort-zstd-compressed-workspace-huffman-x2-x86_64 Debug native (reused)
+|  +- compile test vort-zstd-compressed-workspace-public-tests ReleaseFast native success 37s MaxRSS:977M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-zstd-compressed-workspace-x86-tests Debug x86-linux success 8s MaxRSS:803M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-compressed-workspace-huffman-x2-x86 Debug x86-linux cached 5ms MaxRSS:52M
+|  |  +- compile obj vort-zstd-compressed-workspace-huffman-x2-x86 Debug x86-linux (reused)
+|  +- compile test vort-zstd-compressed-workspace-x86-public-tests ReleaseFast x86-linux success 32s MaxRSS:918M
+|     +- WriteFile cached
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:51M
+|     +- WriteFile cached
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:51M
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
++- check-zstd-history-workspace success
+|  +- check-zstd-history-workspace-wasm success
+|  |  +- compile test vort-zstd-history-workspace-wasm-tests Debug wasm32-wasi success 9s MaxRSS:1G
+|  |  |  +- WriteFile cached
+|  |  |  +- compile obj vort-zstd-history-workspace-huffman-x2-wasm32 Debug wasm32-wasi cached 4ms MaxRSS:42M
+|  |  |  +- compile obj vort-zstd-history-workspace-huffman-x2-wasm32 Debug wasm32-wasi (reused)
+|  |  +- compile test vort-zstd-history-workspace-wasm-public-tests ReleaseFast wasm32-wasi success 23s MaxRSS:1G
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi cached 7ms MaxRSS:41M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi cached 6ms MaxRSS:41M
+|  |     +- compile obj vort-wide-size-public-br-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  |     +- compile obj vort-wide-size-public-zstd-object-wasm32 ReleaseFast wasm32-wasi (reused)
+|  +- compile test vort-zstd-history-workspace-tests Debug native success 2s MaxRSS:286M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-history-workspace-huffman-x2-x86_64 Debug native cached 4ms MaxRSS:60M
+|  |  +- compile obj vort-zstd-history-workspace-huffman-x2-x86_64 Debug native (reused)
+|  +- compile test vort-zstd-history-workspace-public-tests ReleaseFast native success 37s MaxRSS:1G
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile test vort-zstd-history-workspace-x86-tests Debug x86-linux success 8s MaxRSS:799M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-zstd-history-workspace-huffman-x2-x86 Debug x86-linux cached 5ms MaxRSS:60M
+|  |  +- compile obj vort-zstd-history-workspace-huffman-x2-x86 Debug x86-linux (reused)
+|  +- compile test vort-zstd-history-workspace-x86-public-tests ReleaseFast x86-linux success 33s MaxRSS:941M
+|     +- WriteFile cached
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:60M
+|     +- WriteFile cached
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux cached 4ms MaxRSS:60M
+|     +- compile obj vort-wide-size-public-br-object-x86 ReleaseFast x86-linux (reused)
+|     +- compile obj vort-wide-size-public-zstd-object-x86 ReleaseFast x86-linux (reused)
++- check-zstd-source-reverse success
+|  +- test-zstd-source-reverse success
+|  |  +- run test vort-zstd-source-reverse-tests 43 pass (43 total) 8s MaxRSS:63M
+|  |     +- compile test vort-zstd-source-reverse-tests Debug native success 879ms MaxRSS:267M
+|  |        +- WriteFile cached
+|  |        +- compile obj vort-zstd-source-reverse-huffman-x2-x86_64 Debug native cached 5ms MaxRSS:62M
+|  |        +- compile obj vort-zstd-source-reverse-huffman-x2-x86_64 Debug native (reused)
+|  +- test-zstd-source-reverse-x86 success
+|  |  +- run test vort-zstd-source-reverse-x86-tests 43 pass (43 total) 9s MaxRSS:62M
+|  |     +- compile test vort-zstd-source-reverse-x86-tests Debug x86-linux success 6s MaxRSS:768M
+|  |        +- WriteFile cached
+|  |        +- compile obj vort-zstd-source-reverse-huffman-x2-x86 Debug x86-linux cached 5ms MaxRSS:61M
+|  |        +- compile obj vort-zstd-source-reverse-huffman-x2-x86 Debug x86-linux (reused)
+|  +- test-zstd-source-reverse-wasm success
+|     +- install generated to zstd-source-reverse-wasm.json success
+|        +- run node success 7s
+|           +- compile test vort-zstd-source-reverse-wasm-tests Debug wasm32-wasi success 7s MaxRSS:1G
+|              +- WriteFile cached
+|              +- compile obj vort-zstd-source-reverse-huffman-x2-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:47M
+|              +- compile obj vort-zstd-source-reverse-huffman-x2-wasm32 Debug wasm32-wasi (reused)
++- compile test vort-zstd-parallel-frame-tests Debug native success 2s MaxRSS:285M
+|  +- WriteFile cached
+|  +- compile obj vort-zstd-huffman-x2 Debug native cached 6ms MaxRSS:39M
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-zstd-parallel-frame-root-tests Debug native success 2s MaxRSS:332M
+|  +- WriteFile cached
+|  +- compile obj vort-br-record-optimal Debug native cached 4ms MaxRSS:39M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-zstd-parallel-frame-single-tests Debug native success 2s MaxRSS:282M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-parallel-frame-probe Debug native success 2s MaxRSS:279M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-parallel-frame-wasm Debug wasm32-wasi success 9s MaxRSS:1G
+|  +- WriteFile cached
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi cached 6ms MaxRSS:39M
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile test vort-zstd-incremental-parallel-tests Debug native success 2s MaxRSS:294M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-zstd-incremental-parallel-root-tests Debug native success 3s MaxRSS:366M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-zstd-incremental-parallel-single-tests Debug native success 2s MaxRSS:294M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-incremental-parallel-probe Debug native success 2s MaxRSS:290M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-incremental-parallel-wasm Debug wasm32-wasi success 9s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile test vort-xz-parallel-tests Debug native cached 6ms MaxRSS:55M
++- compile test vort-xz-parallel-single-tests Debug native cached 6ms MaxRSS:53M
++- compile exe vort-xz-parallel-probe Debug native cached 6ms MaxRSS:53M
++- compile test vort-xz-parallel-root-tests Debug native success 3s MaxRSS:427M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-xz-parallel-wasm Debug wasm32-wasi cached 6ms MaxRSS:60M
++- compile test vort-xz-block-sizes-consumer-tests Debug native success 3s MaxRSS:420M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-xz-block-sizes-probe Debug native cached 6ms MaxRSS:50M
++- compile exe vort-xz-block-sizes-wasm Debug wasm32-wasi cached 6ms MaxRSS:56M
++- compile test vort-xz-block-sizes-tests Debug native cached 6ms MaxRSS:55M
++- compile test vort-xz-block-sizes-cli-tests Debug native success 912ms MaxRSS:282M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-xz-parallel-incremental-tests Debug native cached 7ms MaxRSS:59M
++- compile test vort-xz-parallel-incremental-root-tests Debug native success 3s MaxRSS:366M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-xz-parallel-incremental-single-tests Debug native cached 6ms MaxRSS:50M
++- compile exe vort-xz-incremental-parallel-probe Debug native cached 6ms MaxRSS:55M
++- compile exe vort-xz-parallel-incremental-wasm Debug wasm32-wasi cached 6ms MaxRSS:49M
++- compile test vort-zstd-magicless-tests Debug native success 2s MaxRSS:288M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-zstd-magicless-root-tests Debug native success 3s MaxRSS:379M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-magicless-probe ReleaseFast native success 41s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile test vort-br-large-history-tests Debug native cached 7ms MaxRSS:39M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
++- compile exe vort-br-large-history-probe ReleaseFast native cached 7ms MaxRSS:63M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
++- compile test vort-br-metadata-tests Debug native cached 7ms MaxRSS:41M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
++- compile test vort-br-metadata-root-tests Debug native success 811ms MaxRSS:299M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-metadata-probe ReleaseFast native cached 7ms MaxRSS:65M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
++- compile test vort-tests Debug native success 1s MaxRSS:294M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-br-record-classifier-tests Debug native cached 5ms MaxRSS:49M
++- compile test vort-br-record-optimal-object-tests Debug native cached 5ms MaxRSS:61M
++- compile exe vort Debug native success 8s MaxRSS:625M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-bench-checksum ReleaseFast native success 13s MaxRSS:540M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-bench-deflate-decode ReleaseFast native success 15s MaxRSS:590M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-bench-corpus-decode ReleaseFast native success 1m MaxRSS:849M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zlib-decode-bench ReleaseFast native success 15s MaxRSS:593M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zlib-relaxed-report Debug native success 2s MaxRSS:300M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-deflate-decode-stage-report ReleaseFast native success 41s MaxRSS:902M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-deflate-dynamic-decode-profile Debug native success 2s MaxRSS:291M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-deflate-huffman-build-bench Debug native success 668ms MaxRSS:264M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-huffman-length-bench Debug native success 564ms MaxRSS:275M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-deflate-code-length-rle-bench Debug native cached 5ms MaxRSS:49M
++- compile exe vort-deflate-huffman-lookup-bench Debug native success 599ms MaxRSS:269M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-deflate-chunked-huffman-bench Debug native success 672ms MaxRSS:267M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-deflate-match-copy-bench Debug native cached 6ms MaxRSS:49M
++- compile exe vort-deflate-extra-bits-bench Debug native success 1s MaxRSS:266M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-chunk-cursor-bench Debug native cached 5ms MaxRSS:53M
++- compile exe vort-png-streaming-zlib-bench-report Debug native success 2s MaxRSS:292M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-png-scanline-bench Debug native success 734ms MaxRSS:267M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zlib-encode-bench ReleaseFast native success 26s MaxRSS:804M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-bench-deflate-encode Debug native success 2s MaxRSS:290M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-bench-deflate-incremental-encode ReleaseFast native success 24s MaxRSS:731M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- translate-c cached 8ms MaxRSS:49M
++- compile exe vort-bench-deflate-incremental-decode ReleaseFast native success 27s MaxRSS:755M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- translate-c (reused)
++- compile exe vort-deflate-params-interop Debug native success 2s MaxRSS:304M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- translate-c (reused)
++- compile exe vort-deflate-split-history-interop Debug native success 2s MaxRSS:209M
+|  +- translate-c (reused)
++- compile exe vort-deflate-incremental-relaxed-interop Debug native success 757ms MaxRSS:190M
+|  +- translate-c (reused)
++- compile exe vort-deflate-incremental-relaxed-wasm Debug wasm32-wasi success 3s MaxRSS:427M
++- compile exe vort-deflate-wide-decode-probe ReleaseFast native success 15s MaxRSS:497M
++- compile exe vort-deflate-wide-decode-probe-x86 ReleaseFast x86-linux success 14s MaxRSS:476M
++- compile test vort-deflate-wide-decode-wasm-tests Debug wasm32-wasi success 2s MaxRSS:504M
++- compile exe vort-bench-native-parallel Debug native success 2s MaxRSS:301M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-fuzz-smoke Debug native success 2s MaxRSS:298M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-fuzz-corpus Debug native success 2s MaxRSS:307M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-fuzz-target Debug native success 4s MaxRSS:438M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- check-wasm success
+|  +- compile lib vort-wasm-check Debug wasm32-wasi success 147ms MaxRSS:187M
+|  |  +- WriteFile cached
+|  |  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi cached 6ms MaxRSS:41M
+|  |  +- WriteFile (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  |  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  |  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- check-br-prefix-decode-wasm (+2 more reused dependencies)
+|  +- check-zlib-or-gzip-auto-wasm (+2 more reused dependencies)
+|  +- check-gzip-direct-chunks-wasm (+2 more reused dependencies)
+|  +- check-zstd-prefix-stable-wasm (+4 more reused dependencies)
+|  +- check-zstd-compressed-workspace-wasm (+2 more reused dependencies)
+|  +- check-zstd-history-workspace-wasm (+2 more reused dependencies)
+|  +- check-zstd-source-reverse-wasm success
+|     +- compile test vort-zstd-source-reverse-wasm-tests Debug wasm32-wasi (+3 more reused dependencies)
++- check-br-public-wasm success
+|  +- compile exe vort-br-public-wasm Debug wasm32-wasi success 23s MaxRSS:1G
+|     +- WriteFile (reused)
+|     +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|     +- WriteFile (reused)
+|     +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|     +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|     +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- check-br-large-window-wasm success
+|  +- compile exe vort-br-large-window-wasm Debug wasm32-wasi success 22s MaxRSS:1G
+|     +- WriteFile (reused)
+|     +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|     +- WriteFile (reused)
+|     +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|     +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|     +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-libfuzzer-smoke Debug native success 2s MaxRSS:357M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-afl-smoke Debug native success 2s MaxRSS:358M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-checksum-diff Debug native success 1s MaxRSS:278M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zlib-diff Debug native success 566ms MaxRSS:265M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zlib-dictionary-resume-probe Debug native success 415ms MaxRSS:172M
++- compile exe vort-zstd-dictionary-resume-probe Debug native success 723ms MaxRSS:245M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-controls-probe Debug native success 2s MaxRSS:278M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-hq-probe Debug native success 2s MaxRSS:325M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-hq-search-probe Debug native success 2s MaxRSS:324M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-hq-search-wasm Debug wasm32-wasi success 9s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-zstd-decode-memory-wasm Debug wasm32-wasi success 3s MaxRSS:656M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-br-stored-memory-wasm Debug wasm32-wasi success 1s MaxRSS:446M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-wide-bit-wasm Debug wasm32-wasi success 3s MaxRSS:609M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-zstd-hq-cli-probe Debug native success 2s MaxRSS:316M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-general-large-window-probe Debug native success 3s MaxRSS:344M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-large-history-probe Debug native success 2s MaxRSS:323M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-far-history-generator ReleaseFast native cached 5ms MaxRSS:55M
++- compile exe vort-br-zstd-window-wasm Debug wasm32-wasi success 29s MaxRSS:2G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-stream-counter-wasm Debug wasm32-wasi success 10s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-br-stream-counter-probe Debug native success 12s MaxRSS:380M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zstd-stream-counter-probe Debug native success 11s MaxRSS:354M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-hq-probe Debug native success 2s MaxRSS:346M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-stored-memory-probe Debug native success 637ms MaxRSS:270M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-wide-bit-probe Debug native success 774ms MaxRSS:281M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-wide-bit-fast-probe Debug native cached 5ms MaxRSS:55M
+|  +- WriteFile src/br/fast_bit_reader.zig cached
++- compile exe vort-br-hq-cli-probe Debug native success 2s MaxRSS:332M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-br-hq-cli-controls-tests Debug native success 796ms MaxRSS:276M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile test vort-zstd-cli-controls-tests Debug native success 681ms MaxRSS:278M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-fast-cover-probe Debug native success 2s MaxRSS:324M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-lzma-encode-controls-probe Debug native success 651ms MaxRSS:280M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-lzma-controls-cli-probe Debug native success 735ms MaxRSS:274M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-lz4-dictionary-resume-probe Debug native cached 11ms MaxRSS:55M
++- compile exe vort-lzma-contract-probe Debug native cached 6ms MaxRSS:53M
++- compile exe vort-lzma-one-shot-probe Debug native cached 6ms MaxRSS:41M
++- compile exe vort-br-stream-contract-probe Debug native cached 7ms MaxRSS:41M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
++- compile exe vort-gzip-diff Debug native success 1s MaxRSS:278M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-zip-writer-probe ReleaseFast native success 47s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zip-incremental-writer-probe ReleaseFast native success 46s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-deflate64-stream-probe ReleaseFast native success 51s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-deflate64-index-probe ReleaseFast native success 19s MaxRSS:571M
++- compile exe vort-tar-incremental-reader-probe ReleaseFast native success 12s MaxRSS:547M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-tar-incremental-compressed-reader-probe ReleaseFast native success 32s MaxRSS:873M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-tar-incremental-auto-reader-probe ReleaseFast native success 32s MaxRSS:904M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-tar-incremental-compressed-writer-probe ReleaseFast native success 1m MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-lzip-incremental-probe ReleaseFast native success 12s MaxRSS:533M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-compress-z-incremental-probe ReleaseFast native success 11s MaxRSS:517M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-rle-probe ReleaseFast native success 28s MaxRSS:946M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-planned-corpus ReleaseFast native success 1m MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-planned-probe ReleaseFast native success 1m MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-planned-encode-bench ReleaseFast native cached 12ms MaxRSS:78M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
++- compile exe vort-br-quality-stage-profile ReleaseFast native cached 7ms MaxRSS:64M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
++- compile exe vort-br-complete-dictionary-bench Debug native cached 8ms MaxRSS:38M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
++- compile exe vort-br-context-tree-report ReleaseFast native success 1m MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-planned-chunks-bench ReleaseFast native success 55s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-planned-stage-profile ReleaseFast native success 29s MaxRSS:994M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-quality-command-state-profile ReleaseFast native success 53s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-ratio-stage-profile ReleaseFast native success 1m MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-literal-context-profile ReleaseFast native success 21s MaxRSS:709M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-dense-huffman-bench ReleaseFast native cached 7ms MaxRSS:41M
++- compile exe vort-br-literal-alphabet-bench ReleaseFast native cached 6ms MaxRSS:59M
++- compile exe vort-br-record-optimal-audit ReleaseFast native success 58s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-record-optimal-shape ReleaseFast native success 51s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-planned-stage-bench ReleaseFast native success 29s MaxRSS:946M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-lazy-sweep ReleaseFast native success 38s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-bench-br-command-lut ReleaseFast native cached 6ms MaxRSS:53M
++- compile exe vort-compression-report Debug native success 2s MaxRSS:308M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-dictionary-report Debug native success 2s MaxRSS:300M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-native-dictionary-report Debug native success 2s MaxRSS:320M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-native-library-bench Debug native success 2s MaxRSS:329M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-snappy-report Debug native success 1s MaxRSS:276M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-snappy-reference-bench ReleaseFast native success 12s MaxRSS:548M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe snappy-interop-probe Debug native success 1s MaxRSS:279M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-bzip2-stream-contract-probe Debug native cached 6ms MaxRSS:50M
++- compile exe vort-bzip2-bwt-bench Debug native cached 11ms MaxRSS:50M
++- compile exe vort-bzip2-encoder-resource-probe Debug native cached 12ms MaxRSS:50M
++- compile exe vort-snappy-stream-contract-probe Debug native cached 5ms MaxRSS:49M
++- compile exe vort-snappy-framing-contract-probe Debug native cached 5ms MaxRSS:55M
++- compile exe vort-lz4-reference-bench ReleaseFast native success 12s MaxRSS:567M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-lz4-hc-reference-bench ReleaseFast native success 12s MaxRSS:554M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-lz4-decode-profile Debug native success 582ms MaxRSS:265M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-compressed-header-profile Debug native success 653ms MaxRSS:282M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-decode-stage-profile ReleaseFast native success 16s MaxRSS:611M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-reference-bench ReleaseFast native success 20s MaxRSS:698M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile test vort-benchmark-provenance-tests ReleaseFast native cached 6ms MaxRSS:50M
++- compile exe vort-zstd-decode-profile ReleaseFast native success 21s MaxRSS:704M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-encode-bench ReleaseFast native success 42s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-seekable-parallel-bench ReleaseFast native success 38s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-level-schedule-bench ReleaseFast native success 38s MaxRSS:983M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-native-encode-stage-bench ReleaseFast native success 29s MaxRSS:861M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-multi-duplicate-profile ReleaseFast native success 19s MaxRSS:667M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-weighted-bound-bench ReleaseFast native cached 5ms MaxRSS:63M
++- compile exe vort-zstd-single-sequence-cost-bench ReleaseFast native success 13s MaxRSS:514M
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-frequency-merge-bench ReleaseFast native cached 8ms MaxRSS:41M
++- compile exe vort-zstd-large-sequence-probe ReleaseFast native success 36s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-dictionary-probe ReleaseFast native success 511ms MaxRSS:221M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-full-dictionary-diff ReleaseFast native success 39s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-dictionary-trainer-compare ReleaseFast native success 37s MaxRSS:985M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-zstd-cover-trainer-compare ReleaseFast native success 36s MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-dictionary-train-bench ReleaseFast native success 34s MaxRSS:929M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-dictionary-deflate-report Debug native success 2s MaxRSS:299M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-dictionary-decode-bench Debug native success 2s MaxRSS:296M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-level-report Debug native success 2s MaxRSS:295M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-huffman-length-report Debug native success 773ms MaxRSS:270M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-dynamic-plan-report Debug native success 11s MaxRSS:302M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-split-policy-report Debug native success 2s MaxRSS:295M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-native-range-report Debug native success 2s MaxRSS:312M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-native-tier-range-bench Debug native success 2s MaxRSS:302M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-native-allocation-report Debug native success 4s MaxRSS:340M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-sidecar-verify-report Debug native success 2s MaxRSS:302M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-file-corpus-report Debug native success 2s MaxRSS:296M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-cpu-features Debug native success 525ms MaxRSS:263M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-stored-corpus Debug native success 701ms MaxRSS:284M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-static-dictionary-report Debug native success 679ms MaxRSS:264M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-upstream-multiblock-diff Debug native success 3s MaxRSS:346M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-compound-dictionary-diff Debug native success 2s MaxRSS:346M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-serialized-dictionary-bench ReleaseFast native success 11s MaxRSS:525M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-br-serialized-trainer-report Debug native success 2s MaxRSS:345M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-progressive-copy-bench Debug native success 1s MaxRSS:288M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-progressive-huffman-bench Debug native success 686ms MaxRSS:278M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-br-incremental-planned-bench ReleaseFast native success 1m MaxRSS:1G
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe zstd-native-frame-probe Debug native success 2s MaxRSS:331M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe zstd-native-dictionary-probe Debug native success 2s MaxRSS:324M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe lz4-native-dictionary-probe Debug native success 765ms MaxRSS:270M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-lz4-fast-controls-probe Debug native success 726ms MaxRSS:271M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-lz4-fast-controls-cli Debug native success 510ms MaxRSS:267M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+|  +- compile obj vort-br-record-optimal Debug native (reused)
+|  +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- compile exe vort-lz4-fast-controls-wasm Debug wasm32-wasi success 971ms MaxRSS:331M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-br-record-optimal-wasm-check Debug wasm32-wasi (reused)
+|  +- compile obj vort-zstd-huffman-x2-wasm-check Debug wasm32-wasi (reused)
++- compile exe vort-lzma2-incremental-report ReleaseFast native success 14s MaxRSS:578M
+|  +- WriteFile (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- WriteFile (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+|  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
++- compile exe vort-xz-progressive-probe Debug native cached 6ms MaxRSS:60M
++- compile exe vort-xz-one-shot-probe Debug native cached 7ms MaxRSS:39M
+check-wasm (+8 more reused dependencies)
+
