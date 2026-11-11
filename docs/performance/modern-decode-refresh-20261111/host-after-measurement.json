@@ -1,0 +1,97 @@
+{
+  "recorded_at_utc": "2026-11-11T11:01:37.317426+00:00",
+  "load_average": [
+    0.3212890625,
+    0.4921875,
+    0.46630859375
+  ],
+  "cpu15_ticks": [
+    3962798,
+    30,
+    59720,
+    14567043,
+    5505,
+    0,
+    6,
+    0,
+    0,
+    0
+  ],
+  "processes_last_seen_on_cpu15": [
+    {
+      "pid": 107,
+      "name": "migration/15",
+      "cpu_ticks": 59
+    },
+    {
+      "pid": 108,
+      "name": "ksoftirqd/15",
+      "cpu_ticks": 124
+    },
+    {
+      "pid": 197,
+      "name": "kworker/15:1H-kblockd",
+      "cpu_ticks": 9
+    },
+    {
+      "pid": 834,
+      "name": "auditd",
+      "cpu_ticks": 28
+    },
+    {
+      "pid": 878,
+      "name": "power-profiles-",
+      "cpu_ticks": 3
+    },
+    {
+      "pid": 888,
+      "name": "snapd",
+      "cpu_ticks": 816
+    },
+    {
+      "pid": 982,
+      "name": "ModemManager",
+      "cpu_ticks": 9
+    },
+    {
+      "pid": 1458,
+      "name": "corplink-uc",
+      "cpu_ticks": 3218
+    },
+    {
+      "pid": 2584,
+      "name": "rtkit-daemon",
+      "cpu_ticks": 103
+    },
+    {
+      "pid": 2792,
+      "name": "dbus-daemon",
+      "cpu_ticks": 3
+    },
+    {
+      "pid": 3150,
+      "name": "gsd-sharing",
+      "cpu_ticks": 8
+    },
+    {
+      "pid": 3180,
+      "name": "gsd-housekeepin",
+      "cpu_ticks": 3531
+    },
+    {
+      "pid": 513409,
+      "name": "traex",
+      "cpu_ticks": 128483
+    },
+    {
+      "pid": 602286,
+      "name": "kworker/15:0-events",
+      "cpu_ticks": 30
+    }
+  ],
+  "active_compiler_processes": [],
+  "scaling_cur_freq_khz": "800000",
+  "governor": "powersave",
+  "turbo_disabled": "0",
+  "measurement_policy": "development-host observational; snapshots do not prove exclusive CPU occupancy"
+}

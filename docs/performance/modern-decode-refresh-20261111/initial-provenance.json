@@ -1,0 +1,72 @@
+{
+  "schema": "vort.decode-refresh-initial-provenance.v1",
+  "created_at_utc": "2026-11-11T10:53:01.242738+00:00",
+  "validated_source_commit": "ea193be259579ceda476c9278dd726fbfaec7e51",
+  "worktree": "/home/passchaos/project-z/vort-decode-refresh-20261111.ea193be2",
+  "excluded_main_status": " M src/deflate.zig\n?? src/deflate/decode/direct_borrows.zig\n?? src/deflate/decode/tests/direct_chunk_borrows.zig\n",
+  "excluded_main_scope": "Unrelated in-flight DirectChunk repair, not yet validated, excluded from benchmark source",
+  "compiler": {
+    "path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "version": "0.16.0",
+    "sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c"
+  },
+  "target": "x86_64-linux-gnu",
+  "target_cpu": "skylake+pku+sgx",
+  "optimize": "ReleaseFast",
+  "references": {
+    "deflate": {
+      "source_revision": "92e6a0db9fa848d742f9eb286c92afc60f2c3dda",
+      "version": "1.26",
+      "file_sha256": {
+        "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28"
+      },
+      "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+      "flags": "-O3 -DNDEBUG -march=skylake",
+      "source_live_git_verified": true,
+      "header_sha256": "1bb50a3ff8c6980c1031c0e9bb324cf99df51379fdca77a358644cca841765cc"
+    },
+    "zstd": {
+      "source_revision": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+      "version": "1.6.0",
+      "file_sha256": {
+        "/tmp/vort-reference-zstd-20261111.uibb6y27/build/lib/libzstd.so.1.6.0": "ff67de9643e7cc0ce88265af3a6f4503c09ef107c094186980484751914ac9c8"
+      },
+      "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+      "flags": "-O3 -DNDEBUG -march=skylake",
+      "cmake_source_directory": "/home/passchaos/Work/zstd/build/cmake",
+      "source_live_git_verified": true,
+      "matching_source_directory": "/home/passchaos/Work/zstd"
+    },
+    "brotli": {
+      "source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+      "version": "1.2.0",
+      "file_sha256": {
+        "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlienc.so.1.2.0": "916611262bd0975d4b75e6a19d957de5747eb182f2c36022a459bd21b6e40b6d",
+        "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlidec.so.1.2.0": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+        "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlicommon.so.1.2.0": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb"
+      },
+      "compiler": "GCC11.4.0",
+      "flags": "Release -O3 -march=skylake",
+      "cmake_source_directory": "/home/passchaos/Work/brotli",
+      "source_live_git_verified": true,
+      "matching_source_directory": "/home/passchaos/Work/brotli"
+    }
+  },
+  "lifecycle_scope": {
+    "cold": 216,
+    "zstd_matched_prepared": 72,
+    "deflate_reference_only_prepared": 72,
+    "brotli_prepared": "unsupported"
+  },
+  "sampling": {
+    "measured_pairs": 6,
+    "warmup_pairs": 2,
+    "order": "balancedAB/BA",
+    "iterations": {
+      "65536": 100,
+      "1048576": 20,
+      "full": 1
+    }
+  },
+  "host_policy": "development-host observational; no dedicated-host acceptance claim"
+}

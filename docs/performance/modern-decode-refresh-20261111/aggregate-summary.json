@@ -1,0 +1,545 @@
+{
+  "aggregate_groups": {
+    "brotli/cold": {
+      "ci95": [
+        1.234772634552235,
+        1.2388024608387496
+      ],
+      "lifecycle_match": "matched-cold",
+      "measured_pairs": 432,
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "pooled_reference_mib_s": 442.37062685437155,
+      "pooled_scope": "sum of measured bytes / sum of all measured batch times; weighted by frozen iteration schedule",
+      "pooled_vort_mib_s": 352.329454465025,
+      "reference_api": "BrotliDecoderDecompress;one-shot-state-and-internal-heap-per-call",
+      "reference_version": "1.2.0",
+      "resamples": 2000,
+      "rows": 72,
+      "seed": 3927522274,
+      "throughput_ci95": [
+        0.8072312024008534,
+        0.8098656967423233
+      ],
+      "throughput_ratio_geomean": 0.8085538810160483,
+      "time_ratio_geomean": 1.2367759570251222,
+      "vort_api": "brDecodeStreamInto",
+      "warmup_pairs": 144,
+      "weakest_rows": [
+        {
+          "encoded_bytes": 14077215,
+          "fixture_key": "brotli/mozilla/full/11",
+          "input_bytes": 51220480,
+          "throughput_ratio": 0.486474138506681,
+          "time_ratio": 2.0556077309056513
+        },
+        {
+          "encoded_bytes": 4363821,
+          "fixture_key": "brotli/samba/full/6",
+          "input_bytes": 21606400,
+          "throughput_ratio": 0.5677664132011234,
+          "time_ratio": 1.761287699922052
+        },
+        {
+          "encoded_bytes": 47644,
+          "fixture_key": "brotli/x-ray/65536/6",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.5907660314642175,
+          "time_ratio": 1.6927175002284636
+        },
+        {
+          "encoded_bytes": 3931,
+          "fixture_key": "brotli/xml/65536/11",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.5929960639436688,
+          "time_ratio": 1.6863518340232935
+        },
+        {
+          "encoded_bytes": 3823126,
+          "fixture_key": "brotli/samba/full/11",
+          "input_bytes": 21606400,
+          "throughput_ratio": 0.6005844281095893,
+          "time_ratio": 1.6650448349911744
+        }
+      ]
+    },
+    "deflate/cold": {
+      "ci95": [
+        1.4519055733005335,
+        1.4563044202324977
+      ],
+      "lifecycle_match": "matched-cold",
+      "measured_pairs": 432,
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "pooled_reference_mib_s": 1170.0314081412528,
+      "pooled_scope": "sum of measured bytes / sum of all measured batch times; weighted by frozen iteration schedule",
+      "pooled_vort_mib_s": 816.0908471271534,
+      "reference_api": "libdeflate_alloc_decompressor+libdeflate_deflate_decompress_ex+libdeflate_free_decompressor",
+      "reference_version": "1.26",
+      "resamples": 2000,
+      "rows": 72,
+      "seed": 3927522275,
+      "throughput_ci95": [
+        0.6866696180461712,
+        0.688750025063102
+      ],
+      "throughput_ratio_geomean": 0.6876989555544014,
+      "time_ratio_geomean": 1.4541246455635972,
+      "vort_api": "decodeRawDeflate",
+      "warmup_pairs": 144,
+      "weakest_rows": [
+        {
+          "encoded_bytes": 18792,
+          "fixture_key": "deflate/reymont/65536/6",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6015121993833009,
+          "time_ratio": 1.6624766730005607
+        },
+        {
+          "encoded_bytes": 18577,
+          "fixture_key": "deflate/reymont/65536/9",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6106078774887196,
+          "time_ratio": 1.63771224851005
+        },
+        {
+          "encoded_bytes": 5193,
+          "fixture_key": "deflate/nci/65536/6",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6119573619980831,
+          "time_ratio": 1.6341007758039396
+        },
+        {
+          "encoded_bytes": 17092,
+          "fixture_key": "deflate/mr/65536/9",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6151926356848408,
+          "time_ratio": 1.6255071045946223
+        },
+        {
+          "encoded_bytes": 290916,
+          "fixture_key": "deflate/reymont/1048576/6",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.6373712651847719,
+          "time_ratio": 1.5689442788264123
+        }
+      ]
+    },
+    "deflate/prepared": {
+      "ci95": [
+        1.4500266426312005,
+        1.4556141484797755
+      ],
+      "lifecycle_match": "reference-only-prepared",
+      "measured_pairs": 432,
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "pooled_reference_mib_s": 1163.1593525923088,
+      "pooled_scope": "sum of measured bytes / sum of all measured batch times; weighted by frozen iteration schedule",
+      "pooled_vort_mib_s": 813.846092150531,
+      "reference_api": "libdeflate_deflate_decompress_ex;retained-decompressor",
+      "reference_version": "1.26",
+      "resamples": 2000,
+      "rows": 72,
+      "seed": 3927522276,
+      "throughput_ci95": [
+        0.6869952459890466,
+        0.6896425007649599
+      ],
+      "throughput_ratio_geomean": 0.6882658833950404,
+      "time_ratio_geomean": 1.4529268762636536,
+      "vort_api": "decodeRawDeflate",
+      "warmup_pairs": 144,
+      "weakest_rows": [
+        {
+          "encoded_bytes": 18792,
+          "fixture_key": "deflate/reymont/65536/6",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6048592049605682,
+          "time_ratio": 1.6532773111474623
+        },
+        {
+          "encoded_bytes": 18577,
+          "fixture_key": "deflate/reymont/65536/9",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6103817836788767,
+          "time_ratio": 1.6383188796572972
+        },
+        {
+          "encoded_bytes": 5193,
+          "fixture_key": "deflate/nci/65536/6",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6107904182419891,
+          "time_ratio": 1.6372228020181712
+        },
+        {
+          "encoded_bytes": 17092,
+          "fixture_key": "deflate/mr/65536/9",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6157452079725784,
+          "time_ratio": 1.6240483678186157
+        },
+        {
+          "encoded_bytes": 1860865,
+          "fixture_key": "deflate/reymont/full/6",
+          "input_bytes": 6627202,
+          "throughput_ratio": 0.6296065200139969,
+          "time_ratio": 1.5882935900628363
+        }
+      ]
+    },
+    "zstd/cold": {
+      "ci95": [
+        1.3015391728111132,
+        1.3106018161467776
+      ],
+      "lifecycle_match": "matched-cold",
+      "measured_pairs": 432,
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "pooled_reference_mib_s": 1313.1379637476437,
+      "pooled_scope": "sum of measured bytes / sum of all measured batch times; weighted by frozen iteration schedule",
+      "pooled_vort_mib_s": 1002.8614851746629,
+      "reference_api": "ZSTD_decompress",
+      "reference_version": "1.6.0",
+      "resamples": 2000,
+      "rows": 72,
+      "seed": 3927522277,
+      "throughput_ci95": [
+        0.7630082513848794,
+        0.7683210931255818
+      ],
+      "throughput_ratio_geomean": 0.7655943505773344,
+      "time_ratio_geomean": 1.3061747376347546,
+      "vort_api": "decodeFrameInto",
+      "warmup_pairs": 144,
+      "weakest_rows": [
+        {
+          "encoded_bytes": 5527504,
+          "fixture_key": "zstd/sao/full/3",
+          "input_bytes": 7251944,
+          "throughput_ratio": 0.6537502975749439,
+          "time_ratio": 1.5296360150189656
+        },
+        {
+          "encoded_bytes": 803976,
+          "fixture_key": "zstd/sao/1048576/3",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.6560333188380593,
+          "time_ratio": 1.5243128226644969
+        },
+        {
+          "encoded_bytes": 656529,
+          "fixture_key": "zstd/mozilla/1048576/3",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.6771618195912863,
+          "time_ratio": 1.4767518945524258
+        },
+        {
+          "encoded_bytes": 3884,
+          "fixture_key": "zstd/nci/65536/19",
+          "input_bytes": 65536,
+          "throughput_ratio": 0.6775242676687995,
+          "time_ratio": 1.4759618920230904
+        },
+        {
+          "encoded_bytes": 296285,
+          "fixture_key": "zstd/samba/1048576/19",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.6948424682893027,
+          "time_ratio": 1.439175130532814
+        }
+      ]
+    },
+    "zstd/prepared": {
+      "ci95": [
+        1.2839292077933904,
+        1.2890009384043029
+      ],
+      "lifecycle_match": "matched-prepared",
+      "measured_pairs": 432,
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "pooled_reference_mib_s": 1320.7789116306826,
+      "pooled_scope": "sum of measured bytes / sum of all measured batch times; weighted by frozen iteration schedule",
+      "pooled_vort_mib_s": 1009.3459248746879,
+      "reference_api": "ZSTD_decompressDCtx;retained-DCtx",
+      "reference_version": "1.6.0",
+      "resamples": 2000,
+      "rows": 72,
+      "seed": 3927522278,
+      "throughput_ci95": [
+        0.7757946252839298,
+        0.7788591410881898
+      ],
+      "throughput_ratio_geomean": 0.7773380492090692,
+      "time_ratio_geomean": 1.2864415951560408,
+      "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+      "warmup_pairs": 144,
+      "weakest_rows": [
+        {
+          "encoded_bytes": 656529,
+          "fixture_key": "zstd/mozilla/1048576/3",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.5970078454811559,
+          "time_ratio": 1.6750198637574925
+        },
+        {
+          "encoded_bytes": 5527504,
+          "fixture_key": "zstd/sao/full/3",
+          "input_bytes": 7251944,
+          "throughput_ratio": 0.6458341437758617,
+          "time_ratio": 1.5483851537385618
+        },
+        {
+          "encoded_bytes": 803976,
+          "fixture_key": "zstd/sao/1048576/3",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.6499411733075878,
+          "time_ratio": 1.5386007858387287
+        },
+        {
+          "encoded_bytes": 296285,
+          "fixture_key": "zstd/samba/1048576/19",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.6955117759233701,
+          "time_ratio": 1.437790177847654
+        },
+        {
+          "encoded_bytes": 640657,
+          "fixture_key": "zstd/mozilla/1048576/19",
+          "input_bytes": 1048576,
+          "throughput_ratio": 0.7035222169918163,
+          "time_ratio": 1.4214192186792483
+        }
+      ]
+    }
+  },
+  "complete": true,
+  "host": {
+    "background_process_names": {
+      "corplink-uc": 2,
+      "kworker/15:0-events": 1,
+      "tmux: server": 1,
+      "traex": 271
+    },
+    "interpretation": "tick deltas are whole-child observations and last-seen CPU labels; they do not identify overlap with individual timed batches or prove exclusive CPU occupancy",
+    "load1_max": 1.30810546875,
+    "load1_min": 0.3125,
+    "power": {
+      "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+      "driver": "intel_pstate",
+      "governor": "powersave",
+      "host_policy": "development-host observational baseline; no dedicated-host acceptance claim",
+      "logical_cpu": 15,
+      "machine_id_sha256": "5962284534d6eefc3652d8aead366e5b3d202c195ebc8c655106f6558e3ac20d",
+      "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+      "turbo_disabled": "0",
+      "zig_version": "0.16.0"
+    },
+    "row_observations": 360,
+    "rows_with_compiler_present": 0,
+    "rows_with_potential_background_activity": 272
+  },
+  "measured_pairs": 2160,
+  "probe_sha256": "5efe3eac0e58bc9f44350096002dc26161f80d48bbeda34f1ff2930c1bd15ea0",
+  "rows": 360,
+  "schema": "vort.decode-refresh-aggregate.v1",
+  "size_groups": {
+    "brotli/cold/1048576": {
+      "ci95": [
+        1.1573058599854296,
+        1.163677576101456
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365649,
+      "throughput_ratio_geomean": 0.8617179880400347,
+      "time_ratio_geomean": 1.1604724676509142,
+      "weakest_time_ratio": 1.387679698976249
+    },
+    "brotli/cold/65536": {
+      "ci95": [
+        1.2658167813101482,
+        1.2724566346374064
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365650,
+      "throughput_ratio_geomean": 0.7879855703214057,
+      "time_ratio_geomean": 1.269058771713443,
+      "weakest_time_ratio": 1.6927175002284636
+    },
+    "brotli/cold/full": {
+      "ci95": [
+        1.2805740273027078,
+        1.288417301493352
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365651,
+      "throughput_ratio_geomean": 0.7784728570354567,
+      "time_ratio_geomean": 1.2845663030669463,
+      "weakest_time_ratio": 2.055607730905651
+    },
+    "deflate/cold/1048576": {
+      "ci95": [
+        1.4173455679341016,
+        1.4246353529359852
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365652,
+      "throughput_ratio_geomean": 0.7037119074826093,
+      "time_ratio_geomean": 1.4210360651382226,
+      "weakest_time_ratio": 1.5689442788264123
+    },
+    "deflate/cold/65536": {
+      "ci95": [
+        1.5043062407859367,
+        1.5119938001627233
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365653,
+      "throughput_ratio_geomean": 0.6630615789562061,
+      "time_ratio_geomean": 1.5081555495557495,
+      "weakest_time_ratio": 1.6624766730005607
+    },
+    "deflate/cold/full": {
+      "ci95": [
+        1.4305761200182976,
+        1.4390456286514732
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365654,
+      "throughput_ratio_geomean": 0.6970217514350879,
+      "time_ratio_geomean": 1.4346754573169553,
+      "weakest_time_ratio": 1.5626285117812628
+    },
+    "deflate/prepared/1048576": {
+      "ci95": [
+        1.4181199581662873,
+        1.425883606041041
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365655,
+      "throughput_ratio_geomean": 0.7031735022464057,
+      "time_ratio_geomean": 1.4221241227169856,
+      "weakest_time_ratio": 1.5808076966613906
+    },
+    "deflate/prepared/65536": {
+      "ci95": [
+        1.5078359604948455,
+        1.5154659978055807
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365656,
+      "throughput_ratio_geomean": 0.6614701703677912,
+      "time_ratio_geomean": 1.5117839697049062,
+      "weakest_time_ratio": 1.6532773111474623
+    },
+    "deflate/prepared/full": {
+      "ci95": [
+        1.420604310216257,
+        1.4328298879344625
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365657,
+      "throughput_ratio_geomean": 0.7009644079571257,
+      "time_ratio_geomean": 1.4266059569477667,
+      "weakest_time_ratio": 1.5882935900628363
+    },
+    "zstd/cold/1048576": {
+      "ci95": [
+        1.3212705532885916,
+        1.33130813795607
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365658,
+      "throughput_ratio_geomean": 0.7540513266031945,
+      "time_ratio_geomean": 1.326169671373354,
+      "weakest_time_ratio": 1.5243128226644969
+    },
+    "zstd/cold/65536": {
+      "ci95": [
+        1.2897261895723617,
+        1.2946346556779655
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365659,
+      "throughput_ratio_geomean": 0.7738705750416683,
+      "time_ratio_geomean": 1.2922057411811476,
+      "weakest_time_ratio": 1.4759618920230904
+    },
+    "zstd/cold/full": {
+      "ci95": [
+        1.2886044947210125,
+        1.3119182463850607
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365660,
+      "throughput_ratio_geomean": 0.7690010239890969,
+      "time_ratio_geomean": 1.3003883854570502,
+      "weakest_time_ratio": 1.5296360150189656
+    },
+    "zstd/prepared/1048576": {
+      "ci95": [
+        1.336704355082503,
+        1.3439658885679668
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365661,
+      "throughput_ratio_geomean": 0.7460672972650179,
+      "time_ratio_geomean": 1.3403616586142633,
+      "weakest_time_ratio": 1.6750198637574925
+    },
+    "zstd/prepared/65536": {
+      "ci95": [
+        1.2061235092408342,
+        1.209105331418604
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365662,
+      "throughput_ratio_geomean": 0.8280604946230223,
+      "time_ratio_geomean": 1.2076412369548601,
+      "weakest_time_ratio": 1.3232176320095923
+    },
+    "zstd/prepared/full": {
+      "ci95": [
+        1.3081433243961647,
+        1.3221565188702347
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "resamples": 2000,
+      "rows": 24,
+      "seed": 539365663,
+      "throughput_ratio_geomean": 0.7603082603412397,
+      "time_ratio_geomean": 1.3152559983383352,
+      "weakest_time_ratio": 1.5483851537385618
+    }
+  },
+  "source_digest": "dd10145c489b1105e50e13ff249d7ecf68a557208a43deb8937b740684814a37",
+  "source_revision": "ea193be259579ceda476c9278dd726fbfaec7e51",
+  "statistics_scope": "all fresh raw pairs; fixed72rows per codec/lifecycle; order-stratified paired log-ratio bootstrap; no minima selection or historical scaling",
+  "warmup_pairs": 720
+}

@@ -1,0 +1,57 @@
+{
+  "original_package": "../modern-decode-current-20261111/README.md",
+  "reference_build_archive": {
+    "files": {
+      "brotli/CMakeCache.txt": "d74d604d7f5dd5241807ac14a770a8ae9a7d1f82bb8baf98db2b6109989a40f9",
+      "deflate/CMakeCache.txt": "b8985fad7f1166b946d6dd8d4be9953a9d84764283cade62d41108970ff6a6ae",
+      "deflate/build.log": "eb5dfd2dc157afe8bd830934090b9c76a053091099918e2675f8aad12e8d6709",
+      "deflate/compile_commands.json": "5cf031d62b4dc4b381adc1ae27aa82ebfa17d9749eda657bfbe9fbbaecef2dca",
+      "deflate/libdeflate.h": "1bb50a3ff8c6980c1031c0e9bb324cf99df51379fdca77a358644cca841765cc",
+      "deflate/provenance.json": "8e700ab1ae47184f1f6f0c694b670a6a753cfb49580c2c911cc5dbdc52f738fe",
+      "deflate/verify.py": "5ad21721a7882dc47d4b8ab855f7fd7b76f6e2df63b64a8336631c17beb362dd",
+      "zstd/CMakeCache.txt": "f2e810cb1255c9d3c966bfff6187ad7ccaedc1610e6ef076fbe34027ece49122",
+      "zstd/build.log": "9aa0df9588ac60bc01dfcb31b3f67a6cf12e66752b389bdd091ba003df59c8e8",
+      "zstd/compile_commands.json": "cc716d10d403f30fa816d33c2de5250154e2eab1ad60e72282345be5ea568b88",
+      "zstd/provenance.json": "160c5b314a5755442735d469f7ee6a65d61a6e9c7a2f8d40861dd0995dc652dc",
+      "zstd/zstd.h": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+    },
+    "path": "../modern-decode-current-20261111/reference-build-metadata.tar.gz",
+    "sha256": "dbacb1ae48b0c31cf22c5667b5c0dff9ea5bb40587bce951a48972aca85e8548",
+    "symlinks": {}
+  },
+  "reference_library_archive": {
+    "files": {
+      "brotli/LICENSE": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
+      "brotli/libbrotlicommon.so.1.2.0": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb",
+      "brotli/libbrotlidec.so.1.2.0": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+      "brotli/libbrotlienc.so.1.2.0": "916611262bd0975d4b75e6a19d957de5747eb182f2c36022a459bd21b6e40b6d",
+      "deflate/COPYING": "4ad69099cb4374836fd27583d9991e2838cd86b6e4666ab26b2d32582c91e73a",
+      "deflate/libdeflate.so.0": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28",
+      "zstd/COPYING": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505",
+      "zstd/LICENSE": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+      "zstd/libzstd.so.1.6.0": "ff67de9643e7cc0ce88265af3a6f4503c09ef107c094186980484751914ac9c8"
+    },
+    "original_paths": {
+      "brotli/libbrotlicommon.so.1.2.0": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlicommon.so.1.2.0",
+      "brotli/libbrotlidec.so.1.2.0": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlidec.so.1.2.0",
+      "brotli/libbrotlienc.so.1.2.0": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlienc.so.1.2.0",
+      "deflate/libdeflate.so.0": "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0",
+      "zstd/libzstd.so.1.6.0": "/tmp/vort-reference-zstd-20261111.uibb6y27/build/lib/libzstd.so.1.6.0"
+    },
+    "path": "../modern-decode-current-20261111/reference-libraries.tar.gz",
+    "sha256": "45fa23a5b80ba5bc68041dc2841b6419735fa77740bdff48501dd48f1774d61a",
+    "symlinks": {
+      "brotli/libbrotlicommon.so": "libbrotlicommon.so.1.2.0",
+      "brotli/libbrotlicommon.so.1": "libbrotlicommon.so.1.2.0",
+      "brotli/libbrotlidec.so": "libbrotlidec.so.1.2.0",
+      "brotli/libbrotlidec.so.1": "libbrotlidec.so.1.2.0",
+      "brotli/libbrotlienc.so": "libbrotlienc.so.1.2.0",
+      "brotli/libbrotlienc.so.1": "libbrotlienc.so.1.2.0",
+      "deflate/libdeflate.so": "libdeflate.so.0",
+      "zstd/libzstd.so": "libzstd.so.1.6.0",
+      "zstd/libzstd.so.1": "libzstd.so.1.6.0"
+    }
+  },
+  "same_five_selected_binary_hashes": true,
+  "schema": "vort.decode-refresh-reference-reuse.v1"
+}

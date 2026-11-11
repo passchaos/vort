@@ -1,0 +1,205 @@
+{
+  "schema": "vort.decode-matrix-summary.v1",
+  "complete": true,
+  "completed_rows": 360,
+  "expected_rows": 360,
+  "elapsed_seconds": 205.86408972740173,
+  "groups": {
+    "brotli/cold/1048576": {
+      "time_ratio_geomean": 1.1604724676509142,
+      "throughput_ratio_geomean": 0.8617179880400347,
+      "ci95": [
+        1.1573058599854296,
+        1.163677576101456
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365649,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.387679698976249
+    },
+    "brotli/cold/65536": {
+      "time_ratio_geomean": 1.269058771713443,
+      "throughput_ratio_geomean": 0.7879855703214057,
+      "ci95": [
+        1.2658167813101482,
+        1.2724566346374064
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.6927175002284636
+    },
+    "brotli/cold/full": {
+      "time_ratio_geomean": 1.2845663030669463,
+      "throughput_ratio_geomean": 0.7784728570354567,
+      "ci95": [
+        1.2805740273027078,
+        1.288417301493352
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365651,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 2.055607730905651
+    },
+    "deflate/cold/1048576": {
+      "time_ratio_geomean": 1.4210360651382226,
+      "throughput_ratio_geomean": 0.7037119074826093,
+      "ci95": [
+        1.4173455679341016,
+        1.4246353529359852
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365652,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5689442788264123
+    },
+    "deflate/cold/65536": {
+      "time_ratio_geomean": 1.5081555495557495,
+      "throughput_ratio_geomean": 0.6630615789562061,
+      "ci95": [
+        1.5043062407859367,
+        1.5119938001627233
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365653,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.6624766730005607
+    },
+    "deflate/cold/full": {
+      "time_ratio_geomean": 1.4346754573169553,
+      "throughput_ratio_geomean": 0.6970217514350879,
+      "ci95": [
+        1.4305761200182976,
+        1.4390456286514732
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365654,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5626285117812628
+    },
+    "deflate/prepared/1048576": {
+      "time_ratio_geomean": 1.4221241227169856,
+      "throughput_ratio_geomean": 0.7031735022464057,
+      "ci95": [
+        1.4181199581662873,
+        1.425883606041041
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365655,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5808076966613906
+    },
+    "deflate/prepared/65536": {
+      "time_ratio_geomean": 1.5117839697049062,
+      "throughput_ratio_geomean": 0.6614701703677912,
+      "ci95": [
+        1.5078359604948455,
+        1.5154659978055807
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365656,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.6532773111474623
+    },
+    "deflate/prepared/full": {
+      "time_ratio_geomean": 1.4266059569477667,
+      "throughput_ratio_geomean": 0.7009644079571257,
+      "ci95": [
+        1.420604310216257,
+        1.4328298879344625
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365657,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5882935900628363
+    },
+    "zstd/cold/1048576": {
+      "time_ratio_geomean": 1.326169671373354,
+      "throughput_ratio_geomean": 0.7540513266031945,
+      "ci95": [
+        1.3212705532885916,
+        1.33130813795607
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365658,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5243128226644969
+    },
+    "zstd/cold/65536": {
+      "time_ratio_geomean": 1.2922057411811476,
+      "throughput_ratio_geomean": 0.7738705750416683,
+      "ci95": [
+        1.2897261895723617,
+        1.2946346556779655
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365659,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.4759618920230904
+    },
+    "zstd/cold/full": {
+      "time_ratio_geomean": 1.3003883854570502,
+      "throughput_ratio_geomean": 0.7690010239890969,
+      "ci95": [
+        1.2886044947210125,
+        1.3119182463850607
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365660,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5296360150189656
+    },
+    "zstd/prepared/1048576": {
+      "time_ratio_geomean": 1.3403616586142633,
+      "throughput_ratio_geomean": 0.7460672972650179,
+      "ci95": [
+        1.336704355082503,
+        1.3439658885679668
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365661,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.6750198637574925
+    },
+    "zstd/prepared/65536": {
+      "time_ratio_geomean": 1.2076412369548601,
+      "throughput_ratio_geomean": 0.8280604946230223,
+      "ci95": [
+        1.2061235092408342,
+        1.209105331418604
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365662,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.3232176320095923
+    },
+    "zstd/prepared/full": {
+      "time_ratio_geomean": 1.3152559983383352,
+      "throughput_ratio_geomean": 0.7603082603412397,
+      "ci95": [
+        1.3081433243961647,
+        1.3221565188702347
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365663,
+      "resamples": 2000,
+      "rows": 24,
+      "weakest_time_ratio": 1.5483851537385618
+    }
+  },
+  "interpretation": "time ratios above one mean Vort slower; Deflate prepared rows retain only reference context and are separately labeled; developer-host observations do not prove industry leadership"
+}

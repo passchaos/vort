@@ -1,0 +1,40 @@
+{
+  "adapter_sha256": "565e27c12ab6e976694535ada15495e4633022a6f3aa999d6da29450d45ba09c",
+  "all_outputs_counts_guards_frozen_bytes_versions_actual_paths_validated": true,
+  "complete": true,
+  "fixture_helper_sha256": "a05d1bdec9ef3c17bfe81c4dcad0c2b1a127b392ccbbf5fc50f39104a0d6e0b4",
+  "frozen_plain_count": 36,
+  "frozen_wire_count": 216,
+  "mapped_shared_library_file_sha256_at_final_validation": {
+    "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlicommon.so.1.2.0": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb",
+    "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlidec.so.1.2.0": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+    "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlienc.so.1.2.0": "916611262bd0975d4b75e6a19d957de5747eb182f2c36022a459bd21b6e40b6d",
+    "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28",
+    "/tmp/vort-reference-zstd-20261111.uibb6y27/build/lib/libzstd.so.1.6.0": "ff67de9643e7cc0ce88265af3a6f4503c09ef107c094186980484751914ac9c8",
+    "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2": "35611512d50a8a878e1c2989685dbbf11c1ca53394825fca5f7debaf18add552",
+    "/usr/lib/x86_64-linux-gnu/libc.so.6": "6813de4f45796f58134ca3f06b3179344ddfea192cad73ea0af35375b1b66e76",
+    "/usr/lib/x86_64-linux-gnu/libdl.so.2": "b970e7f9969a175b5e0726977ee998753fd7cc10512937dafc24ce659508a16a",
+    "/usr/lib/x86_64-linux-gnu/libm.so.6": "297737a3541eb0bbe4c288045edc483321f24c21a237972c51d589cf2864a0b7",
+    "/usr/lib/x86_64-linux-gnu/libpthread.so.0": "fdfd7d83a335ba12bd73e857f95a798dae0355f37935231966fd088647978e23",
+    "/usr/lib/x86_64-linux-gnu/libsnoopy.so.0.0.0": "34fc1412d6ff878f7ccd1f28f71680ba3c9b534796ce81f9d6dddb31cc510bf8"
+  },
+  "measured_pairs": 2160,
+  "probe_sha256": "5efe3eac0e58bc9f44350096002dc26161f80d48bbeda34f1ff2930c1bd15ea0",
+  "recompressed": false,
+  "reference_library_sha256": {
+    "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlicommon.so.1.2.0": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb",
+    "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlidec.so.1.2.0": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+    "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlienc.so.1.2.0": "916611262bd0975d4b75e6a19d957de5747eb182f2c36022a459bd21b6e40b6d",
+    "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28",
+    "/tmp/vort-reference-zstd-20261111.uibb6y27/build/lib/libzstd.so.1.6.0": "ff67de9643e7cc0ce88265af3a6f4503c09ef107c094186980484751914ac9c8"
+  },
+  "schema": "vort.decode-refresh-validation.v1",
+  "source_current_and_git_blobs_match": true,
+  "source_digest": "dd10145c489b1105e50e13ff249d7ecf68a557208a43deb8937b740684814a37",
+  "source_file_count": 2029,
+  "source_revision": "ea193be259579ceda476c9278dd726fbfaec7e51",
+  "validated_rows": 360,
+  "validator_sha256": "ce9d336a37e30c225c99bac0e6f7aa33a4f07da5f8bf9a7c2be6b9f89585969c",
+  "verification_script_sha256": "00df9c97ab4660c18e4bf5a7e599a7389f491cfaf65a684a72fcdce4bcd0acd8",
+  "warmup_pairs": 720
+}

@@ -1,0 +1,19 @@
+{
+  "aggregate_centers_and_ci_exactly_equal": true,
+  "aggregate_groups": 5,
+  "background_activity_rows": 272,
+  "compiler_observations": 0,
+  "measured_pairs": 2160,
+  "method": "independent standard-library paired logs and seeded AB/BA-stratified fixed-row bootstrap",
+  "no_benchmarks_rerun": true,
+  "no_files_modified_by_reviewer": true,
+  "overview_rounding_and_weak_rows_match": true,
+  "producer_evidence_module_imported": false,
+  "raw_rows": 360,
+  "reviewer": "read-only child archive_stats_audit",
+  "schema": "vort.decode-refresh-independent-stats-review.v1",
+  "size_groups": 15,
+  "size_max_float_difference": 2.220446049250313e-16,
+  "source_git_blob_content_check_owner": "standalone archive verifier",
+  "warmup_pairs": 720
+}
