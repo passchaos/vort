@@ -1,0 +1,51 @@
+{
+  "oracle": "Python zlib raw inflate",
+  "runtime": "1.2.11",
+  "cases": [
+    {
+      "case": "stored",
+      "wire_hex": "010400fbff61626364",
+      "wire_sha256": "b211c8a5d9b9de28c54efca4b78bca87d9a2882ac47558557b66833d7efd21a9",
+      "output_hex": "61626364",
+      "output_bytes": 4,
+      "consumed_bytes": 9,
+      "dictionary_hex": null
+    },
+    {
+      "case": "fixed",
+      "wire_hex": "4b4c4a4e494d0300",
+      "wire_sha256": "01b17600d15a192e1dd5732de1780bd1628e4a241a049aae99ef41da23b5329d",
+      "output_hex": "616263646566",
+      "output_bytes": 6,
+      "consumed_bytes": 8,
+      "dictionary_hex": null
+    },
+    {
+      "case": "dynamic",
+      "wire_hex": "3dc6391100000c02302bb5521eff963816965c1e94cb6d01",
+      "wire_sha256": "ae7921a0374385f917fd47ee263e3cf585629ba23c199f11ffaa3da11f60459e",
+      "output_hex": "41424344454142434420414243444541424344",
+      "output_bytes": 19,
+      "consumed_bytes": 24,
+      "dictionary_hex": null
+    },
+    {
+      "case": "dictionary",
+      "wire_hex": "8b4844130000",
+      "wire_sha256": "faf3022f3402d14ba3d4b388f7e5b624b6fedf815e599399453412460e44a21e",
+      "output_hex": "586162636465666768696a6b6c6d6e6f70",
+      "output_bytes": 17,
+      "consumed_bytes": 6,
+      "dictionary_hex": "6162636465666768696a6b6c6d6e6f70"
+    },
+    {
+      "case": "future-stored",
+      "wire_hex": "000300fcff616263010300fcff646566",
+      "wire_sha256": "af3032c578584807adc1ae9c8e843993a1558ebf145479481016888b12a26796",
+      "output_hex": "616263646566",
+      "output_bytes": 6,
+      "consumed_bytes": 16,
+      "dictionary_hex": null
+    }
+  ]
+}

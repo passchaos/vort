@@ -1,0 +1,464 @@
+{
+  "schema": "vort.raw-decode-borrow-smoke.v1",
+  "valid": true,
+  "scope": "functional compatibility and benchmark executability; no performance claim",
+  "base_fixture_manifest_sha256": "2da625abb82d764c0aefb306fc4676f7d58aa93c720d896a7d8bf55adc6f40e8",
+  "source_sha256": {
+    "src/deflate.zig": "ee3b6f2dbe252c23ea4ca05d8cc07a0d85cf6bd375cf82afa2a6ad8ebc680e1d",
+    "src/root.zig": "b0e4066493eb3da43bbb5e88d06d2779a4f7cd63453e7b56e3b199ecfceb3829",
+    "src/deflate/decoder/output_alias.zig": "154ba36ca45fee9c2a23651ea11dd08b2f461a9ffdbcfb3d3ce2d7352f413fc4",
+    "src/deflate/decoder/output_alias_tests.zig": "ac0de6acf7e82f449e47fd89eccc33017d7b72a8bc0c93779129d453e998d7c4",
+    "src/tests/deflate_raw_output_alias.zig": "9115e44a3fa393692b24fa1477a2e8829143679756d0082341e639425b41762d"
+  },
+  "probe_sha256": "7e4998d3f19065a1a5b422919b70c64b7c9aa3473ec351263cac696dab8ca6cc",
+  "reference": {
+    "path": "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0",
+    "version": "1.26",
+    "source_revision": "92e6a0db9fa848d742f9eb286c92afc60f2c3dda",
+    "version_header_sha256": "1bb50a3ff8c6980c1031c0e9bb324cf99df51379fdca77a358644cca841765cc",
+    "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+    "flags": "-O3 -DNDEBUG -march=skylake",
+    "provenance_file": "/tmp/vort-reference-libdeflate-20261111.json",
+    "file_sha256": {
+      "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28"
+    }
+  },
+  "rows": [
+    {
+      "key": "deflate/dickens/65536/6",
+      "row": "dickens.65536.6.json",
+      "sha256": "93acfdabdf35f4396ababc57c716c351ec4ced3112535dc8976d0cebe44a8f69",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/dickens/65536/9",
+      "row": "dickens.65536.9.json",
+      "sha256": "03d2da3014eb686c7c1ff2df8e7f6dd8c5b08dafe4b35c775321873f6bbbf88e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/dickens/1048576/6",
+      "row": "dickens.1048576.6.json",
+      "sha256": "7e996a47d4a9d266a9d15602b79e2cc2461405e37e710f7c2fe04aaca680bf41",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/dickens/1048576/9",
+      "row": "dickens.1048576.9.json",
+      "sha256": "89b640afccf984bb2a4bfb88aca3e16667c0656ccb9bd7bf3b78eeb19c940719",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/dickens/full/6",
+      "row": "dickens.full.6.json",
+      "sha256": "04429be8d291b0684ee549bad45b8e00e3e0d540edf401ce79326b4142b66251",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/dickens/full/9",
+      "row": "dickens.full.9.json",
+      "sha256": "84bb633f02748eeea63273d20f43e98ad0d589f6c13339fa63f5a817706148c4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mozilla/65536/6",
+      "row": "mozilla.65536.6.json",
+      "sha256": "9a77487f90d193fb95e241f73a8e79e360ca8de301052bd65512ca3dc01c7ae9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mozilla/65536/9",
+      "row": "mozilla.65536.9.json",
+      "sha256": "7b1a6b4df9634e38f1cac97b3e9eb19b50cb28f16759c89fa673ec53d81dcc24",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mozilla/1048576/6",
+      "row": "mozilla.1048576.6.json",
+      "sha256": "8667b1263b663db963dcbc6aa2dd6181b3c490e4031222cdaa3f3bfe668a7df3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mozilla/1048576/9",
+      "row": "mozilla.1048576.9.json",
+      "sha256": "d4bd7fd9bd05dff92c6cac6e2fab7bc84619b5d4594648a29aab5b2260346dcd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mozilla/full/6",
+      "row": "mozilla.full.6.json",
+      "sha256": "b4032ffb806c966480d1af5cdbb789d41b13bad874974c75218b23cd687e4eee",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mozilla/full/9",
+      "row": "mozilla.full.9.json",
+      "sha256": "e68bebf2f8cb641c070328ff715f59448c3bd79eceefa07f90baa9a4c655691c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mr/65536/6",
+      "row": "mr.65536.6.json",
+      "sha256": "b445d4100814c21c53978c0cd7ce51ff83c230b6d3e62813400ff36e0c305705",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mr/65536/9",
+      "row": "mr.65536.9.json",
+      "sha256": "2c62efd6bb46b25c20e125ec35b2aacc678ffb333a8b53b6216fd87e32bc6ebb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mr/1048576/6",
+      "row": "mr.1048576.6.json",
+      "sha256": "57a1fc771cf532b8d2d448075ec2f3acd251bfb517f19c14c49e737846f7d283",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mr/1048576/9",
+      "row": "mr.1048576.9.json",
+      "sha256": "dbade2a6843908bfcfc3258b8c555e505e1aca0f10b90ae8371deb9e6fea2c65",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mr/full/6",
+      "row": "mr.full.6.json",
+      "sha256": "0c8cd4d2fdf4e59d9dd18a93263bc5417e6036207f25247abfcbf3509a2f8193",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/mr/full/9",
+      "row": "mr.full.9.json",
+      "sha256": "39a7c3ba781ed3e26610f0f79bc84b491a025a5ec43fd01bc8ee740db437c3d1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/nci/65536/6",
+      "row": "nci.65536.6.json",
+      "sha256": "7181646e80ee17f8d8e069af5d7c8b8640a844f81e9d500f55cca52a3beeef16",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/nci/65536/9",
+      "row": "nci.65536.9.json",
+      "sha256": "e9c547a3e9b4df20cdac816d544d91e71ebbbb4167adb1e68e3d609844cffe31",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/nci/1048576/6",
+      "row": "nci.1048576.6.json",
+      "sha256": "06de85b08efe68339821944085a87481f2bfe9de746023524e0d4b22a20962d3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/nci/1048576/9",
+      "row": "nci.1048576.9.json",
+      "sha256": "7a5adbb1d46fafcd56c3a14be95a66c40e7742fc6d029b9da3daabd71ba7e168",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/nci/full/6",
+      "row": "nci.full.6.json",
+      "sha256": "d30c4d89c82523891b50769c87cd5404ffaf05f9b1871decdc079e922bec6d18",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/nci/full/9",
+      "row": "nci.full.9.json",
+      "sha256": "8bc42721f030093aec5ba8c89090f7f4a1873e31c991a61a1d1240e4dc450764",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/ooffice/65536/6",
+      "row": "ooffice.65536.6.json",
+      "sha256": "ff1a73c520e347e02c5c0dcd26851d07ef09cd6a04db96a0665caa0a863b456a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/ooffice/65536/9",
+      "row": "ooffice.65536.9.json",
+      "sha256": "ad31fadd2791c4330a4142430061d69c93423aab1c61aeed75915bae3dc6a49d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/ooffice/1048576/6",
+      "row": "ooffice.1048576.6.json",
+      "sha256": "c4ab677f854268b75cd4854e5c3cbf3ef353402704e974e7ffef61265cc43157",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/ooffice/1048576/9",
+      "row": "ooffice.1048576.9.json",
+      "sha256": "c903c57930c5e4effc7dc0f55372d0abf471d53cafcefbf5a8329433544bd65a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/ooffice/full/6",
+      "row": "ooffice.full.6.json",
+      "sha256": "e2694c243592e33122ecc2cd72262bd985e605ed8a0ac7810347c772325b060a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/ooffice/full/9",
+      "row": "ooffice.full.9.json",
+      "sha256": "e14c7664581029a8597bf72ad7061a328467b64e99b025b658e158887e74d3d9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/osdb/65536/6",
+      "row": "osdb.65536.6.json",
+      "sha256": "83ad79b86663f798d12f6961cf1887860cc4134808a6847be80f18a9cd45418a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/osdb/65536/9",
+      "row": "osdb.65536.9.json",
+      "sha256": "fd5083c9ab4abab7e8b205cd10ff38de0e5482a6a51664eae48f5043aaa03bf5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/osdb/1048576/6",
+      "row": "osdb.1048576.6.json",
+      "sha256": "d73766126e8f9fef575e925d11ea69af856d6e48ba0d707c3ba2c19344d09f68",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/osdb/1048576/9",
+      "row": "osdb.1048576.9.json",
+      "sha256": "206731ace1b554faf8b4d042ee40e4ab572d60974b43ec73e1f54cb0e92ee275",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/osdb/full/6",
+      "row": "osdb.full.6.json",
+      "sha256": "7a1fadacc64c13f60d0012529186446222a3de1a928d7b088fc481ec23ff5e36",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/osdb/full/9",
+      "row": "osdb.full.9.json",
+      "sha256": "719ab58c560c3a80ccbe5aff0d8265c10ee1bf5490c5b65b2729b391aea86186",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/reymont/65536/6",
+      "row": "reymont.65536.6.json",
+      "sha256": "262246d6dd4db3053bf30c689aca021ac93290e11bac15d48df357fb5359e5b7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/reymont/65536/9",
+      "row": "reymont.65536.9.json",
+      "sha256": "9a9e859d96c849eed2af57ed6e5cbfae31967a5fbf588a95b43f5a0df8ee5846",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/reymont/1048576/6",
+      "row": "reymont.1048576.6.json",
+      "sha256": "5b909f2310552ba57f789c6496015470efad9e5bacd764d07c9ef3cda01d348c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/reymont/1048576/9",
+      "row": "reymont.1048576.9.json",
+      "sha256": "8a90383a03ec6438d758952b626bafa798ae36b03f5f08887821c56664c5332a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/reymont/full/6",
+      "row": "reymont.full.6.json",
+      "sha256": "45be1fe00acb01dc1c957998f25e4c01f59acfb0dd8f08eca5c1c206fb45bce0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/reymont/full/9",
+      "row": "reymont.full.9.json",
+      "sha256": "39febdea01dcb5c30ade2236e96813d57fc78aaef4aafb4ab54e7226a664bc13",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/samba/65536/6",
+      "row": "samba.65536.6.json",
+      "sha256": "ee44268f1c056653288182e675b694a9f0918073404f2a1bf01eb047a3910535",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/samba/65536/9",
+      "row": "samba.65536.9.json",
+      "sha256": "ac07b53cb6f7ebceac3e3716b798a859891e405d91601dd04bbbe27b1a912212",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/samba/1048576/6",
+      "row": "samba.1048576.6.json",
+      "sha256": "6e1fd78a02de4f5d38b1bedcdb1c1b7a966ffbf92bd5cf7d3662fc238094ef7f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/samba/1048576/9",
+      "row": "samba.1048576.9.json",
+      "sha256": "0f67ff695b622dd6e1fda406a3ce9e1986891d135845c2b4f1ab0267f47823ac",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/samba/full/6",
+      "row": "samba.full.6.json",
+      "sha256": "d1c3337b40b32c4883b652d174ed68af31b37f4ee57f73b376fc0b53641a8441",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/samba/full/9",
+      "row": "samba.full.9.json",
+      "sha256": "4f93a582a4d7a7ff4e971a5013be534b0e8b8c02901d3b4aa6d0002c688b8c30",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/sao/65536/6",
+      "row": "sao.65536.6.json",
+      "sha256": "79895a60389e9855d6352e70c87fffc4e5467f23cdfd9c3767a995921ef431b5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/sao/65536/9",
+      "row": "sao.65536.9.json",
+      "sha256": "d2b91378032a583833c3780f72fe82c4a252459211efea08fd755cda6bc1ba25",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/sao/1048576/6",
+      "row": "sao.1048576.6.json",
+      "sha256": "7cf43bd2f36144d7dd838bfa6213785d2d7787415e4e24d760ea6e78b7f1a386",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/sao/1048576/9",
+      "row": "sao.1048576.9.json",
+      "sha256": "e6c508b230f4bb211cb6ac0c2b2f57cefc3a6a0c71e3b1652870f539df853334",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/sao/full/6",
+      "row": "sao.full.6.json",
+      "sha256": "2ccd10dd9e7914ffb9eea9d28f0a704bfe2528e4838600515d1641f26ea8e45b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/sao/full/9",
+      "row": "sao.full.9.json",
+      "sha256": "2393170fecc53e095e2ae63547947a7cf1de0f72f885c6b54451e508172a2578",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/webster/65536/6",
+      "row": "webster.65536.6.json",
+      "sha256": "c9c38c809abb1dd5f6a113b8e2cbae3efa4b53f7b84e9e1621d31b99c76af4c3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/webster/65536/9",
+      "row": "webster.65536.9.json",
+      "sha256": "6604f8b8eaa5060c756518b3b7e3cbb18bf4641c2644c18ef5c529732e0faca5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/webster/1048576/6",
+      "row": "webster.1048576.6.json",
+      "sha256": "efda921ee08b6598f86bb99c4fc2aa73695e873888417ce9c109e7f7ee13a885",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/webster/1048576/9",
+      "row": "webster.1048576.9.json",
+      "sha256": "a79424d7639831fdc4af1d3f7f2cd3158779bf94c07a859ed9e319d3e036f1e9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/webster/full/6",
+      "row": "webster.full.6.json",
+      "sha256": "ffbad2ce893141b341141a59f0ecc6e1a8e110fa8f0317029642ae0f7ece7d46",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/webster/full/9",
+      "row": "webster.full.9.json",
+      "sha256": "58f64a2d251fd876cbc77c5254862012d79ca0c708791422cafacb720cab7046",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/xml/65536/6",
+      "row": "xml.65536.6.json",
+      "sha256": "f056cdcb93a29ee60adc7d246785af4cfa966ea02a96fa1903be681281d695c9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/xml/65536/9",
+      "row": "xml.65536.9.json",
+      "sha256": "b27efdc9d095f3fd0d0ac4d44f6063d6aedd87d4e6ee0b4556237f266cfc3207",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/xml/1048576/6",
+      "row": "xml.1048576.6.json",
+      "sha256": "f77fd0665fa9375467a84f1b789bd31de473b6fff637dbbd0bdd94c858600add",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/xml/1048576/9",
+      "row": "xml.1048576.9.json",
+      "sha256": "abe76d8ce9bab460f83c0b43f18aab3f47d2929ae6148de88aee9a8e81422276",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/xml/full/6",
+      "row": "xml.full.6.json",
+      "sha256": "73366d8effabaf5e9edb8ae1adffec5583aee0364ac0f74bb45c7a792ede6b5b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/xml/full/9",
+      "row": "xml.full.9.json",
+      "sha256": "9b83fa653af45ba9cdcd1a2676fc2569ad96882cf9c88d9875edb3cccdabba61",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/x-ray/65536/6",
+      "row": "x-ray.65536.6.json",
+      "sha256": "87c5c9261b1b04ca699c7031a57a66f7cb5ae79cffdbce09523dbd5410fb3a69",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/x-ray/65536/9",
+      "row": "x-ray.65536.9.json",
+      "sha256": "88d4d96d0b6cf5b670e0014c88688079c00c82bab9025f317978e5522e272814",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/x-ray/1048576/6",
+      "row": "x-ray.1048576.6.json",
+      "sha256": "2adcdca4ed0cc9ca2408f66b3b6808c7667150f5aa494e737642f27fe69b0522",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/x-ray/1048576/9",
+      "row": "x-ray.1048576.9.json",
+      "sha256": "1f1cedef5312111e2bee4bb1abac7b0e014f9ffc97d8a264535de4a961a976a9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/x-ray/full/6",
+      "row": "x-ray.full.6.json",
+      "sha256": "aa22b18d46080e749ff9940910e8d6b423a8e6e209a4ec943c100dc37e07a313",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "key": "deflate/x-ray/full/9",
+      "row": "x-ray.full.9.json",
+      "sha256": "02eedc63e6f2c1e8a0f97be090e9ff320968ff663669d0eed219a74117d4e36f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "fixtures": 72,
+  "paired_batches": 144,
+  "iterations": 1,
+  "warmup_pairs": 0
+}

@@ -1,0 +1,157 @@
+{
+  "schema": "vort.raw-output-alias-gates.v1",
+  "gates": [
+    {
+      "name": "focused-safe",
+      "log": "contracts-safe.log",
+      "command": [
+        "zig",
+        "test",
+        "src/deflate.zig",
+        "-O",
+        "ReleaseSafe",
+        "--test-filter",
+        "Deflate raw decode buffer alias contracts"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "All 6 tests passed.",
+      "result": "6/6 tests; includes 81 core rejection scenarios and successful controls"
+    },
+    {
+      "name": "focused-debug",
+      "log": "debug.log",
+      "command": [
+        "zig",
+        "test",
+        "src/deflate.zig",
+        "-O",
+        "Debug",
+        "--test-filter",
+        "Deflate raw decode buffer alias contracts"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "All 6 tests passed.",
+      "result": "6/6 tests"
+    },
+    {
+      "name": "focused-x86",
+      "log": "x86.log",
+      "command": [
+        "zig",
+        "test",
+        "src/deflate.zig",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "x86_64-linux-gnu",
+        "-mcpu=skylake+pku+sgx",
+        "--test-filter",
+        "Deflate raw decode buffer alias contracts"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "All 6 tests passed.",
+      "result": "6/6 tests; native x86_64-linux-gnu; skylake+pku+sgx"
+    },
+    {
+      "name": "root",
+      "log": "root.log",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "11/11 steps succeeded; 94/94 tests passed",
+      "result": "11/11 steps; 94/94 tests"
+    },
+    {
+      "name": "full-deflate",
+      "log": "deflate-full.log",
+      "command": [
+        "zig",
+        "test",
+        "src/deflate.zig",
+        "-O",
+        "ReleaseSafe"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "All 695 tests passed.",
+      "result": "695/695 tests"
+    },
+    {
+      "name": "wasi-build",
+      "log": "wasm-build.log",
+      "command": [
+        "zig",
+        "test",
+        "src/deflate.zig",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "wasm32-wasi",
+        "--test-filter",
+        "Deflate raw decode buffer alias contracts",
+        "--test-no-exec",
+        "-femit-bin=alias.wasm"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "",
+      "result": "successful recorded exit 0; empty build log"
+    },
+    {
+      "name": "wasi-execution",
+      "log": "wasm-run.log",
+      "command": [
+        "node",
+        "tools/deflate/clone/wasm_gate.js",
+        "--output",
+        "wasm-receipt.json",
+        "alias.wasm"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "\"aggregate_exit_code\":0",
+      "result": "actual wasm32 WASI execution; receipt ok; exit 0"
+    },
+    {
+      "name": "final-probe-build",
+      "log": "probe-build.log",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "-Doptimize=ReleaseFast",
+        "-Dcpu=skylake+pku+sgx",
+        "build-decode-compare",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "7/7 steps succeeded",
+      "result": "7/7 steps"
+    },
+    {
+      "name": "frozen-wire-smoke",
+      "log": "smoke.log",
+      "command": [
+        "python3",
+        "/tmp/vort-raw-output-alias-20261111/smoke.py"
+      ],
+      "exit_code": 0,
+      "exit_code_origin": "completed task executor observation; original success log retained",
+      "success_marker": "all 72 fixtures passed; timings are smoke-only",
+      "result": "72/72 wires; 144 paired batches; smoke only"
+    }
+  ],
+  "command_policy": "Commands are replay recipes using the recorded gate settings; absolute output locations may be relocated. Historical process exit codes were supplied by the completed task executor; logs preserve successful test output. No gates rerun while packaging."
+}
