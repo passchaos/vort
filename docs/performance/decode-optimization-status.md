@@ -48,6 +48,17 @@ multi-block header tool is available through `build-br-header-profile` and
 wrapper's 537,976-byte stack frame, so sampled hotspot shares are explicitly
 scoped to the observed payload root rather than the complete public decoder.
 
+The later [actual route/count investigation](br/decode-mozilla-distributions-20261112.md)
+shows that seven wide10 generic blocks contain 98.65% of full Mozilla q11
+commands, with NPOSTFIX=3 and signed emitted literals. Command density is
+about 3.80x its 1 MiB control. Two semantic-root/phase combinations are rejected:
+full q11 speedups 0.990488x/0.988713x and q6 0.960493x/0.959690x. Moving large
+canonical temporaries out of the hot function reduces stack subtraction from
+9,864 to 408 bytes but does not improve whole decoding. The adopted increment
+is the shared prepared dispatcher plus bounded per-meta diagnostic replay and
+the whole-stream counter tool; no acceleration or new complete ranking is
+claimed. Further work should reduce hot live state and measure complete calls.
+
 ## 2026-11-11 checked dictionary seeding and provision
 
 The later [dictionary seed/provision correction](deflate-dictionary-borrows-20261111/README.md)

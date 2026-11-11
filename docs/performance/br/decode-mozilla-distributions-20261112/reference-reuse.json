@@ -1,0 +1,99 @@
+{
+  "brotli_reference": {
+    "common": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlicommon.so.1.2.0",
+    "compiler": "GCC11.4.0",
+    "decoder": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlidec.so.1.2.0",
+    "encoder": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlienc.so.1.2.0",
+    "file_sha256": {
+      "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlicommon.so.1.2.0": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb",
+      "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlidec.so.1.2.0": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+      "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/libbrotlienc.so.1.2.0": "916611262bd0975d4b75e6a19d957de5747eb182f2c36022a459bd21b6e40b6d"
+    },
+    "flags": "Release -O3 -march=skylake",
+    "provenance_cache": "/home/passchaos/project-z/vort/zig-out/br-interval-cost-20261102/reference/CMakeCache.txt",
+    "source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0"
+  },
+  "modern_manifest": {
+    "path": "docs/performance/modern-decode-refresh-20261111/manifest.json.gz",
+    "sha256": "c52d48173e769c42f998595fa7df50281b78d25a55afaa9c2581e213e424873e"
+  },
+  "modern_reference_reuse": {
+    "path": "docs/performance/modern-decode-refresh-20261111/reference-reuse.json",
+    "sha256": "2a1ac16705933fccae55f1dc751b3ee406341d9308d679b84bcf20b0f98f8634"
+  },
+  "reference_libraries": {
+    "path": "docs/performance/modern-decode-current-20261111/reference-libraries.tar.gz",
+    "sha256": "45fa23a5b80ba5bc68041dc2841b6419735fa77740bdff48501dd48f1774d61a"
+  },
+  "schema": "vort.brotli.mozilla-distributions-reuse.v1",
+  "scope": "Reuse exact fixture metadata/hashes and reference SO archives; do not duplicate payloads or libraries",
+  "selected_fixtures": [
+    {
+      "codec": "brotli",
+      "encoded_bytes": 14077215,
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.brotli.11.wire",
+      "encoded_sha256": "34b94e421e57771d6b83b9dde7959c22e0d9e28d12414985f4df93d93bbfd5f6",
+      "generator": {
+        "api": "BrotliEncoderCompress",
+        "mode": "generic",
+        "quality": 11,
+        "version": "1.2.0",
+        "window_bits": 22
+      },
+      "input_bytes": 51220480,
+      "input_first_byte": 109,
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
+      "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+      "key": "brotli/mozilla/full/11",
+      "level": 11,
+      "name": "mozilla",
+      "scope": "silesia",
+      "size": "full"
+    },
+    {
+      "codec": "brotli",
+      "encoded_bytes": 635440,
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.brotli.11.wire",
+      "encoded_sha256": "23d1b72c7edf3c18a9257e67f46153d50654adb8656e621383c0c3878218cc99",
+      "generator": {
+        "api": "BrotliEncoderCompress",
+        "mode": "generic",
+        "quality": 11,
+        "version": "1.2.0",
+        "window_bits": 22
+      },
+      "input_bytes": 1048576,
+      "input_first_byte": 109,
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain",
+      "input_sha256": "d307112d2151eef3c035e308b0478e831f6039bdd9770bb753207b02e1fd579d",
+      "key": "brotli/mozilla/1048576/11",
+      "level": 11,
+      "name": "mozilla",
+      "scope": "silesia",
+      "size": "1048576"
+    },
+    {
+      "codec": "brotli",
+      "encoded_bytes": 16289474,
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.brotli.6.wire",
+      "encoded_sha256": "b9304910ca1be2aadf065dec1fe7bbca3a5c7a8d08b6a5e8c1492c485c627c9d",
+      "generator": {
+        "api": "BrotliEncoderCompress",
+        "mode": "generic",
+        "quality": 6,
+        "version": "1.2.0",
+        "window_bits": 22
+      },
+      "input_bytes": 51220480,
+      "input_first_byte": 109,
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
+      "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+      "key": "brotli/mozilla/full/6",
+      "level": 6,
+      "name": "mozilla",
+      "scope": "silesia",
+      "size": "full"
+    }
+  ]
+}

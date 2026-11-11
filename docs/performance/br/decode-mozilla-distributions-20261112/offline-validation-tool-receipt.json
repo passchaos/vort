@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "0",
+    "python3",
+    "docs/performance/br/decode-mozilla-distributions-20261112/verify.py",
+    "--original-bytes",
+    "--git-repo",
+    ".",
+    "--external-fixtures",
+    "--receipt",
+    "docs/performance/br/decode-mozilla-distributions-20261112/validation-receipt.json"
+  ],
+  "cwd": "/home/passchaos/project-z/vort",
+  "raw_stderr_saved": false,
+  "raw_stdout_saved": false,
+  "result_file": "validation-receipt.json",
+  "result_sha256": "515f090cd02babc1806bf25a115287a774bae798d5a6da1650ad73d7d9ed8c82",
+  "returncode": 0,
+  "schema": "vort.brotli.mozilla-distributions-offline-tool-receipt.v1",
+  "scope": "One completed final offline validator invocation. Its JSON result file was written by the verifier; no codec/test/measurement rerun. Tool output is not mislabeled as independently captured raw stdout/stderr.",
+  "tool_output_origin": "tools.write_stdin session32841 chunk1a2a43; completed with exit_code0"
+}

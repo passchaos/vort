@@ -1,0 +1,136 @@
+{
+  "aggregate_counts": {
+    "brotli/mozilla/1048576/11": {
+      "applied_copies": 20295,
+      "commands": 20296,
+      "ignored_copies": 1,
+      "max_lz77_distance": 1040246,
+      "max_wire_distance": 1094078,
+      "records": 1
+    },
+    "brotli/mozilla/full/11": {
+      "applied_copies": 3770833,
+      "commands": 3770834,
+      "ignored_copies": 1,
+      "max_lz77_distance": 4194288,
+      "max_wire_distance": 4426103,
+      "records": 9
+    },
+    "brotli/mozilla/full/6": {
+      "applied_copies": 3455500,
+      "commands": 3455508,
+      "ignored_copies": 8,
+      "max_lz77_distance": 4192464,
+      "max_wire_distance": 4192464,
+      "records": 10
+    }
+  },
+  "archive_members": 4696,
+  "archives": 13,
+  "brotli_smoke": {
+    "calls_per_implementation": 2,
+    "rows": 72,
+    "scope": "correctness/executability only; no ranking or throughput ratchet",
+    "warmup_calls": 0
+  },
+  "codegen": {
+    "original_payloads_checked": 3,
+    "scope": "Static ELF and complete entity disassembly only; not dynamic counts/cycles/spill frequency",
+    "v2_payloads_checked": 1
+  },
+  "external_fixture_bytes_checked": true,
+  "original_byte_copies_checked": true,
+  "pinned_git_blobs_checked": true,
+  "route_weight_fixtures": 3,
+  "scope": "Offline archive/source/report/aggregate verification only; no codec execution, timing rerun, or production heap/leadership claim",
+  "semantic_screens": {
+    "cold-fallback-v2": {
+      "brotli/mozilla/1048576/11": {
+        "candidate_over_baseline_throughput_geomean": 1.0005488194058618,
+        "process_pair_speed_ratios": [
+          0.9966307735409486,
+          0.9893842056105333,
+          0.9872163366930092,
+          1.029535996489145
+        ]
+      },
+      "brotli/mozilla/full/11": {
+        "candidate_over_baseline_throughput_geomean": 0.9887127357177551,
+        "process_pair_speed_ratios": [
+          0.9618120528572738,
+          0.9923959110975432,
+          1.009114464438194,
+          0.9921215907533494
+        ]
+      },
+      "brotli/mozilla/full/6": {
+        "candidate_over_baseline_throughput_geomean": 0.9596898067737558,
+        "process_pair_speed_ratios": [
+          0.9861729421024411,
+          0.9640970524081035,
+          0.9878915761094514,
+          0.9031094950684763
+        ]
+      }
+    },
+    "original": {
+      "brotli/mozilla/1048576/11": {
+        "candidate_over_baseline_throughput_geomean": 0.9929737831805172,
+        "process_pair_speed_ratios": [
+          1.003255856982144,
+          0.9855036440311199,
+          0.9886004883975458,
+          0.9946272879300834
+        ]
+      },
+      "brotli/mozilla/full/11": {
+        "candidate_over_baseline_throughput_geomean": 0.9904879980269653,
+        "process_pair_speed_ratios": [
+          0.9894502112370939,
+          0.9903299113466345,
+          0.9871851879455051,
+          0.9950030165911143
+        ]
+      },
+      "brotli/mozilla/full/6": {
+        "candidate_over_baseline_throughput_geomean": 0.9604926770679312,
+        "process_pair_speed_ratios": [
+          0.9647152836295633,
+          0.9066085351838042,
+          0.997494112833269,
+          0.9755441497896188
+        ]
+      }
+    },
+    "shared-dispatch": {
+      "brotli/mozilla/1048576/11": {
+        "candidate_over_baseline_throughput_geomean": 1.0000307623268256,
+        "process_pair_speed_ratios": [
+          0.9912128509395051,
+          1.0099436360752585,
+          1.0014216827588158,
+          0.9976366317423736
+        ]
+      },
+      "brotli/mozilla/full/11": {
+        "candidate_over_baseline_throughput_geomean": 1.0116585966873175,
+        "process_pair_speed_ratios": [
+          1.0492697000446296,
+          1.0067858350897356,
+          0.9969664284715261,
+          0.9945603531155527
+        ]
+      },
+      "brotli/mozilla/full/6": {
+        "candidate_over_baseline_throughput_geomean": 1.0031456559688947,
+        "process_pair_speed_ratios": [
+          0.9829628136603046,
+          1.0022345292297417,
+          1.0008021089418535,
+          1.0270730317603887
+        ]
+      }
+    }
+  },
+  "wasi_diagnostic_tests_passed": 23
+}

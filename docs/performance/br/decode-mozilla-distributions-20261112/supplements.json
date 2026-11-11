@@ -1,0 +1,75 @@
+{
+  "files": {
+    "cold-fallback-v2/cold-kernel-build.log": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/cold-kernel-build.log",
+      "sha256": "4311238bd0028aaeadff82ca4dec941493297028e943b4c8423c6c18cde0bc35"
+    },
+    "cold-fallback-v2/cold-kernel-safe.log": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/cold-kernel-safe.log",
+      "sha256": "60db768c9002fdff6a52581accde8488f748453ac548be9a46054a97687b583b"
+    },
+    "cold-fallback-v2/semantic-cold-screen.log": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/semantic-cold-screen.log",
+      "sha256": "1a8b41c6e473e5df91544739219cbf5dea0f8fca670c10f7482f36fcf0aae131"
+    },
+    "cold-fallback-v2/semantic_cold_screen.py": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/semantic_cold_screen.py",
+      "sha256": "9dabaaf869065143a4fb04c6aa6c58c9d914ef6406c9e24d3db93bddb849910d"
+    },
+    "final-diagnostics/codegen-audit.json": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/codegen-audit.json",
+      "sha256": "f7adf3724a940f3725d56f6ed6f9d193dbd8e1fffd0ad224c43b96e90a729a6b"
+    },
+    "final-diagnostics/diagnostic-contracts.wasm": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/diagnostic-contracts.wasm",
+      "sha256": "a22b6613da29bbaa1d8eeea41839a4fa95defab46940dbd2a3f7ad763f96d422"
+    },
+    "final-diagnostics/diagnostic-wasi-build.log": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/diagnostic-wasi-build.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final-diagnostics/diagnostic-wasi.stderr": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/diagnostic-wasi.stderr",
+      "sha256": "da777f16e64bcc20fe4fea06cfaca12e483df4761cb8fb1b245c8e65d7e9924f"
+    },
+    "final-diagnostics/diagnostic-wasi.stdout": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/diagnostic-wasi.stdout",
+      "sha256": "b06501345570913c74387e7bd48f767262119d2f94baa2767726c98d5e198868"
+    },
+    "final-diagnostics/main-diagnostics-wasm-gate.log": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/main-diagnostics-wasm-gate.log",
+      "sha256": "97b8ac97316e4914b04d8b98d2fea9b052821f2505642e2d5358b39e25a64c10"
+    },
+    "final-diagnostics/route-weights.json": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/route-weights.json",
+      "sha256": "9228dfe51e96904a1f000942d9b974ec46a5c9b2d8914e9eee1642f5a72bc12e"
+    },
+    "final-diagnostics/run_diagnostic_wasi.mjs": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/run_diagnostic_wasi.mjs",
+      "sha256": "a5fa34bc11c87c0d253cf92a4ad19bd0cda358aa85b3e3459832cb0333bd7ac1"
+    },
+    "final-diagnostics/shared-dispatch-screen.log": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/shared-dispatch-screen.log",
+      "sha256": "6ded8e5e112ec3f26e2931496fb5b7b5d0b5e7818461002e332f1a228fe41956"
+    },
+    "final-diagnostics/shared_dispatch_screen.py": {
+      "path": "/tmp/vort-mozilla-distributions-20261112.21952b95/shared_dispatch_screen.py",
+      "sha256": "da8a86f03c2df08c859b7dd0a54628c7977a7f3be7ed1811714ee7c1ce6ee255"
+    }
+  },
+  "screens": [
+    {
+      "binary": "/tmp/vort-mozilla-distributions-20261112.21952b95/semantic-cold-compare",
+      "name": "cold-fallback-v2",
+      "raw_root": "/tmp/vort-mozilla-distributions-20261112.21952b95/semantic-cold-screen",
+      "source_root": "/tmp/vort-mozilla-distributions-20261112.21952b95/semantic-cold-screen-source"
+    },
+    {
+      "binary": "/home/passchaos/project-z/vort/zig-out/bin/vort-decode-compare",
+      "immutable_revision": "6539890e984e76a2ce208e60c3125600e7970b46",
+      "name": "shared-dispatch",
+      "raw_root": "/tmp/vort-mozilla-distributions-20261112.21952b95/shared-dispatch-screen",
+      "recorded_source_revision": "53c49311067af60a84fb3bc3e38bb6c93053b4fb"
+    }
+  ]
+}
