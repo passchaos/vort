@@ -34,3 +34,22 @@ This tool does not identify the public payload route or measure codec heap.
 Use the unchanged whole-operation comparator and separately attributed call
 graphs for those questions. The [Mozilla evidence](../../../docs/performance/br/decode-mozilla-profile-20261112.md)
 records the first three-row pilot and its limits.
+
+`payload_counts.zig` complements the header clocks with the complete public
+whole-stream command, distance and copy summary. It reads no clock:
+
+```sh
+zig build -j2 build-br-payload-counts test-br-payload-counts \
+  -Dtarget=x86_64-linux-gnu -Dcpu=skylake+pku+sgx
+zig-out/bin/vort-br-payload-counts \
+  --input frame.br --plain original.bin --output counts.json
+```
+
+Its report preserves every summary field, verifies the full public decode and
+guards, and exports the SHA-256 of the running Linux executable. An external
+runner binds source and build provenance; the tool does not guess a runtime
+source digest. Input/output alias checks and the 256 MiB file bounds match the
+header tool. Allocating summary history and retry work is diagnostic memory,
+and whole-stream counts do not identify each meta-block's actual executor.
+Copy histograms include a final decoded command whose copy may be unused;
+applied distance-path counters have their own denominator.

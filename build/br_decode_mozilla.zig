@@ -50,4 +50,38 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, br: *std.Build.
     });
     b.step("test-br-header-profile", "Test diagnostic options and work limits")
         .dependOn(&b.addRunArtifact(tests).step);
+
+    const counts = b.addExecutable(.{
+        .name = "vort-br-payload-counts",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/decode_mozilla/payload_counts.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "br", .module = br },
+                .{ .name = "sampling", .module = sampling },
+            },
+        }),
+    });
+    b.step("build-br-payload-counts", "Build whole-stream Brotli payload counter diagnostics")
+        .dependOn(&b.addInstallArtifact(counts, .{}).step);
+    const counts_run = b.addRunArtifact(counts);
+    if (b.args) |args| counts_run.addArgs(args);
+    b.step("run-br-payload-counts", "Inspect existing Brotli commands without timing")
+        .dependOn(&counts_run.step);
+    const counts_tests = b.addTest(.{
+        .name = "vort-br-payload-counts-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/decode_mozilla/payload_counts.zig"),
+            .target = target,
+            .optimize = .ReleaseSafe,
+            .imports = &.{
+                .{ .name = "br", .module = safe_br },
+                .{ .name = "sampling", .module = safe_sampling },
+            },
+        }),
+        .filters = &.{"Mozilla payload counts"},
+    });
+    b.step("test-br-payload-counts", "Test payload diagnostic paths and output sizes")
+        .dependOn(&b.addRunArtifact(counts_tests).step);
 }
