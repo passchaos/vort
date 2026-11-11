@@ -1,0 +1,25 @@
+1/24 deflate.test_0...OK
+2/24 deflate.bt_optimal.test_0...OK
+3/24 deflate.incremental.tests.test_0...OK
+4/24 deflate.incremental.tests.step_borrows.test_0...OK
+5/24 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows reject transactionally and retry...OK
+6/24 deflate.incremental.tests.step_borrows.test.zlib incremental step borrows reject before raw empty-input drain...OK
+7/24 deflate.incremental.tests.step_borrows.test.gzip incremental step borrows reject before raw empty-input drain...OK
+8/24 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows clip an unused output tail at the limit...OK
+9/24 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows permit zero limit with aliased unused output...OK
+10/24 deflate.incremental.tests.step_borrows.test.raw deflate incremental step borrows protect pending output after limits are lowered...OK
+11/24 deflate.incremental.tests.step_borrows.test.incremental step borrows preserve ordinary malformed wrapper partial progress...OK
+12/24 deflate.incremental.tests.step_borrows.semantic.test.incremental step borrows keep colliding optional semantic storage inactive...OK
+13/24 deflate.incremental.tests.step_borrows.semantic.test.incremental step borrows protect active semantic generations and retry...OK
+14/24 deflate.incremental.tests.step_borrows.semantic.test.zlib incremental step borrows keep semantic storage disjoint from retained dictionaries...OK
+15/24 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+16/24 deflate.semantic.rolling_window.test_0...OK
+17/24 bitstream.test_0...OK
+18/24 deflate64.test_0...OK
+19/24 deflate.incremental.tests.step_borrows.dictionaries.test.zlib incremental step borrows protect configured dictionary bytes and set entries...OK
+20/24 deflate.incremental.tests.step_borrows.dictionaries.test.zlib incremental step borrows protect dictionary readers inside decoder storage...OK
+21/24 deflate.incremental.tests.step_borrows.dictionaries.test.zlib incremental step borrows release provideDictionary override after return...OK
+22/24 deflate.incremental.tests.step_borrows.adjacent.test.stored incremental step borrows reject whole calls before header progress...OK
+23/24 deflate.incremental.tests.step_borrows.adjacent.test.automatic wrapper incremental step borrows reject before detection and dispatch...OK
+24/24 deflate.incremental.tests.step_borrows.adjacent.test.deflate64 incremental step borrows reject stored input output and receiver overlap...OK
+All 24 tests passed.

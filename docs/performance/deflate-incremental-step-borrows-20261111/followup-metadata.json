@@ -1,0 +1,34 @@
+{
+  "base_revision": "17058d8150af5b5ae3178def85b2e227f55df686",
+  "source_kind": "frozen current worktree; no source edits after freeze notice",
+  "owned_paths": [
+    "src/deflate/incremental/tests/step_borrows.zig",
+    "src/deflate/incremental/tests/step_borrows/helpers.zig",
+    "src/deflate/incremental/tests/step_borrows/dictionaries.zig",
+    "src/deflate/incremental/tests/step_borrows/adjacent.zig"
+  ],
+  "mode": "ReleaseSafe",
+  "command": "zig test src/deflate.zig -OReleaseSafe --test-filter 'step borrows' -femit-bin=/tmp/vort-incremental-step-borrows-20261111/step-borrows-followup-tests",
+  "exit_code": 0,
+  "result": "All 24 tests passed",
+  "source_file_sha256": {
+    "src/deflate/incremental/tests/step_borrows.zig": "0476672865dd9ec46c833619425379e62289cbd6b155707f689f8af63b50ba14",
+    "src/deflate/incremental/tests/step_borrows/helpers.zig": "206e8ae9b7751a89e12693a03320f2ba8d6283d44ae5474bc57011987993d30a",
+    "src/deflate/incremental/tests/step_borrows/dictionaries.zig": "aad46351213b1829a4edd14b678f26a285da04fa009731d2834b3975f91ef411",
+    "src/deflate/incremental/tests/step_borrows/adjacent.zig": "e9f8ec63edba12ffc9ce372209d2635b807c7d4c4a425c4e7fc1f84114994c5d",
+    "src/deflate/incremental/decoder/fixed_literals.zig": "0360231b152fc39a93d15c2397f80b9c810af0271da04663b4121653f940e358",
+    "src/deflate/incremental/decoder/zlib.zig": "2988f00b30200c7ab611aa14a6fb78527b41b24b91c2e49e9f21c3e13e883686",
+    "src/deflate/incremental/decoder/gzip.zig": "0b3d0790b88888a47b9851eebafed30e500e261ec2085b9c25f6615ae79c85ed",
+    "src/deflate/incremental/decoder/stored.zig": "7dd642ed7174111800e1b5e596bd6b9f9c95cb978277742e4af0b00fc2aa243c",
+    "src/deflate/incremental/decoder/auto_wrapper.zig": "690934909a836c8609ed3dca93819cb6c2a5f975d77a336d99deaeb32af4e2ef",
+    "src/deflate/incremental/decoder/step_borrows.zig": "a2f0d4e69d6ee0b1bc52d0867a63cfdd7fe1ae50a231edff5a75dbc5f1477b31",
+    "src/deflate.zig": "d287b706229e92805bfd6a6f8f2675bcc05adcd082fcffa99176bdb8001fcf1a",
+    "src/deflate64.zig": "13200dfb7a37d0780d9d358a7e4fd6b689e7164231fc72f2596202f998a1d138",
+    "src/deflate/incremental/tests.zig": "ff7fa14d606bc1b76c64d5afb337316bce71bcd5e542667b1a8a96bccbe06ba8",
+    "src/deflate/incremental/tests/step_borrows/semantic.zig": "d18a16698416455280f7699f2801ff512534e395d1166edaf52ea287f728a233"
+  },
+  "artifact_sha256": {
+    "step-borrows-followup-tests": "70d6a8cbdb792e7900830cebcb9f798cd9cb26663dfc06da843385fad326e293",
+    "step-borrows-followup-safe.log": "32850dfff032fda25c59dba178ed6669533c2ccd2153e011b1809d33709043a3"
+  }
+}

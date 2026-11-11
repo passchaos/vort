@@ -22,6 +22,20 @@ No speedup is attributed to either repair. After correctness gates, profile
 Deflate's 64 KiB weak rows and Brotli's full mozilla q11 cliff against this
 modern complete matrix.
 
+The [incremental proof archive](deflate-incremental-step-borrows-20261111/README.md)
+binds `17a8f5a0` to 718 full Deflate tests, 24 focused contracts in
+ReleaseSafe/Debug/x86/actual WASI, 112 filtered public-root/object tests, and
+394 successful Debug compilation/interop steps. Aggregate root coverage is
+filtered to the new contracts; the optimized all-repository CLI attempt was
+interrupted and is recorded separately. Source-reverse WASI stderr warnings
+are checked against actual successful exits rather than a `failed command`
+display label.
+
+The next [Mozilla decode pilot](br/decode-mozilla-profile-plan-20261111.md)
+compares full q11 with its near-parity 1 MiB control and attributes the actual
+multi-block kernel/header/setup paths. Existing single-final-block clustered
+profilers cannot directly attribute that full-file cliff.
+
 ## 2026-11-11 earlier modern reference epoch
 
 The [new frozen raw-pair matrix](modern-decode-current-20261111.md) executes

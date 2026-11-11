@@ -1,0 +1,15 @@
+Build Summary: 11/11 steps succeeded; 112/112 tests passed
+test success
++- run test vort-tests 105 pass (105 total) 56ms MaxRSS:10M
+|  +- compile test vort-tests ReleaseSafe native success 16s MaxRSS:660M
+|     +- WriteFile cached
+|     +- compile obj vort-br-record-optimal ReleaseSafe native cached 4ms MaxRSS:41M
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 ReleaseSafe native cached 5ms MaxRSS:39M
+|     +- compile obj vort-br-record-optimal ReleaseSafe native (reused)
+|     +- compile obj vort-zstd-huffman-x2 ReleaseSafe native (reused)
++- run test vort-br-record-classifier-tests 1 pass (1 total) 2ms MaxRSS:10M
+|  +- compile test vort-br-record-classifier-tests ReleaseSafe native cached 6ms MaxRSS:39M
++- run test vort-br-record-optimal-object-tests 6 pass (6 total) 2ms MaxRSS:10M
+   +- compile test vort-br-record-optimal-object-tests ReleaseSafe native cached 6ms MaxRSS:38M
+

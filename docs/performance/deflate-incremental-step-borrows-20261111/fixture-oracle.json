@@ -1,0 +1,47 @@
+{
+  "oracle": "Python stdlib zlib 1.2.11",
+  "rows": [
+    {
+      "fixture": "stored",
+      "format": "raw",
+      "wire_hex": "000300fcff616263010300fcff646566",
+      "decoded": "abcdef"
+    },
+    {
+      "fixture": "stored",
+      "format": "zlib",
+      "wire_hex": "7801000300fcff616263010300fcff646566081e0256",
+      "decoded": "abcdef"
+    },
+    {
+      "fixture": "stored",
+      "format": "gzip",
+      "wire_hex": "1f8b0800000000000003000300fcff616263010300fcff646566ef398e4b06000000",
+      "decoded": "abcdef"
+    },
+    {
+      "fixture": "fixed",
+      "format": "raw",
+      "wire_hex": "4b4c040100",
+      "decoded": "aaaaaa"
+    },
+    {
+      "fixture": "fixed",
+      "format": "zlib",
+      "wire_hex": "78014b4c04010007fb0247",
+      "decoded": "aaaaaa"
+    },
+    {
+      "fixture": "fixed",
+      "format": "gzip",
+      "wire_hex": "1f8b08000000000000034b4c040100f819e45a06000000",
+      "decoded": "aaaaaa"
+    },
+    {
+      "fixture": "dictionary_override",
+      "format": "zlib",
+      "wire_hex": "782096b20ac44b4c04010007fb0247",
+      "decoded": "aaaaaa"
+    }
+  ]
+}

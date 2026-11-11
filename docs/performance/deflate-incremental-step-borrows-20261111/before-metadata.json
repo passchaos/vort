@@ -1,0 +1,46 @@
+{
+  "source_revision": "17058d8150af5b5ae3178def85b2e227f55df686",
+  "public_module": "src/root.zig",
+  "zig_version": "0.16.0",
+  "mode": "Debug",
+  "build_command": "zig build-exe -ODebug --dep vort -Mroot=/tmp/vort-incremental-step-borrows-20261111/before.zig -Mvort=src/root.zig -femit-bin=/tmp/vort-incremental-step-borrows-20261111/before",
+  "build_exit_code": 0,
+  "run_exit_code": 1,
+  "files": {
+    "before-run.log": "eeb996e8ebf4ac8c7080a8e682b60cdb1356ffcabc033a0998961adda872977f",
+    "before-source-17058d8150af5b5ae3178def85b2e227f55df686.tar": "9e03d6b797dcf5cd7028318340c735744f62d8a17766e133106892996358b3cb",
+    "before-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "before.zig": "eecadb7a07b6bf313e6e8dcc136a8ac76accfba211d078218433dbeef3ded699",
+    "before": "559ca0dba821893282612cbe219a8a9dd4c94a4925f343909acc9b3415a9f742"
+  },
+  "source_file_sha256": {
+    "src/root.zig": "9d1481b56e518cf5b61aaac2e7d4457b0e2e4a8bcfb47db1f02753c70e3dbddc",
+    "src/deflate.zig": "d287b706229e92805bfd6a6f8f2675bcc05adcd082fcffa99176bdb8001fcf1a",
+    "src/deflate/incremental/decoder/fixed_literals.zig": "f01ee34d85f5cb68cf90f10bb23ae12cfbb442e5ac59f13384c57406b8de25bd",
+    "build.zig": "8d68ce724327cffcd9bde46036799986ce65ba2fa61316e3e463e4d228fea2ec",
+    "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480"
+  },
+  "history_bytes": 32768,
+  "input_hex": "00 03 00 fc ff 61 62 63 01 03 00 fc ff 64 65 66",
+  "input_backing_len": 19,
+  "input_range": [
+    0,
+    16
+  ],
+  "output_range": [
+    13,
+    19
+  ],
+  "expected": {
+    "status": "done",
+    "input_read": 16,
+    "output_written": 6,
+    "output": "abcdef"
+  },
+  "actual": {
+    "status": "done",
+    "input_read": 16,
+    "output_written": 6,
+    "output": "abcabc"
+  }
+}

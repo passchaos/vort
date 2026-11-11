@@ -1,0 +1,7 @@
+revision=17058d8150af5b5ae3178def85b2e227f55df686 public_module=src/root.zig mode=Debug Zig=0.16.0
+expected_status=done expected_input=16 expected_output=6 expected_bytes=abcdef
+actual_status=done actual_input=16 actual_output=6 actual_bytes=abcabc
+error: OutputMismatch
+/tmp/vort-incremental-step-borrows-20261111/before.zig:12:54: 0x11d872e in main (before.zig)
+    if (!std.mem.eql(u8, backing[13..19], "abcdef")) return error.OutputMismatch;
+                                                     ^

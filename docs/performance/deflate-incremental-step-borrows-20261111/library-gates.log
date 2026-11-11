@@ -1,0 +1,136 @@
+1/9 deflate.test.Deflate wide decode stream counters and overflow transactions...OK
+2/9 deflate.test_0...OK
+3/9 deflate.bt_optimal.test_0...OK
+4/9 deflate.incremental.tests.test_0...OK
+5/9 deflate64.test_0...OK
+6/9 deflate.semantic.rolling_window.test_0...OK
+7/9 bitstream.test_0...OK
+8/9 deflate.incremental.tests.step_borrows.test_0...OK
+9/9 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+All 9 tests passed.
+{"schema":"vort-deflate-wide-decode-wasm-v1","status":"ok","utc":"2026-11-11T12:48:45.796Z","pointer_bits":32,"logical_counter_bits":64,"progress_counter_bits":32,"contract":"Deflate wide decode stream counters and overflow transactions","wasm_path":"/home/passchaos/project-z/vort/.zig-cache/o/5c2c7631358a33531f08fd38a45610b2/vort-deflate-wide-decode-wasm-tests.wasm","node_version":"v26.10.0","wasm_sha256":"d3b641cf6e4a31e9d18c602a5d0112cb5b949cc70cc24e0e2b07564d2ef5154c","execution":"Zig test runner with checked lawful-prefix and physical-suffix contracts"}
+(node:680115) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+incremental_relaxed_interop_reference zlib_version=1.2.11
+incremental_relaxed_interop_ok cases=593 valid_splits=143 footer_matrix=328 partial_footers=80 malformed_payloads=2 tails=24 dictionaries=8 recognized_gzip_headers=8 finish_seals=256 tiny_input_bytes=1 tiny_output_bytes=3 steps=57230 zero_output_steps=952 need_input=7432 need_output=49014 done=376
+deflate_split_history_reference zlib_version=1.2.11
+split_history_row case=previous-input wrapper=raw mode=fixed bytes=4395
+split_history_row case=previous-input wrapper=raw mode=dynamic bytes=4384
+split_history_row case=previous-input wrapper=raw mode=best bytes=4179
+split_history_row case=previous-input wrapper=raw mode=adaptive bytes=4159
+split_history_row case=previous-input wrapper=zlib mode=fixed bytes=4401
+split_history_row case=previous-input wrapper=zlib mode=dynamic bytes=4390
+split_history_row case=previous-input wrapper=zlib mode=best bytes=4185
+split_history_row case=previous-input wrapper=zlib mode=adaptive bytes=4165
+split_history_row case=previous-input wrapper=gzip mode=fixed bytes=4413
+split_history_row case=previous-input wrapper=gzip mode=dynamic bytes=4402
+split_history_row case=previous-input wrapper=gzip mode=best bytes=4197
+split_history_row case=previous-input wrapper=gzip mode=adaptive bytes=4177
+split_history_row case=residual-dictionary wrapper=raw mode=fixed bytes=1125
+split_history_row case=residual-dictionary wrapper=raw mode=dynamic bytes=1151
+split_history_row case=residual-dictionary wrapper=raw mode=best bytes=1075
+split_history_row case=residual-dictionary wrapper=raw mode=adaptive bytes=1071
+split_history_row case=residual-dictionary wrapper=zlib mode=fixed bytes=1135
+split_history_row case=residual-dictionary wrapper=zlib mode=dynamic bytes=1161
+split_history_row case=residual-dictionary wrapper=zlib mode=best bytes=1085
+split_history_row case=residual-dictionary wrapper=zlib mode=adaptive bytes=1081
+split_history_row case=evicted-dictionary wrapper=raw mode=fixed bytes=33696
+split_history_row case=evicted-dictionary wrapper=raw mode=dynamic bytes=32311
+split_history_row case=evicted-dictionary wrapper=raw mode=best bytes=31984
+split_history_row case=evicted-dictionary wrapper=raw mode=adaptive bytes=31969
+split_history_row case=evicted-dictionary wrapper=zlib mode=fixed bytes=33706
+split_history_row case=evicted-dictionary wrapper=zlib mode=dynamic bytes=32321
+split_history_row case=evicted-dictionary wrapper=zlib mode=best bytes=31994
+split_history_row case=evicted-dictionary wrapper=zlib mode=adaptive bytes=31979
+split_history_row case=narrow-window wrapper=raw mode=fixed bytes=1912
+split_history_row case=narrow-window wrapper=raw mode=dynamic bytes=2145
+split_history_row case=narrow-window wrapper=raw mode=best bytes=1839
+split_history_row case=narrow-window wrapper=raw mode=adaptive bytes=1822
+split_history_row case=narrow-window wrapper=zlib mode=fixed bytes=1922
+split_history_row case=narrow-window wrapper=zlib mode=dynamic bytes=2155
+split_history_row case=narrow-window wrapper=zlib mode=best bytes=1849
+split_history_row case=narrow-window wrapper=zlib mode=adaptive bytes=1832
+split_history_row case=empty-dictionary wrapper=raw mode=fixed bytes=80
+split_history_row case=empty-dictionary wrapper=raw mode=dynamic bytes=263
+split_history_row case=empty-dictionary wrapper=raw mode=best bytes=80
+split_history_row case=empty-dictionary wrapper=raw mode=adaptive bytes=30
+split_history_row case=empty-dictionary wrapper=zlib mode=fixed bytes=90
+split_history_row case=empty-dictionary wrapper=zlib mode=dynamic bytes=273
+split_history_row case=empty-dictionary wrapper=zlib mode=best bytes=90
+split_history_row case=empty-dictionary wrapper=zlib mode=adaptive bytes=40
+split_history_row case=empty-dictionary wrapper=gzip mode=fixed bytes=98
+split_history_row case=empty-dictionary wrapper=gzip mode=dynamic bytes=281
+split_history_row case=empty-dictionary wrapper=gzip mode=best bytes=98
+split_history_row case=empty-dictionary wrapper=gzip mode=adaptive bytes=48
+split_history_row case=empty-input wrapper=raw mode=fixed bytes=2
+split_history_row case=empty-input wrapper=raw mode=dynamic bytes=12
+split_history_row case=empty-input wrapper=raw mode=best bytes=2
+split_history_row case=empty-input wrapper=raw mode=adaptive bytes=2
+split_history_row case=empty-input wrapper=zlib mode=fixed bytes=12
+split_history_row case=empty-input wrapper=zlib mode=dynamic bytes=22
+split_history_row case=empty-input wrapper=zlib mode=best bytes=12
+split_history_row case=empty-input wrapper=zlib mode=adaptive bytes=12
+deflate_split_history_ok cases=56 vort_decode=56 libz_decode=56 dictionary_requests=20 tiny_inflate_calls=75842
+check
++- check-zstd-source-reverse
+   +- test-zstd-source-reverse-wasm
+      +- install generated to zstd-source-reverse-wasm.json
+         +- run node w
+1/43 zstd.test.Zstd source reverse consumer contracts...OK
+2/43 zstd.test.Zstd source literals metadata contracts...OK
+3/43 zstd.test.Zstd source sequence metadata contracts...OK
+4/43 zstd.test.Zstd source sequence reverse execution contracts...OK
+5/43 zstd.test.Zstd source frame and block layout contracts...OK
+6/43 zstd.test.Zstd source Huffman tree preparation contracts...OK
+7/43 zstd.test.Zstd source Huffman literal execution contracts...OK
+8/43 zstd.test.Zstd source literal stream execution contracts...OK
+9/43 zstd.test.Zstd source compressed block execution contracts...OK
+10/43 zstd.test.Zstd source frame execution contracts...OK
+11/43 zstd.test.Zstd source stream cursor contracts...OK
+12/43 zstd.test.Zstd source frame decode API contracts...OK
+13/43 zstd.test.Zstd source output alias contracts...OK
+14/43 zstd.test_0...OK
+15/43 zstd.decode.budget.test_0...OK
+16/43 io.requested_heap_budget.test_0...OK
+17/43 tests.zstd_stream_counter_contracts.test_0...OK
+18/43 tests.zstd_large_history_contracts.test_0...OK
+19/43 zstd.incremental.encoder.frame.test_0...OK
+20/43 tests.zstd_hq_search_contracts.test_0...OK
+21/43 zstd.source.input.test.Zstd source range enforces absolute and relative bounds...OK
+22/43 zstd.source.forward_cursor.test.Zstd source forward cursor does not prefetch its remaining range...OK
+23/43 zstd.source.literals.test.Zstd source literals raw layout skips payload bytes...OK
+24/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader matches slice reads across page boundaries...OK
+25/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader checkpoint restores across page refills...OK
+26/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader rejects bit-count overflow before callback...OK
+27/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse exhaustive pages alignments markers and widths match slice reader...OK
+28/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse random mixed operations match slice reader on every page size...OK
+29/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse fields refill across page boundaries without retaining the range...OK
+30/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse completes one two and three byte callback reads...OK
+31/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse rejects undersized page before any source callback...OK
+32/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse uses nonzero synthetic offsets beyond four GiB...OK
+33/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse maps zero excessive and failed callbacks...OK
+34/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse range rejects overflow and every out of bounds access...OK
+35/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse page is poison safe reusable and canary bounded...OK
+36/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse poisoned stale page is fully replaced on descending refill...OK
+37/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse reports marker truncation corruption and width errors...OK
+38/43 zstd.match.hq_tree.test_0...OK
+39/43 zstd.match.hq_parser.test_0...OK
+40/43 zstd.match.lazy2.test_0...OK
+41/43 zstd.match.hq_parser.tests.test_0...OK
+42/43 zstd.match.hq_parser.frontier_parser.test_0...OK
+43/43 checksum.xxh64_stream.test_0...OK
+All 43 tests passed.
+(node:681559) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed command: node tools/zstd/source_reverse_wasm_gate.js ./.zig-cache/o/9fe81611e75f0038ab345c8411cd5f94/vort-zstd-source-reverse-wasm-tests.wasm
+
+check
++- compile test vort-tests ReleaseSafe native failure
+error: process terminated with signal INT
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/cee0eb16a8535f7964c7dcc97f70a69d/vort-br-record-optimal.o .zig-cache/o/5bfa0de1933f9816015dd36800e1c845/vort-zstd-huffman-x2.o -OReleaseSafe -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d --dep vail_archive_crypto -Mroot=/home/passchaos/project-z/vort/src/root.zig -OReleaseSafe -Mvail_archive_crypto=/home/passchaos/project-z/vail/archive_crypto/src/root.zig --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+check
++- compile exe vort ReleaseSafe native failure
+error: process terminated with signal INT
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig build-exe -OReleaseSafe --dep vort -Mroot=/home/passchaos/project-z/vort/examples/cli.zig .zig-cache/o/cee0eb16a8535f7964c7dcc97f70a69d/vort-br-record-optimal.o .zig-cache/o/5bfa0de1933f9816015dd36800e1c845/vort-zstd-huffman-x2.o -OReleaseSafe -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d --dep vail_archive_crypto -Mvort=/home/passchaos/project-z/vort/src/root.zig -OReleaseSafe -Mvail_archive_crypto=/home/passchaos/project-z/vail/archive_crypto/src/root.zig --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+

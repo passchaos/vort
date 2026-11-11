@@ -1,0 +1,46 @@
+1/43 zstd.test.Zstd source reverse consumer contracts...OK
+2/43 zstd.test.Zstd source literals metadata contracts...OK
+3/43 zstd.test.Zstd source sequence metadata contracts...OK
+4/43 zstd.test.Zstd source sequence reverse execution contracts...OK
+5/43 zstd.test.Zstd source frame and block layout contracts...OK
+6/43 zstd.test.Zstd source Huffman tree preparation contracts...OK
+7/43 zstd.test.Zstd source Huffman literal execution contracts...OK
+8/43 zstd.test.Zstd source literal stream execution contracts...OK
+9/43 zstd.test.Zstd source compressed block execution contracts...OK
+10/43 zstd.test.Zstd source frame execution contracts...OK
+11/43 zstd.test.Zstd source stream cursor contracts...OK
+12/43 zstd.test.Zstd source frame decode API contracts...OK
+13/43 zstd.test.Zstd source output alias contracts...OK
+14/43 zstd.test_0...OK
+15/43 zstd.decode.budget.test_0...OK
+16/43 io.requested_heap_budget.test_0...OK
+17/43 tests.zstd_stream_counter_contracts.test_0...OK
+18/43 tests.zstd_large_history_contracts.test_0...OK
+19/43 zstd.incremental.encoder.frame.test_0...OK
+20/43 tests.zstd_hq_search_contracts.test_0...OK
+21/43 zstd.source.input.test.Zstd source range enforces absolute and relative bounds...OK
+22/43 zstd.source.forward_cursor.test.Zstd source forward cursor does not prefetch its remaining range...OK
+23/43 zstd.source.literals.test.Zstd source literals raw layout skips payload bytes...OK
+24/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader matches slice reads across page boundaries...OK
+25/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader checkpoint restores across page refills...OK
+26/43 zstd.source.reverse_bit_reader.test.Zstd source reverse reader rejects bit-count overflow before callback...OK
+27/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse exhaustive pages alignments markers and widths match slice reader...OK
+28/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse random mixed operations match slice reader on every page size...OK
+29/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse fields refill across page boundaries without retaining the range...OK
+30/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse completes one two and three byte callback reads...OK
+31/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse rejects undersized page before any source callback...OK
+32/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse uses nonzero synthetic offsets beyond four GiB...OK
+33/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse maps zero excessive and failed callbacks...OK
+34/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse range rejects overflow and every out of bounds access...OK
+35/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse page is poison safe reusable and canary bounded...OK
+36/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse poisoned stale page is fully replaced on descending refill...OK
+37/43 zstd.source.reverse_bit_reader_tests.test.Zstd source reverse reports marker truncation corruption and width errors...OK
+38/43 zstd.match.hq_tree.test_0...OK
+39/43 zstd.match.hq_parser.test_0...OK
+40/43 zstd.match.lazy2.test_0...OK
+41/43 zstd.match.hq_parser.tests.test_0...OK
+42/43 zstd.match.hq_parser.frontier_parser.test_0...OK
+43/43 checksum.xxh64_stream.test_0...OK
+All 43 tests passed.
+(node:682391) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
