@@ -3634,6 +3634,10 @@ test "root raw Deflate caller-buffer borrow contracts" {
     try @import("tests/deflate_raw_output_alias.zig").contracts(@This());
 }
 
+test "root public generic semantic linear contracts" {
+    try @import("deflate/semantic/public_linear_contracts.zig").rootContracts(@This());
+}
+
 test "root Deflate chunk borrow contracts" {
     try @import("tests/deflate_chunk_borrows.zig").contracts(@This());
 }

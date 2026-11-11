@@ -23654,6 +23654,16 @@ test "PNG ultrafast zlib streams round trip through general decoder" {
     }
 }
 
+test "Deflate public generic semantic linear contracts" {
+    const D = @This();
+    const Api = struct {
+        pub const decodeRawDeflate = D.decodeRawAuto;
+        pub const literalLookupBits = D.dynamicLiteralLookupBits;
+        pub const slicesOverlap = D.slicesOverlapForSemanticDecode;
+    };
+    try @import("deflate/semantic/public_linear_contracts.zig").contracts(Api);
+}
+
 test "deflate portable secondary lookups decode the guarded reference OSDB dynamic block" {
     try @import("deflate/decoder/portable_secondary_tests.zig").check(@This());
 }
