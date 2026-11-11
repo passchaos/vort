@@ -1,0 +1,219 @@
+{
+  "schema": "vort.deflate-chunk-borrows-archive.v1",
+  "fix_commit": "b6709ae9f210781ff3b1d90998d57e005fb8b32b",
+  "base_commit": "4e3c42ce4fd6999fba50732ae9dcb5dd3145275c",
+  "claim": "functional compatibility only; no performance claim",
+  "archives": {
+    "campaign.tar.gz": {
+      "sha256": "6aa9dd5af3a26117ecfdb31f8c5ae275c99e4f8d18fc767f873351a6e584208b",
+      "members": {
+        "README.md": {
+          "bytes": 2754,
+          "sha256": "03b1af5b570c322a3c0adc710ff04d60244205ab157018d08b72db5a3fe947a2"
+        },
+        "build.json": {
+          "bytes": 413799,
+          "sha256": "0421da579d959171072abbb8d6142e368cd7cabaa1d4d5a3d513ba879a71aea6"
+        },
+        "campaign.py": {
+          "bytes": 12073,
+          "sha256": "81ffa554db38f2ac0066694f806057d189df4725d7a8da8c8821cbd88b837070"
+        },
+        "commands.txt": {
+          "bytes": 669,
+          "sha256": "a221c776e1277406dc97f73e9e8361153944fdb77a8d68f41dfba9c6094813a0"
+        },
+        "coverage.json": {
+          "bytes": 1138,
+          "sha256": "e066ce769e92cd8e7f3624487d2d43f5a397ecba62cd42a101b1deee3d3773ef"
+        },
+        "final-rows.jsonl": {
+          "bytes": 2238929,
+          "sha256": "e93dfce59b1ef92b025d6169df89a8e978b06d7c04230b5f58c1a55cff9f4331"
+        },
+        "final-summary.json": {
+          "bytes": 413365,
+          "sha256": "1c8bd28c4edbfdf7ccda97b34fc7cca9e1fb0b6e4263170c22c0052cbcad3952"
+        },
+        "fixtures.json": {
+          "bytes": 227666,
+          "sha256": "becc6c34563f175866bfa58b787601cdb6f2b617833f24b8b6af1e18fa96123f"
+        },
+        "packet.json": {
+          "bytes": 4156,
+          "sha256": "6bad3b9cfdb8476363d89b015955ae5026cfdf439457282e3324dcc9c517ee49"
+        },
+        "pilot-probe.zig": {
+          "bytes": 7697,
+          "sha256": "3ba04a0465c757c17693ebdbf18ad60a468cb135f442930502a93c96fd36bc39"
+        },
+        "pilot-row.schema.json": {
+          "bytes": 1859,
+          "sha256": "5e826d0f77bc97376e36b52a6164e1450f0b8e5b61c6c7f2555ae6b84aefa18a"
+        },
+        "pilot-rows.jsonl": {
+          "bytes": 33720,
+          "sha256": "dbc65e0eedfa1d8653b3d580d807b47c338951ec7e1ae2ea7d23d2fab57fc8bf"
+        },
+        "pilot-summary.json": {
+          "bytes": 413360,
+          "sha256": "33495ad7b9cee9eae3a08bed75318c7e50b884d39ae08d47e38d145e19f7cce9"
+        },
+        "probe": {
+          "bytes": 4828720,
+          "sha256": "8ec4ac7f1936ec34eb3e9bf2d64a3805b915aab7ca72c9c3bb2aa8f0689c6ffd"
+        },
+        "probe.zig": {
+          "bytes": 7885,
+          "sha256": "b70a232e91717446bcae5e919c558f712d1998ce2a9ae4b03cfeb0212fd9cc11"
+        },
+        "row.schema.json": {
+          "bytes": 1534,
+          "sha256": "16d951311a10a4779abde82aacdf74e306e5e6de8e263d3e7cab73ec263a3f7d"
+        },
+        "sample-row.json": {
+          "bytes": 1780,
+          "sha256": "83f1df9503b2526302540955bd12138df21ab661a301f5b898b070de470fd971"
+        },
+        "source-commit-binding.json": {
+          "bytes": 412717,
+          "sha256": "428a618ff5bda99567e6e76b958772fadb8f4b4acda58151c24d0e53f2381719"
+        },
+        "source-epoch.json": {
+          "bytes": 206668,
+          "sha256": "cd437b772870c9c3202e5d5d4d072abf9e6b162b7569b6170c67cd2bfcb20795"
+        },
+        "source-final-note.txt": {
+          "bytes": 552,
+          "sha256": "7adb2e434c173180907e3abc825f97aee5bf030c490217f6791746924c43bc04"
+        },
+        "zig-env.txt": {
+          "bytes": 1230,
+          "sha256": "c8eab15db44d0b56a66eb3a177255efe6fa0294877ad220a8d82377a3b8e5933"
+        }
+      }
+    },
+    "gates.tar.gz": {
+      "sha256": "91f570c7062d8965de977fd24d2ac8e3c92c314dedf4b3b5c490c8e904a32c2f",
+      "members": {
+        "before/deflate.zig": {
+          "bytes": 1188115,
+          "sha256": "ee3b6f2dbe252c23ea4ca05d8cc07a0d85cf6bd375cf82afa2a6ad8ebc680e1d"
+        },
+        "before/dictionary-safe.log": {
+          "bytes": 296,
+          "sha256": "8b570bf66e2c60605cdd00d5494bd1bf1be1124040e43fef3d698c76e574b191"
+        },
+        "before/probe-safe": {
+          "bytes": 4103608,
+          "sha256": "d694116ce80fb607bcbe4d22d71107cdc59a11797bf7fd29694a8a82ac646320"
+        },
+        "before/unread-chunk-safe.log": {
+          "bytes": 210,
+          "sha256": "48a2c849a4b51b4f48f2475374d8399d626a933a0207dbc50b648c7d0df183f4"
+        },
+        "commands.txt": {
+          "bytes": 958,
+          "sha256": "07de0ff82943e615cede7253d61c8691b84aed1e1d0def2e3d6438dd339dad63"
+        },
+        "contracts-all-safe.log": {
+          "bytes": 500,
+          "sha256": "aa6f32a117bab5ff6b36a51a12064c01837d0ad076da2281a9f5475a3c694061"
+        },
+        "contracts-debug.log": {
+          "bytes": 500,
+          "sha256": "aa6f32a117bab5ff6b36a51a12064c01837d0ad076da2281a9f5475a3c694061"
+        },
+        "contracts-safe.log": {
+          "bytes": 270,
+          "sha256": "5f28d2f92caa681322b82216ba2995df256f59e8f55fd0ba7d34bf369236404d"
+        },
+        "contracts-x86.log": {
+          "bytes": 500,
+          "sha256": "aa6f32a117bab5ff6b36a51a12064c01837d0ad076da2281a9f5475a3c694061"
+        },
+        "contracts.wasm": {
+          "bytes": 4567647,
+          "sha256": "193059c8dd1b66890fe87290c6dcded40d3b42f75223baefc8277abb5bdc059c"
+        },
+        "deflate-full.log": {
+          "bytes": 70316,
+          "sha256": "11bd549f64c4269e313fc9ca902b9b52cba16055bae80b663d04ecd5fc1873d8"
+        },
+        "probe.zig": {
+          "bytes": 3277,
+          "sha256": "13bd7a0ce8933e23204bb5e45ff06bb17be362c750fd50f6e205f591e5eb2173"
+        },
+        "root.log": {
+          "bytes": 907,
+          "sha256": "787575ebac3a83022e25edbb23bd5982b3467cda38cfbcfb8814064fb540f333"
+        },
+        "wasm-build.log": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "wasm-receipt.json": {
+          "bytes": 3261,
+          "sha256": "8e67b31f46d354df412040b56a6ddf091ffcb0f82201f5125204d007f3deeef8"
+        },
+        "wasm-run.log": {
+          "bytes": 3261,
+          "sha256": "8e67b31f46d354df412040b56a6ddf091ffcb0f82201f5125204d007f3deeef8"
+        }
+      }
+    },
+    "source-overlay.tar.gz": {
+      "sha256": "a15d53508e849c9e04c7984faf6eae818b63ff8d978a5fb22a20fe067dd23f6c",
+      "members": {
+        "src/deflate.zig": {
+          "bytes": 1192827,
+          "sha256": "5f95fd73012751dbbd49075f4f111368deebe00a4a9c361521d5dea728cffb1e"
+        },
+        "src/deflate/decode/append_borrows.zig": {
+          "bytes": 876,
+          "sha256": "09f20e278a7ad4279f3b064cd27e9c6d92ffd2b20cd33fd10d682005d1e5cd37"
+        },
+        "src/deflate/decode/chunk_join.zig": {
+          "bytes": 6005,
+          "sha256": "07fa4dcd45af1f973bf38ae132846380d25d20b5676b3df6db83662879da308d"
+        },
+        "src/deflate/decode/tests/chunk_borrows.zig": {
+          "bytes": 19779,
+          "sha256": "a66c50c4bf92e2ef98235369da053a865757b45e0683de13c52152ff30eed061"
+        },
+        "src/deflate/decode/tests/wrapper_chunk_borrows.zig": {
+          "bytes": 15956,
+          "sha256": "647548deb2844b841ec9a9570dc382b151ce9a5b3286285b5925c334693b7f12"
+        },
+        "src/deflate/decode/tests/wrapper_chunk_borrows_append.zig": {
+          "bytes": 7489,
+          "sha256": "d627f3c1b934a7e31f62d3a985c3a4896c588b7e40a231ad7a014c92c1b45017"
+        },
+        "src/deflate/decode/tests/wrapper_chunk_borrows_state.zig": {
+          "bytes": 11173,
+          "sha256": "be91aa9f124837e87ae17bdb918cf313d2c26a5089a7c1635a398f50a38341bd"
+        },
+        "src/deflate/decode/tests/wrapper_chunk_borrows_support.zig": {
+          "bytes": 3041,
+          "sha256": "acef8098b4ffc7bb59c19eb00583ad42ed1c1b963335d7fb6d0669faeb2e3c75"
+        },
+        "src/deflate/decode/tests/zlib_chunk_append_borrows.zig": {
+          "bytes": 11706,
+          "sha256": "def5b353ce7b1dc1d796e4de978f3bae84a9443a41e3190de19f698a315b34fe"
+        },
+        "src/deflate/decoder/output_alias.zig": {
+          "bytes": 869,
+          "sha256": "a392bd91d57e2753f07b9bb49ef776738b1201ecf8dd44e9facbdbbea3558fb2"
+        },
+        "src/root.zig": {
+          "bytes": 853349,
+          "sha256": "14f7668f3a838305f71066397471d5b25958b7c3e30625f17e4706eaf40189fc"
+        },
+        "src/tests/deflate_chunk_borrows.zig": {
+          "bytes": 2392,
+          "sha256": "04a298784b1dc61243ab8f0232ebf2dca164665c25a7dbf8b19627f1993f53ae"
+        }
+      }
+    }
+  }
+}

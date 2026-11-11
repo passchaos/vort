@@ -1,0 +1,29 @@
+{
+  "valid": true,
+  "claim": "functional compatibility only; no performance claim",
+  "archive_members": 49,
+  "source_files": 1858,
+  "live_source_files_verified": 1858,
+  "source_overlay_files": 12,
+  "fixtures": 216,
+  "rows": 1368,
+  "rows_by_codec": {
+    "raw": 456,
+    "zlib": 456,
+    "gzip": 456
+  },
+  "rows_by_schedule": {
+    "single": 216,
+    "single_among_empty": 216,
+    "spans4093_empty": 216,
+    "packed_identity": 216,
+    "first_forward": 216,
+    "first_backward": 216,
+    "spans1_empty": 72
+  },
+  "full_tests": 698,
+  "root_tests": 94,
+  "focused_tests": 11,
+  "actual_wasi_exit_code": 0,
+  "pilot_is_nonfinal": true
+}

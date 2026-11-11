@@ -17,7 +17,26 @@ separate. These development-host observations are not an industry-best claim.
 
 ## 2026-11-11 Raw Deflate borrow correction and follow-up routing
 
-The subsequent `f74ca1fe` functional change rejects caller-output overlap with
+The follow-up `b6709ae9` closes the shared legacy chunk-joining borrow boundary
+for Raw Deflate/zlib/gzip, including reusable consumers and outer PNG buffers.
+The previous join could overwrite an unread payload or dictionary and still
+return successful wrong output. Admission now finishes before writes, retains
+single-source borrowing, supports identity/current-chunk memmove layouts, and
+protects descriptors, dictionaries, complete outputs/append allocations and
+receiver/retained storage. Aliased append read borrows stage through the caller
+allocator before output growth; real OOM remains an error with cleanup.
+See [the contract](../formats/deflate-chunk-borrows.md) and
+[the full evidence](deflate-chunk-borrows-20261111.md).
+
+The complete Deflate family passes 698/698 tests, public-root gate 94/94, and
+Debug/x86/actual 32-bit WASI shared contracts. The independent compatibility
+campaign binds 216 raw/zlib/gzip wires to 1,368 schedule rows, including
+fragmentation, packed identity and both safe current-chunk moves. These are
+functional checks, not updated throughput or memory-leadership measurements.
+Scratch-free direct chunk execution, contiguous dictionary-set and incremental
+ownership still require their separate contract audits.
+
+The preceding `f74ca1fe` functional change rejects caller-output overlap with
 complete compressed input or preset dictionary storage before any writes.
 The old raw stored path could return `abcabc` instead of `abcdef` after
 overwriting a later block's unread payload, even when each individual memcpy
