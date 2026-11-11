@@ -760,7 +760,7 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
                 // Fixed-width inline vector moves with one overlapping tail
                 // store; the 258-byte loop headroom bounds every speculative
                 // byte, so no runtime-length compiler-rt memcpy is needed.
-                shortcopy.copyWide(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
+                shortcopy.copyWideAtLeast16(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
             } else {
                 shortcopy.copy(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
             }

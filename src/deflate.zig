@@ -23672,6 +23672,10 @@ test "deflate exact short nonoverlapping copies preserve all lengths alignments 
     try @import("deflate/decoder/shortcopy_tests.zig").check();
 }
 
+test "Deflate wide copy exact contracts" {
+    try @import("deflate/decoder/wide_copy_tests.zig").check();
+}
+
 test "Deflate whole-operation requested heap contracts" {
     try @import("deflate/encode/total_budget/tests.zig").contracts(@This());
 }

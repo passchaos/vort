@@ -29,6 +29,17 @@ inline fn pair(comptime width: usize, destination: []u8, source: []const u8, len
 /// not overlap and both spans stay inside their buffers.
 pub inline fn copyWide(destination: []u8, source: []const u8, length: usize) void {
     std.debug.assert(length >= 3 and length <= 258 and length <= destination.len and length <= source.len);
+    if (length < 16) {
+        copy(destination, source, length);
+        return;
+    }
+    copyWideAtLeast16(destination, source, length);
+}
+
+/// The validated wide-call boundary keeps the exact short-span fallback out
+/// of production hot paths whose owner already proves at least one full word.
+pub inline fn copyWideAtLeast16(destination: []u8, source: []const u8, length: usize) void {
+    std.debug.assert(length >= 16 and length <= 258 and length <= destination.len and length <= source.len);
     var offset: usize = 0;
     while (offset + 16 <= length) : (offset += 16) {
         const head: [16]u8 = source[offset..][0..16].*;
