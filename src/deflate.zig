@@ -20,6 +20,7 @@ const png_windowed_history =
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
+const decode_output_alias = @import("deflate/decoder/output_alias.zig");
 const dynamic_optimal = @import("deflate/dynamic_optimal.zig");
 const bt_optimal = @import("deflate/bt_optimal.zig");
 const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
@@ -148,6 +149,7 @@ pub fn findRawDeflateSyncPoint(input: []const u8) ?RawDeflateSyncPoint {
 pub fn decodeRawDeflateAfterSync(input: []const u8, output: []u8) SyncError!RawDeflateSyncDecodeResult {
     const point = findRawDeflateSyncPoint(input) orelse
         return error.DeflateSyncPointNotFound;
+    try decode_output_alias.validate(input, "", output);
     const decoded = try decodeRawAuto(input[point.resume_offset..], output);
     return .{
         .sync_point = point,
@@ -4440,6 +4442,7 @@ test "fused dynamic match writer matches field-by-field reference" {
 }
 
 pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
+    try decode_output_alias.validate(input, "", output);
     var reader = bitstream.BufferedBitReader.init(input);
     const header = try readBlockHeader(&reader);
     if (header.block_type != 0b01) return error.InvalidDeflateBlockType;
@@ -5518,16 +5521,23 @@ fn planRawStoredOnlyForFullInput(input: []const u8) Error!?StoredOnlyPlan {
     return stored_plan;
 }
 
+/// Caller output must be disjoint from the complete compressed input. Aliased
+/// output is rejected before any writes; see docs/formats/deflate-decode-borrows.md.
 pub fn decodeRawAuto(input: []const u8, output: []u8) Error!DecodeResult {
     return decodeRawAutoWithDictionary(input, "", output);
 }
 
 pub fn decodeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, output: []u8) Error!DecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
+    try decode_output_alias.validate(input, dictionary, output);
     if (try decodeRawStoredOnlyIntoMaybe(input, output)) |stored| return stored;
 
     var reader = bitstream.BufferedBitReader.init(input);
     return decodeRawAutoWithDictionaryFromReader(&reader, 0, dictionary, output);
+}
+
+test "Deflate raw decode buffer alias contracts" {
+    try @import("deflate/decoder/output_alias_tests.zig").contracts(@This());
 }
 
 pub fn decodeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!DecodeResult {
@@ -5885,6 +5895,7 @@ fn writeStoredSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWr
 }
 
 pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
+    try decode_output_alias.validate(input, "", output);
     return (try decodeRawStoredOnlyIntoMaybe(input, output)) orelse error.InvalidDeflateBlockType;
 }
 

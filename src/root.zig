@@ -3629,6 +3629,11 @@ pub const decodeRawDeflateChunksAppendExactSize = deflate.decodeRawChunksAppendE
 pub const decodeRawDeflateChunksAppendWithDictionaryExactSize = deflate.decodeRawChunksAppendWithDictionaryExactSize;
 pub const decodeRawDeflateChunksAppendLimited = deflate.decodeRawChunksAppendLimited;
 pub const decodeRawDeflateChunksAppendWithDictionaryLimited = deflate.decodeRawChunksAppendWithDictionaryLimited;
+
+test "root raw Deflate caller-buffer borrow contracts" {
+    try @import("tests/deflate_raw_output_alias.zig").contracts(@This());
+}
+
 pub const decodedRawDeflateSize = deflate.decodedRawAutoSize;
 pub const decodedRawDeflateSizeWithDictionary = deflate.decodedRawAutoSizeWithDictionary;
 pub const decodedRawDeflateChunksSize = deflate.decodedRawChunksSize;
