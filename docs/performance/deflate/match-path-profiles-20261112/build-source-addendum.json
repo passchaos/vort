@@ -1,0 +1,24 @@
+{
+  "artifact_kind": "later main-authored reconstruction of omitted build modules from immutable492a0a74 Git blobs; not an original capture-time registry",
+  "original_registered_count": 2048,
+  "added_build_modules": {
+    "build/br_decode_memory.zig": "2a6c437715c529a65633c73324fc9643e350f67ec1cf020578319a62a9d78658",
+    "build/br_decode_mozilla.zig": "a8d252f5876140480caf9dead582c9196b87fba7c242740dc00b76cbacab53e6",
+    "build/br_prefix_decode.zig": "01e575ec565b0a4f42f506bf8d2d817373e71ee9cae0a615c3b610f00343dd7f",
+    "build/codec_controls.zig": "bac3e52b2416e02df39e82d35df010b8172613599f548fd832eae891086e77b7",
+    "build/codec_state_controls.zig": "942221ccbc4becde7bb48e9b661f2c9e660252bb34b4c354faa1b6d49499afb3",
+    "build/deflate_wide_encode.zig": "1e3b4074184c068317befeea88931b6ff55c24fd7e777140e40069beb0d9b339",
+    "build/gzip_direct_chunks.zig": "94f7e15ed681be5b7e84d74971b00133b8111aec7225463e19dca17389122689",
+    "build/wide_sizes.zig": "b9bd8b74e71d258033d9cff21e01819ce791fbaa6205c9f29375b48b86772b86",
+    "build/zip_wide_input.zig": "8a52dc337d6ba4d64330e06d1ea9e199e3b84bcbce79ea8bacba7945fc665488",
+    "build/zip_wide_read.zig": "9efa274f3d7b8ad1a6f5bae82b41a04b3c0cee1881d5be1aee9436598ed6fa50",
+    "build/zlib_or_gzip_auto.zig": "bbee7b0be2b5fba0a5372308c9bc20126d5c4ec69e0c3fde96c4025cd66a4ba5",
+    "build/zstd_compressed_workspace.zig": "860be12a44eb03d91e89031f7eff1d2dd7b5759efadba66153120db05f7bca12",
+    "build/zstd_history_workspace.zig": "bb4114e79bd54ad5300fac5e60cac2200321047b04e63a4655020443c36dcf08",
+    "build/zstd_prefix_stable.zig": "62644cc642d4df05c07d3b747a11d095439a10e1859c1fb11cf8573059b5372b",
+    "build/zstd_source_reverse.zig": "eaf8b9df77fee49775f986d9cfe0b25c035e37ab8c5c28d90eb842017776d7f5"
+  },
+  "reconstructed_count": 2063,
+  "reconstructed_digest": "32546e939bea56b5b2122482e0383a2bce3769e4f6146bcf0684d31128692075",
+  "scope": "Original manifest and capture-validation2048 registry remain unchanged. The15 modules match earlier recorded baseline hashes and current unchanged build bytes; replay dependencies are preserved separately."
+}

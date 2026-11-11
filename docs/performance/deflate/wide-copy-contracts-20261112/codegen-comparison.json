@@ -1,0 +1,29 @@
+{
+  "artifact_kind": "main-authored derived summary from read-only audit_deflate_loop messages; original nm/objdump stdout not preserved",
+  "baseline_probe_sha256": "2527c72112f19ac34d08d8f199f38e76dc4a9883ad25466f2f83ff193da21f14",
+  "root_symbol": "deflate.semantic.linear_entry.aligned",
+  "baseline": {
+    "text_bytes": 3637,
+    "stack_reservation": 296,
+    "register_pushes": 6,
+    "static_instructions_with_padding": 898,
+    "negative_rbp_references": 131
+  },
+  "initial_full_facade": {
+    "probe_sha256": "650927b7b313d6746d7f83f4433b9d1cc9270fa153bc432654d6568027493549",
+    "text_bytes": 3701,
+    "stack_reservation": 312,
+    "static_instructions_with_padding": 900,
+    "negative_rbp_references": 122,
+    "finding": "low-length fallback remains in generic code; original cmp16 reused, not an added long-match check; register/block layout changes"
+  },
+  "validated_boundary": {
+    "probe_sha256": "e8377941221a13c0a0030b10ae083bb73cf17bc58f81ea8d55ad98c5eb66cb5c",
+    "text_bytes": 3669,
+    "stack_reservation": 296,
+    "static_instructions_with_padding": 896,
+    "negative_rbp_references": 131,
+    "finding": "entropy/preload/refill register/arithmetic shape restores baseline; short fallback absent; wide loop entry/tail and block layout differ, no strict normalized instruction equality"
+  },
+  "scope": "whole static symbol includes copy/tail/errors/padding; all inspections CPU0. This is not measured throughput or dynamic instruction/spill cost."
+}

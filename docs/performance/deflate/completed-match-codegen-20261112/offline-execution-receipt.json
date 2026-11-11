@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "0",
+    "python3",
+    "-B",
+    "docs/performance/deflate/completed-match-codegen-20261112/verify.py",
+    "--original-bytes",
+    "--receipt",
+    "docs/performance/deflate/completed-match-codegen-20261112/validation-receipt.json"
+  ],
+  "cwd": "/home/passchaos/project-z/vort",
+  "raw_stderr_saved": false,
+  "raw_stdout_saved": false,
+  "result_sha256": "b394220308b03fdc413c3edede9d84761064f2172e848f4b9529a86b01993731",
+  "returncode": 0,
+  "scope": "Completed standard-library CPU0 offline audit only; original36 files unchanged; no compiler/test/benchmark/codec execution",
+  "tool_origin": "tools.exec nested exec_command chunkfc5eff; exit_code0"
+}

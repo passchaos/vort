@@ -1,0 +1,40 @@
+{
+  "schema": "vort.deflate.match-path-profile-archive-validation.v1",
+  "valid": true,
+  "scope": "offline byte/source/recorded-statistics verification; no compiler, codec, sampling or benchmark run",
+  "cpu_affinity": [
+    0
+  ],
+  "nci_revision": "492a0a74535992cd4a7e3ad3182777414c8c0fac",
+  "reymont_revision": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "original_nci_capture_registry_files": 2048,
+  "later_reconstructed_nci_inventory_files": 2063,
+  "reymont_source_registry_files": 2062,
+  "nci_git_blobs_verified": 2063,
+  "reymont_git_blobs_verified": 2062,
+  "original_files_verified": 35,
+  "nci_fixture_bytes": 70372,
+  "profiles": [
+    {
+      "label": "reymont64KL6",
+      "root_samples": 1554,
+      "capture_samples": 2681,
+      "whole_process_root_percent": 58.02,
+      "rounded_region_sum": 99.94000000000001,
+      "stack_statistics_overlap_partition": true
+    },
+    {
+      "label": "nci64KL9",
+      "root_samples": 578,
+      "capture_samples": 1244,
+      "whole_process_root_percent": 46.93,
+      "rounded_region_sum": 100.05,
+      "stack_statistics_overlap_partition": true
+    }
+  ],
+  "complete_vort_only_denominator": false,
+  "codec_heap_measured": false,
+  "profile_clocks_are_acceptance_samples": false,
+  "region_original_partitioning_script_preserved": false,
+  "verified_at_utc": "2026-11-11T22:22:18.859810+00:00"
+}

@@ -1,0 +1,11 @@
+{
+  "returncode": 0,
+  "raw_json_valid": true,
+  "source_files": 2048,
+  "probe_sha256": "2527c72112f19ac34d08d8f199f38e76dc4a9883ad25466f2f83ff193da21f14",
+  "profile_sha256": "e4308167ee9ec67b1f18fce899effa579983bc80a27e90a15bc08d42ff212274",
+  "stdout_sha256": "1572d7af514a9a721e201bd5c7c5feae1be0e82f4641c17517abdfdf8b8e4c36",
+  "stderr_sha256": "07de86152de4f86efb34f76755afa348dbcf7dc14104e2ee5fd36d94a91c4395",
+  "capture_script_sha256": "decdaba6d1bb53fd51c434b96c1df163a1ae52ca927424680fded630261770b4",
+  "scope": "full output/count/consumption/guards validated; all profile clocks excluded from A/B"
+}

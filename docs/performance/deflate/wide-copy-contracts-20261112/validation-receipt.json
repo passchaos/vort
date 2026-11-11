@@ -1,0 +1,84 @@
+{
+  "schema": "vort.deflate.wide-copy-archive-validation.v1",
+  "valid": true,
+  "scope": "offline byte/source/recorded-contract verification; no compiler, codec, sampling or benchmark run",
+  "cpu_affinity": [
+    0
+  ],
+  "base_revision": "492a0a74535992cd4a7e3ad3182777414c8c0fac",
+  "capture_registry_files": 2048,
+  "later_reconstructed_base_inventory_files": 2063,
+  "base_git_blobs_verified": 2063,
+  "saved_final_source_commit": "fe75d21fa10a45b204347cce8d52be97f534d718",
+  "saved_final_source_git_blobs_verified": 4,
+  "original_files_verified": 577,
+  "completed_nonregression_and_smoke": {
+    "events": 96,
+    "selected_rows": 12,
+    "outer_pairs_per_row": 4,
+    "child_measured_pairs": 2,
+    "child_warmup_pairs": 2,
+    "selected_geomean": 1.003627731641238,
+    "weakest_row": "deflate_nci_1048576_9_cold",
+    "weakest_geomean": 0.9848586630321882,
+    "all_selected_row_geomeans_at_least_0_98": true,
+    "performance_gain_claimed": false,
+    "smoke_events": 72,
+    "smoke_times_are_acceptance_samples": false,
+    "large_fixture_bytes_archived": false,
+    "external_fixture_files_verified": 108,
+    "external_fixture_bytes_verified": 371820359
+  },
+  "source_epoch_file_counts": {
+    "before_overlay": 2,
+    "v1_overlay": 3,
+    "final_boundary_overlay": 4
+  },
+  "before_direct_low_length_failure_verified": true,
+  "final_facade_scalar_cases": 73728,
+  "final_core_scalar_cases": 69984,
+  "total_scalar_cases": 143712,
+  "v1_focused_runs": 4,
+  "v1_full_safe": {
+    "tests": 736,
+    "anonymous_import_tests": 13,
+    "named_tests": 723
+  },
+  "final_runs": [
+    {
+      "label": "debug",
+      "tests": 1,
+      "anonymous_import_tests": 0,
+      "named_tests": 1
+    },
+    {
+      "label": "safe",
+      "tests": 1,
+      "anonymous_import_tests": 0,
+      "named_tests": 1
+    },
+    {
+      "label": "x86-safe",
+      "tests": 1,
+      "anonymous_import_tests": 0,
+      "named_tests": 1
+    },
+    {
+      "label": "wasi-safe",
+      "tests": 1,
+      "anonymous_import_tests": 0,
+      "named_tests": 1
+    },
+    {
+      "label": "full-deflate-safe",
+      "tests": 736,
+      "anonymous_import_tests": 13,
+      "named_tests": 723
+    }
+  ],
+  "codegen_original_nm_objdump_preserved": false,
+  "strict_codegen_equivalence_proven": false,
+  "performance_gain_claimed": false,
+  "new_public_wire_defect_claimed": false,
+  "verified_at_utc": "2026-11-11T22:22:16.128225+00:00"
+}

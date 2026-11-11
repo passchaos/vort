@@ -1,0 +1,1955 @@
+{
+  "artifact_kind": "archive-created exact fixture path/hash/size/generator descriptors; original large fixture bytes remain external",
+  "fixture_count": 72,
+  "original_file_count": 108,
+  "original_bytes": 371820359,
+  "files": {
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.plain": {
+      "sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.deflate.6.wire": {
+      "sha256": "1139d3f6f114faec5cf70e53b3a512c3fa2fa823c8b263e921ce79ca77a9aedf",
+      "bytes": 26268
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.deflate.9.wire": {
+      "sha256": "45df15ae44c971049b1f6eb6dcd865fdcd779d22ad21266b1664b93555c5a5c2",
+      "bytes": 26190
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.plain": {
+      "sha256": "afd479dd0e0339643530bf4ee3d10423265c515a06e7994bbe26ccba39aea9ab",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.deflate.6.wire": {
+      "sha256": "23437d6b2f02f7dc12d7866f3d00958394e6efdae392dc16f10954c3f584f21e",
+      "bytes": 391493
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.deflate.9.wire": {
+      "sha256": "c8d689a87c21cbdc56b9aa150b35eaf54693966f68db37f2f200f9c01972861c",
+      "bytes": 388931
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.plain": {
+      "sha256": "b24c37886142e11d0ee687db6ab06f936207aa7f2ea1fd1d9a36763c7a507e6a",
+      "bytes": 10192446
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.deflate.6.wire": {
+      "sha256": "1d3dd4e7fe9a1b06d39d5dd893ed1df0de16325b48d18f2cfcbc1a8075770138",
+      "bytes": 3871628
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.deflate.9.wire": {
+      "sha256": "9c3ec8dad67b9791aa46bb63e79049e6747c59294f61cf167eea8f0bb7cfc0be",
+      "bytes": 3854729
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain": {
+      "sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.deflate.6.wire": {
+      "sha256": "241e836fe4da8b6980f1a5ce7f615e49c7d4b4103b45dcdc5694e5655f72c8fe",
+      "bytes": 17078
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.deflate.9.wire": {
+      "sha256": "b5292977f37496fc41aa7122a2904ff9567a57dafd3ba4e14d7acb738c2020db",
+      "bytes": 16961
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain": {
+      "sha256": "d307112d2151eef3c035e308b0478e831f6039bdd9770bb753207b02e1fd579d",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.deflate.6.wire": {
+      "sha256": "e0e6fb5839fd83e97de8f3b1863323ef20a15158046e23e85d5b88d9cd979eb3",
+      "bytes": 662776
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.deflate.9.wire": {
+      "sha256": "54498319b31abdbef4e1073ef5e737a6b86c316d4c6688f3edb72738d1a090b5",
+      "bytes": 662225
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain": {
+      "sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+      "bytes": 51220480
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.deflate.6.wire": {
+      "sha256": "5c4d07cb40a058e4567e4a532e71e09dbfd73848c459d3aab2f22671fa80c09e",
+      "bytes": 19089118
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.deflate.9.wire": {
+      "sha256": "d7b2d2625b3bcc998928b4c891e87e8ec644466e167e7d30b24f3af349a868cc",
+      "bytes": 19044390
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.plain": {
+      "sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.deflate.6.wire": {
+      "sha256": "1be3b69245b1845adf1f2150da3c5bbd55aa68f3878ca06e915fca1e3c4ea7f5",
+      "bytes": 17155
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.deflate.9.wire": {
+      "sha256": "007f21ce8de4b82a8701c84a00b5149a8d9a2ddd67d73621749768204e989462",
+      "bytes": 17092
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.plain": {
+      "sha256": "470f6baf5a1e97e0003e84ab6bebfa9ca680145630504b09c22d8653de91a4ac",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.deflate.6.wire": {
+      "sha256": "59a8cdb7397a0461687cf3ab798969361fc1b8aa824b7e19eb122e02a5b95702",
+      "bytes": 348147
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.deflate.9.wire": {
+      "sha256": "e67a697d63bd2253451415c0dffe325964dddcb39f8ec5c39831299c9effcfd9",
+      "bytes": 346400
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.plain": {
+      "sha256": "68637ed52e3e4860174ed2dc0840ac77d5f1a60abbcb13770d5754e3774d53e6",
+      "bytes": 9970564
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.deflate.6.wire": {
+      "sha256": "41f067c36b594ace1e327c5b6c3c16246dfe6404a2b9609f2754c1325626ab33",
+      "bytes": 3675935
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.deflate.9.wire": {
+      "sha256": "790c3c6b578e8383b34f17a77d220351d4dd07ffb092e72f7ede410fc4697016",
+      "bytes": 3660788
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain": {
+      "sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.6.wire": {
+      "sha256": "b0fd15e1f822b0c092b7048cc882a7055a68c3cafd217c987f8a3dcec5ab5d8c",
+      "bytes": 5193
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.9.wire": {
+      "sha256": "e06f43c3fa9c5514e3dbd9d286dcb24959d53f1219b1f5c1475ba95234a7ecca",
+      "bytes": 4836
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.plain": {
+      "sha256": "3d234780bf0ef1a8f13459589904c5f6b0abe8da8c3e2119f20201c6bea6010d",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.deflate.6.wire": {
+      "sha256": "81d572db25eeb70e60f10c3e36dc263ed1f657865f39f3da88bbb9244f800eba",
+      "bytes": 108376
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.deflate.9.wire": {
+      "sha256": "d11436e4104619c68a2332f7dab94e203a506e9023a7c49ec8d1e65f6f83b498",
+      "bytes": 100947
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.plain": {
+      "sha256": "fc63a31770947b8c2062d3b19ca94c00485a232bb91b502021948fee983e1635",
+      "bytes": 33553445
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.deflate.6.wire": {
+      "sha256": "63d2bddec90ac39916d3ab4dabcc6581b738021dfab645a0faeb9b5fd88087fe",
+      "bytes": 3200182
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.deflate.9.wire": {
+      "sha256": "02e35f24f50566d78d85bc3955ab23dc478e6d3517d64ab53813b5492638c39f",
+      "bytes": 2987995
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.plain": {
+      "sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.deflate.6.wire": {
+      "sha256": "c8bfd300a9ee114719d55ca97853ac2118b727e16f6d6684230dc191cfe3d758",
+      "bytes": 32294
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.deflate.9.wire": {
+      "sha256": "c128516e084d5dbdfd3e9499ba62c4b9f4335e5fcd3868d19e0b7a52121e2047",
+      "bytes": 32268
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.plain": {
+      "sha256": "1ed1cfc6b104bb390188e22082608ac8a79b59e367cdbb82796d99b980a9e2bd",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.deflate.6.wire": {
+      "sha256": "ac23d402d004ccebbbcf0604f853319f7caf50c1ee3309ee6a2d42b1327d327d",
+      "bytes": 583446
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.deflate.9.wire": {
+      "sha256": "1df2cc415132839df2bb541f0be4f92716b79c6d187335a0a79f8f28a1d71d82",
+      "bytes": 582514
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.plain": {
+      "sha256": "e7ee013880d34dd5208283d0d3d91b07f442e067454276095ded14f322a656eb",
+      "bytes": 6152192
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.deflate.6.wire": {
+      "sha256": "868831e0f1e3fa04d063c36aca7e7c15d76bba6f7bb1a8e4af362d0a2749b282",
+      "bytes": 3097288
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.deflate.9.wire": {
+      "sha256": "b04700ed8934742be16c870ef0bcab938a84317ebd3ad97197ad0c9b490b22ff",
+      "bytes": 3092920
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.plain": {
+      "sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.deflate.6.wire": {
+      "sha256": "cb731c66afe83c470f5ef4f6e24807c3590e8b145adac9d2511474fff1e7b91f",
+      "bytes": 27584
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.deflate.9.wire": {
+      "sha256": "83a2a975ad672576717b8bc6111a9235daca0158203861b3e77881ccda42f1b7",
+      "bytes": 27469
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.plain": {
+      "sha256": "79c5f0f50af5dbb61368cfb91f735545ccc4de12062f6b62cf7f2bcd4290ef14",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.deflate.6.wire": {
+      "sha256": "d543f61f51d5a8f9088b2092b38d117ee32de78c066f091a0263ce58e2e291a8",
+      "bytes": 386961
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.deflate.9.wire": {
+      "sha256": "23a7c7914b1f305263b12848d8280bed7978c1c93d9825dd9c5ea7680a0417b0",
+      "bytes": 384657
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.plain": {
+      "sha256": "60f027179302ca3ad87c58ac90b6be72ec23588aaa7a3b7fe8ecc0f11def3fa3",
+      "bytes": 10085684
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.deflate.6.wire": {
+      "sha256": "07a31819a642c1cda4427dbade41ec7e44fa266a336221357598675a7357274f",
+      "bytes": 3695164
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.deflate.9.wire": {
+      "sha256": "33603d48b73e256df8123bbe8f5c6143ecd0419976ba0eb71b855676a7795f6d",
+      "bytes": 3673171
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain": {
+      "sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire": {
+      "sha256": "93159be7c00758f86eee3518f3abb76ddcf5a42aedc48d434bffdc198deee2bc",
+      "bytes": 18792
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.9.wire": {
+      "sha256": "96759d535cb9d0a9ddbcaafd760042f3ff4789e29196dc86852acf4561aecd61",
+      "bytes": 18577
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.plain": {
+      "sha256": "fc42c772bf7961598b23936784396392710995c5273074d0f0aba226ef924e2a",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.deflate.6.wire": {
+      "sha256": "56203e3ba92610f28423ce88cba99acf0bbea12f11f4b111b6f7cc564db0a5f6",
+      "bytes": 290916
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.deflate.9.wire": {
+      "sha256": "1decf4a96731df6fdfe5eea188f3a9698fa5505fe4722c96b6425351e4da400e",
+      "bytes": 285317
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.plain": {
+      "sha256": "0eac0114a3dfe6e2ee1f345a0f79d653cb26c3bc9f0ed79238af4933422b7578",
+      "bytes": 6627202
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.deflate.6.wire": {
+      "sha256": "89b77cac3cf39f461d4a8a282239e9e08f9b2816ce2ef27465293393eb1235d8",
+      "bytes": 1860865
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.deflate.9.wire": {
+      "sha256": "408cffd2ab511dd3e4974dfa64d9869469a3b09cf758d84a79d0acd5130ceca1",
+      "bytes": 1823190
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.plain": {
+      "sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.deflate.6.wire": {
+      "sha256": "a84fa5c3a0bccf47cec663af71c28e12ac7b9e5e08fe7125e2521a28cdd48ea6",
+      "bytes": 22343
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.deflate.9.wire": {
+      "sha256": "f34cf843f89daca55a57024877da312de3bbc8e29b71f9c8b455790dc15c8060",
+      "bytes": 22262
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.plain": {
+      "sha256": "fa8147ca0ce5941901483e5cb608fed67c84e1832148ca2b94b6101908c838d0",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.deflate.6.wire": {
+      "sha256": "47683cdbe0995b620e5b953c1525a48ad664c4104134711136789c9304990edf",
+      "bytes": 331468
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.deflate.9.wire": {
+      "sha256": "edbcc949059db5996590fe377479f4cb3fa43863dd4e09ffbd8c1eecc48ce06c",
+      "bytes": 329901
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.plain": {
+      "sha256": "93ba07bc44d8267789c1d911992f40b089ffa2140b4a160fac11ccae9a40e7b2",
+      "bytes": 21606400
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.deflate.6.wire": {
+      "sha256": "dd5931ed1129481dda1060beae0e4f54f6f5beac158a112833fb9a184c2e4a87",
+      "bytes": 5451399
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.deflate.9.wire": {
+      "sha256": "94f77b7f5390ca5a20e0058ba1161b33347b11fbf4724061c36bc02fc874691f",
+      "bytes": 5402704
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.plain": {
+      "sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.deflate.6.wire": {
+      "sha256": "a7a982796357347470b05285c4a527afba295bc2100dd2baae8e9d00d752e8df",
+      "bytes": 49807
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.deflate.9.wire": {
+      "sha256": "207ed57e53e7c39ae064cdea47e3d7f04ca669bdf83c3030969c16fb05495fc4",
+      "bytes": 49639
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.plain": {
+      "sha256": "ac3e75948e2d88287758dd1e22bbe3ba45d92595b393202e300374a45559bc26",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.deflate.6.wire": {
+      "sha256": "d2cb1155a03cb25f841819e6bbaef6f5e4503dd71a5aa81706effa8fdf82fda3",
+      "bytes": 775304
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.deflate.9.wire": {
+      "sha256": "5d2cb0b954183e2419a7ca765b9c94f34a554bf5841a2662dfc7d8958d2d8ef2",
+      "bytes": 773908
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.plain": {
+      "sha256": "c2d0ea2cc59d4c21b7fe43a71499342a00cbe530a1d5548770e91ecd6214adcc",
+      "bytes": 7251944
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.deflate.6.wire": {
+      "sha256": "2c819e3ea47c4d47fbac39539a16351427e23938acad4f0880d76dec54c059d9",
+      "bytes": 5331793
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.deflate.9.wire": {
+      "sha256": "0645ebe106b2700f94f50127abb92ef28be8e5531a47f039197aa50b94f726e1",
+      "bytes": 5325914
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.plain": {
+      "sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.deflate.6.wire": {
+      "sha256": "bf347c52ef4a956575967a7e26b99690cbf2a673da5fdbcb623f01460ee9a05c",
+      "bytes": 23022
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.deflate.9.wire": {
+      "sha256": "948c93f460be3bafcedba2f1840abca799ebce50cfd0005dc27a315f63882125",
+      "bytes": 22904
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.plain": {
+      "sha256": "2e22bff2997b86befa1165366bd320c9535882009e4d5cd7c838542edf13baf2",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.deflate.6.wire": {
+      "sha256": "ea52d0207707a2abdf6582a9d5926ea61489a205c2eb891575a46e692fd35c03",
+      "bytes": 306288
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.deflate.9.wire": {
+      "sha256": "450649d66f2a12e8dc9ba586a02226d0dda5834a3bd681111c6fd3871a3e62ab",
+      "bytes": 303103
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.plain": {
+      "sha256": "6a68f69b26daf09f9dd84f7470368553194a0b294fcfa80f1604efb11143a383",
+      "bytes": 41458703
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.deflate.6.wire": {
+      "sha256": "1872d8bf00ea95a93095015c15b52888fc1e4a9d93236dcf1b53c8ec38318884",
+      "bytes": 12213941
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.deflate.9.wire": {
+      "sha256": "5215398beb5409f3df7a4d5c3dd59b3d4e982898cd630b058e1034e1585c3d85",
+      "bytes": 12073469
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.plain": {
+      "sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.deflate.6.wire": {
+      "sha256": "42f4318deeaa394cd4d75f5953a5b3c301bf9785426c54e14597830a329c52d3",
+      "bytes": 5449
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.deflate.9.wire": {
+      "sha256": "9421ceaeea84d37aaf0978e96b0f96321e5feb9e7bc7669a751d5abed4a6d921",
+      "bytes": 5106
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.plain": {
+      "sha256": "f0e6a94c2cda4d451675ced3fb34ddc6a9186a210df053eee123905f7119c1af",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.deflate.6.wire": {
+      "sha256": "a0a2170a550012c9c3e77abe531ee3c2a2819b65f0e009ae54cead9e0279df51",
+      "bytes": 152255
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.deflate.9.wire": {
+      "sha256": "42fd75f5d05d81bcf784dbe595fd9c74306e5d6a52454cad354bafc641c6daeb",
+      "bytes": 147455
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.plain": {
+      "sha256": "0e82e54e695c1938e4193448022543845b33020c8be6bf3bf3ead2224903e08c",
+      "bytes": 5345280
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.deflate.6.wire": {
+      "sha256": "10b690170e7a645619f7ea32ca9960fb3c945fbb57b0e9797da59f23d4bdac59",
+      "bytes": 687991
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.deflate.9.wire": {
+      "sha256": "a5ded093fa390a3c9b9b3cae0df18d7e6183ff219f95f9a20fd7e7e19fe9bce2",
+      "bytes": 658899
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.plain": {
+      "sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.deflate.6.wire": {
+      "sha256": "742fc5221c90ed538f3011ff18c2882bd7608c9e105751096eccdca44a8b84bb",
+      "bytes": 47398
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.deflate.9.wire": {
+      "sha256": "307c5df604763e9e0b60d1d26c9742afe7b5d5afa9f76093a51729d03368cebf",
+      "bytes": 47397
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.plain": {
+      "sha256": "7d21ad3a7773607c966985ba5abc0919081a8237d76123af1b7a909bbadcc67f",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.deflate.6.wire": {
+      "sha256": "61245846aa2e1fd32b5f39a1bb383c09f8e960868d915f6696fabb02f51c4ffc",
+      "bytes": 711474
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.deflate.9.wire": {
+      "sha256": "180332fde66e3a06eb9b0687a8a308283f31fef8b66d0e5ed395a44145b2b96f",
+      "bytes": 711473
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.plain": {
+      "sha256": "7de9fce1405dc44ae5e6813ed21cd5751e761bd4265655a005d39b9685d1c9ad",
+      "bytes": 8474240
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.deflate.6.wire": {
+      "sha256": "6a18138d3270b1df313c93246aa3d269ae33bac723ebda3407c98f17ea768480",
+      "bytes": 6045111
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.deflate.9.wire": {
+      "sha256": "78e38918a7315193806ded9a6985235e1f2a725975c0516b7a4de15f3a3f0ef5",
+      "bytes": 6045032
+    }
+  },
+  "fixtures": [
+    {
+      "key": "deflate/dickens/65536/6",
+      "codec": "deflate",
+      "name": "dickens",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 42,
+      "encoded_bytes": 26268,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "encoded_sha256": "1139d3f6f114faec5cf70e53b3a512c3fa2fa823c8b263e921ce79ca77a9aedf",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/dickens/65536/9",
+      "codec": "deflate",
+      "name": "dickens",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 42,
+      "encoded_bytes": 26190,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "encoded_sha256": "45df15ae44c971049b1f6eb6dcd865fdcd779d22ad21266b1664b93555c5a5c2",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/dickens/1048576/6",
+      "codec": "deflate",
+      "name": "dickens",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 42,
+      "encoded_bytes": 391493,
+      "input_sha256": "afd479dd0e0339643530bf4ee3d10423265c515a06e7994bbe26ccba39aea9ab",
+      "encoded_sha256": "23437d6b2f02f7dc12d7866f3d00958394e6efdae392dc16f10954c3f584f21e",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/dickens/1048576/9",
+      "codec": "deflate",
+      "name": "dickens",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 42,
+      "encoded_bytes": 388931,
+      "input_sha256": "afd479dd0e0339643530bf4ee3d10423265c515a06e7994bbe26ccba39aea9ab",
+      "encoded_sha256": "c8d689a87c21cbdc56b9aa150b35eaf54693966f68db37f2f200f9c01972861c",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/dickens/full/6",
+      "codec": "deflate",
+      "name": "dickens",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.deflate.6.wire",
+      "input_bytes": 10192446,
+      "input_first_byte": 42,
+      "encoded_bytes": 3871628,
+      "input_sha256": "b24c37886142e11d0ee687db6ab06f936207aa7f2ea1fd1d9a36763c7a507e6a",
+      "encoded_sha256": "1d3dd4e7fe9a1b06d39d5dd893ed1df0de16325b48d18f2cfcbc1a8075770138",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/dickens/full/9",
+      "codec": "deflate",
+      "name": "dickens",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.deflate.9.wire",
+      "input_bytes": 10192446,
+      "input_first_byte": 42,
+      "encoded_bytes": 3854729,
+      "input_sha256": "b24c37886142e11d0ee687db6ab06f936207aa7f2ea1fd1d9a36763c7a507e6a",
+      "encoded_sha256": "9c3ec8dad67b9791aa46bb63e79049e6747c59294f61cf167eea8f0bb7cfc0be",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mozilla/65536/6",
+      "codec": "deflate",
+      "name": "mozilla",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 109,
+      "encoded_bytes": 17078,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "encoded_sha256": "241e836fe4da8b6980f1a5ce7f615e49c7d4b4103b45dcdc5694e5655f72c8fe",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mozilla/65536/9",
+      "codec": "deflate",
+      "name": "mozilla",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 109,
+      "encoded_bytes": 16961,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "encoded_sha256": "b5292977f37496fc41aa7122a2904ff9567a57dafd3ba4e14d7acb738c2020db",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mozilla/1048576/6",
+      "codec": "deflate",
+      "name": "mozilla",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 109,
+      "encoded_bytes": 662776,
+      "input_sha256": "d307112d2151eef3c035e308b0478e831f6039bdd9770bb753207b02e1fd579d",
+      "encoded_sha256": "e0e6fb5839fd83e97de8f3b1863323ef20a15158046e23e85d5b88d9cd979eb3",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mozilla/1048576/9",
+      "codec": "deflate",
+      "name": "mozilla",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 109,
+      "encoded_bytes": 662225,
+      "input_sha256": "d307112d2151eef3c035e308b0478e831f6039bdd9770bb753207b02e1fd579d",
+      "encoded_sha256": "54498319b31abdbef4e1073ef5e737a6b86c316d4c6688f3edb72738d1a090b5",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mozilla/full/6",
+      "codec": "deflate",
+      "name": "mozilla",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.deflate.6.wire",
+      "input_bytes": 51220480,
+      "input_first_byte": 109,
+      "encoded_bytes": 19089118,
+      "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+      "encoded_sha256": "5c4d07cb40a058e4567e4a532e71e09dbfd73848c459d3aab2f22671fa80c09e",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mozilla/full/9",
+      "codec": "deflate",
+      "name": "mozilla",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.deflate.9.wire",
+      "input_bytes": 51220480,
+      "input_first_byte": 109,
+      "encoded_bytes": 19044390,
+      "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+      "encoded_sha256": "d7b2d2625b3bcc998928b4c891e87e8ec644466e167e7d30b24f3af349a868cc",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mr/65536/6",
+      "codec": "deflate",
+      "name": "mr",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 8,
+      "encoded_bytes": 17155,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "encoded_sha256": "1be3b69245b1845adf1f2150da3c5bbd55aa68f3878ca06e915fca1e3c4ea7f5",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mr/65536/9",
+      "codec": "deflate",
+      "name": "mr",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 8,
+      "encoded_bytes": 17092,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "encoded_sha256": "007f21ce8de4b82a8701c84a00b5149a8d9a2ddd67d73621749768204e989462",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mr/1048576/6",
+      "codec": "deflate",
+      "name": "mr",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 8,
+      "encoded_bytes": 348147,
+      "input_sha256": "470f6baf5a1e97e0003e84ab6bebfa9ca680145630504b09c22d8653de91a4ac",
+      "encoded_sha256": "59a8cdb7397a0461687cf3ab798969361fc1b8aa824b7e19eb122e02a5b95702",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mr/1048576/9",
+      "codec": "deflate",
+      "name": "mr",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 8,
+      "encoded_bytes": 346400,
+      "input_sha256": "470f6baf5a1e97e0003e84ab6bebfa9ca680145630504b09c22d8653de91a4ac",
+      "encoded_sha256": "e67a697d63bd2253451415c0dffe325964dddcb39f8ec5c39831299c9effcfd9",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mr/full/6",
+      "codec": "deflate",
+      "name": "mr",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.deflate.6.wire",
+      "input_bytes": 9970564,
+      "input_first_byte": 8,
+      "encoded_bytes": 3675935,
+      "input_sha256": "68637ed52e3e4860174ed2dc0840ac77d5f1a60abbcb13770d5754e3774d53e6",
+      "encoded_sha256": "41f067c36b594ace1e327c5b6c3c16246dfe6404a2b9609f2754c1325626ab33",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/mr/full/9",
+      "codec": "deflate",
+      "name": "mr",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.deflate.9.wire",
+      "input_bytes": 9970564,
+      "input_first_byte": 8,
+      "encoded_bytes": 3660788,
+      "input_sha256": "68637ed52e3e4860174ed2dc0840ac77d5f1a60abbcb13770d5754e3774d53e6",
+      "encoded_sha256": "790c3c6b578e8383b34f17a77d220351d4dd07ffb092e72f7ede410fc4697016",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/65536/6",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 49,
+      "encoded_bytes": 5193,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "encoded_sha256": "b0fd15e1f822b0c092b7048cc882a7055a68c3cafd217c987f8a3dcec5ab5d8c",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/65536/9",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 49,
+      "encoded_bytes": 4836,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "encoded_sha256": "e06f43c3fa9c5514e3dbd9d286dcb24959d53f1219b1f5c1475ba95234a7ecca",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/1048576/6",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 49,
+      "encoded_bytes": 108376,
+      "input_sha256": "3d234780bf0ef1a8f13459589904c5f6b0abe8da8c3e2119f20201c6bea6010d",
+      "encoded_sha256": "81d572db25eeb70e60f10c3e36dc263ed1f657865f39f3da88bbb9244f800eba",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/1048576/9",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 49,
+      "encoded_bytes": 100947,
+      "input_sha256": "3d234780bf0ef1a8f13459589904c5f6b0abe8da8c3e2119f20201c6bea6010d",
+      "encoded_sha256": "d11436e4104619c68a2332f7dab94e203a506e9023a7c49ec8d1e65f6f83b498",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/full/6",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.deflate.6.wire",
+      "input_bytes": 33553445,
+      "input_first_byte": 49,
+      "encoded_bytes": 3200182,
+      "input_sha256": "fc63a31770947b8c2062d3b19ca94c00485a232bb91b502021948fee983e1635",
+      "encoded_sha256": "63d2bddec90ac39916d3ab4dabcc6581b738021dfab645a0faeb9b5fd88087fe",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/full/9",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.deflate.9.wire",
+      "input_bytes": 33553445,
+      "input_first_byte": 49,
+      "encoded_bytes": 2987995,
+      "input_sha256": "fc63a31770947b8c2062d3b19ca94c00485a232bb91b502021948fee983e1635",
+      "encoded_sha256": "02e35f24f50566d78d85bc3955ab23dc478e6d3517d64ab53813b5492638c39f",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/ooffice/65536/6",
+      "codec": "deflate",
+      "name": "ooffice",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 77,
+      "encoded_bytes": 32294,
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "encoded_sha256": "c8bfd300a9ee114719d55ca97853ac2118b727e16f6d6684230dc191cfe3d758",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/ooffice/65536/9",
+      "codec": "deflate",
+      "name": "ooffice",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 77,
+      "encoded_bytes": 32268,
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "encoded_sha256": "c128516e084d5dbdfd3e9499ba62c4b9f4335e5fcd3868d19e0b7a52121e2047",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/ooffice/1048576/6",
+      "codec": "deflate",
+      "name": "ooffice",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 77,
+      "encoded_bytes": 583446,
+      "input_sha256": "1ed1cfc6b104bb390188e22082608ac8a79b59e367cdbb82796d99b980a9e2bd",
+      "encoded_sha256": "ac23d402d004ccebbbcf0604f853319f7caf50c1ee3309ee6a2d42b1327d327d",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/ooffice/1048576/9",
+      "codec": "deflate",
+      "name": "ooffice",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 77,
+      "encoded_bytes": 582514,
+      "input_sha256": "1ed1cfc6b104bb390188e22082608ac8a79b59e367cdbb82796d99b980a9e2bd",
+      "encoded_sha256": "1df2cc415132839df2bb541f0be4f92716b79c6d187335a0a79f8f28a1d71d82",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/ooffice/full/6",
+      "codec": "deflate",
+      "name": "ooffice",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.deflate.6.wire",
+      "input_bytes": 6152192,
+      "input_first_byte": 77,
+      "encoded_bytes": 3097288,
+      "input_sha256": "e7ee013880d34dd5208283d0d3d91b07f442e067454276095ded14f322a656eb",
+      "encoded_sha256": "868831e0f1e3fa04d063c36aca7e7c15d76bba6f7bb1a8e4af362d0a2749b282",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/ooffice/full/9",
+      "codec": "deflate",
+      "name": "ooffice",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.deflate.9.wire",
+      "input_bytes": 6152192,
+      "input_first_byte": 77,
+      "encoded_bytes": 3092920,
+      "input_sha256": "e7ee013880d34dd5208283d0d3d91b07f442e067454276095ded14f322a656eb",
+      "encoded_sha256": "b04700ed8934742be16c870ef0bcab938a84317ebd3ad97197ad0c9b490b22ff",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/osdb/65536/6",
+      "codec": "deflate",
+      "name": "osdb",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 3,
+      "encoded_bytes": 27584,
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "encoded_sha256": "cb731c66afe83c470f5ef4f6e24807c3590e8b145adac9d2511474fff1e7b91f",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/osdb/65536/9",
+      "codec": "deflate",
+      "name": "osdb",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 3,
+      "encoded_bytes": 27469,
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "encoded_sha256": "83a2a975ad672576717b8bc6111a9235daca0158203861b3e77881ccda42f1b7",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/osdb/1048576/6",
+      "codec": "deflate",
+      "name": "osdb",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 3,
+      "encoded_bytes": 386961,
+      "input_sha256": "79c5f0f50af5dbb61368cfb91f735545ccc4de12062f6b62cf7f2bcd4290ef14",
+      "encoded_sha256": "d543f61f51d5a8f9088b2092b38d117ee32de78c066f091a0263ce58e2e291a8",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/osdb/1048576/9",
+      "codec": "deflate",
+      "name": "osdb",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 3,
+      "encoded_bytes": 384657,
+      "input_sha256": "79c5f0f50af5dbb61368cfb91f735545ccc4de12062f6b62cf7f2bcd4290ef14",
+      "encoded_sha256": "23a7c7914b1f305263b12848d8280bed7978c1c93d9825dd9c5ea7680a0417b0",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/osdb/full/6",
+      "codec": "deflate",
+      "name": "osdb",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.deflate.6.wire",
+      "input_bytes": 10085684,
+      "input_first_byte": 3,
+      "encoded_bytes": 3695164,
+      "input_sha256": "60f027179302ca3ad87c58ac90b6be72ec23588aaa7a3b7fe8ecc0f11def3fa3",
+      "encoded_sha256": "07a31819a642c1cda4427dbade41ec7e44fa266a336221357598675a7357274f",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/osdb/full/9",
+      "codec": "deflate",
+      "name": "osdb",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.deflate.9.wire",
+      "input_bytes": 10085684,
+      "input_first_byte": 3,
+      "encoded_bytes": 3673171,
+      "input_sha256": "60f027179302ca3ad87c58ac90b6be72ec23588aaa7a3b7fe8ecc0f11def3fa3",
+      "encoded_sha256": "33603d48b73e256df8123bbe8f5c6143ecd0419976ba0eb71b855676a7795f6d",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/reymont/65536/6",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 37,
+      "encoded_bytes": 18792,
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "encoded_sha256": "93159be7c00758f86eee3518f3abb76ddcf5a42aedc48d434bffdc198deee2bc",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/reymont/65536/9",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 37,
+      "encoded_bytes": 18577,
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "encoded_sha256": "96759d535cb9d0a9ddbcaafd760042f3ff4789e29196dc86852acf4561aecd61",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/reymont/1048576/6",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 37,
+      "encoded_bytes": 290916,
+      "input_sha256": "fc42c772bf7961598b23936784396392710995c5273074d0f0aba226ef924e2a",
+      "encoded_sha256": "56203e3ba92610f28423ce88cba99acf0bbea12f11f4b111b6f7cc564db0a5f6",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/reymont/1048576/9",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 37,
+      "encoded_bytes": 285317,
+      "input_sha256": "fc42c772bf7961598b23936784396392710995c5273074d0f0aba226ef924e2a",
+      "encoded_sha256": "1decf4a96731df6fdfe5eea188f3a9698fa5505fe4722c96b6425351e4da400e",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/reymont/full/6",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.deflate.6.wire",
+      "input_bytes": 6627202,
+      "input_first_byte": 37,
+      "encoded_bytes": 1860865,
+      "input_sha256": "0eac0114a3dfe6e2ee1f345a0f79d653cb26c3bc9f0ed79238af4933422b7578",
+      "encoded_sha256": "89b77cac3cf39f461d4a8a282239e9e08f9b2816ce2ef27465293393eb1235d8",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/reymont/full/9",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.deflate.9.wire",
+      "input_bytes": 6627202,
+      "input_first_byte": 37,
+      "encoded_bytes": 1823190,
+      "input_sha256": "0eac0114a3dfe6e2ee1f345a0f79d653cb26c3bc9f0ed79238af4933422b7578",
+      "encoded_sha256": "408cffd2ab511dd3e4974dfa64d9869469a3b09cf758d84a79d0acd5130ceca1",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/samba/65536/6",
+      "codec": "deflate",
+      "name": "samba",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 115,
+      "encoded_bytes": 22343,
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "encoded_sha256": "a84fa5c3a0bccf47cec663af71c28e12ac7b9e5e08fe7125e2521a28cdd48ea6",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/samba/65536/9",
+      "codec": "deflate",
+      "name": "samba",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 115,
+      "encoded_bytes": 22262,
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "encoded_sha256": "f34cf843f89daca55a57024877da312de3bbc8e29b71f9c8b455790dc15c8060",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/samba/1048576/6",
+      "codec": "deflate",
+      "name": "samba",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 115,
+      "encoded_bytes": 331468,
+      "input_sha256": "fa8147ca0ce5941901483e5cb608fed67c84e1832148ca2b94b6101908c838d0",
+      "encoded_sha256": "47683cdbe0995b620e5b953c1525a48ad664c4104134711136789c9304990edf",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/samba/1048576/9",
+      "codec": "deflate",
+      "name": "samba",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 115,
+      "encoded_bytes": 329901,
+      "input_sha256": "fa8147ca0ce5941901483e5cb608fed67c84e1832148ca2b94b6101908c838d0",
+      "encoded_sha256": "edbcc949059db5996590fe377479f4cb3fa43863dd4e09ffbd8c1eecc48ce06c",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/samba/full/6",
+      "codec": "deflate",
+      "name": "samba",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.deflate.6.wire",
+      "input_bytes": 21606400,
+      "input_first_byte": 115,
+      "encoded_bytes": 5451399,
+      "input_sha256": "93ba07bc44d8267789c1d911992f40b089ffa2140b4a160fac11ccae9a40e7b2",
+      "encoded_sha256": "dd5931ed1129481dda1060beae0e4f54f6f5beac158a112833fb9a184c2e4a87",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/samba/full/9",
+      "codec": "deflate",
+      "name": "samba",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/samba.full.deflate.9.wire",
+      "input_bytes": 21606400,
+      "input_first_byte": 115,
+      "encoded_bytes": 5402704,
+      "input_sha256": "93ba07bc44d8267789c1d911992f40b089ffa2140b4a160fac11ccae9a40e7b2",
+      "encoded_sha256": "94f77b7f5390ca5a20e0058ba1161b33347b11fbf4724061c36bc02fc874691f",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/sao/65536/6",
+      "codec": "deflate",
+      "name": "sao",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 0,
+      "encoded_bytes": 49807,
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "encoded_sha256": "a7a982796357347470b05285c4a527afba295bc2100dd2baae8e9d00d752e8df",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/sao/65536/9",
+      "codec": "deflate",
+      "name": "sao",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 0,
+      "encoded_bytes": 49639,
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "encoded_sha256": "207ed57e53e7c39ae064cdea47e3d7f04ca669bdf83c3030969c16fb05495fc4",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/sao/1048576/6",
+      "codec": "deflate",
+      "name": "sao",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 0,
+      "encoded_bytes": 775304,
+      "input_sha256": "ac3e75948e2d88287758dd1e22bbe3ba45d92595b393202e300374a45559bc26",
+      "encoded_sha256": "d2cb1155a03cb25f841819e6bbaef6f5e4503dd71a5aa81706effa8fdf82fda3",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/sao/1048576/9",
+      "codec": "deflate",
+      "name": "sao",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 0,
+      "encoded_bytes": 773908,
+      "input_sha256": "ac3e75948e2d88287758dd1e22bbe3ba45d92595b393202e300374a45559bc26",
+      "encoded_sha256": "5d2cb0b954183e2419a7ca765b9c94f34a554bf5841a2662dfc7d8958d2d8ef2",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/sao/full/6",
+      "codec": "deflate",
+      "name": "sao",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.deflate.6.wire",
+      "input_bytes": 7251944,
+      "input_first_byte": 0,
+      "encoded_bytes": 5331793,
+      "input_sha256": "c2d0ea2cc59d4c21b7fe43a71499342a00cbe530a1d5548770e91ecd6214adcc",
+      "encoded_sha256": "2c819e3ea47c4d47fbac39539a16351427e23938acad4f0880d76dec54c059d9",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/sao/full/9",
+      "codec": "deflate",
+      "name": "sao",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.deflate.9.wire",
+      "input_bytes": 7251944,
+      "input_first_byte": 0,
+      "encoded_bytes": 5325914,
+      "input_sha256": "c2d0ea2cc59d4c21b7fe43a71499342a00cbe530a1d5548770e91ecd6214adcc",
+      "encoded_sha256": "0645ebe106b2700f94f50127abb92ef28be8e5531a47f039197aa50b94f726e1",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/webster/65536/6",
+      "codec": "deflate",
+      "name": "webster",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 13,
+      "encoded_bytes": 23022,
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "encoded_sha256": "bf347c52ef4a956575967a7e26b99690cbf2a673da5fdbcb623f01460ee9a05c",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/webster/65536/9",
+      "codec": "deflate",
+      "name": "webster",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 13,
+      "encoded_bytes": 22904,
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "encoded_sha256": "948c93f460be3bafcedba2f1840abca799ebce50cfd0005dc27a315f63882125",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/webster/1048576/6",
+      "codec": "deflate",
+      "name": "webster",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 13,
+      "encoded_bytes": 306288,
+      "input_sha256": "2e22bff2997b86befa1165366bd320c9535882009e4d5cd7c838542edf13baf2",
+      "encoded_sha256": "ea52d0207707a2abdf6582a9d5926ea61489a205c2eb891575a46e692fd35c03",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/webster/1048576/9",
+      "codec": "deflate",
+      "name": "webster",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 13,
+      "encoded_bytes": 303103,
+      "input_sha256": "2e22bff2997b86befa1165366bd320c9535882009e4d5cd7c838542edf13baf2",
+      "encoded_sha256": "450649d66f2a12e8dc9ba586a02226d0dda5834a3bd681111c6fd3871a3e62ab",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/webster/full/6",
+      "codec": "deflate",
+      "name": "webster",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.deflate.6.wire",
+      "input_bytes": 41458703,
+      "input_first_byte": 13,
+      "encoded_bytes": 12213941,
+      "input_sha256": "6a68f69b26daf09f9dd84f7470368553194a0b294fcfa80f1604efb11143a383",
+      "encoded_sha256": "1872d8bf00ea95a93095015c15b52888fc1e4a9d93236dcf1b53c8ec38318884",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/webster/full/9",
+      "codec": "deflate",
+      "name": "webster",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.deflate.9.wire",
+      "input_bytes": 41458703,
+      "input_first_byte": 13,
+      "encoded_bytes": 12073469,
+      "input_sha256": "6a68f69b26daf09f9dd84f7470368553194a0b294fcfa80f1604efb11143a383",
+      "encoded_sha256": "5215398beb5409f3df7a4d5c3dd59b3d4e982898cd630b058e1034e1585c3d85",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/65536/6",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 101,
+      "encoded_bytes": 5449,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "encoded_sha256": "42f4318deeaa394cd4d75f5953a5b3c301bf9785426c54e14597830a329c52d3",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/65536/9",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 101,
+      "encoded_bytes": 5106,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "encoded_sha256": "9421ceaeea84d37aaf0978e96b0f96321e5feb9e7bc7669a751d5abed4a6d921",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/1048576/6",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 101,
+      "encoded_bytes": 152255,
+      "input_sha256": "f0e6a94c2cda4d451675ced3fb34ddc6a9186a210df053eee123905f7119c1af",
+      "encoded_sha256": "a0a2170a550012c9c3e77abe531ee3c2a2819b65f0e009ae54cead9e0279df51",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/1048576/9",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 101,
+      "encoded_bytes": 147455,
+      "input_sha256": "f0e6a94c2cda4d451675ced3fb34ddc6a9186a210df053eee123905f7119c1af",
+      "encoded_sha256": "42fd75f5d05d81bcf784dbe595fd9c74306e5d6a52454cad354bafc641c6daeb",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/full/6",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.deflate.6.wire",
+      "input_bytes": 5345280,
+      "input_first_byte": 101,
+      "encoded_bytes": 687991,
+      "input_sha256": "0e82e54e695c1938e4193448022543845b33020c8be6bf3bf3ead2224903e08c",
+      "encoded_sha256": "10b690170e7a645619f7ea32ca9960fb3c945fbb57b0e9797da59f23d4bdac59",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/full/9",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.full.deflate.9.wire",
+      "input_bytes": 5345280,
+      "input_first_byte": 101,
+      "encoded_bytes": 658899,
+      "input_sha256": "0e82e54e695c1938e4193448022543845b33020c8be6bf3bf3ead2224903e08c",
+      "encoded_sha256": "a5ded093fa390a3c9b9b3cae0df18d7e6183ff219f95f9a20fd7e7e19fe9bce2",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/x-ray/65536/6",
+      "codec": "deflate",
+      "name": "x-ray",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 208,
+      "encoded_bytes": 47398,
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "encoded_sha256": "742fc5221c90ed538f3011ff18c2882bd7608c9e105751096eccdca44a8b84bb",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/x-ray/65536/9",
+      "codec": "deflate",
+      "name": "x-ray",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 208,
+      "encoded_bytes": 47397,
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "encoded_sha256": "307c5df604763e9e0b60d1d26c9742afe7b5d5afa9f76093a51729d03368cebf",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/x-ray/1048576/6",
+      "codec": "deflate",
+      "name": "x-ray",
+      "size": "1048576",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.deflate.6.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 208,
+      "encoded_bytes": 711474,
+      "input_sha256": "7d21ad3a7773607c966985ba5abc0919081a8237d76123af1b7a909bbadcc67f",
+      "encoded_sha256": "61245846aa2e1fd32b5f39a1bb383c09f8e960868d915f6696fabb02f51c4ffc",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/x-ray/1048576/9",
+      "codec": "deflate",
+      "name": "x-ray",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 208,
+      "encoded_bytes": 711473,
+      "input_sha256": "7d21ad3a7773607c966985ba5abc0919081a8237d76123af1b7a909bbadcc67f",
+      "encoded_sha256": "180332fde66e3a06eb9b0687a8a308283f31fef8b66d0e5ed395a44145b2b96f",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/x-ray/full/6",
+      "codec": "deflate",
+      "name": "x-ray",
+      "size": "full",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.deflate.6.wire",
+      "input_bytes": 8474240,
+      "input_first_byte": 208,
+      "encoded_bytes": 6045111,
+      "input_sha256": "7de9fce1405dc44ae5e6813ed21cd5751e761bd4265655a005d39b9685d1c9ad",
+      "encoded_sha256": "6a18138d3270b1df313c93246aa3d269ae33bac723ebda3407c98f17ea768480",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/x-ray/full/9",
+      "codec": "deflate",
+      "name": "x-ray",
+      "size": "full",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/x-ray.full.deflate.9.wire",
+      "input_bytes": 8474240,
+      "input_first_byte": 208,
+      "encoded_bytes": 6045032,
+      "input_sha256": "7de9fce1405dc44ae5e6813ed21cd5751e761bd4265655a005d39b9685d1c9ad",
+      "encoded_sha256": "78e38918a7315193806ded9a6985235e1f2a725975c0516b7a4de15f3a3f0ef5",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    }
+  ],
+  "scope": "original bytes verified during packing and by --originals; standard offline verification checks recorded descriptors and captured reports, without decompression or fixture regeneration"
+}

@@ -1,0 +1,33 @@
+{
+  "baseline_sha256": "e8377941221a13c0a0030b10ae083bb73cf17bc58f81ea8d55ad98c5eb66cb5c",
+  "candidate_only_patch_files": [
+    "src/deflate/semantic/completed_match.zig",
+    "src/deflate/semantic/completed_match_tests.zig",
+    "src/deflate/semantic/decoder.zig"
+  ],
+  "candidate_sha256": "ff60e8d12b1b0d75128595a3f5c24b1460113d2e39961f15898c99550c40055f",
+  "frozen_source_counts": {
+    "before": 4,
+    "candidate": 6
+  },
+  "original_bytes_checked": true,
+  "original_members": 36,
+  "producer_checksum_covered_files": 35,
+  "recorded_tests": {
+    "filtered": 11,
+    "full": 739,
+    "helper": 2,
+    "legal_pairs": 8388608
+  },
+  "registry_count": 2765,
+  "registry_scope": "producer-defined registered paths only; not automatically complete compiler inputs",
+  "schema": "vort.deflate.completed-match-offline-validation.v1",
+  "scope": "Offline byte/source/diff/test-receipt/raw-static-output validation only; no test or A/B/perf execution, no dynamic spill/heap/speed claim; prototype rejected",
+  "static_delta": {
+    "elf_text_section_bytes": 512,
+    "local_stack_reservation_bytes": 32,
+    "negative_rbp_operand_references": -3,
+    "static_instruction_lines_including_padding": 73,
+    "symbol_bytes": 332
+  }
+}

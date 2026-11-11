@@ -130,6 +130,29 @@ implemented in these candidates.
 
 ## 2026-11-12 Deflate public generic contracts and current profile
 
+The later [wide-copy complete-range correction](deflate/wide-copy-contracts-20261112.md)
+fixes an internal underflow for lengths 3..15 while preserving lengths 3..258.
+The existing production wide-call domain is at least 17; it now uses a
+separate validated core while the full facade retains exact short copying.
+Final Debug/ReleaseSafe/x86/actual WASI scalar oracles cover 143,712 scenarios,
+full Deflate passes 736/736, and 72 frozen wires pass full-output/consumption/
+guard smoke. The 12-row functional non-regression pilot is 1.003628x, weakest
+row 0.984859x, without a performance-gain or full-ranking claim.
+
+The [paired match-path profiles](deflate/match-path-profiles-20261112.md)
+observe higher nci wide-copy weight and a common preload/refill live-state
+region. Percentages use the observed physical root's sampled period, with
+reference/harness work outside that root; no instruction-cost attribution is
+claimed. The new capture's 2048-file registry remains original, with 15 omitted
+build modules separately reconstructed from immutable Git for replay.
+
+The [checked completed-match codegen prototype](deflate/completed-match-codegen-20261112.md)
+passes 739 complete tests but fails to carry only one word across refill:
+LLVM keeps full-width parameters, word/tag and pointers across refill. Static
+symbol size 3669→4001 and local stack 296→328 support rejecting this mechanism
+before A/B. It changes no mainline entry/refill layout or complete benchmark
+ranking; its exact sources and original static output remain archived.
+
 The [public generic contract increment](deflate/public-linear-contracts-20261112.md)
 adds real-header LL14 secondary and independently generated LL10 witnesses.
 They prove the actual public generic selector and wide-loop preconditions

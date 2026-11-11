@@ -1,0 +1,13 @@
+{
+  "artifact_kind": "later saved Git commit identity for byte-identical final-boundary source; not a new validation/performance capture epoch",
+  "commit": "fe75d21fa10a45b204347cce8d52be97f534d718",
+  "parent": "492a0a74535992cd4a7e3ad3182777414c8c0fac",
+  "subject": "fix(deflate): preserve the complete wide-copy length contract",
+  "source_sha256": {
+    "src/deflate.zig": "ff7e4761c6fced59f7eab5d1323ea7f448448dca0d96e4d2554de57fb626d73f",
+    "src/deflate/decoder/shortcopy.zig": "ecf6e7b88740604d8f095df0cdb5325bad31ce50bae56b9d932640e76972dfc8",
+    "src/deflate/decoder/wide_copy_tests.zig": "8751274e6a7dd53b4bf477ecc9267f94447ba3caaa415c136fc200df6f2333ea",
+    "src/deflate/semantic/decoder.zig": "ea32f14d401db7e3cc047c57a4d1b769d54e732c2c75a2da99a5ed3ddba4dd4d"
+  },
+  "scope": "Four final frozen source files match this saved commit exactly. Before/v1/final raw captures keep their original base492a0a74 source/probe identities; NCI and Reymont profiles remain pre-fix."
+}

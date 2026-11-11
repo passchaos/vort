@@ -1,0 +1,64 @@
+{
+  "base_revision": "492a0a74",
+  "source_sha256": {
+    "src/deflate.zig": "ff7e4761c6fced59f7eab5d1323ea7f448448dca0d96e4d2554de57fb626d73f",
+    "src/deflate/semantic/decoder.zig": "ea32f14d401db7e3cc047c57a4d1b769d54e732c2c75a2da99a5ed3ddba4dd4d",
+    "src/deflate/decoder/shortcopy.zig": "ecf6e7b88740604d8f095df0cdb5325bad31ce50bae56b9d932640e76972dfc8",
+    "src/deflate/decoder/wide_copy_tests.zig": "8751274e6a7dd53b4bf477ecc9267f94447ba3caaa415c136fc200df6f2333ea"
+  },
+  "source_unchanged": true,
+  "before_exit_code": 1,
+  "before_result": "first direct3-byte wide-copy case aborts with integer overflow",
+  "before_log_sha256": "63679a5498f57847e739f0c9127e11ea4d834ec8b4f33e8f8ae4d88f081163a4",
+  "final_facade_cases": 73728,
+  "final_at_least16_core_cases": 69984,
+  "total_scalar_cases": 143712,
+  "runs": [
+    {
+      "label": "debug",
+      "returncode": 0,
+      "tests_passed": 1,
+      "raw_log": "boundary-debug.log",
+      "log_sha256": "39ce40bb31822ea71f8c962ead0953b8ce44be5ab1f35619489093cc2dc75533",
+      "executable": "boundary-debug",
+      "executable_sha256": "c0d68c150288b1ca1434604ee193af7981005d803b9235b1a2edb6b553fe484e"
+    },
+    {
+      "label": "safe",
+      "returncode": 0,
+      "tests_passed": 1,
+      "raw_log": "boundary-safe.log",
+      "log_sha256": "39ce40bb31822ea71f8c962ead0953b8ce44be5ab1f35619489093cc2dc75533",
+      "executable": "boundary-safe",
+      "executable_sha256": "43a09530cd0b2d36c1e4e3dc9f330f30fe259b8758c702b3611d03a4448702d8"
+    },
+    {
+      "label": "x86-safe",
+      "returncode": 0,
+      "tests_passed": 1,
+      "raw_log": "boundary-x86.log",
+      "log_sha256": "39ce40bb31822ea71f8c962ead0953b8ce44be5ab1f35619489093cc2dc75533",
+      "executable": "boundary-x86",
+      "executable_sha256": "e33a8c491764d2ec7ecc81ebc82e73e2fe239fd329e7dbc70f66d198610e050a"
+    },
+    {
+      "label": "wasi-safe",
+      "returncode": 0,
+      "tests_passed": 1,
+      "raw_log": "boundary-wasi-run.log",
+      "log_sha256": "39ce40bb31822ea71f8c962ead0953b8ce44be5ab1f35619489093cc2dc75533",
+      "executable": "boundary-wasi.wasm",
+      "executable_sha256": "621db350c74e7c115e6691986987141600d527626cd88399df3fffe932b5b93d"
+    },
+    {
+      "label": "full-deflate-safe",
+      "returncode": 0,
+      "tests_passed": 736,
+      "raw_log": "boundary-full-safe.log",
+      "log_sha256": "21ec4ee4d05ab6870554af5f463487709c838f4fd497009e57d0d55aa8aff3e5",
+      "executable": "boundary-full-safe",
+      "executable_sha256": "9677b045bd7cfa8f6c314163fffa0cb4b78306e86a0ca6aebc5453808d144b55"
+    }
+  ],
+  "scope": "copyWide declared3..258 kernel contract correction; production previously called>=17; no new public wire defect claimed; static/throughput acceptance kept separate"
+}

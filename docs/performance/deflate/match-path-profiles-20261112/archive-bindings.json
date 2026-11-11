@@ -1,0 +1,163 @@
+{
+  "schema": "vort.deflate.match-path-profile-bindings.v1",
+  "base_revision": "492a0a74535992cd4a7e3ad3182777414c8c0fac",
+  "reymont_revision": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "archives": {
+    "nci-raw-profile.tar.gz": {
+      "files": {
+        "annotate-physical.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "annotate-physical.txt": "28898107c4de1fd2c20800c677d878bf9dfb204f6456f15d8fbccbc00a1ae2f5",
+        "baseline-build.log": "3c76e0191f34d468d907e48db87f366eb68bb3cb23f533d44c2a6af8e5a18376",
+        "capture-validation.json": "b83e8fbdc0f011b76f1fe897ae477dda56016d1c9e4b7c95a7805ce5f0769518",
+        "capture.log": "720744a08de6a36662badb11f9a7de7208acb467836f0b704d5b9feb2e366247",
+        "capture.py": "decdaba6d1bb53fd51c434b96c1df163a1ae52ca927424680fded630261770b4",
+        "command.json": "b228e454490a69b0f313b047fea28c083fdd241269b6ba69a18e01d7a7656649",
+        "execution.json": "b53b02f91bbd4159f3813fb4a36fa68272625f45804335b891e7919638a2a759",
+        "manifest.json": "39bb51e67adf6769039b143e914418f0d078ba94380bf10416aa075b82753f7d",
+        "nci-64k-L9.data": "e4308167ee9ec67b1f18fce899effa579983bc80a27e90a15bc08d42ff212274",
+        "stderr.raw": "07de86152de4f86efb34f76755afa348dbcf7dc14104e2ee5fd36d94a91c4395",
+        "stdout.raw": "1572d7af514a9a721e201bd5c7c5feae1be0e82f4641c17517abdfdf8b8e4c36",
+        "symbols-physical.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "symbols-physical.txt": "9dda178b993b84f1d9c1eb56e5750c2396b1ee2bde2508c220d67e0a61ce8f30"
+      },
+      "origins": {
+        "baseline-build.log": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/baseline-build.log",
+        "capture-validation.json": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/capture-validation.json",
+        "capture.log": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/capture.log",
+        "capture.py": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/capture.py",
+        "command.json": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/command.json",
+        "execution.json": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/execution.json",
+        "manifest.json": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/manifest.json",
+        "nci-64k-L9.data": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/nci-64k-L9.data",
+        "stderr.raw": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/stderr.raw",
+        "stdout.raw": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/stdout.raw",
+        "symbols-physical.txt": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/symbols-physical.txt",
+        "symbols-physical.stderr": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/symbols-physical.stderr",
+        "annotate-physical.txt": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/annotate-physical.txt",
+        "annotate-physical.stderr": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/annotate-physical.stderr"
+      },
+      "mode": 420
+    },
+    "reymont-offline-annotate.tar.gz": {
+      "files": {
+        "annotate-physical.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "annotate-physical.txt": "3b89e8f20e29e55393261dbb32ea888197c6ec30f21ddd91a3d00279b18eb08d"
+      },
+      "origins": {
+        "annotate-physical.txt": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/annotate-physical.txt",
+        "annotate-physical.stderr": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/annotate-physical.stderr"
+      },
+      "mode": 420
+    },
+    "build-source-addendum.tar.gz": {
+      "files": {
+        "build-source-addendum.json": "8339d3e11d6f0b6000f6a613c6365b5588e6d4bb73f8ffb6f187b44cee01a576",
+        "build/br_decode_memory.zig": "2a6c437715c529a65633c73324fc9643e350f67ec1cf020578319a62a9d78658",
+        "build/br_decode_mozilla.zig": "a8d252f5876140480caf9dead582c9196b87fba7c242740dc00b76cbacab53e6",
+        "build/br_prefix_decode.zig": "01e575ec565b0a4f42f506bf8d2d817373e71ee9cae0a615c3b610f00343dd7f",
+        "build/codec_controls.zig": "bac3e52b2416e02df39e82d35df010b8172613599f548fd832eae891086e77b7",
+        "build/codec_state_controls.zig": "942221ccbc4becde7bb48e9b661f2c9e660252bb34b4c354faa1b6d49499afb3",
+        "build/deflate_wide_encode.zig": "1e3b4074184c068317befeea88931b6ff55c24fd7e777140e40069beb0d9b339",
+        "build/gzip_direct_chunks.zig": "94f7e15ed681be5b7e84d74971b00133b8111aec7225463e19dca17389122689",
+        "build/wide_sizes.zig": "b9bd8b74e71d258033d9cff21e01819ce791fbaa6205c9f29375b48b86772b86",
+        "build/zip_wide_input.zig": "8a52dc337d6ba4d64330e06d1ea9e199e3b84bcbce79ea8bacba7945fc665488",
+        "build/zip_wide_read.zig": "9efa274f3d7b8ad1a6f5bae82b41a04b3c0cee1881d5be1aee9436598ed6fa50",
+        "build/zlib_or_gzip_auto.zig": "bbee7b0be2b5fba0a5372308c9bc20126d5c4ec69e0c3fde96c4025cd66a4ba5",
+        "build/zstd_compressed_workspace.zig": "860be12a44eb03d91e89031f7eff1d2dd7b5759efadba66153120db05f7bca12",
+        "build/zstd_history_workspace.zig": "bb4114e79bd54ad5300fac5e60cac2200321047b04e63a4655020443c36dcf08",
+        "build/zstd_prefix_stable.zig": "62644cc642d4df05c07d3b747a11d095439a10e1859c1fb11cf8573059b5372b",
+        "build/zstd_source_reverse.zig": "eaf8b9df77fee49775f986d9cfe0b25c035e37ab8c5c28d90eb842017776d7f5"
+      },
+      "origins": {
+        "build/br_decode_memory.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/br_decode_memory.zig",
+        "build/br_decode_mozilla.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/br_decode_mozilla.zig",
+        "build/br_prefix_decode.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/br_prefix_decode.zig",
+        "build/codec_controls.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/codec_controls.zig",
+        "build/codec_state_controls.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/codec_state_controls.zig",
+        "build/deflate_wide_encode.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/deflate_wide_encode.zig",
+        "build/gzip_direct_chunks.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/gzip_direct_chunks.zig",
+        "build/wide_sizes.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/wide_sizes.zig",
+        "build/zip_wide_input.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zip_wide_input.zig",
+        "build/zip_wide_read.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zip_wide_read.zig",
+        "build/zlib_or_gzip_auto.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zlib_or_gzip_auto.zig",
+        "build/zstd_compressed_workspace.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zstd_compressed_workspace.zig",
+        "build/zstd_history_workspace.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zstd_history_workspace.zig",
+        "build/zstd_prefix_stable.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zstd_prefix_stable.zig",
+        "build/zstd_source_reverse.zig": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum/build/zstd_source_reverse.zig",
+        "build-source-addendum.json": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/build-source-addendum.json"
+      },
+      "mode": 420
+    },
+    "nci-fixture-bytes.tar.gz": {
+      "files": {
+        "nci.65536.deflate.9.wire": "e06f43c3fa9c5514e3dbd9d286dcb24959d53f1219b1f5c1475ba95234a7ecca",
+        "nci.65536.plain": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe"
+      },
+      "origins": {
+        "nci.65536.plain": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+        "nci.65536.deflate.9.wire": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.9.wire"
+      },
+      "mode": 420
+    },
+    "nci-runner-dependencies.tar.gz": {
+      "files": {
+        "evidence.py": "ce9d336a37e30c225c99bac0e6f7aa33a4f07da5f8bf9a7c2be6b9f89585969c",
+        "fixtures.py": "a05d1bdec9ef3c17bfe81c4dcad0c2b1a127b392ccbbf5fc50f39104a0d6e0b4",
+        "matrix.py": "4b81d2359276d34ec8ff9c6811894cfdb841a2a6004b90cc9a2730786df2c3e2",
+        "seed-manifest.json": "73705d4cd52f0bad33fdb53589e3896ee02a2a0039e3d298b8327f7f27fed0d2"
+      },
+      "origins": {
+        "seed-manifest.json": "/tmp/vort-zstd-sao-profile-20261112.093d5b9c/manifest.json"
+      },
+      "mode": 420
+    }
+  },
+  "reuse": {
+    "baseline_source": {
+      "path": "docs/performance/br/decode-mozilla-distributions-20261112/shared-dispatch-source.tar.gz",
+      "sha256": "84a9c1d9b2946fba4cb80921dd4f7a625242fe7c319eea6f536b13265ea0baba"
+    },
+    "public_linear_overlay": {
+      "path": "docs/performance/deflate/public-linear-contracts-20261112/source-overlay.tar.gz",
+      "sha256": "404924650e01be19129101b1a9eeafe215e832797c0c3a5df4dd637f77f9adc5"
+    },
+    "baseline_binary": {
+      "path": "docs/performance/br/decode-mozilla-distributions-20261112/probe-binaries.tar.gz",
+      "sha256": "336ac3d42018c3c851f43e425d6db86a1ee4bc08ed69482a76314543dc3e7565",
+      "member": "shared-dispatch/semantic-compare"
+    },
+    "reference_library": {
+      "path": "docs/performance/modern-decode-current-20261111/reference-libraries.tar.gz",
+      "sha256": "45fa23a5b80ba5bc68041dc2841b6419735fa77740bdff48501dd48f1774d61a",
+      "member": "deflate/libdeflate.so.0"
+    },
+    "reymont_packet": {
+      "path": "docs/performance/deflate/reymont-profile-20261112",
+      "files": {
+        "README.md": "5ba6f400da677be5b6f9288da9699fa19725ea80f0286bd1fb3d69821a281713",
+        "SHA256SUMS": "5b01bde541f7fb1c8ba37885419af54079c97b8769adf4a34fea19296783be5a",
+        "archive-bindings.json": "8a2cccffa2a02c40d249290929273f4b6686e9b6f7a3c6d74e0f5ddbacbad6c8",
+        "capture-validation.json": "951bad9881179a0b23bedb149465ed16911b35c0bd4a6f672a8a4fed55f7aa8c",
+        "fixture-bytes.tar.gz": "6babab3c2f3356d367c4aa106cc0a8c35b1ba9585f7bce38c2d312686f875311",
+        "raw-profile.tar.gz": "7b71af5e1cc05cf466a9e3b0e266c4049d1fc95abfff3b6e0bc1ac2779c854e5",
+        "runner-dependencies.tar.gz": "8ab547467ec4015d79f027d72103b797c5cad64cfdf13eb6aeb8cb81afb2067b",
+        "validation-receipt.json": "396a259bba1cf4f19d53a166dd21dfac3bfade490df40ead9be50b14afde97d9",
+        "verify.py": "87a5686c04ae3b860edc6e77260a7b4caac771e84411bf46c9ddbdbd97ecc1c4"
+      }
+    }
+  },
+  "archive_cpu": 0,
+  "policy": "Sorted GNU tar, uid/gid/mtime zero, empty owner names; regular modes0644 or0755; gzip level9 empty filename/mtime0. All packing pinned CPU0.",
+  "nci_binary_original": "/tmp/vort-deflate-nci-profile-20261112.492a0a74/baseline-compare",
+  "scope": {
+    "capture_registry_files": 2048,
+    "later_reconstructed_inventory_files": 2063,
+    "capture_includes_harness_and_reference": true,
+    "complete_vort_only_denominator": false,
+    "codec_heap_measured": false,
+    "profile_clocks_are_acceptance_samples": false,
+    "region_summary_is_message_derived": true
+  },
+  "derived_regions_origin": "/tmp/vort-deflate-match-path-analysis-20261112.492a0a74/regions.json",
+  "derived_regions_sha256": "2c3301f87447e43bca7a531bf653d9007ffcb5d3e6cf1af390d6262a5691b920"
+}
