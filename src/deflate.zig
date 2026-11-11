@@ -22,6 +22,7 @@ const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const decode_output_alias = @import("deflate/decoder/output_alias.zig");
 const decode_chunk_join = @import("deflate/decode/chunk_join.zig");
+const decode_direct_borrows = @import("deflate/decode/direct_borrows.zig");
 const decode_append_borrows = @import("deflate/decode/append_borrows.zig");
 const appendReadsAlias = decode_append_borrows.needsStaging;
 const dynamic_optimal = @import("deflate/dynamic_optimal.zig");
@@ -5577,6 +5578,10 @@ test "Deflate contiguous PNG borrow contracts" {
     try @import("deflate/decode/tests/contiguous_png_borrows.zig").contracts(@This());
 }
 
+test "Deflate direct chunk borrow contracts" {
+    try @import("deflate/decode/tests/direct_chunk_borrows.zig").contracts(@This());
+}
+
 pub fn decodeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!DecodeResult {
     return decodeRawChunksWithDictionary(chunks, compressed_scratch, output, "");
 }
@@ -8770,6 +8775,7 @@ fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks: []co
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
 
     if (try decodeZlibChunksViaStackJoinMaybe(chunks, total_len, header, output, dictionary, options)) |written| return written;
+    try decode_direct_borrows.validateKnownTotal(chunks, total_len, dictionary orelse "", output);
     if (try decodeZlibStoredChunksIntoMaybe(chunks, total_len, header.data_offset, output, options)) |stored_written| return stored_written;
 
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -8850,6 +8856,7 @@ fn decodeZlibStoredChunksIntoMaybe(chunks: []const []const u8, total_len: usize,
 }
 
 fn chunksTotalLen(chunks: []const []const u8) Error!usize {
+    _ = try decode_direct_borrows.descriptorBytes(chunks);
     var total: usize = 0;
     for (chunks) |chunk| {
         total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
@@ -9549,9 +9556,10 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptionsDirect(self: *ZlibDecoder, chunks: []const []const u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, "", output_scratch, std.mem.asBytes(self), &.{});
         const frame_len = try chunksTotalLen(chunks);
         const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks, frame_len, output_scratch, null, options) catch |err| {
-            self.recordError(err);
+            if (err != error.InvalidBlockPlan) self.recordError(err);
             return err;
         };
         self.* = .{
@@ -9561,6 +9569,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptionsExactSizeDirect(self: *ZlibDecoder, chunks: []const []const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, "", output_scratch, std.mem.asBytes(self), &.{});
         try self.resetFromChunksWithOptionsDirect(chunks, output_scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -9595,9 +9604,10 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionaryAndOptionsDirect(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, dictionary, output_scratch, std.mem.asBytes(self), &.{});
         const frame_len = try chunksTotalLen(chunks);
         const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks, frame_len, output_scratch, dictionary, options) catch |err| {
-            self.recordError(err);
+            if (err != error.InvalidBlockPlan) self.recordError(err);
             return err;
         };
         self.* = .{
@@ -9607,6 +9617,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionaryAndOptionsExactSizeDirect(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, dictionary, output_scratch, std.mem.asBytes(self), &.{});
         try self.resetFromChunksWithDictionaryAndOptionsDirect(chunks, dictionary, output_scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -10671,15 +10682,17 @@ pub const PngZlibScanlineDecoder = struct {
         bytes_per_pixel: usize,
         options: ZlibDecodeOptions,
     ) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, "", zlib_scratch, std.mem.asBytes(self), &.{ filtered_row_scratch, previous_row_scratch });
         const expected_payload_len = try validateConfig(row_len, row_count, bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
+        const candidate_zlib = try ZlibDecoder.initFromChunksWithOptionsExactSizeDirect(chunks, zlib_scratch, options, expected_payload_len);
         self.* = .{
+            .zlib = candidate_zlib,
             .filtered_row_scratch = filtered_row_scratch[0..row_len],
             .previous_row_scratch = previous_row_scratch[0..row_len],
             .row_len = row_len,
             .row_count = row_count,
             .bytes_per_pixel = bytes_per_pixel,
         };
-        self.zlib = try ZlibDecoder.initFromChunksWithOptionsExactSizeDirect(chunks, zlib_scratch, options, expected_payload_len);
     }
 
     pub fn resetFromChunksWithInfoAndOptionsDirect(
@@ -12427,6 +12440,11 @@ pub fn decodePngStoredZlibImageFromChunksWithOptionsDirect(
 ) Error!PngImageDecodeResult {
     const output_len = try pngImageOutputLen(info);
     if (output.len < output_len) return error.OutputTooSmall;
+    try decode_direct_borrows.validateWriters(chunks, try chunksTotalLen(chunks), &.{
+        output[0..output_len],
+        filtered_row_scratch[0..@min(filtered_row_scratch.len, info.row_len)],
+        previous_row_scratch[0..@min(previous_row_scratch.len, info.row_len)],
+    });
     var decoder = try PngStoredZlibChunkedScanlineDecoder.initWithInfoAndOptions(chunks, filtered_row_scratch, previous_row_scratch, info, options);
     return drainPngStoredZlibChunksImage(&decoder, output[0..output_len]);
 }
@@ -12906,6 +12924,10 @@ pub fn decodePngStreamingZlibImageFromChunksWithOptionsDirect(
 ) Error!PngImageDecodeResult {
     const output_len = try pngImageOutputLen(info);
     if (output.len < output_len) return error.OutputTooSmall;
+    try decode_direct_borrows.validateWriters(chunks, try chunksTotalLen(chunks), &.{
+        output[0..output_len],
+        history_scratch[0..@min(history_scratch.len, lz77.default_window_len)],
+    });
     var decoder = try PngStreamingZlibChunkedScanlineDecoder.initWithInfoAndOptions(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
     return drainPngStreamingZlibChunksImage(&decoder, output[0..output_len]);
 }
@@ -14223,35 +14245,31 @@ fn previousPngOutputRow(output: []const u8, offset: usize, row_len: usize) ?[]co
 
 fn drainPngStoredZlibImage(decoder: *PngStoredZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
     var offset: usize = 0;
-    var zlib_input_read: usize = 0;
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
         const step = try decoder.step(row);
         offset += step.row_bytes;
-        zlib_input_read += step.progress.input_read;
     }
     if (!decoder.snapshot().done) return error.SizeMismatch;
     return .{
         .rows = decoder.row_count,
         .output_written = offset,
-        .zlib_input_read = zlib_input_read,
+        .zlib_input_read = decoder.snapshot().input_read,
     };
 }
 
 fn drainPngStoredZlibChunksImage(decoder: *PngStoredZlibChunkedScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
     var offset: usize = 0;
-    var zlib_input_read: usize = 0;
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
         const step = try decoder.step(row);
         offset += step.row_bytes;
-        zlib_input_read += step.progress.input_read;
     }
     if (!decoder.snapshot().done) return error.SizeMismatch;
     return .{
         .rows = decoder.row_count,
         .output_written = offset,
-        .zlib_input_read = zlib_input_read,
+        .zlib_input_read = decoder.snapshot().input_read,
     };
 }
 
@@ -14396,6 +14414,13 @@ pub fn decodePngAdam7StreamingZlibImageFromChunksWithOptionsDirect(
     output: []u8,
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7StreamingDecodeBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch, output);
+    const sizes = pngAdam7DecodeBufferSizes(info);
+    try decode_direct_borrows.validateWriters(chunks, try chunksTotalLen(chunks), &.{
+        output[0..info.image_output_len],
+        history_scratch[0..@min(history_scratch.len, lz77.default_window_len)],
+        filtered_row_scratch[0..sizes.filtered_row_scratch_len],
+        previous_row_scratch[0..sizes.previous_row_scratch_len],
+    });
     @memset(output[0..info.image_output_len], 0);
     var decoder = try PngAdam7StreamingZlibChunkedRowDecoder.initWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
     while (try decoder.step()) |row| try placePngAdam7Row(info, row.pass, row.pass_row_index, row.row, output);
@@ -14428,6 +14453,12 @@ pub fn streamPngAdam7ZlibRowsFromChunksWithOptionsDirect(
     options: ZlibDecodeOptions,
     callback: PngAdam7RowCallback,
 ) Error!PngAdam7RowsDecodeResult {
+    const sizes = pngAdam7DecodeBufferSizes(info);
+    try decode_direct_borrows.validateWriters(chunks, try chunksTotalLen(chunks), &.{
+        history_scratch[0..@min(history_scratch.len, lz77.default_window_len)],
+        filtered_row_scratch[0..@min(filtered_row_scratch.len, sizes.filtered_row_scratch_len)],
+        previous_row_scratch[0..@min(previous_row_scratch.len, sizes.previous_row_scratch_len)],
+    });
     var decoder = try PngAdam7StreamingZlibChunkedRowDecoder.initWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
     while (try decoder.step()) |row| try callback.on_row(callback.context, row);
     const snap = decoder.snapshot();
@@ -16336,6 +16367,7 @@ pub fn decodeGzipChunksInto(chunks: []const []const u8, output: []u8) Error!usiz
 
 pub fn decodeGzipChunksIntoWithOptions(chunks: []const []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
     const total_len = try chunksTotalLen(chunks);
+    try decode_direct_borrows.validateKnownTotal(chunks, total_len, "", output);
     const data_offset = try parseGzipHeaderFromChunksKnownTotal(chunks, total_len);
     var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, data_offset, total_len);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, data_offset, "", output);
@@ -16624,18 +16656,20 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptionsDirect(self: *GzipDecoder, chunks: []const []const u8, output_scratch: []u8, options: GzipDecodeOptions) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, "", output_scratch, std.mem.asBytes(self), &.{});
         const total_len = chunksTotalLen(chunks) catch |err| {
-            self.recordError(err);
+            if (err != error.InvalidBlockPlan) self.recordError(err);
             return err;
         };
         const written = decodeGzipChunksIntoWithOptions(chunks, output_scratch, options) catch |err| {
-            self.recordError(err);
+            if (err != error.InvalidBlockPlan) self.recordError(err);
             return err;
         };
         self.installDecoded(total_len, output_scratch, written);
     }
 
     pub fn resetFromChunksWithOptionsExactSizeDirect(self: *GzipDecoder, chunks: []const []const u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_direct_borrows.validateReceiver(chunks, "", output_scratch, std.mem.asBytes(self), &.{});
         try self.resetFromChunksWithOptionsDirect(chunks, output_scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
