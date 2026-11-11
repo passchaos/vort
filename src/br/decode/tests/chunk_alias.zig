@@ -209,13 +209,16 @@ fn joinedSpan(comptime B: type) !void {
     // output, and half-open ranges touching at their boundary are disjoint.
     inline for (.{ @as(usize, f.external.len - 1), f.external.len, f.external.len + 1 }) |leading_len| {
         var backing: [1024]u8 = @splat(0xa5);
-        const before = backing;
         var fixed = std.heap.FixedBufferAllocator.init(&backing);
         const heap = fixed.allocator();
         _ = try heap.alloc(u8, leading_len);
         var out = std.ArrayList(u8).fromOwnedSlice(try heap.alloc(u8, 128));
         defer out.deinit(heap);
         out.items.len = 8;
+        // Allocator.alloc may poison fresh storage in safety modes. Capture
+        // the codec's pre-call bytes after completing allocator setup.
+        @memset(&backing, 0xa5);
+        const before = backing;
         const chunks = [_][]const u8{&f.external};
         const result = B.decodeStreamPrefixChunksAppend(heap, &out, &chunks, &backing);
         if (leading_len < f.external.len) {

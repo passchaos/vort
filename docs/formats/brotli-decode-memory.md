@@ -70,6 +70,12 @@ inherited policies. Use independent compressed scratch to retry; ordinary
 decode/limit/allocator validation then follows. Eager reset retains its existing
 error diagnostics when join validation fails.
 
+The [chunk-borrow and append-sizing contract](brotli-decode-borrows.md) extends
+preflight to source/descriptor, dictionary, caller history and decoder-object
+borrows. It also rejects impossible exact append lengths with explicit
+`IntegerOverflow` before allocator or quota admission, while preserving
+scalar format-error priority and inherited profiles.
+
 ## Zero-heap operations and failure precedence
 
 Caller-buffer into APIs, fixed/caller-history size/summary APIs, probes and the

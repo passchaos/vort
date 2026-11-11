@@ -3,6 +3,7 @@ const prepared_adaptive_literal = @import("br/encoder/prepared_adaptive_literal.
 const allocator_dispatch = @import("br/allocator_dispatch.zig");
 const decode_budget = @import("br/decode/budget.zig");
 const decode_operation = @import("br/decode/one_shot.zig");
+const decode_output_size = @import("br/decode/output_size.zig");
 pub const DecodeMemoryProfile = decode_budget.DecodeMemoryProfile;
 const builtin = @import("builtin");
 const core = @import("core.zig");
@@ -1334,6 +1335,14 @@ pub const DecodedPrefix = struct {
 
 test "Brotli decode total memory contracts" {
     try @import("br/decode/tests.zig").contracts(@This());
+}
+
+test "Brotli decode total memory append size contracts" {
+    try @import("br/decode/tests/append_sizing.zig").contracts(@This());
+}
+
+test "Brotli decode total memory chunk borrow contracts" {
+    try @import("br/decode/tests/chunk_borrows.zig").contracts(@This());
 }
 
 test "Brotli incremental decode policy contracts" {
@@ -15184,12 +15193,14 @@ pub fn decodeStreamPrefixAllocLimited(allocator: std.mem.Allocator, stream: []co
 }
 
 pub fn decodeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error![]u8 {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     if (!decode_budget.isTracked(allocator) and !try decodeOptionsNeedColdPath(options)) return decodeStreamAlloc(allocator, stream);
     return try decodeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     if (!decode_budget.isTracked(allocator) and !try decodeOptionsNeedColdPath(options)) return decodeStreamAllocLimited(allocator, stream, max_output_len);
     const decoded = try decodeStreamPrefixAllocLimitedWithOptions(allocator, stream, max_output_len, options);
@@ -15199,12 +15210,14 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
 }
 
 pub fn decodeStreamPrefixAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error!DecodedPrefix {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     if (!decode_budget.isTracked(allocator) and !try decodeOptionsNeedColdPath(options)) return decodeStreamPrefixAlloc(allocator, stream);
     return decodeStreamPrefixAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamPrefixAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator)) return decode_operation.ownedPrefix(DecodeBudgetCodec, allocator, stream, max_output_len, options);
     return decodeStreamPrefixAllocLimitedWithOptionsInternal(allocator, stream, max_output_len, options);
@@ -15269,6 +15282,7 @@ pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const 
 }
 
 pub fn decodeStreamAllocExactSizeWithOptions(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error![]u8 {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator)) return decode_operation.ownedExact(DecodeBudgetCodec, false, allocator, stream, expected_output_len, options);
     return decodeStreamAllocExactSizeWithOptionsInternal(allocator, stream, expected_output_len, options);
@@ -15288,6 +15302,7 @@ pub fn decodeStreamPrefixAllocExactSize(allocator: std.mem.Allocator, stream: []
 }
 
 pub fn decodeStreamPrefixAllocExactSizeWithOptions(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator)) return decode_operation.ownedExact(DecodeBudgetCodec, true, allocator, stream, expected_output_len, options);
     return decodeStreamPrefixAllocExactSizeWithOptionsInternal(allocator, stream, expected_output_len, options);
@@ -15307,7 +15322,7 @@ pub fn decodeStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
 pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize) Error!usize {
     if (decode_operation.appendNeedsProtection(out, stream, DecodeOptions{})) return decode_operation.append(DecodeBudgetCodec, false, false, allocator, out, stream, max_output_len, .{});
     const decoded_len = try stream_count.toLocal(try decodedStreamSizeAllocLimited(allocator, stream, max_output_len));
-    try out.ensureUnusedCapacity(allocator, decoded_len);
+    try decode_output_size.ensureAppendCapacity(allocator, out, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
     const written = decodeStreamInto(stream, slot) catch |err| {
@@ -15322,12 +15337,14 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
 }
 
 pub fn decodeStreamAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, options: DecodeOptions) Error!usize {
+    try validateDecodeProfile(stream, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
     if (!decode_budget.isTracked(allocator) and !try decodeOptionsNeedColdPath(options)) return decodeStreamAppend(allocator, out, stream);
     return try decodeStreamAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateDecodeProfile(stream, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator) or decode_operation.appendNeedsProtection(out, stream, options)) return decode_operation.append(DecodeBudgetCodec, false, false, allocator, out, stream, max_output_len, options);
     return decodeStreamAppendLimitedWithOptionsInternal(allocator, out, stream, max_output_len, options);
@@ -15340,7 +15357,7 @@ fn decodeStreamAppendLimitedWithOptionsInternal(allocator: std.mem.Allocator, ou
 }
 
 fn appendDecodedStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, decoded_len: usize, options: DecodeOptions) Error!usize {
-    try out.ensureUnusedCapacity(allocator, decoded_len);
+    try decode_output_size.ensureAppendCapacity(allocator, out, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
     const written = decodeStreamIntoWithOptions(stream, slot, options) catch |err| {
@@ -15355,8 +15372,9 @@ fn appendDecodedStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), st
 }
 
 pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize) Error!usize {
+    const required = try decode_output_size.exactAppendEnd(DecodeBudgetCodec, out.items.len, expected_output_len, stream, .{});
     if (decode_operation.appendNeedsProtection(out, stream, DecodeOptions{})) return decode_operation.append(DecodeBudgetCodec, false, true, allocator, out, stream, expected_output_len, .{});
-    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    try out.ensureTotalCapacity(allocator, required);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
     const written = decodeStreamIntoExactSize(stream, slot, expected_output_len) catch |err| {
@@ -15371,6 +15389,7 @@ pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.Array
 }
 
 pub fn decodeStreamAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateDecodeProfile(stream, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator) or decode_operation.appendNeedsProtection(out, stream, options)) return decode_operation.append(DecodeBudgetCodec, false, true, allocator, out, stream, expected_output_len, options);
     return decodeStreamAppendExactSizeWithOptionsInternal(allocator, out, stream, expected_output_len, options);
@@ -15378,7 +15397,8 @@ pub fn decodeStreamAppendExactSizeWithOptions(allocator: std.mem.Allocator, out:
 
 fn decodeStreamAppendExactSizeWithOptionsInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppendExactSize(allocator, out, stream, expected_output_len);
-    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    const required = try decode_output_size.exactAppendEnd(DecodeBudgetCodec, out.items.len, expected_output_len, stream, options);
+    try out.ensureTotalCapacity(allocator, required);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
     const written = decodeStreamIntoExactSizeWithOptions(stream, slot, expected_output_len, options) catch |err| {
@@ -15397,6 +15417,7 @@ pub fn decodeStreamPrefixAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn decodeStreamPrefixAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateDecodeProfile(stream, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
     return decodeStreamPrefixAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), options);
 }
@@ -15406,6 +15427,7 @@ pub fn decodeStreamPrefixAppendLimited(allocator: std.mem.Allocator, out: *std.A
 }
 
 pub fn decodeStreamPrefixAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateDecodeProfile(stream, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator)) return decode_operation.append(DecodeBudgetCodec, true, false, allocator, out, stream, max_output_len, options);
     return decodeStreamPrefixAppendLimitedWithOptionsInternal(allocator, out, stream, max_output_len, options);
@@ -15414,7 +15436,8 @@ pub fn decodeStreamPrefixAppendLimitedWithOptions(allocator: std.mem.Allocator, 
 fn decodeStreamPrefixAppendLimitedWithOptionsInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
     const decoded = try decodeStreamPrefixAllocLimitedWithOptions(allocator, stream, max_output_len, options);
     defer decoded.deinit(allocator);
-    try out.appendSlice(allocator, decoded.bytes);
+    try decode_output_size.ensureAppendCapacity(allocator, out, decoded.bytes.len);
+    out.appendSliceAssumeCapacity(decoded.bytes);
     return .{ .input_read = decoded.input_read, .output_written = decoded.output_written };
 }
 
@@ -15423,15 +15446,18 @@ pub fn decodeStreamPrefixAppendExactSize(allocator: std.mem.Allocator, out: *std
 }
 
 pub fn decodeStreamPrefixAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateDecodeProfile(stream, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator)) return decode_operation.append(DecodeBudgetCodec, true, true, allocator, out, stream, expected_output_len, options);
     return decodeStreamPrefixAppendExactSizeWithOptionsInternal(allocator, out, stream, expected_output_len, options);
 }
 
 fn decodeStreamPrefixAppendExactSizeWithOptionsInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    _ = try decode_output_size.exactAppendEnd(DecodeBudgetCodec, out.items.len, expected_output_len, stream, options);
     const decoded = try decodeStreamPrefixAllocExactSizeWithOptions(allocator, stream, expected_output_len, options);
     defer decoded.deinit(allocator);
-    try out.appendSlice(allocator, decoded.bytes);
+    try decode_output_size.ensureAppendCapacity(allocator, out, decoded.bytes.len);
+    out.appendSliceAssumeCapacity(decoded.bytes);
     return .{ .input_read = decoded.input_read, .output_written = decoded.output_written };
 }
 
@@ -15514,6 +15540,7 @@ pub fn decodeStreamPrefixInto(stream: []const u8, output: []u8) Error!DecodePref
 }
 
 pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!usize {
+    try validateDecodeProfile(stream, options, &.{output});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamInto(stream, output);
     // The direct stored encoder's common WBITS=16 wire is payload+4 bytes.
@@ -15532,6 +15559,7 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
 }
 
 pub noinline fn decodeStreamPrefixIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateDecodeProfile(stream, options, &.{output});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamPrefixInto(stream, output);
     var shared = try decodeSharedDictionary(options);
@@ -15682,6 +15710,7 @@ pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len:
 }
 
 pub fn decodeStreamIntoLimitedWithOptions(stream: []const u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateDecodeProfile(stream, options, &.{output});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamIntoLimited(stream, output, max_output_len);
     // Match the allocator-returning and append limited APIs: perform the full
@@ -15702,6 +15731,7 @@ pub fn decodeStreamPrefixIntoLimited(stream: []const u8, output: []u8, max_outpu
 }
 
 pub fn decodeStreamPrefixIntoLimitedWithOptions(stream: []const u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateDecodeProfile(stream, options, &.{output});
     decode_budget.noHeap(options);
     const size = try decodedStreamPrefixSizeLimitedWithOptions(stream, max_output_len, options);
     const decoded_len = try stream_count.toLocal(size.decoded_bytes);
@@ -15725,6 +15755,7 @@ pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_outp
 }
 
 pub fn decodeStreamIntoExactSizeWithOptions(stream: []const u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateDecodeProfile(stream, options, &.{output});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamIntoExactSize(stream, output, expected_output_len);
     if (output.len < expected_output_len) return error.OutputTooSmall;
@@ -15741,6 +15772,7 @@ pub fn decodeStreamPrefixIntoExactSize(stream: []const u8, output: []u8, expecte
 }
 
 pub fn decodeStreamPrefixIntoExactSizeWithOptions(stream: []const u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateDecodeProfile(stream, options, &.{output});
     decode_budget.noHeap(options);
     if (output.len < expected_output_len) return error.OutputTooSmall;
     const result = decodeStreamPrefixIntoWithOptions(stream, output[0..expected_output_len], options) catch |err| switch (err) {
@@ -15760,12 +15792,14 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: Counter) Err
 }
 
 pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!Counter {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSize(stream);
     return try decodedStreamSizeLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
 pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSizeLimited(stream, max_output_len);
     return (try summarizeStreamLimitedWithOptions(stream, max_output_len, options)).decoded_bytes;
@@ -15780,11 +15814,13 @@ pub fn decodedStreamPrefixSizeLimited(stream: []const u8, max_output_len: Counte
 }
 
 pub fn decodedStreamPrefixSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!DecodedPrefixSize {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.noHeap(options);
     return decodedStreamPrefixSizeLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
 pub fn decodedStreamPrefixSizeLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!DecodedPrefixSize {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     var input_read: usize = 0;
@@ -15805,12 +15841,14 @@ pub fn summarizeStreamLimited(stream: []const u8, max_output_len: Counter) Error
 }
 
 pub fn summarizeStreamWithOptions(stream: []const u8, options: DecodeOptions) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStream(stream);
     return try summarizeStreamLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
 pub fn summarizeStreamLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimited(stream, max_output_len);
     var diagnostics: StreamSummaryDiagnostics = .{};
@@ -15822,6 +15860,7 @@ pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSu
 }
 
 pub fn summarizeStreamWithOptionsAndDiagnostics(stream: []const u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.noHeap(options);
     return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(Counter), options, diagnostics);
 }
@@ -15834,6 +15873,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
 }
 
 pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.noHeap(options);
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null, null) catch |err| switch (err) {
@@ -15855,11 +15895,13 @@ pub fn summarizeStreamLimitedWithHistory(stream: []const u8, history: []u8, max_
 }
 
 pub fn summarizeStreamWithHistoryAndOptions(stream: []const u8, history: []u8, options: DecodeOptions) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{history});
     decode_budget.noHeap(options);
     return summarizeStreamLimitedWithHistoryAndOptions(stream, history, std.math.maxInt(Counter), options);
 }
 
 pub fn summarizeStreamLimitedWithHistoryAndOptions(stream: []const u8, history: []u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{history});
     decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, max_output_len, options, &diagnostics);
@@ -15870,6 +15912,7 @@ pub fn summarizeStreamWithHistoryAndDiagnostics(stream: []const u8, history: []u
 }
 
 pub fn summarizeStreamWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{ history, std.mem.asBytes(diagnostics) });
     decode_budget.noHeap(options);
     return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, std.math.maxInt(Counter), options, diagnostics);
 }
@@ -15879,6 +15922,7 @@ pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, histo
 }
 
 pub fn summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{ history, std.mem.asBytes(diagnostics) });
     decode_budget.noHeap(options);
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
@@ -15899,11 +15943,13 @@ pub fn summarizeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const
 }
 
 pub fn summarizeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     return try summarizeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(Counter), options);
 }
 
 pub fn summarizeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{});
     decode_budget.observeCaller(allocator, options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, max_output_len, options, &diagnostics);
@@ -15918,11 +15964,13 @@ pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, 
 }
 
 pub fn summarizeStreamAllocWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.observeCaller(allocator, options);
     return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(Counter), options, diagnostics);
 }
 
 pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.observeCaller(allocator, options);
     if (decode_budget.requested(options) or decode_budget.isTracked(allocator)) return decode_operation.summary(DecodeBudgetCodec, allocator, stream, max_output_len, options, diagnostics);
     return summarizeStreamAllocLimitedWithOptionsAndDiagnosticsInternal(allocator, stream, max_output_len, options, diagnostics);
@@ -16050,6 +16098,7 @@ test "br allocating summary history hint is bounded and conservative" {
 }
 
 fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8, prefix_input_read: ?*usize) SummaryError!StreamSummary {
+    try validateDecodeProfile(stream, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.noHeap(options);
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
@@ -16201,8 +16250,9 @@ pub fn decodeStreamPrefixChunksAlloc(allocator: std.mem.Allocator, chunks: []con
 }
 
 pub fn decodeStreamPrefixChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!DecodedPrefix {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return decodeStreamPrefixAllocWithOptions(allocator, joined, options);
 }
 
@@ -16211,8 +16261,9 @@ pub fn decodeStreamPrefixChunksAllocLimited(allocator: std.mem.Allocator, chunks
 }
 
 pub fn decodeStreamPrefixChunksAllocLimitedWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return decodeStreamPrefixAllocLimitedWithOptions(allocator, joined, max_output_len, options);
 }
 
@@ -16221,8 +16272,9 @@ pub fn decodeStreamPrefixChunksAllocExactSize(allocator: std.mem.Allocator, chun
 }
 
 pub fn decodeStreamPrefixChunksAllocExactSizeWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodedPrefix {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return decodeStreamPrefixAllocExactSizeWithOptions(allocator, joined, expected_output_len, options);
 }
 
@@ -16231,8 +16283,9 @@ pub fn decodeStreamPrefixChunksAppend(allocator: std.mem.Allocator, out: *std.Ar
 }
 
 pub fn decodeStreamPrefixChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, out.allocatedSlice());
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     return decodeStreamPrefixAppendWithOptions(allocator, out, joined, options);
 }
 
@@ -16241,8 +16294,9 @@ pub fn decodeStreamPrefixChunksAppendLimited(allocator: std.mem.Allocator, out: 
 }
 
 pub fn decodeStreamPrefixChunksAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, out.allocatedSlice());
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     return decodeStreamPrefixAppendLimitedWithOptions(allocator, out, joined, max_output_len, options);
 }
 
@@ -16251,8 +16305,9 @@ pub fn decodeStreamPrefixChunksAppendExactSize(allocator: std.mem.Allocator, out
 }
 
 pub fn decodeStreamPrefixChunksAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, out.allocatedSlice());
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     return decodeStreamPrefixAppendExactSizeWithOptions(allocator, out, joined, expected_output_len, options);
 }
 
@@ -16261,8 +16316,9 @@ pub fn decodeStreamPrefixChunksInto(chunks: []const []const u8, compressed_scrat
 }
 
 pub fn decodeStreamPrefixChunksIntoWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{output});
     decode_budget.noHeap(options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, output);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{output});
     return decodeStreamPrefixIntoWithOptions(joined, output, options);
 }
 
@@ -16271,8 +16327,9 @@ pub fn decodeStreamPrefixChunksIntoLimited(chunks: []const []const u8, compresse
 }
 
 pub fn decodeStreamPrefixChunksIntoLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{output});
     decode_budget.noHeap(options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, output);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{output});
     return decodeStreamPrefixIntoLimitedWithOptions(joined, output, max_output_len, options);
 }
 
@@ -16281,8 +16338,9 @@ pub fn decodeStreamPrefixChunksIntoExactSize(chunks: []const []const u8, compres
 }
 
 pub fn decodeStreamPrefixChunksIntoExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!DecodePrefixResult {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{output});
     decode_budget.noHeap(options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, output);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{output});
     return decodeStreamPrefixIntoExactSizeWithOptions(joined, output, expected_output_len, options);
 }
 
@@ -16291,8 +16349,9 @@ pub fn decodedStreamPrefixChunksSize(chunks: []const []const u8, compressed_scra
 }
 
 pub fn decodedStreamPrefixChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!DecodedPrefixSize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.noHeap(options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return decodedStreamPrefixSizeWithOptions(joined, options);
 }
 
@@ -16301,8 +16360,9 @@ pub fn decodedStreamPrefixChunksSizeLimited(chunks: []const []const u8, compress
 }
 
 pub fn decodedStreamPrefixChunksSizeLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) Error!DecodedPrefixSize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.noHeap(options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return decodedStreamPrefixSizeLimitedWithOptions(joined, max_output_len, options);
 }
 
@@ -16311,8 +16371,9 @@ pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []c
 }
 
 pub fn decodeStreamChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error![]u8 {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try decodeStreamAllocWithOptions(allocator, joined, options);
 }
 
@@ -16321,8 +16382,9 @@ pub fn decodeStreamChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []
 }
 
 pub fn decodeStreamChunksAllocExactSizeWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error![]u8 {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try decodeStreamAllocExactSizeWithOptions(allocator, joined, expected_output_len, options);
 }
 
@@ -16331,8 +16393,9 @@ pub fn decodeStreamChunksAllocLimited(allocator: std.mem.Allocator, chunks: []co
 }
 
 pub fn decodeStreamChunksAllocLimitedWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try decodeStreamAllocLimitedWithOptions(allocator, joined, max_output_len, options);
 }
 
@@ -16341,8 +16404,9 @@ pub fn decodeStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn decodeStreamChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!usize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, out.allocatedSlice());
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     return try decodeStreamAppendWithOptions(allocator, out, joined, options);
 }
 
@@ -16351,8 +16415,9 @@ pub fn decodeStreamChunksAppendExactSize(allocator: std.mem.Allocator, out: *std
 }
 
 pub fn decodeStreamChunksAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, out.allocatedSlice());
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     return try decodeStreamAppendExactSizeWithOptions(allocator, out, joined, expected_output_len, options);
 }
 
@@ -16361,8 +16426,9 @@ pub fn decodeStreamChunksAppendLimited(allocator: std.mem.Allocator, out: *std.A
 }
 
 pub fn decodeStreamChunksAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     decode_budget.observeCaller(allocator, options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, out.allocatedSlice());
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{ out.allocatedSlice(), std.mem.asBytes(out) });
     return try decodeStreamAppendLimitedWithOptions(allocator, out, joined, max_output_len, options);
 }
 
@@ -16371,8 +16437,9 @@ pub fn decodeStreamChunksInto(chunks: []const []const u8, compressed_scratch: []
 }
 
 pub fn decodeStreamChunksIntoWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodeOptions) Error!usize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{output});
     decode_budget.noHeap(options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, output);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{output});
     return try decodeStreamIntoWithOptions(joined, output, options);
 }
 
@@ -16381,8 +16448,9 @@ pub fn decodeStreamChunksIntoLimited(chunks: []const []const u8, compressed_scra
 }
 
 pub fn decodeStreamChunksIntoLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{output});
     decode_budget.noHeap(options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, output);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{output});
     return try decodeStreamIntoLimitedWithOptions(joined, output, max_output_len, options);
 }
 
@@ -16391,8 +16459,9 @@ pub fn decodeStreamChunksIntoExactSize(chunks: []const []const u8, compressed_sc
 }
 
 pub fn decodeStreamChunksIntoExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{output});
     decode_budget.noHeap(options);
-    const joined = try joinChunksForOutput(chunks, compressed_scratch, output);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{output});
     return try decodeStreamIntoExactSizeWithOptions(joined, output, expected_output_len, options);
 }
 
@@ -16401,8 +16470,9 @@ pub fn decodedStreamChunksSize(chunks: []const []const u8, compressed_scratch: [
 }
 
 pub fn decodedStreamChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!Counter {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.noHeap(options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try decodedStreamSizeWithOptions(joined, options);
 }
 
@@ -16411,8 +16481,9 @@ pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scr
 }
 
 pub fn decodedStreamChunksSizeLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.noHeap(options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try decodedStreamSizeLimitedWithOptions(joined, max_output_len, options);
 }
 
@@ -16421,8 +16492,9 @@ pub fn summarizeStreamChunks(chunks: []const []const u8, compressed_scratch: []u
 }
 
 pub fn summarizeStreamChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!StreamSummary {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.noHeap(options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try summarizeStreamWithOptions(joined, options);
 }
 
@@ -16431,8 +16503,9 @@ pub fn summarizeStreamChunksLimited(chunks: []const []const u8, compressed_scrat
 }
 
 pub fn summarizeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{});
     decode_budget.noHeap(options);
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, options, &.{});
     return try summarizeStreamLimitedWithOptions(joined, max_output_len, options);
 }
 
@@ -16441,8 +16514,9 @@ pub fn summarizeStreamChunksWithDiagnostics(chunks: []const []const u8, compress
 }
 
 pub fn summarizeStreamChunksWithOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.noHeap(options);
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, options, &.{std.mem.asBytes(diagnostics)}) catch |err| {
         diagnostics.* = .{};
         return err;
     };
@@ -16454,8 +16528,9 @@ pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, c
 }
 
 pub fn summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{std.mem.asBytes(diagnostics)});
     decode_budget.noHeap(options);
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, options, &.{std.mem.asBytes(diagnostics)}) catch |err| {
         diagnostics.* = .{};
         return err;
     };
@@ -16471,12 +16546,10 @@ pub fn summarizeStreamChunksLimitedWithHistory(chunks: []const []const u8, compr
 }
 
 pub fn summarizeStreamChunksWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, options: DecodeOptions) Error!StreamSummary {
-    decode_budget.noHeap(options);
     return summarizeStreamChunksLimitedWithHistoryAndOptions(chunks, compressed_scratch, history, std.math.maxInt(Counter), options);
 }
 
 pub fn summarizeStreamChunksLimitedWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
-    decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, max_output_len, options, &diagnostics);
 }
@@ -16486,7 +16559,6 @@ pub fn summarizeStreamChunksWithHistoryAndDiagnostics(chunks: []const []const u8
 }
 
 pub fn summarizeStreamChunksWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    decode_budget.noHeap(options);
     return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(Counter), options, diagnostics);
 }
 
@@ -16495,8 +16567,9 @@ pub fn summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks: []const []c
 }
 
 pub fn summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    try validateChunkProfile(chunks, compressed_scratch, options, &.{ history, std.mem.asBytes(diagnostics) });
     decode_budget.noHeap(options);
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, options, &.{ history, std.mem.asBytes(diagnostics) }) catch |err| {
         diagnostics.* = .{};
         return err;
     };
@@ -16512,12 +16585,10 @@ pub fn probeStreamLimited(stream: []const u8, max_output_len: Counter) StreamPro
 }
 
 pub fn probeStreamWithOptions(stream: []const u8, options: DecodeOptions) StreamProbeResult {
-    decode_budget.noHeap(options);
     return probeStreamLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
 pub fn probeStreamLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) StreamProbeResult {
-    decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics) catch |err| {
         return .{
@@ -16538,7 +16609,6 @@ pub fn probeStreamExactSize(stream: []const u8, expected_output_len: Counter) St
 }
 
 pub fn probeStreamExactSizeWithOptions(stream: []const u8, expected_output_len: Counter, options: DecodeOptions) StreamProbeResult {
-    decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(Counter), options, &diagnostics) catch |err| {
         return .{
@@ -16571,12 +16641,10 @@ pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: 
 }
 
 pub fn probeStreamChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) StreamProbeResult {
-    decode_budget.noHeap(options);
     return probeStreamChunksLimitedWithOptions(chunks, compressed_scratch, std.math.maxInt(Counter), options);
 }
 
 pub fn probeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) StreamProbeResult {
-    decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks, compressed_scratch, max_output_len, options, &diagnostics) catch |err| {
         return .{
@@ -16597,7 +16665,6 @@ pub fn probeStreamChunksExactSize(chunks: []const []const u8, compressed_scratch
 }
 
 pub fn probeStreamChunksExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: Counter, options: DecodeOptions) StreamProbeResult {
-    decode_budget.noHeap(options);
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamChunksWithOptionsAndDiagnostics(chunks, compressed_scratch, options, &diagnostics) catch |err| {
         return .{
@@ -16841,6 +16908,7 @@ pub const StreamDecoder = struct {
     }
 
     pub fn initWithOptions(stream: []const u8, output_scratch: []u8, options: DecodeOptions) Error!StreamDecoder {
+        try validateDecodeProfile(stream, options, &.{output_scratch});
         decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetWithOptions(stream, output_scratch, options);
@@ -16852,6 +16920,7 @@ pub const StreamDecoder = struct {
     }
 
     pub fn initExactSizeWithOptions(stream: []const u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
+        try validateDecodeProfile(stream, options, &.{output_scratch});
         decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetExactSizeWithOptions(stream, output_scratch, expected_output_len, options);
@@ -16863,6 +16932,7 @@ pub const StreamDecoder = struct {
     }
 
     pub fn initLimitedWithOptions(stream: []const u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
+        try validateDecodeProfile(stream, options, &.{output_scratch});
         decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetLimitedWithOptions(stream, output_scratch, max_output_len, options);
@@ -16874,7 +16944,6 @@ pub const StreamDecoder = struct {
     }
 
     pub fn initFromChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodeOptions) Error!StreamDecoder {
-        decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
         return self;
@@ -16885,7 +16954,6 @@ pub const StreamDecoder = struct {
     }
 
     pub fn initFromChunksExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
-        decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetFromChunksExactSizeWithOptions(chunks, compressed_scratch, output_scratch, expected_output_len, options);
         return self;
@@ -16896,7 +16964,6 @@ pub const StreamDecoder = struct {
     }
 
     pub fn initFromChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
-        decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetFromChunksLimitedWithOptions(chunks, compressed_scratch, output_scratch, max_output_len, options);
         return self;
@@ -16907,6 +16974,7 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodeOptions) Error!void {
+        try validateDecodeProfile(stream, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
         return self.resetLimitedWithOptions(stream, output_scratch, std.math.maxInt(usize), options);
     }
@@ -16916,6 +16984,7 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetExactSizeWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!void {
+        try validateDecodeProfile(stream, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
         const decoded_len = decodedStreamSizeWithOptions(stream, options) catch |err| {
             self.recordError(err);
@@ -16941,6 +17010,7 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetLimitedWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!void {
+        try validateDecodeProfile(stream, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
         const decoded_count = decodedStreamSizeLimitedWithOptions(stream, max_output_len, options) catch |err| {
             self.recordError(err);
@@ -16970,8 +17040,9 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptions(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodeOptions) Error!void {
+        try validateChunkProfile(chunks, compressed_scratch, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
-        const joined = joinChunksForOutput(chunks, compressed_scratch, output_scratch) catch |err| {
+        const joined = joinDecodeChunks(chunks, compressed_scratch, options, &.{ output_scratch, std.mem.asBytes(self) }) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -16983,8 +17054,9 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetFromChunksExactSizeWithOptions(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!void {
+        try validateChunkProfile(chunks, compressed_scratch, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
-        const joined = joinChunksForOutput(chunks, compressed_scratch, output_scratch) catch |err| {
+        const joined = joinDecodeChunks(chunks, compressed_scratch, options, &.{ output_scratch, std.mem.asBytes(self) }) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -16996,8 +17068,9 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetFromChunksLimitedWithOptions(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!void {
+        try validateChunkProfile(chunks, compressed_scratch, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
-        const joined = joinChunksForOutput(chunks, compressed_scratch, output_scratch) catch |err| {
+        const joined = joinDecodeChunks(chunks, compressed_scratch, options, &.{ output_scratch, std.mem.asBytes(self) }) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -17069,24 +17142,19 @@ pub const StreamDecoder = struct {
     }
 };
 
-fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
-    return joinChunksForOutput(chunks, compressed_scratch, &.{});
+/// Observe only a valid profile binding. Mutable telemetry cannot also be
+/// compressed input, scratch, dictionary or caller output/history storage.
+fn validateChunkProfile(chunks: []const []const u8, scratch: []u8, options: DecodeOptions, protected: []const []const u8) Error!void {
+    if (options.memory_profile) |profile|
+        try @import("br/decode/chunk_join.zig").validateObserver(chunks, scratch, protected, options.shared_dictionary, std.mem.asBytes(profile));
 }
 
-/// Joining precedes decode validation and allocator admission. Reject writes
-/// into caller output, including append spare capacity, before copying any
-/// chunk. Unused scratch may overlap output; only the joined span is written.
-fn joinChunksForOutput(chunks: []const []const u8, compressed_scratch: []u8, output_allocation: []const u8) Error![]const u8 {
-    var total: usize = 0;
-    for (chunks) |chunk| total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
-    if (compressed_scratch.len < total) return error.OutputTooSmall;
-    if (@import("br/decode/alias.zig").overlaps(compressed_scratch[0..total], output_allocation)) return error.InvalidBlockPlan;
-    var offset: usize = 0;
-    for (chunks) |chunk| {
-        @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
-        offset += chunk.len;
-    }
-    return compressed_scratch[0..total];
+fn validateDecodeProfile(stream: []const u8, options: DecodeOptions, protected: []const []const u8) Error!void {
+    try validateChunkProfile(&.{stream}, &.{}, options, protected);
+}
+
+fn joinDecodeChunks(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions, protected: []const []const u8) Error![]const u8 {
+    return @import("br/decode/chunk_join.zig").join(chunks, compressed_scratch, protected, options.shared_dictionary);
 }
 
 fn readWindowBits(reader: *bitstream.BitReader) Error!void {

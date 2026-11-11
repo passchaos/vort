@@ -34,6 +34,14 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     b.step("test-br-decode-memory", "Run Brotli decode total heap and incremental policy contracts")
         .dependOn(&b.addRunArtifact(native_tests).step);
 
+    const decode_tests = b.addTest(.{
+        .name = "vort-br-decode-tests",
+        .root_module = native_tests.root_module,
+        .filters = &.{ "decode", "Decode", "summary", "Summary", "summar", "Brotli compressed chunk join" },
+    });
+    b.step("test-br-decode", "Run complete Brotli decoder, summary and borrowed-input contracts")
+        .dependOn(&b.addRunArtifact(decode_tests).step);
+
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const wasm_tests = b.addTest(.{
         .name = "vort-br-decode-memory-wasm-tests",

@@ -1,5 +1,6 @@
 const std = @import("std");
 const budget = @import("../budget.zig");
+const output_size = @import("../output_size.zig");
 
 /// Adopts output capacity before decoded staging is allocated and transfers
 /// the final capacity back to its physical caller when the scope closes.
@@ -29,8 +30,8 @@ pub const AppendScope = struct {
     /// fallback overlap. Failure preserves the output pointer/capacity/bytes.
     pub fn append(self: *AppendScope, decoded: []const u8) budget.Error!void {
         std.debug.assert(self.active);
+        _ = try output_size.appendEnd(self.out.items.len, decoded.len);
         if (self.lease.state == null) return self.out.appendSlice(self.caller, decoded);
-        _ = std.math.add(usize, self.out.items.len, decoded.len) catch return error.IntegerOverflow;
         self.out.appendSlice(self.lease.allocator(), decoded) catch |err| return @errorCast(budget.mapLeaseError(self.lease, err));
     }
 

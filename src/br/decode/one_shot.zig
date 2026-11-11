@@ -3,6 +3,7 @@
 const std = @import("std");
 const budget = @import("budget.zig");
 const alias = @import("alias.zig");
+const output_size = @import("output_size.zig");
 
 pub fn ownedPrefix(comptime Codec: type, caller: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: Codec.DecodeOptions) Codec.Error!Codec.DecodedPrefix {
     noHeapForCaller(caller, options);
@@ -55,6 +56,12 @@ pub fn append(comptime Codec: type, comptime prefix: bool, comptime exact: bool,
         try Codec.fixedSummary(stream, output_len, budget.forward(options), &diagnostics)
     else
         null;
+    if (exact) {
+        _ = try output_size.appendEnd(out.items.len, output_len);
+    } else if (preflighted) |checked| {
+        const decoded_len = std.math.cast(usize, checked.decoded_bytes) orelse return error.IntegerOverflow;
+        _ = try output_size.appendEnd(out.items.len, decoded_len);
+    }
     var entry = try budget.Entry.initExisting(caller, options, out.capacity);
     defer entry.deinit();
     var publication = try budget.AppendScope.initCharged(entry.lease, caller, out);
