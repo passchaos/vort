@@ -1,0 +1,279 @@
+{
+  "schema": "vort.brotli.root_attribution_audit.v1",
+  "status": "complete-offline-public-root-unavailable-local-scopes-observed",
+  "created_utc": "2026-11-11T16:48:58Z",
+  "source": {
+    "revision": "5fb4c6957342ba51af6902172af02a5369e020cb",
+    "source_digest": "7107d54e04304549603816d06b674b71c032b269727d5dc758612b43344468d3",
+    "probe_path": "/home/passchaos/project-z/vort-mozilla-profile-20261111.5fb4c695/zig-out/bin/vort-decode-compare",
+    "probe_sha256": "9bb054933076e6faca6277f9763ac7f4ae4977d2713ce649d7d67cb9b9a86e41"
+  },
+  "input": {
+    "codec": "brotli",
+    "name": "mozilla",
+    "size": "full",
+    "quality": 11,
+    "lifecycle": "cold",
+    "reference_version": "1.2.0",
+    "input_bytes": 51220480,
+    "encoded_bytes": 14077215,
+    "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+    "encoded_sha256": "34b94e421e57771d6b83b9dde7959c22e0d9e28d12414985f4df93d93bbfd5f6"
+  },
+  "artifacts": {
+    "/tmp/vort-mozilla-profile-20261111.5fb4c695/perf/brotli_mozilla_full_11_cold.data": "77bb2ffa42557a9b126bcb337d8b0509e93a6dc26742969fd08e7fd2818346bd",
+    "/tmp/vort-mozilla-profile-20261111.5fb4c695/perf/full-q11-stacks.txt": "b978f670764af6cc30ede0cb5b44cc10ba8df36626d9e66ce28b61b761f404a9",
+    "/tmp/vort-mozilla-profile-20261111.5fb4c695/perf/full-q11-symbols.txt": "72f010a25a337705d13ec48e042c0cae81b79480a42ed3a8e4c670cbc7d708bd"
+  },
+  "sampling": {
+    "event": "cycles:u",
+    "frequency_hz": 499,
+    "user_stack_bytes": 16384,
+    "all_samples": 1917,
+    "all_period": 18438825507,
+    "reported_lost_samples": 0,
+    "child_scope": "Entire child includes startup, 2 warmup paired batches, 6 measured paired batches, both codecs, pre-output memset and post-batch validation.",
+    "profile_is_new_performance_epoch": false
+  },
+  "method": {
+    "weight": "sum(recorded sample period); approximate event-count weight, not sample-count share or elapsed time",
+    "self": "perf script --no-inline leaf physical symbol",
+    "generic_core_mapping": "genericCore(false,false) has no separately emitted Core symbol; represented by Native__anon_37334",
+    "inclusive": "Any frame matching a symbol family counts once per sample; exact family name or family + __anon_ prefix",
+    "strict_root": "Exact br.decodeStreamInto",
+    "annotated_vs_complete_no_inline_replay": "Both have all 1917 samples and period 18438825507; target self/inclusive counts and periods agree.",
+    "scope_warning": "Inclusive scopes are nested and must not be added. Observed br union/local payload root cannot replace public call totals."
+  },
+  "scopes": [
+    {
+      "name": "strict_public_root_unavailable",
+      "definition": "Recorded callchain contains exact br.decodeStreamInto; empty observed set. Zero denominator means unavailable attribution, not zero real decode work.",
+      "samples": 0,
+      "denominator_period": 0,
+      "percent_all_period": null,
+      "functions": [
+        {
+          "symbol_family": "br.processWideExternalLiteralLookupCompressedPayloadNative",
+          "self_samples": 0,
+          "inclusive_samples": 0,
+          "self_period": 0,
+          "inclusive_period": 0,
+          "self_percent": null,
+          "inclusive_percent": null
+        },
+        {
+          "symbol_family": "br.commandPrefixForDecode",
+          "self_samples": 0,
+          "inclusive_samples": 0,
+          "self_period": 0,
+          "inclusive_period": 0,
+          "self_percent": null,
+          "inclusive_percent": null
+        },
+        {
+          "symbol_family": "br.distancePrefixForDecode",
+          "self_samples": 0,
+          "inclusive_samples": 0,
+          "self_period": 0,
+          "inclusive_period": 0,
+          "self_percent": null,
+          "inclusive_percent": null
+        },
+        {
+          "symbol_family": "br.readCommandSymbolAny",
+          "self_samples": 0,
+          "inclusive_samples": 0,
+          "self_period": 0,
+          "inclusive_period": 0,
+          "self_percent": null,
+          "inclusive_percent": null
+        },
+        {
+          "symbol_family": "br.readMinimalDistance",
+          "self_samples": 0,
+          "inclusive_samples": 0,
+          "self_period": 0,
+          "inclusive_period": 0,
+          "self_percent": null,
+          "inclusive_percent": null
+        }
+      ]
+    },
+    {
+      "name": "observed_br_symbol_union",
+      "definition": "Recorded callchain contains at least one symbol beginning br.; conditional observed descendant union, not strict public root.",
+      "samples": 1079,
+      "denominator_period": 10476269254,
+      "percent_all_period": 56.81635877525309,
+      "functions": [
+        {
+          "symbol_family": "br.processWideExternalLiteralLookupCompressedPayloadNative",
+          "self_samples": 379,
+          "inclusive_samples": 985,
+          "self_period": 3673105113,
+          "inclusive_period": 9564092283,
+          "self_percent": 35.061194247155804,
+          "inclusive_percent": 91.29292166052608
+        },
+        {
+          "symbol_family": "br.commandPrefixForDecode",
+          "self_samples": 76,
+          "inclusive_samples": 89,
+          "self_period": 740056778,
+          "inclusive_period": 865165750,
+          "self_percent": 7.064125215352163,
+          "inclusive_percent": 8.258338240683022
+        },
+        {
+          "symbol_family": "br.distancePrefixForDecode",
+          "self_samples": 157,
+          "inclusive_samples": 180,
+          "self_period": 1529953914,
+          "inclusive_period": 1752837967,
+          "self_percent": 14.603995725060619,
+          "inclusive_percent": 16.731509323614794
+        },
+        {
+          "symbol_family": "br.readCommandSymbolAny",
+          "self_samples": 86,
+          "inclusive_samples": 197,
+          "self_period": 833049198,
+          "inclusive_period": 1912357550,
+          "self_percent": 7.951773458685486,
+          "inclusive_percent": 18.254184802188362
+        },
+        {
+          "symbol_family": "br.readMinimalDistance",
+          "self_samples": 134,
+          "inclusive_samples": 360,
+          "self_period": 1301040388,
+          "inclusive_period": 3501021801,
+          "self_percent": 12.418928498837912,
+          "inclusive_percent": 33.41859316629588
+        }
+      ]
+    },
+    {
+      "name": "observed_generic_payload_root",
+      "definition": "Recorded callchain contains br.processWideExternalLiteralLookupCompressedPayloadNative__anon_37334; narrower generic payload-root attribution only.",
+      "samples": 985,
+      "denominator_period": 9564092283,
+      "percent_all_period": 51.86931390705524,
+      "functions": [
+        {
+          "symbol_family": "br.processWideExternalLiteralLookupCompressedPayloadNative",
+          "self_samples": 379,
+          "inclusive_samples": 985,
+          "self_period": 3673105113,
+          "inclusive_period": 9564092283,
+          "self_percent": 38.40516176876375,
+          "inclusive_percent": 100.0
+        },
+        {
+          "symbol_family": "br.commandPrefixForDecode",
+          "self_samples": 73,
+          "inclusive_samples": 86,
+          "self_period": 710965618,
+          "inclusive_period": 836074590,
+          "self_percent": 7.433696758277087,
+          "inclusive_percent": 8.741808059360817
+        },
+        {
+          "symbol_family": "br.distancePrefixForDecode",
+          "self_samples": 157,
+          "inclusive_samples": 180,
+          "self_period": 1529953914,
+          "inclusive_period": 1752837967,
+          "self_percent": 15.996854366613183,
+          "inclusive_percent": 18.327279946008442
+        },
+        {
+          "symbol_family": "br.readCommandSymbolAny",
+          "self_samples": 86,
+          "inclusive_samples": 194,
+          "self_period": 833049198,
+          "inclusive_period": 1883266390,
+          "self_percent": 8.71017524036996,
+          "inclusive_percent": 19.691010231545672
+        },
+        {
+          "symbol_family": "br.readMinimalDistance",
+          "self_samples": 134,
+          "inclusive_samples": 359,
+          "self_period": 1301040388,
+          "inclusive_period": 3491465890,
+          "self_percent": 13.60338597226394,
+          "inclusive_percent": 36.505982864741036
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "public_root_symbol_in_elf": {
+      "symbol": "br.decodeStreamInto",
+      "address": "0x10e81b0"
+    },
+    "public_root_seen_samples": 0,
+    "generic_payload_symbol_seen": "br.processWideExternalLiteralLookupCompressedPayloadNative__anon_37334",
+    "generic_payload_period_percent_of_observed_br_union": 91.29292166052608,
+    "annotated_callchains_with_unknown_frame": {
+      "samples": 1899,
+      "period": 18303351044,
+      "percent_all_period": 99.2652760722283
+    },
+    "generic_payload_callchains_with_unknown_frame": {
+      "samples": 978,
+      "period": 9496585649
+    },
+    "max_annotated_frames": 10,
+    "wide_wrapper_stack_subtraction": {
+      "symbol": "br.processWideExternalLiteralLookupMetaBlock__anon_34349",
+      "address": "0x10eebd0",
+      "instruction_address": "0x10eebdd",
+      "instruction": "sub $0x83578,%rsp",
+      "bytes": 537976,
+      "scope": "Stack subtraction excludes register pushes; exceeds the 16384-byte captured user stack"
+    },
+    "missing_scope": "Public-root ancestry is absent. Existing capture cannot quantify all Vort decode cycles, split warmup versus measured API samples, recover missing parent stack bytes, or convert these local percentages into stage elapsed times.",
+    "lost_vs_unwind": "Zero lost samples does not imply complete callchain unwinding."
+  },
+  "commands": {
+    "perf_header": [
+      "perf",
+      "report",
+      "--header-only",
+      "-i",
+      "/tmp/vort-mozilla-profile-20261111.5fb4c695/perf/brotli_mozilla_full_11_cold.data"
+    ],
+    "complete_offline_replay": [
+      "perf",
+      "script",
+      "--no-inline",
+      "-i",
+      "/tmp/vort-mozilla-profile-20261111.5fb4c695/perf/brotli_mozilla_full_11_cold.data",
+      "--fields",
+      "comm,pid,time,period,event,ip,sym,dso"
+    ],
+    "root_symbol_check": [
+      "nm",
+      "-an",
+      "--defined-only",
+      "/home/passchaos/project-z/vort-mozilla-profile-20261111.5fb4c695/zig-out/bin/vort-decode-compare"
+    ],
+    "root_symbol_filter": "br\\.decodeStreamInto|br\\.decodeStreamPrefixInto|br\\.decodeLargeStreamPrefixInto|br\\.processWideExternalLiteralLookupCompressedPayloadNative|compare\\.measureOnce",
+    "wrapper_stack_check": [
+      "objdump",
+      "-d",
+      "--start-address=0x10eebd0",
+      "--stop-address=0x10eec58",
+      "/home/passchaos/project-z/vort-mozilla-profile-20261111.5fb4c695/zig-out/bin/vort-decode-compare"
+    ],
+    "reduction": "Split perf script output by blank-line sample records; parse header : PERIOD cycles:u:; collect frame symbols after hex IP before (dso); strip trailing +0xOFFSET; first physical frame is self (--no-inline); apply scope predicates and inclusive-count-once aggregation."
+  },
+  "limitations": [
+    "No new recording, compilation, benchmark, candidate edit, or prior evidence overwrite.",
+    "One head-only perf-script preview was terminated and not used for counts; numbers come from subsequent complete replay exit 0 with empty stderr.",
+    "This profile is diagnostic evidence for 5fb4c695, not candidate speedup or industry ranking."
+  ],
+  "pending_verification": []
+}

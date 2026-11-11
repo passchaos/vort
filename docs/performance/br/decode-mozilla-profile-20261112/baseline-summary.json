@@ -1,0 +1,36 @@
+{
+  "schema": "vort.decode-matrix-summary.v1",
+  "complete": false,
+  "completed_rows": 3,
+  "expected_rows": 216,
+  "elapsed_seconds": 8.8507661819458,
+  "groups": {
+    "brotli/cold/1048576": {
+      "time_ratio_geomean": 0.8862358272742067,
+      "throughput_ratio_geomean": 1.1283678330582703,
+      "ci95": [
+        0.8014390728459935,
+        0.9712814423785668
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365649,
+      "resamples": 2000,
+      "rows": 1,
+      "weakest_time_ratio": 0.8862358272742067
+    },
+    "brotli/cold/full": {
+      "time_ratio_geomean": 1.8268771857215018,
+      "throughput_ratio_geomean": 0.5473821709613516,
+      "ci95": [
+        1.8209047367041833,
+        1.8323416242104391
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 2,
+      "weakest_time_ratio": 2.051069925628395
+    }
+  },
+  "interpretation": "time ratios above one mean Vort slower; Deflate prepared rows retain only reference context and are separately labeled; developer-host observations do not prove industry leadership"
+}

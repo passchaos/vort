@@ -1,0 +1,68 @@
+{
+  "schema": "vort.brotli.mozilla-profile-validation.v1",
+  "valid": true,
+  "scope": "independent offline source/probe/raw-statistic/attribution validation; no build, recording, codec call or experiment rerun",
+  "baseline_revision": "5fb4c6957342ba51af6902172af02a5369e020cb",
+  "baseline_complete": false,
+  "baseline_completed_rows": 3,
+  "baseline_expected_rows": 216,
+  "baseline_source_files": 2044,
+  "packed_source_files": 2046,
+  "baseline_per_row_time_ratios": {
+    "brotli_mozilla_full_11_cold": 2.051069925628395,
+    "brotli_mozilla_1048576_11_cold": 0.8862358272742067,
+    "brotli_mozilla_full_6_cold": 1.627189892459272
+  },
+  "screens": {
+    "cache-screen": {
+      "brotli_mozilla_full_11_cold": {
+        "producer_median_process_pair_geomean": 1.0528652947117587,
+        "raw_measured_pair_log_geomean": 1.052858046280411
+      },
+      "brotli_mozilla_1048576_11_cold": {
+        "producer_median_process_pair_geomean": 0.9976543818787503,
+        "raw_measured_pair_log_geomean": 0.997653601489695
+      },
+      "brotli_mozilla_full_6_cold": {
+        "producer_median_process_pair_geomean": 1.0530285526757057,
+        "raw_measured_pair_log_geomean": 1.0530543012173885
+      }
+    },
+    "packed-planes-screen": {
+      "brotli_mozilla_full_11_cold": {
+        "producer_median_process_pair_geomean": 1.047527093862721,
+        "raw_measured_pair_log_geomean": 1.0472007985544463
+      },
+      "brotli_mozilla_1048576_11_cold": {
+        "producer_median_process_pair_geomean": 0.9992930392439617,
+        "raw_measured_pair_log_geomean": 0.9992820811596018
+      },
+      "brotli_mozilla_full_6_cold": {
+        "producer_median_process_pair_geomean": 1.0298446717349699,
+        "raw_measured_pair_log_geomean": 1.02991048806422
+      }
+    }
+  },
+  "screen_child_events_each": 24,
+  "screen_measured_pairs_each": 48,
+  "screen_warmup_pairs_each": 48,
+  "perf_recordings": 3,
+  "perf_audit_samples": 1917,
+  "strict_public_root_samples": 0,
+  "header_diagnostic_header_counts": {
+    "brotli_mozilla_full_11": 9,
+    "brotli_mozilla_1048576_11": 1,
+    "brotli_mozilla_full_6": 10
+  },
+  "header_measurement_exported_identity": false,
+  "post_timing_header_parser_tests": 3,
+  "post_timing_header_alias_cases": 5,
+  "post_timing_safe_tests": 22,
+  "debug_proof_is_transcript": true,
+  "reference_binaries_verified": 3,
+  "baseline_git_blobs_verified": 2044,
+  "original_fixture_files_verified": 5,
+  "original_raw_files_verified": 236,
+  "candidate_merged": false,
+  "complete_acceptance_or_industry_leadership_claim": false
+}

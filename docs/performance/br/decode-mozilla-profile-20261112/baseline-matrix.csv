@@ -1,0 +1,4 @@
+codec,name,size,level,lifecycle,input_bytes,encoded_bytes,vort_median_ns,reference_median_ns,time_ratio,rss_kib
+brotli,mozilla,full,11,cold,51220480,14077215,264821807,128867527,2.054992542845957,238352
+brotli,mozilla,1048576,11,cold,1048576,635440,71197048,74303885.5,0.9581874153808552,10880
+brotli,mozilla,full,6,cold,51220480,16289474,176166480.5,107899131.5,1.6326960008941314,242872

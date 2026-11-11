@@ -1,0 +1,68 @@
+[
+  {
+    "key": "brotli/mozilla/full/11",
+    "codec": "brotli",
+    "name": "mozilla",
+    "size": "full",
+    "level": 11,
+    "scope": "silesia",
+    "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
+    "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.brotli.11.wire",
+    "input_bytes": 51220480,
+    "input_first_byte": 109,
+    "encoded_bytes": 14077215,
+    "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+    "encoded_sha256": "34b94e421e57771d6b83b9dde7959c22e0d9e28d12414985f4df93d93bbfd5f6",
+    "generator": {
+      "api": "BrotliEncoderCompress",
+      "version": "1.2.0",
+      "quality": 11,
+      "window_bits": 22,
+      "mode": "generic"
+    }
+  },
+  {
+    "key": "brotli/mozilla/1048576/11",
+    "codec": "brotli",
+    "name": "mozilla",
+    "size": "1048576",
+    "level": 11,
+    "scope": "silesia",
+    "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain",
+    "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.brotli.11.wire",
+    "input_bytes": 1048576,
+    "input_first_byte": 109,
+    "encoded_bytes": 635440,
+    "input_sha256": "d307112d2151eef3c035e308b0478e831f6039bdd9770bb753207b02e1fd579d",
+    "encoded_sha256": "23d1b72c7edf3c18a9257e67f46153d50654adb8656e621383c0c3878218cc99",
+    "generator": {
+      "api": "BrotliEncoderCompress",
+      "version": "1.2.0",
+      "quality": 11,
+      "window_bits": 22,
+      "mode": "generic"
+    }
+  },
+  {
+    "key": "brotli/mozilla/full/6",
+    "codec": "brotli",
+    "name": "mozilla",
+    "size": "full",
+    "level": 6,
+    "scope": "silesia",
+    "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
+    "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.brotli.6.wire",
+    "input_bytes": 51220480,
+    "input_first_byte": 109,
+    "encoded_bytes": 16289474,
+    "input_sha256": "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+    "encoded_sha256": "b9304910ca1be2aadf065dec1fe7bbca3a5c7a8d08b6a5e8c1492c485c627c9d",
+    "generator": {
+      "api": "BrotliEncoderCompress",
+      "version": "1.2.0",
+      "quality": 6,
+      "window_bits": 22,
+      "mode": "generic"
+    }
+  }
+]

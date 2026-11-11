@@ -36,6 +36,18 @@ compares full q11 with its near-parity 1 MiB control and attributes the actual
 multi-block kernel/header/setup paths. Existing single-final-block clustered
 profilers cannot directly attribute that full-file cliff.
 
+The completed [Mozilla pilot and isolated screens](br/decode-mozilla-profile-20261112.md)
+keep the clean `5fb4c695` full q11 public-call ratio at **2.0511x** libbrotli
+1.2.0. Two four-process-pair screens show about 5.3% for resolved pointer
+caching and 4.8% for stable packed nine-bit auxiliary planes on this row;
+neither reaches the 20% cliff-repair gate, so neither codec variant is adopted.
+The latter adds 512 KiB of bounded lookup storage. All raw pairs and exact
+timing sources remain separate from later test variants. The reusable
+multi-block header tool is available through `build-br-header-profile` and
+`test-br-header-profile`. Existing 16 KiB DWARF stacks do not cross the wide
+wrapper's 537,976-byte stack frame, so sampled hotspot shares are explicitly
+scoped to the observed payload root rather than the complete public decoder.
+
 ## 2026-11-11 checked dictionary seeding and provision
 
 The later [dictionary seed/provision correction](deflate-dictionary-borrows-20261111/README.md)
