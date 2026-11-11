@@ -43,10 +43,37 @@
       "wasi_tests": 43,
       "exit_code": 0
     },
-    "test_refinement": "The post-growth fixed-buffer fixture checks codec publication, allowing std Allocator initialization/poisoning before the returned allocation is validated."
+    "test_refinement": "The post-growth fixed-buffer fixture checks codec publication, allowing std Allocator initialization/poisoning before the returned allocation is validated.",
+    "post_rebase_full_zstd": {
+      "command": "zig build -j2 test-zstd -Doptimize=ReleaseFast --summary all",
+      "tests": 1410,
+      "exit_code": 0
+    }
   },
-  "pending": [
-    "broad codec regressions",
-    "native/WASI compilation and remote synchronization"
-  ]
+  "pending": [],
+  "reference": {
+    "library": "libzstd.so.1",
+    "version": "1.4.8",
+    "function": "ZSTD_decompress",
+    "wire_sha256": "4856e4ecc3cd58bf492b4e061c754014a21037c6444d3a743910eaa0a6595a3b",
+    "decoded_hex": "616263646566",
+    "decoded_len": 6,
+    "is_error": false
+  },
+  "library_check": {
+    "command": "zig build -j2 check check-wasm --summary all",
+    "exit_code": 0,
+    "steps": 379,
+    "native_x86_source_tests": 86,
+    "wasi_source_tests": 43
+  },
+  "checked_code_revision": "252bf0edeeb11896e661b2913e4e33a66dad7229",
+  "post_rebase_library_check": {
+    "command": "zig build -j2 check check-wasm --summary all",
+    "exit_code": 0,
+    "steps": 379,
+    "native_x86_source_tests": 86,
+    "wasi_source_tests": 43,
+    "code_revision": "252bf0edeeb11896e661b2913e4e33a66dad7229"
+  }
 }

@@ -1,0 +1,9 @@
+{
+  "library": "libzstd.so.1",
+  "version": "1.4.8",
+  "function": "ZSTD_decompress",
+  "wire_sha256": "4856e4ecc3cd58bf492b4e061c754014a21037c6444d3a743910eaa0a6595a3b",
+  "decoded_hex": "616263646566",
+  "decoded_len": 6,
+  "is_error": false
+}

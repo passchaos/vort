@@ -61,8 +61,50 @@
     "exit_code": 0,
     "tests": 25
   },
-  "pending": [
-    "broad codec regressions",
-    "native/WASI compilation and remote synchronization"
-  ]
+  "pending": [],
+  "intermediate_full_suite": {
+    "exit_code": 1,
+    "zstd_passed": 1410,
+    "brotli_passed": 1587,
+    "brotli_skipped": 1,
+    "brotli_failed": 1,
+    "reason": "The compile captured the older inherited fixture with capacity192 before its correction to48; current focused tests and disassembly confirm a test snapshot mismatch.",
+    "old_test_sha256": "a1bc01c74aa2be836ee79bf02099419c245c4b5a1514158923f2c4c09ba3a258",
+    "current_test_sha256": "d53fcc515191bd55c48dec0ced5d17760672a9c5f95536c55e4361a40c30ddd1",
+    "old_binary_sha256": "c717dd28411f857cdef97fea379fa2fbf0da9930c992f7d3f5653b31ac2bc475",
+    "old_disassembly": {
+      "allocation_192": "0x200f0f1",
+      "capacity_192": "0x200f116",
+      "items_len_48": "0x200f14d"
+    },
+    "current_focused_disassembly": {
+      "allocation_48": "0x119223c",
+      "capacity_48": "0x1192262",
+      "items_len_48": "0x119227f"
+    }
+  },
+  "final_full_suite": {
+    "command": "zig build -j2 test-br -Doptimize=ReleaseFast --summary all",
+    "exit_code": 0,
+    "passed": 1588,
+    "skipped": 1,
+    "failed": 0,
+    "steps": 5
+  },
+  "library_check": {
+    "command": "zig build -j2 check check-wasm --summary all",
+    "exit_code": 0,
+    "steps": 379,
+    "native_x86_source_tests": 86,
+    "wasi_source_tests": 43
+  },
+  "checked_code_revision": "252bf0edeeb11896e661b2913e4e33a66dad7229",
+  "post_rebase_library_check": {
+    "command": "zig build -j2 check check-wasm --summary all",
+    "exit_code": 0,
+    "steps": 379,
+    "native_x86_source_tests": 86,
+    "wasi_source_tests": 43,
+    "code_revision": "252bf0edeeb11896e661b2913e4e33a66dad7229"
+  }
 }

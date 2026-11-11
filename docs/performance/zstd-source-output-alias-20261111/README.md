@@ -9,6 +9,10 @@ history append overwrites output already published by the first block.
 length still passes. A checksum cannot detect this overwrite because the
 executor hashes independent staging bytes.
 
+The installed libzstd 1.4.8 independently accepts the same frozen frame through
+`ZSTD_decompress` and returns exactly six bytes, `abcdef`; `reference.json`
+records the library, fixture hash and decoded bytes.
+
 Reproduce against the archived revision without changing the working tree:
 
 ```sh
