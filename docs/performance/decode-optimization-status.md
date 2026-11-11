@@ -15,6 +15,35 @@ replaces the older installed-library gap routing below for its declared scope;
 reference-only prepared Deflate rows and matched prepared Zstd rows remain
 separate. These development-host observations are not an industry-best claim.
 
+## 2026-11-11 Raw Deflate borrow correction and follow-up routing
+
+The subsequent `f74ca1fe` functional change rejects caller-output overlap with
+complete compressed input or preset dictionary storage before any writes.
+The old raw stored path could return `abcabc` instead of `abcdef` after
+overwriting a later block's unread payload, even when each individual memcpy
+was disjoint. See the [borrow contract](../formats/deflate-decode-borrows.md)
+and [before/after evidence](deflate-raw-output-alias-20261111.md).
+
+The complete Deflate family passed 695/695 tests, public-root gate 94/94,
+focused Debug/ReleaseSafe/x86 and actual 32-bit WASI execution. The 72 frozen
+Deflate wires passed a functional/benchmark-executability smoke at one call
+per batch. Those smoke timings do not update the preceding source epoch's
+throughput figures or establish a performance ratchet.
+
+The [weakest-row entry profile](deflate/entry-profile-20261111/README.md)
+attributes about 92.4% of executable-weighted events to the semantic loop.
+Duplicate generic/semantic distance setup exists, but its removable cost was
+not isolated and no A/B variant was attempted. Preserve current singleton,
+empty/incomplete-distance and malformed-input error order before any lazy
+setup experiment.
+
+A separate [Brotli exact-64-KiB model-reuse plan](br/repcode-model-reuse-plan-20261111.md)
+identifies identical repcode-bonus model construction for bonus DP and the
+later wide command-state parser. It remains planned, with exact-wire,
+requested-peak/OOM and whole-operation gates. The next functionality slice
+should audit chunk joining and zlib/gzip/incremental borrow surfaces before
+advancing that encoding optimization.
+
 ## Historical 2026-11-01/02 gaps
 
 Latest 1,296-process epoch (`industry-aln64-comparison.json`), current/reference

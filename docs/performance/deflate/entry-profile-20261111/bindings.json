@@ -1,0 +1,77 @@
+{
+  "schema": "vort.deflate-entry-profile.v1",
+  "status": "exploratory; no A/B or production optimization",
+  "source": {
+    "revision": "6618b0c5833bf48dcc1a3cb99b9cec238f9e67b1",
+    "probe_sha256": "eddd7b5deaef84f1dc7fc50cc736cb64e0083b6e02e6a40ae8298c8ccc5bb8ba",
+    "deflate_sha256": "c0973bffe09c177339cd0bfa6cc89e6e55b891f462c8f42153303b8d0706ad95"
+  },
+  "probe_provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "15",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "eddd7b5deaef84f1dc7fc50cc736cb64e0083b6e02e6a40ae8298c8ccc5bb8ba",
+    "command": "/tmp/vort-deflate-distance-setup-20261111/base-probe --codec deflate --input /tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain --encoded-input /tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire --iterations 30000 --rounds 2 --warmup 2 --lifecycle cold --reference /tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0 --reference-version 1.26 --output /tmp/vort-deflate-distance-setup-20261111/base-profile.json"
+  },
+  "reference": {
+    "version": "1.26",
+    "version_origin": "declared-pinned-header",
+    "path": "/tmp/vort-reference-libdeflate-20261111.SkIxha/build/libdeflate.so.0",
+    "sha256": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28"
+  },
+  "fixture": {
+    "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain",
+    "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire",
+    "input_bytes": 65536,
+    "encoded_bytes": 18792,
+    "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+    "encoded_sha256": "93159be7c00758f86eee3518f3abb76ddcf5a42aedc48d434bffdc198deee2bc"
+  },
+  "perf_version": "6.8.12",
+  "samples": 2668,
+  "lost_samples": 0,
+  "event": "cycles:P",
+  "sample_frequency": 199,
+  "vort_executable_weight_percent": 62.53,
+  "semantic_kernel_weight_percent": 57.76,
+  "archive_sha256": "22b4addf3b1d84a7e168b86e4e6d721e38441635d3c562ac3d98c1cdb20d2ab6",
+  "members": {
+    "dso-report.stderr.txt": {
+      "bytes": 278,
+      "sha256": "f060916a0433ca57831f00d70f219d7f3e9e6b2db87b82cc23f05d47e10dfaa7"
+    },
+    "dso-report.txt": {
+      "bytes": 420,
+      "sha256": "acdd564c4e4c6c2ddc8a1dc902e14d2baf7d6cb0362e62dd8e12fe79dcea8a64"
+    },
+    "perf.data": {
+      "bytes": 288764,
+      "sha256": "7603f523e321c25ad33906269231feea81f5d730fec471ae2b7915052df88f82"
+    },
+    "raw-paired-profile.json": {
+      "bytes": 3757,
+      "sha256": "3c8de921410569f1267924572632801349b122a8d4620246dec5c337609aa0d4"
+    },
+    "source-binding.json": {
+      "bytes": 235,
+      "sha256": "dce91cae713be5273f8206d97c6aec37a05e263aca245aec85f6362721ea523d"
+    },
+    "symbol-report.stderr.txt": {
+      "bytes": 278,
+      "sha256": "f060916a0433ca57831f00d70f219d7f3e9e6b2db87b82cc23f05d47e10dfaa7"
+    },
+    "symbol-report.txt": {
+      "bytes": 2106,
+      "sha256": "85d0ab0fd7d05d7e2dc41d3e618d18778c0e21e8299ddd365bec8d1edc34d309"
+    }
+  }
+}

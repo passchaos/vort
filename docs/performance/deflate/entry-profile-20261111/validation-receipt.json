@@ -1,0 +1,8 @@
+{
+  "valid": true,
+  "archive_members_verified": 7,
+  "raw_warmup_pairs": 2,
+  "raw_measured_pairs": 2,
+  "frozen_source_verified": true,
+  "scope": "exact archival and raw/profile attribution checks; no decoder rerun or throughput acceptance"
+}
