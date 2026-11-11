@@ -31,6 +31,8 @@ existing validation timing and partial-output behavior. The no-write rule
 here is the alias admission rule, not a new transactional decode API.
 Allocating/append, chunk-joining, zlib/gzip wrapper and incremental APIs have
 separate ownership surfaces and require their own borrow validation gates.
+The legacy coalescing chunk facades now define their additional scratch,
+append and state admission in [Deflate chunk borrows](deflate-chunk-borrows.md).
 
 ## Why individual copy checks are insufficient
 

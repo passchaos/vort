@@ -21,6 +21,9 @@ const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const decode_output_alias = @import("deflate/decoder/output_alias.zig");
+const decode_chunk_join = @import("deflate/decode/chunk_join.zig");
+const decode_append_borrows = @import("deflate/decode/append_borrows.zig");
+const appendReadsAlias = decode_append_borrows.needsStaging;
 const dynamic_optimal = @import("deflate/dynamic_optimal.zig");
 const bt_optimal = @import("deflate/bt_optimal.zig");
 const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
@@ -5466,7 +5469,7 @@ pub fn decodeRawChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []con
 }
 
 pub fn decodeRawChunksAllocWithDictionaryExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary} });
     return decodeRawAutoAllocWithDictionaryExactSize(allocator, joined, dictionary, expected_output_len);
 }
 
@@ -5491,7 +5494,10 @@ pub fn decodeRawChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.Ar
 }
 
 pub fn decodeRawChunksAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, expected_output_len: usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{
+        .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) },
+        .reads = &.{dictionary},
+    });
     return decodeRawAutoAppendWithDictionaryExactSize(allocator, out, joined, dictionary, expected_output_len);
 }
 
@@ -5504,12 +5510,23 @@ pub fn decodeRawChunksAppendWithDictionaryLimited(allocator: std.mem.Allocator, 
 }
 
 fn decodeRawChunksAppendWithDictionaryLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{
+        .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) },
+        .reads = &.{dictionary},
+    });
+    if (appendReadsAlias(out, joined, dictionary)) {
+        _ = try appendAbsoluteLimit(out.items.len, max_output_len);
+        const decoded = if (max_output_len) |limit|
+            try decodeRawAutoAllocWithDictionaryLimited(allocator, joined, dictionary, limit)
+        else
+            try decodeRawAutoAllocWithDictionary(allocator, joined, dictionary);
+        return decode_append_borrows.publishOwned(allocator, out, decoded);
+    }
     return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, joined, dictionary, max_output_len);
 }
 
 fn decodeRawChunksAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) ![]u8 {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary} });
     if (max_output_len) |limit| return decodeRawAutoAllocWithDictionaryLimited(allocator, joined, dictionary, limit);
     return decodeRawAutoAllocWithDictionary(allocator, joined, dictionary);
 }
@@ -5540,12 +5557,27 @@ test "Deflate raw decode buffer alias contracts" {
     try @import("deflate/decoder/output_alias_tests.zig").contracts(@This());
 }
 
+test "Deflate chunk decode borrow contracts" {
+    try @import("deflate/decode/tests/chunk_borrows.zig").contracts(@This());
+}
+
+test "Deflate wrapped chunk decode borrow contracts" {
+    try @import("deflate/decode/tests/wrapper_chunk_borrows.zig").contracts(@This());
+}
+
+test "Deflate zlib chunk decode borrow contracts" {
+    try @import("deflate/decode/tests/zlib_chunk_append_borrows.zig").contracts(@This());
+}
+
 pub fn decodeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!DecodeResult {
     return decodeRawChunksWithDictionary(chunks, compressed_scratch, output, "");
 }
 
 pub fn decodeRawChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: []const u8) Error!DecodeResult {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{
+        .reads = &.{dictionary},
+        .destination = output,
+    });
     return decodeRawAutoWithDictionary(joined, dictionary, output);
 }
 
@@ -8379,7 +8411,7 @@ pub fn inspectZlibStreamFromChunksAllocWithDictionaryLimited(
     dictionary: []const u8,
     max_output_len: usize,
 ) !ZlibStreamInfo {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary} });
     return inspectZlibStreamAllocWithDictionaryLimited(allocator, joined, dictionary, max_output_len);
 }
 
@@ -8457,36 +8489,11 @@ pub fn decodeZlibWithDictionaryAndOptions(input: []const u8, output: []u8, dicti
 }
 
 fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
-    var total: usize = 0;
-    var single_non_empty: ?[]const u8 = null;
-    var non_empty_count: usize = 0;
-    for (chunks) |chunk| {
-        // Compute total length and identify the single-chunk fast path together;
-        // legacy wrapper chunk joins are small but hot in tests and PNG-style
-        // adapters, so avoid scanning the slice list twice before every decode.
-        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
-        if (chunk.len == 0) continue;
-        single_non_empty = chunk;
-        non_empty_count += 1;
-    }
-    if (non_empty_count == 1) {
-        const chunk = single_non_empty.?;
-        std.debug.assert(chunk.len == total);
-        // Legacy chunked APIs need a caller-provided compressed scratch buffer
-        // only when they must coalesce multiple spans. A single non-empty chunk
-        // is already contiguous and lives for the duration of the synchronous
-        // decode/reset call, so borrowing it avoids both the scratch-size
-        // requirement and an otherwise redundant memcpy.
-        return chunk;
-    }
-    if (compressed_scratch.len < total) return error.OutputTooSmall;
-    var offset: usize = 0;
-    for (chunks) |chunk| {
-        if (chunk.len == 0) continue;
-        @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
-        offset += chunk.len;
-    }
-    return compressed_scratch[0..total];
+    return decode_chunk_join.join(chunks, compressed_scratch, .{});
+}
+
+fn joinDecodeChunks(chunks: []const []const u8, compressed_scratch: []u8, borrows: decode_chunk_join.Borrows) Error![]const u8 {
+    return decode_chunk_join.join(chunks, compressed_scratch, borrows);
 }
 
 pub fn decodeZlibChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
@@ -8522,7 +8529,7 @@ pub fn decodeZlibChunksIntoWithDictionaryAndOptions(chunks: []const []const u8, 
 }
 
 fn decodeZlibChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary orelse ""}, .destination = output });
     return decodeZlibWithOptionalDictionaryAndOptions(joined, output, dictionary, options);
 }
 
@@ -8802,7 +8809,7 @@ fn decodeZlibChunksViaStackJoinLarge(chunks: []const []const u8, total_len: usiz
 }
 
 fn decodeZlibChunksViaStackJoinBuffer(chunks: []const []const u8, total_len: usize, joined_buffer: []u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
-    const joined = try joinChunks(chunks, joined_buffer[0..total_len]);
+    const joined = try joinDecodeChunks(chunks, joined_buffer[0..total_len], .{ .reads = &.{dictionary orelse ""}, .destination = output });
     return try decodeZlibWithOptionalDictionaryAndOptions(joined, output, dictionary, options);
 }
 
@@ -8986,16 +8993,16 @@ pub const RawDeflateDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionary(self: *RawDeflateDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
-        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
-            self.recordError(err);
+        const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} }) catch |err| {
+            if (err != error.InvalidBlockPlan) self.recordError(err);
             return err;
         };
         return self.resetWithDictionary(joined, dictionary, output_scratch);
     }
 
     pub fn resetFromChunksWithDictionaryExactSize(self: *RawDeflateDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
-        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
-            self.recordError(err);
+        const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} }) catch |err| {
+            if (err != error.InvalidBlockPlan) self.recordError(err);
             return err;
         };
         return self.resetWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
@@ -9147,7 +9154,7 @@ pub fn probeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, outp
 }
 
 pub fn probeRawChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) RawDeflateProbeResult {
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch }) catch |err| {
         return .{
             .ok = false,
             .diagnostics = .{
@@ -9167,7 +9174,7 @@ pub fn probeRawChunksExactSize(chunks: []const []const u8, compressed_scratch: [
 }
 
 pub fn probeRawChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch }) catch |err| {
         return .{
             .ok = false,
             .diagnostics = .{
@@ -9506,7 +9513,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptions(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetWithOptions(joined, output_scratch, options);
     }
 
@@ -9515,7 +9522,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
@@ -9552,7 +9559,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionaryAndOptions(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetWithDictionaryAndOptions(joined, dictionary, output_scratch, options);
     }
 
@@ -9561,7 +9568,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetWithDictionaryAndOptionsExactSize(joined, dictionary, output_scratch, options, expected_output_len);
     }
 
@@ -9679,7 +9686,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunksWithOptions(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetConcatenatedWithOptions(joined, output_scratch, options);
     }
 
@@ -9688,7 +9695,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunksWithOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetConcatenatedWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
@@ -9697,7 +9704,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunksWithDictionaryAndOptions(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetConcatenatedWithDictionaryAndOptions(joined, dictionary, output_scratch, options);
     }
 
@@ -9706,7 +9713,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunksWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary}, .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetConcatenatedWithDictionaryAndOptionsExactSize(joined, dictionary, output_scratch, options, expected_output_len);
     }
 
@@ -10295,7 +10302,7 @@ pub fn probeZlibConcatenatedChunksWithDictionaryAndOptions(chunks: []const []con
 }
 
 fn probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary orelse ""}, .destination = output_scratch }) catch |err| {
         return .{
             .ok = false,
             .diagnostics = .{
@@ -10333,7 +10340,7 @@ pub fn probeZlibConcatenatedChunksWithDictionaryAndOptionsExactSize(chunks: []co
 }
 
 fn probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary orelse ""}, .destination = output_scratch }) catch |err| {
         return .{
             .ok = false,
             .diagnostics = .{
@@ -10570,6 +10577,17 @@ pub const PngZlibScanlineDecoder = struct {
         bytes_per_pixel: usize,
     ) Error!void {
         const expected_payload_len = try validateConfig(row_len, row_count, bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{
+            .destination = zlib_scratch,
+            .observer = std.mem.asBytes(self),
+            .protected = &.{
+                filtered_row_scratch,
+                previous_row_scratch,
+                self.zlib.decoded,
+                self.filtered_row_scratch,
+                self.previous_row_scratch,
+            },
+        });
         self.* = .{
             .filtered_row_scratch = filtered_row_scratch[0..row_len],
             .previous_row_scratch = previous_row_scratch[0..row_len],
@@ -10577,7 +10595,7 @@ pub const PngZlibScanlineDecoder = struct {
             .row_count = row_count,
             .bytes_per_pixel = bytes_per_pixel,
         };
-        self.zlib = try ZlibDecoder.initFromChunksExactSize(chunks, compressed_scratch, zlib_scratch, expected_payload_len);
+        self.zlib = try ZlibDecoder.initExactSize(joined, zlib_scratch, expected_payload_len);
     }
 
     pub fn resetFromChunksWithInfo(
@@ -14234,7 +14252,11 @@ pub fn decodePngAdam7ZlibImageFromChunks(
     output: []u8,
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7DecodeBuffers(info, filtered_row_scratch, previous_row_scratch, output);
-    var zlib = try ZlibDecoder.initFromChunksExactSize(chunks, compressed_scratch, zlib_scratch, info.zlib_payload_len);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{
+        .destination = zlib_scratch,
+        .protected = &.{ filtered_row_scratch, previous_row_scratch, output },
+    });
+    var zlib = try ZlibDecoder.initExactSize(joined, zlib_scratch, info.zlib_payload_len);
     return drainPngAdam7ZlibImage(&zlib, filtered_row_scratch, previous_row_scratch, info, output[0..info.image_output_len]);
 }
 
@@ -15174,12 +15196,17 @@ pub fn decodeZlibConcatenatedChunksAppendWithDictionaryAndOptionsLimited(allocat
 }
 
 fn decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary orelse ""}, .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) } });
+    if (appendReadsAlias(out, joined, dictionary orelse "")) {
+        _ = try appendAbsoluteLimit(out.items.len, max_output_len);
+        const decoded = try decodeZlibConcatenatedAllocLimitedInternal(allocator, joined, dictionary, options, max_output_len);
+        return decode_append_borrows.publishOwned(allocator, out, decoded);
+    }
     return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, joined, dictionary, options, max_output_len);
 }
 
 fn decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .reads = &.{dictionary orelse ""}, .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) } });
     return decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, joined, dictionary, options, expected_output_len);
 }
 
@@ -16292,7 +16319,7 @@ pub fn decodeGzipChunks(chunks: []const []const u8, compressed_scratch: []u8, ou
 }
 
 pub fn decodeGzipChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: GzipDecodeOptions) Error!usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output });
     return decodeGzipWithOptions(joined, output, options);
 }
 
@@ -16334,7 +16361,7 @@ pub fn decodeGzipChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.A
 }
 
 pub fn decodeGzipChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) } });
     return decodeGzipAppendWithOptionsExactSize(allocator, out, joined, options, expected_output_len);
 }
 
@@ -16347,7 +16374,12 @@ pub fn decodeGzipChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, ou
 }
 
 fn decodeGzipChunksAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) } });
+    if (appendReadsAlias(out, joined, "")) {
+        _ = try appendAbsoluteLimit(out.items.len, max_output_len);
+        const decoded = try decodeGzipAllocWithOptionsLimitedInternal(allocator, joined, options, max_output_len);
+        return decode_append_borrows.publishOwned(allocator, out, decoded);
+    }
     return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, joined, options, max_output_len);
 }
 
@@ -16537,7 +16569,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptions(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetWithOptions(joined, output_scratch, options);
     }
 
@@ -16546,7 +16578,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptionsExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
@@ -16607,7 +16639,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunksWithOptions(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetConcatenatedWithOptions(joined, output_scratch, options);
     }
 
@@ -16616,7 +16648,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunksWithOptionsExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
-        const joined = try joinChunks(chunks, compressed_scratch);
+        const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch, .observer = std.mem.asBytes(self), .protected = &.{self.decoded} });
         return self.resetConcatenatedWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
@@ -16789,7 +16821,7 @@ pub fn probeGzipConcatenatedChunks(chunks: []const []const u8, compressed_scratc
 }
 
 pub fn probeGzipConcatenatedChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) DecodeProbeResult {
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch }) catch |err| {
         return .{
             .ok = false,
             .diagnostics = .{
@@ -16811,7 +16843,7 @@ pub fn probeGzipConcatenatedChunksExactSize(chunks: []const []const u8, compress
 }
 
 pub fn probeGzipConcatenatedChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) DecodeProbeResult {
-    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+    const joined = joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output_scratch }) catch |err| {
         return .{
             .ok = false,
             .diagnostics = .{
@@ -17015,7 +17047,7 @@ pub fn decodeGzipConcatenatedChunks(chunks: []const []const u8, compressed_scrat
 }
 
 pub fn decodeGzipConcatenatedChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: GzipDecodeOptions) Error!usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .destination = output });
     return decodeGzipConcatenatedWithOptions(joined, output, options);
 }
 
@@ -17057,7 +17089,7 @@ pub fn decodeGzipConcatenatedChunksAppendExactSize(allocator: std.mem.Allocator,
 }
 
 pub fn decodeGzipConcatenatedChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) } });
     return decodeGzipConcatenatedAppendWithOptionsExactSize(allocator, out, joined, options, expected_output_len);
 }
 
@@ -17070,7 +17102,12 @@ pub fn decodeGzipConcatenatedChunksAppendWithOptionsLimited(allocator: std.mem.A
 }
 
 fn decodeGzipConcatenatedChunksAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
-    const joined = try joinChunks(chunks, compressed_scratch);
+    const joined = try joinDecodeChunks(chunks, compressed_scratch, .{ .protected = &.{ out.allocatedSlice(), std.mem.asBytes(out) } });
+    if (appendReadsAlias(out, joined, "")) {
+        _ = try appendAbsoluteLimit(out.items.len, max_output_len);
+        const decoded = try decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator, joined, options, max_output_len);
+        return decode_append_borrows.publishOwned(allocator, out, decoded);
+    }
     return decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator, out, joined, options, max_output_len);
 }
 

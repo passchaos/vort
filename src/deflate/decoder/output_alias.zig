@@ -8,7 +8,7 @@ pub fn validate(input: []const u8, dictionary: []const u8, output: []const u8) e
 }
 
 /// Compare half-open byte ranges without adding lengths to addresses.
-fn overlaps(left: []const u8, right: []const u8) bool {
+pub fn overlaps(left: []const u8, right: []const u8) bool {
     if (left.len == 0 or right.len == 0) return false;
     const left_start = @intFromPtr(left.ptr);
     const right_start = @intFromPtr(right.ptr);
