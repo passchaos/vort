@@ -8,6 +8,7 @@ const bitstream = @import("../../../bitstream.zig");
 const semantic = @import("../../semantic/decoder.zig");
 const rolling_decoder = @import("../../semantic/rolling_decoder.zig");
 const semantic_state = @import("semantic_state.zig");
+const step_borrows = @import("step_borrows.zig");
 const rewindSemanticLookahead = @import("semantic_bits.zig").rewindLookahead;
 pub const SemanticMode = semantic_state.Mode;
 pub const SemanticWork = semantic_state.Work;
@@ -349,9 +350,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         /// reports consumed input/output. The caller may persist its own state
         /// and resume with another call.
         pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            self.pause_requested = true;
-            defer self.pause_requested = false;
-            return self.step(input, output);
+            return self.stepInternal(input, output, true);
         }
         pub fn atBlockBoundary(self: *const Self) bool {
             return self.phase == .block_header or self.phase == .done;
@@ -363,6 +362,15 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         }
 
         pub fn step(self: *Self, input: []const u8, provided_output: []u8) Error!core.StepResult {
+            return self.stepInternal(input, provided_output, false);
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, provided_output: []u8, boundary: bool) Error!core.StepResult {
+            const semantic_admitted = try self.admitStep(input, provided_output);
+            if (boundary) self.pause_requested = true;
+            defer if (boundary) {
+                self.pause_requested = false;
+            };
             const output = if (self.options.stop_at_output_limit and self.options.max_output_len != std.math.maxInt(Count))
                 provided_output[0..stream_count.bounded(self.options.max_output_len -| self.total_output, provided_output.len)]
             else
@@ -504,7 +512,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     .dynamic_lengths => {
                         const total = self.dynamic_hlit + self.dynamic_hdist;
                         if (self.dynamic_length_pos == total) {
-                            if (try self.prepareDynamicTables(input.len - input_read)) {
+                            if (try self.prepareDynamicTables(input.len - input_read, semantic_admitted)) {
                                 // Commit earlier output before linearizing its history.
                                 if (history_record_start != output_written) {
                                     self.recordStepOutput(output[history_record_start..output_written]);
@@ -666,10 +674,18 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
 
         const SemanticRunStatus = enum { need_input, need_output, fallback, counter_fallback, block_end, done };
 
+        fn admitStep(self: *const Self, input: []const u8, output: []u8) Error!bool {
+            const writers = if (self.input_finished or self.phase == .done)
+                output[0..0]
+            else
+                step_borrows.outputPrefix(self.options, self.total_output, output);
+            return step_borrows.rawAdmission(std.mem.asBytes(self), self, input, writers);
+        }
+
         /// Dynamic header work is paid once per block. Keep canonical tree
         /// preparation outside the symbol-heavy step so table building and
         /// semantic admission do not enlarge its hot instruction footprint.
-        noinline fn prepareDynamicTables(self: *Self, contiguous_input_len: usize) Error!bool {
+        noinline fn prepareDynamicTables(self: *Self, contiguous_input_len: usize, semantic_admitted: bool) Error!bool {
             if (self.dynamic_literal_lengths[256] == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
             if (!validDynamicAlphabet(self.dynamic_literal_lengths[0..self.dynamic_hlit]) or
                 !validDynamicAlphabet(self.dynamic_distance_lengths[0..self.dynamic_hdist]))
@@ -677,7 +693,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             self.dynamic_literal_table = huffman.HuffmanTable(286).init(self.dynamic_literal_lengths[0..self.dynamic_hlit]) catch |err| return self.fail(.dynamic_lengths, err);
             self.dynamic_distance_table = huffman.HuffmanTable(format.distance_symbol_count).init(self.dynamic_distance_lengths[0..self.dynamic_hdist]) catch |err| return self.fail(.dynamic_lengths, err);
             if (comptime supports_semantic_window) {
-                if (self.semantic_decoder != null and
+                if (semantic_admitted and self.semantic_decoder != null and
                     !self.options.stop_at_output_limit and
                     self.options.max_distance == format.window_len and
                     contiguous_input_len >= semantic_min_contiguous_input and

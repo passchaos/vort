@@ -5,6 +5,7 @@ const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
+const step_borrows = @import("step_borrows.zig");
 
 /// Incremental gzip decoder with opt-in concatenated-member support. The raw
 /// decoder stops at the final DEFLATE block and leaves the footer unconsumed.
@@ -213,15 +214,25 @@ pub fn Decoder(comptime Codec: type) type {
         /// compressed-block boundary, an input/output wait, or completion.
         /// `block_boundary` reports a stop between blocks with remaining input.
         pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            self.pause_requested = true;
-            defer self.pause_requested = false;
-            return self.step(input, output);
+            return self.stepAdmitted(input, output, true);
         }
         pub fn atBlockBoundary(self: *const Self) bool {
             return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            return self.stepAdmitted(input, output, false);
+        }
+
+        fn stepAdmitted(self: *Self, input: []const u8, output: []u8, boundary: bool) Error!core.StepResult {
+            const semantic_admitted = try self.admitStep(input, output);
+            if (boundary) self.pause_requested = true;
+            defer if (boundary) {
+                self.pause_requested = false;
+            };
+            const workspace = self.raw.semantic_decoder;
+            if (!semantic_admitted) self.raw.semantic_decoder = null;
+            defer self.raw.semantic_decoder = workspace;
             self.last_step_progress = .{};
             const before = wrapper_count.Before.init(self.total_input, self.total_output);
             const stepped = self.stepInternal(input, output) catch |err| {
@@ -230,6 +241,14 @@ pub fn Decoder(comptime Codec: type) type {
             };
             self.last_step_progress = stepped.progress;
             return stepped;
+        }
+
+        fn admitStep(self: *const Self, input: []const u8, output: []u8) Error!bool {
+            const writers = if (self.input_finished or self.phase == .done)
+                output[0..0]
+            else
+                step_borrows.outputPrefix(self.options, self.total_output, output);
+            return step_borrows.rawAdmission(std.mem.asBytes(self), &self.raw, input, writers);
         }
 
         fn stepInternal(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {

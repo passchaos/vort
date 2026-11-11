@@ -5,6 +5,7 @@ const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
+const step_borrows = @import("step_borrows.zig");
 
 /// Incremental zlib wrapper around the raw stored/fixed/dynamic decoder. The
 /// raw decoder stops at the final DEFLATE block and leaves the Adler footer
@@ -259,6 +260,20 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            return self.stepAdmitted(input, output, false);
+        }
+
+        fn stepAdmitted(self: *Self, input: []const u8, output: []u8, boundary: bool) Error!core.StepResult {
+            const semantic_admitted = try self.admitStep(input, output);
+            if (boundary) self.pause_requested = true;
+            defer if (boundary) {
+                self.pause_requested = false;
+            };
+            // Retain the attachment, while keeping an unsafe optional workspace
+            // inactive for every raw drain and member transition in this call.
+            const workspace = self.raw.semantic_decoder;
+            if (!semantic_admitted) self.raw.semantic_decoder = null;
+            defer self.raw.semantic_decoder = workspace;
             self.last_step_progress = .{};
             const before = wrapper_count.Before.init(self.total_input, self.total_output);
             const stepped = self.stepInternal(input, output) catch |err| {
@@ -273,12 +288,28 @@ pub fn Decoder(comptime Codec: type) type {
         /// compressed-block boundary, an input/output wait, or completion.
         /// `block_boundary` reports a stop between blocks with remaining input.
         pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            self.pause_requested = true;
-            defer self.pause_requested = false;
-            return self.step(input, output);
+            return self.stepAdmitted(input, output, true);
         }
         pub fn atBlockBoundary(self: *const Self) bool {
             return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
+        }
+
+        fn admitStep(self: *const Self, input: []const u8, output: []u8) Error!bool {
+            const writers = if (self.input_finished or self.phase == .done)
+                output[0..0]
+            else
+                step_borrows.outputPrefix(self.options, self.total_output, output);
+            const receiver = std.mem.asBytes(self);
+            var admitted = try step_borrows.rawAdmission(receiver, &self.raw, input, writers);
+            if (self.dictionary_available) {
+                const dictionary_admitted = try step_borrows.dictionaryAdmission(receiver, &self.raw, writers, self.dictionary);
+                admitted = admitted and dictionary_admitted;
+            }
+            if (self.dictionaries) |dictionaries| {
+                const set_admitted = try step_borrows.setAdmission(receiver, &self.raw, writers, dictionaries);
+                admitted = admitted and set_admitted;
+            }
+            return admitted;
         }
 
         fn stepInternal(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {

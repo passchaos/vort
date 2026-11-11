@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const Count = core.StreamCount;
 const clone_storage = @import("../clone_storage.zig");
+const step_borrows = @import("step_borrows.zig");
 
 pub fn Decoder(comptime Codec: type) type {
     return struct {
@@ -207,6 +208,22 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn stepInternal(self: *Self, input: []const u8, output: []u8, block_boundary: bool) Error!core.StepResult {
+            const semantic_admitted = try self.admitStep(input, output);
+            const workspace = switch (self.active) {
+                .detecting => null,
+                .zlib => |*decoder| decoder.raw.semantic_decoder,
+                .gzip => |*decoder| decoder.raw.semantic_decoder,
+            };
+            if (!semantic_admitted) switch (self.active) {
+                .detecting => unreachable,
+                .zlib => |*decoder| decoder.raw.semantic_decoder = null,
+                .gzip => |*decoder| decoder.raw.semantic_decoder = null,
+            };
+            defer if (!semantic_admitted) switch (self.active) {
+                .detecting => unreachable,
+                .zlib => |*decoder| decoder.raw.semantic_decoder = workspace,
+                .gzip => |*decoder| decoder.raw.semantic_decoder = workspace,
+            };
             self.last_step_progress = .{};
             var detected_input: usize = 0;
             if (self.active == .detecting) {
@@ -252,6 +269,40 @@ pub fn Decoder(comptime Codec: type) type {
             var result = stepped;
             result.progress = self.last_step_progress;
             return result;
+        }
+
+        fn admitStep(self: *const Self, input: []const u8, output: []u8) Error!bool {
+            const receiver = std.mem.asBytes(self);
+            switch (self.active) {
+                .detecting => {
+                    const writers = step_borrows.outputPrefix(self.options, 0, output);
+                    const history = self.history[0..@TypeOf(@as(Codec.ZlibDecoder, undefined).raw).required_history_len];
+                    try step_borrows.validate(receiver, input, writers, history);
+                    switch (self.configured_dictionary) {
+                        .none => {},
+                        .single => |dictionary| try step_borrows.validateDictionary(receiver, history, writers, dictionary),
+                        .set => |dictionaries| try step_borrows.validateSet(receiver, history, writers, dictionaries),
+                    }
+                    return true;
+                },
+                .zlib => |*decoder| return self.admitSelected(receiver, decoder, input, output),
+                .gzip => |*decoder| return self.admitSelected(receiver, decoder, input, output),
+            }
+        }
+
+        fn admitSelected(self: *const Self, receiver: []const u8, decoder: anytype, input: []const u8, output: []u8) Error!bool {
+            const writers = if (decoder.input_finished or decoder.phase == .done)
+                output[0..0]
+            else
+                step_borrows.outputPrefix(self.options, decoder.total_output, output);
+            var admitted = try step_borrows.rawAdmission(receiver, &decoder.raw, input, writers);
+            const configured_admitted = switch (self.configured_dictionary) {
+                .none => true,
+                .single => |dictionary| try step_borrows.dictionaryAdmission(receiver, &decoder.raw, writers, dictionary),
+                .set => |dictionaries| try step_borrows.setAdmission(receiver, &decoder.raw, writers, dictionaries),
+            };
+            admitted = admitted and configured_admitted;
+            return admitted;
         }
 
         fn select(self: *Self) Error!void {

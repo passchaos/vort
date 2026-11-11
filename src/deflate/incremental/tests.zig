@@ -11,6 +11,8 @@ const partial_flush_tests = @import("tests/partial_flush.zig");
 const rolling_hash_tests = @import("tests/rolling_hash.zig");
 const rolling_semantic_tests = @import("tests/rolling_semantic.zig");
 const semantic_window_tests = @import("tests/semantic_window.zig");
+const step_borrow_tests = @import("tests/step_borrows.zig");
+const semantic_borrow_tests = @import("tests/step_borrows/semantic.zig");
 const sync_recovery_tests = @import("tests/sync_recovery.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
 const zlib_dictionary_tests = @import("decoder/zlib_dictionary_tests.zig");
@@ -26,6 +28,8 @@ test {
     _ = rolling_hash_tests;
     _ = rolling_semantic_tests;
     _ = semantic_window_tests;
+    _ = step_borrow_tests;
+    _ = semantic_borrow_tests;
     _ = sync_recovery_tests;
     _ = wrapper_continuation_tests;
     _ = zlib_dictionary_tests;

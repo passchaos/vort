@@ -4,7 +4,25 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
-## 2026-11-11 current-source modern reference epoch
+## 2026-11-11 complete refreshed decode comparison
+
+The [complete refresh](modern-decode-refresh-20261111.md) binds the verified
+`ea193be2` source to 360 lifecycle rows and 2,160 measured pairs against
+libdeflate 1.26, libzstd 1.6.0 and libbrotli 1.2.0. All-72-row cold throughput
+Vort/reference is **68.77% / 76.56% / 80.86%**; matched prepared Zstd is
+**77.73%**. The weakest cold Brotli row, full mozilla q11, reaches **48.65%**.
+These development-host observations do not establish industry leadership.
+
+The later DirectChunk repair and incremental
+[step-borrow correction](../formats/deflate-incremental-step-borrows.md) are
+functional increments outside that timing epoch. The latter rejects whole-call
+unread-input/output/history/state conflicts before progress or pause changes,
+preserves inactive second-half storage and admits optional semantic fallback.
+No speedup is attributed to either repair. After correctness gates, profile
+Deflate's 64 KiB weak rows and Brotli's full mozilla q11 cliff against this
+modern complete matrix.
+
+## 2026-11-11 earlier modern reference epoch
 
 The [new frozen raw-pair matrix](modern-decode-current-20261111.md) executes
 360 lifecycle rows against libdeflate 1.26, libzstd 1.6.0 and libbrotli 1.2.0.

@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const clone_storage = @import("../clone_storage.zig");
+const step_borrows = @import("step_borrows.zig");
 const count = core.stream_count;
 const Count = core.StreamCount;
 
@@ -89,6 +90,15 @@ pub const Decoder = struct {
     }
 
     pub fn step(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
+        return self.stepInternal(input, output, false);
+    }
+
+    fn stepInternal(self: *Decoder, input: []const u8, output: []u8, boundary: bool) Error!core.StepResult {
+        try self.admitStep(input, output);
+        if (boundary) self.pause_requested = true;
+        defer if (boundary) {
+            self.pause_requested = false;
+        };
         if (self.input_finished) {
             if (input.len != 0) return self.fail(self.phase, error.TrailingData);
             return .{ .status = if (self.phase == .done) .done else .need_input };
@@ -150,12 +160,18 @@ pub const Decoder = struct {
     /// Advance until the next stored-block boundary, an input/output wait, or
     /// completion. `block_boundary` reports a stop between blocks.
     pub fn stepToBlockBoundary(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
-        self.pause_requested = true;
-        defer self.pause_requested = false;
-        return self.step(input, output);
+        return self.stepInternal(input, output, true);
     }
     pub fn atBlockBoundary(self: *const Decoder) bool {
         return self.phase == .header or self.phase == .done;
+    }
+
+    fn admitStep(self: *const Decoder, input: []const u8, output: []u8) Error!void {
+        const writers = if (self.input_finished or self.phase == .done)
+            output[0..0]
+        else
+            step_borrows.outputPrefix(self.options, self.total_output, output);
+        try step_borrows.validate(std.mem.asBytes(self), input, writers, "");
     }
 
     fn parseHeader(self: *Decoder) Error!void {
