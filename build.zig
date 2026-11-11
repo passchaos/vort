@@ -455,6 +455,7 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
     const decode_compare_compile = @import("build/decode_compare.zig").register(b, target, vort_mod_releasefast, benchmark_provenance_mod);
+    @import("build/br_decode_mozilla.zig").register(b, target, br_encode_bench_mod);
 
     const lib = b.addLibrary(.{
         .name = "vort",
