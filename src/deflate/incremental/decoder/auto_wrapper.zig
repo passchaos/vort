@@ -5,6 +5,7 @@ const core = @import("../../../core.zig");
 const Count = core.StreamCount;
 const clone_storage = @import("../clone_storage.zig");
 const step_borrows = @import("step_borrows.zig");
+const dictionary_borrows = @import("dictionary_borrows.zig");
 
 pub fn Decoder(comptime Codec: type) type {
     return struct {
@@ -161,7 +162,13 @@ pub fn Decoder(comptime Codec: type) type {
 
         pub fn provideDictionary(self: *Self, dictionary: []const u8) Error!void {
             return switch (self.active) {
-                .zlib => |*decoder| decoder.provideDictionary(dictionary),
+                .zlib => |*decoder| blk: {
+                    // The child's seed must preserve outer facade metadata too.
+                    // Temporary sources may still borrow any receiver bytes.
+                    if (decoder.requiredDictionaryId() != null and !decoder.input_finished)
+                        try dictionary_borrows.validateSeed(std.mem.asBytes(self), decoder.raw.history, dictionary);
+                    break :blk decoder.provideDictionary(dictionary);
+                },
                 else => error.InvalidStreamState,
             };
         }

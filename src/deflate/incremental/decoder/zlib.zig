@@ -6,6 +6,7 @@ const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
 const step_borrows = @import("step_borrows.zig");
+const dictionary_borrows = @import("dictionary_borrows.zig");
 
 /// Incremental zlib wrapper around the raw stored/fixed/dynamic decoder. The
 /// raw decoder stops at the final DEFLATE block and leaves the Adler footer
@@ -198,8 +199,9 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn provideDictionary(self: *Self, dictionary: []const u8) Error!void {
             const id = self.requiredDictionaryId() orelse return error.InvalidStreamState;
             if (self.input_finished) return error.InvalidStreamState;
+            try dictionary_borrows.validateSeed(std.mem.asBytes(self), self.raw.history, dictionary);
             if (Codec.Adler32.hash(dictionary) != id) return self.fail(.dictid, error.DictionaryMismatch);
-            self.acceptDictionary(dictionary);
+            try self.acceptDictionary(dictionary);
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -349,12 +351,12 @@ pub fn Decoder(comptime Codec: type) type {
                     if (self.dictionaries) |dictionaries| {
                         if (dictionaries.find(id)) |dictionary| {
                             if (Codec.Adler32.hash(dictionary) == id) {
-                                self.acceptDictionary(dictionary);
+                                try self.acceptDictionary(dictionary);
                                 continue;
                             }
                         }
                     } else if (self.dictionary_available and id == Codec.Adler32.hash(self.dictionary)) {
-                        self.acceptDictionary(self.dictionary);
+                        try self.acceptDictionary(self.dictionary);
                         continue;
                     }
                     return self.fail(.dictid, error.NeedDictionary);
@@ -476,8 +478,8 @@ pub fn Decoder(comptime Codec: type) type {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
         }
-        fn acceptDictionary(self: *Self, dictionary: []const u8) void {
-            self.raw.seedDictionary(dictionary);
+        fn acceptDictionary(self: *Self, dictionary: []const u8) Error!void {
+            try self.raw.seedDictionary(dictionary);
             self.required_dictionary_id = null;
             self.phase = .raw;
             self.clearError();

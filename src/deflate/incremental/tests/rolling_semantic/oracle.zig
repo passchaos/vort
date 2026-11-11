@@ -62,7 +62,7 @@ pub const Rig = struct {
             const current = &@field(self, member[0]);
             current.reset();
             try std.testing.expect(current.semantic_decoder == &@field(self, member[2]));
-            current.seedDictionary(dictionary);
+            try current.seedDictionary(dictionary);
             try std.testing.expectEqual(@as(usize, 0), current.semanticBlocksStarted());
             try std.testing.expectEqualDeep(decoder.SemanticWork{}, current.semanticWork());
         }

@@ -16,6 +16,7 @@ const semantic_borrow_tests = @import("tests/step_borrows/semantic.zig");
 const sync_recovery_tests = @import("tests/sync_recovery.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
 const zlib_dictionary_tests = @import("decoder/zlib_dictionary_tests.zig");
+const dictionary_borrow_tests = @import("tests/dictionary_borrows.zig");
 
 test {
     _ = block_flush_tests;
@@ -33,6 +34,7 @@ test {
     _ = sync_recovery_tests;
     _ = wrapper_continuation_tests;
     _ = zlib_dictionary_tests;
+    _ = dictionary_borrow_tests;
     _ = @import("encoder/png_ultrafast/root.zig");
 }
 

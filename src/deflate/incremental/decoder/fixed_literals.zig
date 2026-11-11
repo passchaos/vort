@@ -9,6 +9,7 @@ const semantic = @import("../../semantic/decoder.zig");
 const rolling_decoder = @import("../../semantic/rolling_decoder.zig");
 const semantic_state = @import("semantic_state.zig");
 const step_borrows = @import("step_borrows.zig");
+const dictionary_borrows = @import("dictionary_borrows.zig");
 const rewindSemanticLookahead = @import("semantic_bits.zig").rewindLookahead;
 pub const SemanticMode = semantic_state.Mode;
 pub const SemanticWork = semantic_state.Work;
@@ -176,7 +177,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         }
         pub fn initWithDictionary(options: Options, history: []u8, dictionary: []const u8) Error!Self {
             var decoder = try initWithHistory(options, history);
-            decoder.seedDictionary(dictionary);
+            try decoder.seedDictionary(dictionary);
             return decoder;
         }
         pub fn initWithOptions(options: Options) Self {
@@ -313,14 +314,19 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             self.total_input = resumed_input;
             self.total_output = produced;
         }
-        /// Seed only while no semantic generation is active (normally after
-        /// initialization, reset or sync recovery). Caller storage is replaced.
-        pub fn seedDictionary(self: *Self, dictionary: []const u8) void {
-            std.debug.assert(self.phase != .fast_dynamic_block);
-            if (self.history.len == 0) return;
+        /// Replace history after consuming the dictionary tail. Sources may
+        /// overlap history or this receiver. Active semantic generations and
+        /// seeds too short for a pending match refuse without changing state.
+        pub fn seedDictionary(self: *Self, dictionary: []const u8) Error!void {
+            if (self.phase == .fast_dynamic_block) return error.InvalidStreamState;
             const keep = @min(dictionary.len, self.history.len);
+            if (self.phase == .match_copy and self.match_remaining != 0 and
+                (self.match_distance == 0 or self.match_distance > self.history.len or keep < self.match_distance))
+                return error.InvalidStreamState;
+            try dictionary_borrows.validateSeed(std.mem.asBytes(self), self.history, dictionary);
+            if (self.history.len == 0) return;
             const source = dictionary[dictionary.len - keep ..];
-            @memcpy(self.history[0..keep], source);
+            @memmove(self.history[0..keep], source);
             self.history_len = keep;
             self.history_pos = if (keep == self.history.len) 0 else keep;
         }

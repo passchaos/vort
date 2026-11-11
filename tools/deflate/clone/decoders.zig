@@ -119,7 +119,7 @@ fn fork(comptime Decoder: type, init: std.process.Init, config: common.Config, p
     source_live = false;
     const branch_a = try branch(a.ptr, init, config, wire_a, prefix, tail_a, consumed, common_plain.items, config.reset_path, &calls);
     a.ptr.reset();
-    if (comptime Decoder == codec.RawDeflateIncrementalFixedLiteralDecoder) a.ptr.seedDictionary(dictionary);
+    if (comptime Decoder == codec.RawDeflateIncrementalFixedLiteralDecoder) try a.ptr.seedDictionary(dictionary);
     const reset_path = try std.fmt.allocPrint(init.gpa, "{s}.reset", .{config.reset_path});
     defer init.gpa.free(reset_path);
     _ = try branch(a.ptr, init, config, wire_a, prefix, tail_a, 0, &.{}, reset_path, &calls);
