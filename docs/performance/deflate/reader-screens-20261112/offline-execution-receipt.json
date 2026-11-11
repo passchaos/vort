@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "0",
+    "python3",
+    "-B",
+    "docs/performance/deflate/reader-screens-20261112/verify.py",
+    "--original-bytes",
+    "--git-repo",
+    ".",
+    "--fixture-bytes",
+    "--receipt",
+    "docs/performance/deflate/reader-screens-20261112/validation-receipt.json"
+  ],
+  "cwd": "/home/passchaos/project-z/vort",
+  "origin": "tools.write_stdin session44399 chunk5c584e; exit_code0",
+  "raw_stderr_saved": false,
+  "raw_stdout_saved": false,
+  "result_sha256": "5f441f4ac39de7a589d974dd9231067aa7c477872259a46e58ed334317897924",
+  "returncode": 0,
+  "scope": "Final CPU0 offline archival audit after last frozen payload-counts addition; no compiler/codec/test/benchmark execution. Earlier640-member preliminary receipt was superseded."
+}

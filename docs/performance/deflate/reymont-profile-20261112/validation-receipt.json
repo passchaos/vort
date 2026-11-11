@@ -1,0 +1,26 @@
+{
+  "schema": "vort.deflate.reymont-profile-archive-validation.v1",
+  "valid": true,
+  "scope": "independent raw-byte/source/probe/reference/recorded-statistics verification; no compiler, codec or sampling rerun",
+  "cpu_affinity": [
+    0
+  ],
+  "profile_revision": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "source_files": 2062,
+  "baseline_git_blobs_verified": 2062,
+  "original_files_verified": 17,
+  "fixture_bytes": 84328,
+  "iterations": 30000,
+  "warmup_pairs": 2,
+  "measured_pairs": 2,
+  "perf_samples": 2681,
+  "whole_process_period": 65407305645,
+  "whole_process_physical_percentages": {
+    "vort_kernel": 58.02,
+    "reference_kernel": 36.53
+  },
+  "public_root_denominator_complete": false,
+  "codec_heap_measured": false,
+  "profile_clocks_are_acceptance_samples": false,
+  "profile_frozen_before_test_overlay": true
+}

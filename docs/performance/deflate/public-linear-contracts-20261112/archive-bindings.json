@@ -1,0 +1,126 @@
+{
+  "schema": "vort.deflate.public-linear-archive-bindings.v1",
+  "base_revision": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "raw_root": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba",
+  "archives": {
+    "source-overlay.tar.gz": {
+      "files": {
+        "src/deflate.zig": "ba69fedeeee8bb171d324718bca30261bd8d866f8cb83480b70f6d820784af6d",
+        "src/deflate/semantic/public_linear_contracts.zig": "46d3acd1deed098b0229d36298b17e7cc126bdfd2fef21293a502226ed219531",
+        "src/root.zig": "a118a66cea7d3c7491a083c25d82d300e6a8f4903e19af26c4b2bf7794fcd6a3"
+      },
+      "origins": {
+        "src/root.zig": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/source/src/root.zig",
+        "src/deflate.zig": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/source/src/deflate.zig",
+        "src/deflate/semantic/public_linear_contracts.zig": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/source/src/deflate/semantic/public_linear_contracts.zig"
+      }
+    },
+    "raw-validation.tar.gz": {
+      "files": {
+        "debug.log": "bc3d7303d1cb13cf508902b2cc0283cb117ba8249c9e6d3ded6b379f823715d0",
+        "full-safe.log": "2defb5bba12deff0137a3ae488084850dd29736ca6601285f53dd6590a65633b",
+        "oracle-validation.json": "48872151fac0b6bd267ba7d568c314d0fd363e9e41eb1096e7a9070322e4e260",
+        "oracle.log": "ae753aa199bf9a308651072b2e2537b53fcd07edc74f792e7198056fac1ce08d",
+        "oracle.py": "8d7ae9a7281a0c6a5584178ee1f98fcdbb15ddd5ef6b002ad376514f177210f2",
+        "root-debug.log": "b772970f1c1e65276e67900621bcacaafd5bea3873057272883cabb7e7d1ea8d",
+        "root-safe.log": "b772970f1c1e65276e67900621bcacaafd5bea3873057272883cabb7e7d1ea8d",
+        "root-wasi-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "root-wasi-run.log": "b772970f1c1e65276e67900621bcacaafd5bea3873057272883cabb7e7d1ea8d",
+        "run-wasi.js": "f2aa5423d0c7a38fdf91fef263e0a74eed9892efd37dca403b020ecb0bba93bb",
+        "safe.log": "bc3d7303d1cb13cf508902b2cc0283cb117ba8249c9e6d3ded6b379f823715d0",
+        "source-sha256.json": "a892ed2b2bac865265c460986ead2706840e8aae7f8a6e5f043d5783fe45f72f",
+        "validation.json": "60467185e9e59d32b876ab864fd442628fcba3477fcb20eb7b56f27180ff8622",
+        "wasi-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "wasi-run.log": "bc3d7303d1cb13cf508902b2cc0283cb117ba8249c9e6d3ded6b379f823715d0",
+        "x86.log": "bc3d7303d1cb13cf508902b2cc0283cb117ba8249c9e6d3ded6b379f823715d0"
+      },
+      "origins": {
+        "full-safe.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/full-safe.log",
+        "root-safe.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-safe.log",
+        "safe.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/safe.log",
+        "root-debug.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-debug.log",
+        "x86.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/x86.log",
+        "debug.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/debug.log",
+        "wasi-run.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/wasi-run.log",
+        "oracle.py": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/oracle.py",
+        "root-wasi-build.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-wasi-build.log",
+        "root-wasi-run.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-wasi-run.log",
+        "wasi-build.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/wasi-build.log",
+        "oracle.log": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/oracle.log",
+        "validation.json": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/validation.json",
+        "oracle-validation.json": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/oracle-validation.json",
+        "run-wasi.js": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/run-wasi.js",
+        "source-sha256.json": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/source-sha256.json"
+      }
+    },
+    "test-executables.tar.gz": {
+      "files": {
+        "deflate-debug": "ad44aedc1f2865a51997c21fea3644a89a04edf208fecb1b24ed77a18217dbda",
+        "deflate-full-safe": "f1f65b34c18f98ed12731782aa806d1f1f7db8a0655c4ebb667855c050978d41",
+        "deflate-safe": "f3b60fc36cc2fb37e6068e8aa4871aeec3bc0549cefd6b99976325adbaee49d2",
+        "deflate-wasi.wasm": "b22b58ecc265a4d3fcd2b7213530d8417f97ff838a1dcc3fea87f607e2de651a",
+        "deflate-x86": "a3891c50bf96810fd95bf98f419f65c29dd35731eac98a09d53b406c4d9cf834",
+        "root-debug": "0289b741a70c20ccbb5436ccd2b6a378b8eef423ecda4ac7eafe46ffc4b39eb3",
+        "root-safe": "f34ebcf857c28a310a39b349aed5415a9c10416acc98ddab2bf6813f3e7dee3d",
+        "root-wasi.wasm": "3f76cc456d6e5d3ef2bac6a5e1f92141e4833cde3fa03eabdc4daec5a6019c5e"
+      },
+      "origins": {
+        "deflate-debug": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/deflate-debug",
+        "deflate-safe": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/deflate-safe",
+        "deflate-x86": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/deflate-x86",
+        "deflate-wasi.wasm": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/deflate-wasi.wasm",
+        "root-debug": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-debug",
+        "root-safe": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-safe",
+        "root-wasi.wasm": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/root-wasi.wasm",
+        "deflate-full-safe": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/deflate-full-safe"
+      }
+    },
+    "small-fixtures.tar.gz": {
+      "files": {
+        "invalid_history_dist0.deflate": "2a6f6984ed3d627d29f9e412ed16b41511c386db9510e6cc44f0cb6249a647dd",
+        "invalid_history_dist29.deflate": "05f7e82ce4aad64cbf812c3bd5aa9dbb628e4caeb449eb6f0223cdeb8b0fdf48",
+        "ll10-missing-distance-primary.deflate": "8a1701d1510d6f035880beff6225441ad7c91cc87b8fad6dbfb1343cdb5aa18e",
+        "long211.deflate": "bfa2c6881f7659de5df6c40e4edbc99d9bf5c8cacb35059b480ec42b2aab05b3",
+        "long211_cut1.deflate": "3e0fcf897dc6f903feda421bd3792d960239161a3c927afe3196b9525cbfd6d0",
+        "long211_cut2.deflate": "84a8be19cd0a5a45c928dc9b0f4cf236e592700e5ccc1d49047066c6eac44362",
+        "long211_cut3.deflate": "1d02e2d28fa4c017180bfb3ea3f009415daefee54d1ec0db9b03b571c3bc0162",
+        "long211_cut4.deflate": "0406cc13830a06de20af87c203ce398710ebcaf84ddb4f24da0dc94f7736b710",
+        "osdb-zlib6-64k.deflate": "cb731c66afe83c470f5ef4f6e24807c3590e8b145adac9d2511474fff1e7b91f",
+        "valid84.deflate": "f2ce4182e7e18e47a334436e0179d2df858360de4f585e70e7816d39ecec8144"
+      },
+      "origins": {
+        "osdb-zlib6-64k.deflate": "/home/passchaos/project-z/vort/src/deflate/decoder/testdata/osdb-zlib6-64k.deflate"
+      }
+    }
+  },
+  "reuse": {
+    "source_archive": "docs/performance/br/decode-mozilla-distributions-20261112/shared-dispatch-source.tar.gz",
+    "source_archive_sha256": "84a9c1d9b2946fba4cb80921dd4f7a625242fe7c319eea6f536b13265ea0baba",
+    "source_prefix": "shared-dispatch/",
+    "binary_archive": "docs/performance/br/decode-mozilla-distributions-20261112/probe-binaries.tar.gz",
+    "binary_archive_sha256": "336ac3d42018c3c851f43e425d6db86a1ee4bc08ed69482a76314543dc3e7565",
+    "binary_member": "shared-dispatch/semantic-compare",
+    "binary_sha256": "2527c72112f19ac34d08d8f199f38e76dc4a9883ad25466f2f83ff193da21f14",
+    "reference_archive": "docs/performance/modern-decode-current-20261111/reference-libraries.tar.gz",
+    "reference_archive_sha256": "45fa23a5b80ba5bc68041dc2841b6419735fa77740bdff48501dd48f1774d61a",
+    "reference_member": "deflate/libdeflate.so.0",
+    "reference_sha256": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28"
+  },
+  "fixture_git_blob": "65fef053a7ecef14ed1b3f8662f0f0dda627ad45",
+  "fixture_git_path": "src/deflate/decoder/testdata/osdb-zlib6-64k.deflate",
+  "generated_small_wire_origin": "Eight LL14 bare wires reconstructed from original OSDB bits and matched to recorded oracle hashes; LL10 malformed wire reconstructed from frozen Zig test writer; not pre-existing captured stdout.",
+  "scope": {
+    "public_scenarios": 27,
+    "direct_root_calls": 2,
+    "deflate_filtered_tests": 8,
+    "root_filtered_tests": 90,
+    "full_deflate_tests": 734,
+    "filtered_count_caveat": "Deflate1 aggregate+7 imports; root2 aggregates+88 imports, not90 independent cases",
+    "production_change": false,
+    "performance_claim": false,
+    "new_production_wire_bug_found": false
+  },
+  "archive_cpu": 0,
+  "policy": "Sorted GNU tar, regular files, uid/gid/mtime0, empty owners, modes0644/0755; gziplevel9/no filename/mtime0",
+  "equivalent_test_commit": "52cb0f56f594cc3f3e7c56be2217b726e74990cf"
+}

@@ -1,0 +1,45 @@
+{
+  "schema": "vort.deflate.public-linear-archive-validation.v1",
+  "valid": true,
+  "scope": "independent raw-byte/source/shape/recorded-oracle validation; no compiler, codec or benchmark rerun",
+  "cpu_affinity": [
+    0
+  ],
+  "base_revision": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "source_overlay_files": 3,
+  "baseline_git_blobs_verified": 2062,
+  "validation_runs": 8,
+  "public_scenarios": 27,
+  "direct_root_calls": 2,
+  "filtered_deflate_aggregate_import_tests": 8,
+  "filtered_root_aggregate_import_tests": 90,
+  "full_deflate_tests": 734,
+  "test_only_hookups": true,
+  "original_files_verified": 28,
+  "ll14_shape": {
+    "hlit": 279,
+    "hdist": 30,
+    "header_bits": 762,
+    "literal_max_bits": 14,
+    "distance_max_bits": 9,
+    "literal_leaves": 279,
+    "distance_leaves": 22,
+    "literal_complete": true,
+    "distance_complete": true
+  },
+  "ll10_shape": {
+    "hlit": 258,
+    "hdist": 30,
+    "header_bits": 1226,
+    "literal_max_bits": 10,
+    "distance_max_bits": 2,
+    "literal_leaves": 11,
+    "distance_leaves": 2,
+    "literal_complete": true,
+    "distance_complete": false
+  },
+  "recorded_zlib_oracle_cases": 8,
+  "oracle_is_new_post_freeze_revalidation": true,
+  "new_production_wire_bug_fixed": false,
+  "performance_claim": false
+}

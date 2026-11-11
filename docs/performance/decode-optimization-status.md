@@ -128,6 +128,49 @@ was deferred because it still materializes all literals and copies most literal
 runs, with additional output-suffix, alias and padding constraints. It was not
 implemented in these candidates.
 
+## 2026-11-12 Deflate public generic contracts and current profile
+
+The [public generic contract increment](deflate/public-linear-contracts-20261112.md)
+adds real-header LL14 secondary and independently generated LL10 witnesses.
+They prove the actual public generic selector and wide-loop preconditions
+before checking InvalidMatch, InvalidHuffmanCode, OutputTooSmall, short output
+and a real fast-to-tail truncation handoff. The old private/public comparison's
+public call selects compact9 and cannot establish this route. All guards and
+exact successful output/consumption are checked without forbidding permitted
+scratch stores inside caller capacity.
+
+Deflate filtered Debug/ReleaseSafe/x86/actual WASI passes 8/8 each, public-root
+Debug/ReleaseSafe/actual WASI passes 90/90, and complete Deflate ReleaseSafe
+passes 734/734. These filtered totals include import tests; the new behavioral
+scope is 27 public scenarios plus two direct root calls. The independent zlib
+oracle covers eight real-header output/error cases. No production decode
+behavior or throughput claim changes in this functional increment.
+
+The [fresh current-source profile](deflate/reymont-profile-20261112/README.md)
+binds byte-equivalent `8adfb3ba` to the same modern reymont 64 KiB L6 wire.
+The whole-process capture records 2,681 samples with no reported loss;
+physical semantic-loop weight is 58.02% of the captured child, which also
+contains libdeflate and validation. This is a diagnostic share, not a
+Vort-only timing or instruction denominator. It continues to favor the
+semantic loop over the small duplicate distance-setup cost.
+
+The [two reader dependency screens](deflate/reader-screens-20261112.md) are
+rejected despite 734/734 ReleaseSafe correctness. Length-prefix metadata
+removes a serial distance-primary shift, but the twelve-row screen is only
+1.009984x; target reymont64K L6 is 1.048682x and nci64K L9 is 0.938845x.
+Independent OR56 refill normalization has a 0.961166x twelve-row mean, with
+nci/xml64K controls 0.839242–0.923285x. Both miss the 20% target and 0.98x
+control gates. All 192 successful child events and exact candidate epochs are
+retained, without a complete-matrix or dedicated-host acceptance claim.
+
+Machine-code inspection confirms the intended local dependency changes, but
+both aligned functions reserve 16 more stack bytes and have changed hot-path
+spills. Whole-symbol static counts cannot attribute those control losses.
+Independent first-block parsing confirms all six 64K rows select generic11;
+the 1 MiB nci first blocks select non-overlap, with later blocks unclassified.
+Further work should first reduce measured hot live state or material token
+work, rather than infer gains from an isolated arithmetic simplification.
+
 ## 2026-11-11 checked dictionary seeding and provision
 
 The later [dictionary seed/provision correction](deflate-dictionary-borrows-20261111/README.md)

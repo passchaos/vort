@@ -1,0 +1,92 @@
+{
+  "schema": "vort.deflate.reymont-profile-bindings.v1",
+  "base_revision": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "raw_root": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba",
+  "archives": {
+    "raw-profile.tar.gz": {
+      "files": {
+        "baseline-build.log": "bac572bea7e5f67deb9676667cb889b9dab7f5bf607e0d7f7cac2ba50643e718",
+        "capture-validation.json": "951bad9881179a0b23bedb149465ed16911b35c0bd4a6f672a8a4fed55f7aa8c",
+        "capture.log": "720744a08de6a36662badb11f9a7de7208acb467836f0b704d5b9feb2e366247",
+        "capture.py": "56c801469c49979836ad77b24696917653221ad6b1359175e8666c567e012e6e",
+        "command.json": "21df046b0aeb3d957c44a999ae844c5f3d8cc52f827ebaeecb7a2dca45544dd3",
+        "execution.json": "dc95ff23c19eba8d88b9e3df9a0edde9b4f793eefb89218e59a68b42f4d98539",
+        "manifest.json": "2c02a14349e689766e156b9d8188754003984975eca86f6134cfd5624a22ca8f",
+        "reymont-64k-L6.data": "54d664d51cfae9feb73eca21be761ea7bfb345d6a0ba9d322a6066de6b9c6a59",
+        "stderr.raw": "73a40e6ea6e1a98595b841e0426c6656ffbfde0493307eeff961532cac3af677",
+        "stdout.raw": "e631313080f216ec5da38690bd75d3d76b5e77cf2ae28eb78f83b87c3b678db1",
+        "symbols-physical.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "symbols-physical.txt": "ffe0b5e4c1e51e955a8fb2a9ec37bd63ba71d2ffe9ea3b47e735c99b9fdf2890"
+      },
+      "origins": {
+        "baseline-build.log": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/baseline-build.log",
+        "reymont-64k-L6.data": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/reymont-64k-L6.data",
+        "manifest.json": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/manifest.json",
+        "command.json": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/command.json",
+        "symbols-physical.txt": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/symbols-physical.txt",
+        "capture.py": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/capture.py",
+        "capture-validation.json": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/capture-validation.json",
+        "capture.log": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/capture.log",
+        "stdout.raw": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/stdout.raw",
+        "symbols-physical.stderr": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/symbols-physical.stderr",
+        "execution.json": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/execution.json",
+        "stderr.raw": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/stderr.raw"
+      }
+    },
+    "fixture-bytes.tar.gz": {
+      "files": {
+        "reymont.65536.deflate.6.wire": "93159be7c00758f86eee3518f3abb76ddcf5a42aedc48d434bffdc198deee2bc",
+        "reymont.65536.plain": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22"
+      },
+      "origins": {
+        "reymont.65536.plain": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain",
+        "reymont.65536.deflate.6.wire": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire"
+      }
+    },
+    "runner-dependencies.tar.gz": {
+      "files": {
+        "evidence.py": "ce9d336a37e30c225c99bac0e6f7aa33a4f07da5f8bf9a7c2be6b9f89585969c",
+        "fixtures.py": "a05d1bdec9ef3c17bfe81c4dcad0c2b1a127b392ccbbf5fc50f39104a0d6e0b4",
+        "seed-manifest.json": "73705d4cd52f0bad33fdb53589e3896ee02a2a0039e3d298b8327f7f27fed0d2"
+      },
+      "origins": {
+        "evidence.py": "/home/passchaos/project-z/vort/tools/decode/evidence.py",
+        "fixtures.py": "/home/passchaos/project-z/vort/tools/decode/fixtures.py",
+        "seed-manifest.json": "/tmp/vort-zstd-sao-profile-20261112.093d5b9c/manifest.json"
+      }
+    }
+  },
+  "reuse": {
+    "source_archive": "docs/performance/br/decode-mozilla-distributions-20261112/shared-dispatch-source.tar.gz",
+    "source_archive_sha256": "84a9c1d9b2946fba4cb80921dd4f7a625242fe7c319eea6f536b13265ea0baba",
+    "source_prefix": "shared-dispatch/",
+    "binary_archive": "docs/performance/br/decode-mozilla-distributions-20261112/probe-binaries.tar.gz",
+    "binary_archive_sha256": "336ac3d42018c3c851f43e425d6db86a1ee4bc08ed69482a76314543dc3e7565",
+    "binary_member": "shared-dispatch/semantic-compare",
+    "binary_sha256": "2527c72112f19ac34d08d8f199f38e76dc4a9883ad25466f2f83ff193da21f14",
+    "reference_archive": "docs/performance/modern-decode-current-20261111/reference-libraries.tar.gz",
+    "reference_archive_sha256": "45fa23a5b80ba5bc68041dc2841b6419735fa77740bdff48501dd48f1774d61a",
+    "reference_member": "deflate/libdeflate.so.0",
+    "reference_sha256": "1261b5e2461c0a12995439abea25e042de4f2d899c5f26fb738b023dc2cbff28"
+  },
+  "baseline_binary_original": "/tmp/vort-deflate-reymont-profile-20261112.8adfb3ba/baseline-compare",
+  "scope": {
+    "frozen_before_new_tests": true,
+    "samples": 2681,
+    "frequency_hz": 199,
+    "user_stack_bytes": 65528,
+    "iterations": 30000,
+    "warmup_pairs": 2,
+    "measured_pairs": 2,
+    "lifecycle": "cold",
+    "whole_process_physical_percentages": {
+      "vort_linear_kernel": 58.02,
+      "reference_kernel": 36.53
+    },
+    "vort_only_denominator_complete": false,
+    "codec_heap_measured": false,
+    "acceptance_timing": false
+  },
+  "archive_cpu": 0,
+  "policy": "Sorted GNU tar, regular files, uid/gid/mtime0, empty owners, modes0644/0755; gziplevel9/no filename/mtime0"
+}

@@ -1,0 +1,19 @@
+{
+  "archives": {
+    "probe-binaries.tar.gz": "336ac3d42018c3c851f43e425d6db86a1ee4bc08ed69482a76314543dc3e7565",
+    "shared-dispatch-source.tar.gz": "84a9c1d9b2946fba4cb80921dd4f7a625242fe7c319eea6f536b13265ea0baba"
+  },
+  "baseline_binary_member": "shared-dispatch/semantic-compare",
+  "modern_manifest": {
+    "path": "docs/performance/modern-decode-refresh-20261111/manifest.json.gz",
+    "sha256": "c52d48173e769c42f998595fa7df50281b78d25a55afaa9c2581e213e424873e"
+  },
+  "prior_binding_sha256": "97274fe3d057900c00e10c5c5fd6c425552dd4110b63865d8d392143437071a9",
+  "prior_package": "docs/performance/br/decode-mozilla-distributions-20261112",
+  "reference_libraries": {
+    "path": "docs/performance/modern-decode-current-20261111/reference-libraries.tar.gz",
+    "sha256": "45fa23a5b80ba5bc68041dc2841b6419735fa77740bdff48501dd48f1774d61a"
+  },
+  "scope": "Reuse exact2062 source bytes/2527c721 baseline binary and pinned reference libraries; base8ad advances docs only",
+  "source_prefix": "shared-dispatch/"
+}

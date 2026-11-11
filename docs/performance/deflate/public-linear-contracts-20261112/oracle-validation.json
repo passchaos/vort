@@ -1,0 +1,262 @@
+{
+  "artifact_origin": "New post-freeze revalidation; oracle.log is this rerun's stdout, not an archived copy of earlier tool stdout.",
+  "case_count": 8,
+  "cases": [
+    {
+      "actual": {
+        "outcome": "success",
+        "output_length_bytes": 84,
+        "output_sha256": "4fea5e6a3ec5f5474a26d858bc77b6d7bd3ab864ea02d988683fdc648602b248"
+      },
+      "available_input_bits": 808,
+      "case_id": "valid84",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 278,
+        "literal_count": 1
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "outcome": "success",
+        "output_byte": 0,
+        "output_length_bytes": 84,
+        "output_sha256": "4fea5e6a3ec5f5474a26d858bc77b6d7bd3ab864ea02d988683fdc648602b248"
+      },
+      "original_logical_wire_bits": 807,
+      "pass": true,
+      "wire_length_bytes": 101,
+      "wire_sha256": "f2ce4182e7e18e47a334436e0179d2df858360de4f585e70e7816d39ecec8144"
+    },
+    {
+      "actual": {
+        "outcome": "success",
+        "output_length_bytes": 211,
+        "output_sha256": "a8e63d1668da80b7902494cbbfe1313ef5c5fe3c455435e316b48072c8f4b52d"
+      },
+      "available_input_bits": 1448,
+      "case_id": "long211",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 278,
+        "literal_count": 128
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "outcome": "success",
+        "output_byte": 0,
+        "output_length_bytes": 211,
+        "output_sha256": "a8e63d1668da80b7902494cbbfe1313ef5c5fe3c455435e316b48072c8f4b52d"
+      },
+      "original_logical_wire_bits": 1442,
+      "pass": true,
+      "wire_length_bytes": 181,
+      "wire_sha256": "bfa2c6881f7659de5df6c40e4edbc99d9bf5c8cacb35059b480ec42b2aab05b3"
+    },
+    {
+      "actual": {
+        "error_message": "Error -3 while decompressing data: invalid distance too far back",
+        "outcome": "error",
+        "python_exception_type": "zlib.error",
+        "zlib_error_code": -3
+      },
+      "available_input_bits": 792,
+      "case_id": "invalid_history_dist0",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 257,
+        "literal_count": 0
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "error_category": "invalid_history",
+        "outcome": "error"
+      },
+      "original_logical_wire_bits": 789,
+      "pass": true,
+      "wire_length_bytes": 99,
+      "wire_sha256": "2a6f6984ed3d627d29f9e412ed16b41511c386db9510e6cc44f0cb6249a647dd"
+    },
+    {
+      "actual": {
+        "error_message": "Error -3 while decompressing data: invalid distance too far back",
+        "outcome": "error",
+        "python_exception_type": "zlib.error",
+        "zlib_error_code": -3
+      },
+      "available_input_bits": 800,
+      "case_id": "invalid_history_dist29",
+      "construction": {
+        "distance_symbol": 29,
+        "length_symbol": 257,
+        "literal_count": 0
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "error_category": "invalid_history",
+        "outcome": "error"
+      },
+      "original_logical_wire_bits": 800,
+      "pass": true,
+      "wire_length_bytes": 100,
+      "wire_sha256": "05f7e82ce4aad64cbf812c3bd5aa9dbb628e4caeb449eb6f0223cdeb8b0fdf48"
+    },
+    {
+      "actual": {
+        "error_message": "Error -5 while decompressing data: incomplete or truncated stream",
+        "outcome": "error",
+        "python_exception_type": "zlib.error",
+        "zlib_error_code": -5
+      },
+      "available_input_bits": 1440,
+      "case_id": "long211_cut1",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 278,
+        "literal_count": 128,
+        "original_wire_sha256": "bfa2c6881f7659de5df6c40e4edbc99d9bf5c8cacb35059b480ec42b2aab05b3",
+        "removed_tail_bytes": 1
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "error_category": "truncated_frame",
+        "outcome": "error"
+      },
+      "original_logical_wire_bits": 1442,
+      "pass": true,
+      "wire_length_bytes": 180,
+      "wire_sha256": "3e0fcf897dc6f903feda421bd3792d960239161a3c927afe3196b9525cbfd6d0"
+    },
+    {
+      "actual": {
+        "error_message": "Error -5 while decompressing data: incomplete or truncated stream",
+        "outcome": "error",
+        "python_exception_type": "zlib.error",
+        "zlib_error_code": -5
+      },
+      "available_input_bits": 1432,
+      "case_id": "long211_cut2",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 278,
+        "literal_count": 128,
+        "original_wire_sha256": "bfa2c6881f7659de5df6c40e4edbc99d9bf5c8cacb35059b480ec42b2aab05b3",
+        "removed_tail_bytes": 2
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "error_category": "truncated_frame",
+        "outcome": "error"
+      },
+      "original_logical_wire_bits": 1442,
+      "pass": true,
+      "wire_length_bytes": 179,
+      "wire_sha256": "84a8be19cd0a5a45c928dc9b0f4cf236e592700e5ccc1d49047066c6eac44362"
+    },
+    {
+      "actual": {
+        "error_message": "Error -5 while decompressing data: incomplete or truncated stream",
+        "outcome": "error",
+        "python_exception_type": "zlib.error",
+        "zlib_error_code": -5
+      },
+      "available_input_bits": 1424,
+      "case_id": "long211_cut3",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 278,
+        "literal_count": 128,
+        "original_wire_sha256": "bfa2c6881f7659de5df6c40e4edbc99d9bf5c8cacb35059b480ec42b2aab05b3",
+        "removed_tail_bytes": 3
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "error_category": "truncated_frame",
+        "outcome": "error"
+      },
+      "original_logical_wire_bits": 1442,
+      "pass": true,
+      "wire_length_bytes": 178,
+      "wire_sha256": "1d02e2d28fa4c017180bfb3ea3f009415daefee54d1ec0db9b03b571c3bc0162"
+    },
+    {
+      "actual": {
+        "error_message": "Error -5 while decompressing data: incomplete or truncated stream",
+        "outcome": "error",
+        "python_exception_type": "zlib.error",
+        "zlib_error_code": -5
+      },
+      "available_input_bits": 1416,
+      "case_id": "long211_cut4",
+      "construction": {
+        "distance_symbol": 0,
+        "length_symbol": 278,
+        "literal_count": 128,
+        "original_wire_sha256": "bfa2c6881f7659de5df6c40e4edbc99d9bf5c8cacb35059b480ec42b2aab05b3",
+        "removed_tail_bytes": 4
+      },
+      "decoder_api": "zlib.decompress(wire, wbits=-15)",
+      "expected": {
+        "error_category": "truncated_frame",
+        "outcome": "error"
+      },
+      "original_logical_wire_bits": 1442,
+      "pass": true,
+      "wire_length_bytes": 177,
+      "wire_sha256": "0406cc13830a06de20af87c203ce398710ebcaf84ddb4f24da0dc94f7736b710"
+    }
+  ],
+  "execution_order": "Main-generated and integrated Zig tests were frozen before this new oracle revalidation.",
+  "finished_utc": "2026-11-11T21:26:14.305903+00:00",
+  "fixture": {
+    "header_bits_reused": 762,
+    "length_bytes": 27584,
+    "path": "/home/passchaos/project-z/vort/src/deflate/decoder/testdata/osdb-zlib6-64k.deflate",
+    "sha256": "cb731c66afe83c470f5ef4f6e24807c3590e8b145adac9d2511474fff1e7b91f"
+  },
+  "frozen_zig_contract_call_counts": {
+    "direct_root_facade": 2,
+    "public_contracts": 27
+  },
+  "frozen_zig_tests": {
+    "expected_sha256": "46d3acd1deed098b0229d36298b17e7cc126bdfd2fef21293a502226ed219531",
+    "path": "/home/passchaos/project-z/vort/src/deflate/semantic/public_linear_contracts.zig",
+    "sha256_after_rerun": "46d3acd1deed098b0229d36298b17e7cc126bdfd2fef21293a502226ed219531",
+    "sha256_before_rerun": "46d3acd1deed098b0229d36298b17e7cc126bdfd2fef21293a502226ed219531",
+    "unchanged": true
+  },
+  "oracle_argv": [
+    "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/oracle.py",
+    "--workspace",
+    "/home/passchaos/project-z/vort",
+    "--validation",
+    "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/oracle-validation.json"
+  ],
+  "oracle_scene_scope": "Eight LL14 OSDB-header scenes. Caller-bounded output and the LL10 incomplete-distance primary-hole scene remain Zig contracts; zlib's one-shot API does not provide a caller output slice.",
+  "oracle_script_path": "/tmp/vort-deflate-public-linear-20261112.8adfb3ba/oracle.py",
+  "oracle_script_sha256": "8d7ae9a7281a0c6a5584178ee1f98fcdbb15ddd5ef6b002ad376514f177210f2",
+  "passed_case_count": 8,
+  "python_executable": "/usr/bin/python3",
+  "python_version": "3.10.12 (main, Aug 15 2025, 14:32:43) [GCC 11.4.0]",
+  "schema": "vort.deflate.public-linear.zlib-oracle.v1",
+  "source_head_at_task_start": "8adfb3bae74409bae146fed2ed9b6594a1d3cdb8",
+  "started_utc": "2026-11-11T21:26:14.304528+00:00",
+  "status": "pass",
+  "wire_scope": "Bare raw Deflate wires only; no trailing zero padding is passed to zlib.",
+  "zig_validation_count_scope": "Parent-reported aggregate/import counts, not counts of independent public-linear scenarios.",
+  "zig_validation_reported_by_parent_before_rerun": {
+    "deflate": {
+      "Debug": "8/8",
+      "ReleaseSafe": "8/8",
+      "WASI": "8/8",
+      "x86": "8/8"
+    },
+    "full_deflate_ReleaseSafe": "734/734",
+    "root": {
+      "Debug": "90/90",
+      "ReleaseSafe": "90/90",
+      "WASI": "90/90"
+    }
+  },
+  "zlib_compile_version": "1.2.11",
+  "zlib_runtime_version": "1.2.11"
+}

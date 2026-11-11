@@ -1,0 +1,61 @@
+{
+  "archives": 4,
+  "events": 192,
+  "fixture_bytes": true,
+  "git_blobs": true,
+  "members": 642,
+  "original_bytes": true,
+  "schema": "vort.deflate.reader-screens-validation.v1",
+  "scope": "Offline identity/source/raw-statistics/guards/input/exact-consumption verification. No profile clocks, codec heap, full72-row acceptance or dynamic codegen claim.",
+  "screens": {
+    "prefix": {
+      "controls_below_0_98": {
+        "deflate_nci_65536_6_cold": 0.976816351013917,
+        "deflate_nci_65536_9_cold": 0.9388454925030074
+      },
+      "events": 96,
+      "geomean_twelve_selected_rows": 1.0099839656880558,
+      "rows": {
+        "deflate_nci_1048576_6_cold": 0.9896819720292828,
+        "deflate_nci_1048576_9_cold": 0.9853973051122897,
+        "deflate_nci_65536_6_cold": 0.976816351013917,
+        "deflate_nci_65536_9_cold": 0.9388454925030074,
+        "deflate_reymont_1048576_6_cold": 1.0510175626904363,
+        "deflate_reymont_1048576_9_cold": 1.043769624134986,
+        "deflate_reymont_65536_6_cold": 1.0486816351474246,
+        "deflate_reymont_65536_9_cold": 1.0611819506925642,
+        "deflate_xml_1048576_6_cold": 1.0351024748724647,
+        "deflate_xml_1048576_9_cold": 1.0262453512838323,
+        "deflate_xml_65536_6_cold": 0.9892619507205725,
+        "deflate_xml_65536_9_cold": 0.9818964131731768
+      },
+      "target_reymont_64k_l6": 1.0486816351474246
+    },
+    "refill": {
+      "controls_below_0_98": {
+        "deflate_nci_65536_6_cold": 0.9232849261792121,
+        "deflate_nci_65536_9_cold": 0.910305832088486,
+        "deflate_xml_65536_6_cold": 0.8392420174654576,
+        "deflate_xml_65536_9_cold": 0.8791255099688111
+      },
+      "events": 96,
+      "geomean_twelve_selected_rows": 0.9611664352386534,
+      "rows": {
+        "deflate_nci_1048576_6_cold": 0.9928906464654843,
+        "deflate_nci_1048576_9_cold": 0.99795334250924,
+        "deflate_nci_65536_6_cold": 0.9232849261792121,
+        "deflate_nci_65536_9_cold": 0.910305832088486,
+        "deflate_reymont_1048576_6_cold": 1.0009557624624918,
+        "deflate_reymont_1048576_9_cold": 1.0100741356264322,
+        "deflate_reymont_65536_6_cold": 1.0183349950846656,
+        "deflate_reymont_65536_9_cold": 1.0039654607887563,
+        "deflate_xml_1048576_6_cold": 0.9916975781304165,
+        "deflate_xml_1048576_9_cold": 0.9870826109618964,
+        "deflate_xml_65536_6_cold": 0.8392420174654576,
+        "deflate_xml_65536_9_cold": 0.8791255099688111
+      },
+      "target_reymont_64k_l6": 1.0183349950846656
+    }
+  },
+  "selected_rows": 24
+}
