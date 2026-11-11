@@ -24,6 +24,7 @@ const core = @import("../../core.zig");
 const StreamingXxHash64 = @import("../../checksum/xxh64_stream.zig").XxHash64;
 const history_workspace = @import("../decode/history_workspace.zig");
 const stable_output = @import("../decode/stable_output.zig");
+const output_alias = @import("output_alias.zig");
 const frame_checksum = @import("../frame/checksum.zig");
 const compressed_block = @import("compressed_block.zig");
 const source_frame = @import("frame.zig");
@@ -195,6 +196,16 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
         /// destination. A zero destination makes no progress.
         pub fn drain(self: *Self, destination: []u8) Error!DrainResult {
             if (self.phase != .drain) return error.InvalidStreamState;
+            try output_alias.validateRegions(destination, &.{
+                self.history.storage,
+                self.dictionary_history,
+                self.staging,
+                self.literal_page,
+                self.sequence_page,
+                std.mem.asBytes(self.state),
+                std.mem.asBytes(self.history),
+                std.mem.asBytes(self),
+            });
             const remaining = self.staged_len - self.drain_offset;
             const amount = @min(destination.len, remaining);
             if (amount == 0) {
@@ -204,10 +215,6 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
                 }
                 return .{ .written = 0, .status = .need_output };
             }
-            if (stable_output.overlaps(
-                destination[0..amount],
-                self.staging[0..self.staged_len],
-            )) return error.InvalidBlockPlan;
             @memcpy(
                 destination[0..amount],
                 self.staging[self.drain_offset..][0..amount],

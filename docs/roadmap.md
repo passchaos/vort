@@ -509,6 +509,14 @@ content-defined boundaries, chunk-invariant streaming, identical
 serial/multi-worker wires and an actual Job count in the one-shot profile. No
 performance claim follows.
 
+The [source output ownership contract](formats/zstd-source-output.md) rejects
+destination/workspace aliases before source payload execution or append
+growth, including spare capacity, dictionary catalogs and cursor state. It
+closes a silent-corruption case where two valid Raw blocks returned `abddef`
+instead of `abcdef` while checksum validation could still succeed. Low-level
+drain rejection preserves the block lease for an independent retry. This is a
+correctness increment; reference performance leadership remains open.
+
 ### Earlier detailed completion audit (started 2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these

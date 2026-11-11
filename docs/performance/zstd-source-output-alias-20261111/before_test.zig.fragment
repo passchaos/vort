@@ -1,0 +1,14 @@
+
+test "source history alias reproduction" {
+    const encoded = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd, 0, 0, 0x18, 0, 0, 'a', 'b', 'c', 0x19, 0, 0, 'd', 'e', 'f' };
+    var source = @import("zstd/source/stream_cursor_tests/common.zig").TrackingSource{ .bytes = &encoded };
+    var history: [1024]u8 = @splat(0);
+    var staging: [1024]u8 = undefined;
+    var literal: [17]u8 = undefined;
+    var sequence: [17]u8 = undefined;
+    const result = try decodeSourceFrameInto(source.source(), history[1..7], .{
+        .history = &history, .staging = &staging, .literal_page = &literal, .sequence_page = &sequence,
+    }, .{});
+    try std.testing.expectEqual(@as(u64, 6), @as(u64, @intCast(result.decoded_len)));
+    try std.testing.expectEqualStrings("abcdef", history[1..7]);
+}

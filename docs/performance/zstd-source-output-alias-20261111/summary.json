@@ -1,0 +1,52 @@
+{
+  "schema": "vort.zstd.source-output-alias.v1",
+  "baseline_revision": "5425a37b0c36ce8b4193b8ea8d09dd638403d1ab",
+  "baseline_exit_code": 1,
+  "baseline_expected": "abcdef",
+  "baseline_actual": "abddef",
+  "baseline_wire_sha256": "4856e4ecc3cd58bf492b4e061c754014a21037c6444d3a743910eaa0a6595a3b",
+  "compiler": "0.16.0",
+  "host": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "change_kind": "functional ownership rejection; no performance claim",
+  "source_sha256": {
+    "src/zstd.zig": "a666b0adbd8a15501d2dbb59d6a91eee216e2181f46008a74cf5b29f2d3e0b90",
+    "src/zstd/source/output_alias.zig": "7ff5f21d33809fe04078682971d1c1e44ebfae9bbc41a142fc0e7d1624901c17",
+    "src/zstd/source/decode_api.zig": "f52a538ba95d5ab8cae49badbe97e9e544aeeceb323eec71bb1ea2214683f84f",
+    "src/zstd/source/frame_executor.zig": "f48a18ddbb5c9282aecea07721c5ba2ff196cb7588ab67e00f0f0ab884d88991",
+    "src/zstd/source/decode_alias_tests.zig": "0198bcee15a065295f909bc161d942e4323fef114dffaa5dcaffdb43a7608e6f",
+    "src/zstd/source/frame_executor_tests.zig": "5c5b21f947cd5303d824385fdd47243383bb02a51e862694877efd47b7223e76",
+    "src/zstd/source/frame_executor_tests/output_alias.zig": "7fcc19c7b6cde5736720cc7c34eb91f4f69417659a8410aec333f73843051c4e",
+    "tools/zstd/source_reverse_wasm_gate.js": "e754b6ea23d79a79af8189b4253e773bab1d1f36f0bcca0316b0038fb3a56377"
+  },
+  "validation": {
+    "public_alias_releasesafe": {
+      "steps": 5,
+      "tests": 14,
+      "exit_code": 0
+    },
+    "executor_alias_releasesafe": {
+      "steps": 5,
+      "tests": 14,
+      "targets": 17,
+      "exit_code": 0
+    },
+    "public_alias_debug": {
+      "steps": 5,
+      "tests": 14,
+      "exit_code": 0
+    },
+    "final_source_native_x86_wasi": {
+      "command": "zig build -j2 check-zstd-source-reverse -Doptimize=ReleaseSafe --summary all",
+      "steps": 17,
+      "native_tests": 43,
+      "x86_tests": 43,
+      "wasi_tests": 43,
+      "exit_code": 0
+    },
+    "test_refinement": "The post-growth fixed-buffer fixture checks codec publication, allowing std Allocator initialization/poisoning before the returned allocation is validated."
+  },
+  "pending": [
+    "broad codec regressions",
+    "native/WASI compilation and remote synchronization"
+  ]
+}

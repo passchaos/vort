@@ -15,6 +15,13 @@
 //! success. Fixed destinations must be large enough for the whole stream; a
 //! full destination returns `OutputTooSmall` without discarding committed
 //! blocks. The append forms keep committed output on error.
+//!
+//! Destination storage (including all append capacity) must be disjoint from
+//! every workspace. Both must be disjoint from configured dictionary/catalog
+//! storage, and workspaces must be mutually disjoint. Alias refusal is
+//! `InvalidBlockPlan` before payload execution or output growth. The opaque
+//! source context and backing bytes must remain independent of all mutable
+//! storage for the complete operation; their ranges cannot be inferred here.
 const std = @import("std");
 const core = @import("../../core.zig");
 const byte_source = @import("../../io/source.zig");
@@ -23,6 +30,7 @@ const frame_executor = @import("frame_executor.zig");
 const source_frame = @import("frame.zig");
 const source_input = @import("input.zig");
 const stream_cursor = @import("stream_cursor.zig");
+const output_alias = @import("output_alias.zig");
 
 const Count = core.StreamCount;
 const count = core.stream_count;
@@ -301,6 +309,7 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: Options,
         ) Error!Result {
+            try output_alias.validateOperation(destination, workspace, options);
             var history: history_workspace.Binding = undefined;
             var state: Support.State = undefined;
             var executor = try openFrame(
@@ -335,6 +344,7 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: Options,
         ) Error!Result {
+            try validateAppend(out, workspace, options);
             var history: history_workspace.Binding = undefined;
             var state: Support.State = undefined;
             var executor = try openFrame(
@@ -358,6 +368,7 @@ pub fn Facade(comptime Support: type) type {
                     const needed = std.math.add(usize, start, size) catch
                         return error.IntegerOverflow;
                     try out.ensureTotalCapacity(allocator, needed);
+                    try validateAppend(out, workspace, options);
                     var written: usize = 0;
                     errdefer out.items.len = start + written;
                     while (executor.snapshot().phase != .done) {
@@ -386,7 +397,10 @@ pub fn Facade(comptime Support: type) type {
                 switch (executor.snapshot().phase) {
                     .drain => {
                         const result = try executor.drain(&buffer);
-                        try out.appendSlice(allocator, buffer[0..result.written]);
+                        try validateAppend(out, workspace, options);
+                        try out.ensureUnusedCapacity(allocator, result.written);
+                        try validateAppend(out, workspace, options);
+                        out.appendSliceAssumeCapacity(buffer[0..result.written]);
                     },
                     else => try executor.execute(),
                 }
@@ -404,6 +418,7 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: Options,
         ) Error!Result {
+            try output_alias.validateOperation(destination, workspace, options);
             return decodeFrameInto(
                 try parse(source, options),
                 destination,
@@ -422,6 +437,7 @@ pub fn Facade(comptime Support: type) type {
             out: *std.ArrayList(u8),
             options: Options,
         ) Error!Result {
+            try validateAppend(out, workspace, options);
             return decodeFrameAppend(
                 try parse(source, options),
                 allocator,
@@ -466,6 +482,8 @@ pub fn Facade(comptime Support: type) type {
         ) Options {
             return .{
                 .format = options.format,
+                .dictionary = options.dictionary,
+                .dictionary_set = options.dictionary_set,
                 .frame_decoded_max = frame_decoded_max,
                 .ignore_checksum = options.ignore_checksum,
             };
@@ -523,6 +541,12 @@ pub fn Facade(comptime Support: type) type {
             return maximum - total;
         }
 
+        fn validateAppend(out: *std.ArrayList(u8), workspace: Workspace, options: anytype) Error!void {
+            try output_alias.validateOperation(out.allocatedSlice(), workspace, options);
+            try output_alias.validateOperation(std.mem.asBytes(out), workspace, options);
+            try output_alias.validateRegions(std.mem.asBytes(out), &.{out.allocatedSlice()});
+        }
+
         /// Decode every data frame into caller-owned destination while
         /// advancing skippable frames without reading their payloads.
         pub fn decodeStreamInto(
@@ -531,6 +555,7 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: StreamOptions,
         ) Error!StreamResult {
+            try output_alias.validateOperation(destination, workspace, options);
             const range = try streamRange(source);
             var cursor = stream_cursor.Cursor.init(range, options.format);
             var total: Count = 0;
@@ -581,6 +606,7 @@ pub fn Facade(comptime Support: type) type {
             out: *std.ArrayList(u8),
             options: StreamOptions,
         ) Error!StreamResult {
+            try validateAppend(out, workspace, options);
             const range = try streamRange(source);
             var cursor = stream_cursor.Cursor.init(range, options.format);
             var total: Count = 0;
@@ -701,6 +727,15 @@ pub fn Facade(comptime Support: type) type {
             ) Error!Result {
                 const frame = self.pending_frame orelse
                     return error.InvalidStreamState;
+                try output_alias.validateOperation(destination, workspace, options);
+                try output_alias.validateRegions(std.mem.asBytes(self), &.{
+                    destination,
+                    workspace.history,
+                    workspace.staging,
+                    workspace.literal_page,
+                    workspace.sequence_page,
+                });
+                try output_alias.validateOptions(std.mem.asBytes(self), options);
                 const dictionary = try resolveStreamDictionary(
                     frame.header.dictionary_id,
                     options,

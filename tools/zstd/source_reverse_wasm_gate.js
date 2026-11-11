@@ -42,7 +42,7 @@ console.log(JSON.stringify({
     minimum_page_len: 9,
     tested_page_lengths: [9, 10, 17],
     maximum_tree_description_len: 128,
-    coverage: ["reverse-bit-reader", "frame-block-layout", "literals-layout", "huffman-table-preparation", "huffman-literal-execution", "literal-stream-execution", "sequence-metadata", "sequence-reverse-execution", "compressed-block-execution", "frame-execution", "stream-cursor", "frame-decode-api", "stream-decode-api", "stream-decode-cursor"],
+    coverage: ["reverse-bit-reader", "frame-block-layout", "literals-layout", "huffman-table-preparation", "huffman-literal-execution", "literal-stream-execution", "sequence-metadata", "sequence-reverse-execution", "compressed-block-execution", "frame-execution", "stream-cursor", "frame-decode-api", "stream-decode-api", "stream-decode-cursor", "output-alias-rejection"],
     status: "ok",
     executions,
 }));
