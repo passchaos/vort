@@ -4,7 +4,18 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
-## Current gaps
+## 2026-11-11 current-source modern reference epoch
+
+The [new frozen raw-pair matrix](modern-decode-current-20261111.md) executes
+360 lifecycle rows against libdeflate 1.26, libzstd 1.6.0 and libbrotli 1.2.0.
+Cold-context whole-operation Vort/reference time is 1.457x / 1.312x / 1.211x
+over 72 rows per codec (64 KiB, 1 MiB and full files). All measured/warmup pairs,
+library closures, source/frame hashes and host settings are retained. This
+replaces the older installed-library gap routing below for its declared scope;
+reference-only prepared Deflate rows and matched prepared Zstd rows remain
+separate. These development-host observations are not an industry-best claim.
+
+## Historical 2026-11-01/02 gaps
 
 Latest 1,296-process epoch (`industry-aln64-comparison.json`), current/reference
 against libdeflate, libzstd 1.6.0 and libbrotli 1.2.0:

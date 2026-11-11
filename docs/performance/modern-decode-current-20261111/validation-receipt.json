@@ -1,0 +1,29 @@
+{
+  "schema": "vort.decode-archive-validation.v1",
+  "valid": true,
+  "validator": "independent stdlib implementation; no benchmark rerun",
+  "source_registry_entries": 2014,
+  "source_overlay_files": 10,
+  "reference_shared_libraries": 5,
+  "reference_symlinks": 9,
+  "fixtures": 216,
+  "tasks": 360,
+  "raw_archive_members": 1080,
+  "warmup_pairs": 720,
+  "measured_pairs": 2160,
+  "recomputed_summary_groups": 15,
+  "csv_rows": 360,
+  "csv_original_sha256": "f7af1b8b1eb7c3526f416033f3e7b1f98626837aa919c0f90a2e4606d402bfaf",
+  "csv_readable_sha256": "6297975b8cca0084643c642014a4e45d65d5c6ec9d8293bce09fb29d35557377",
+  "csv_line_endings_normalized": true,
+  "svg_geometry_preserved": true,
+  "nonempty_stderr": 0,
+  "live_source_files_verified": 2014,
+  "live_fixture_files_verified": 252,
+  "cold_global_time_ratios": {
+    "deflate": 1.4570417450259894,
+    "zstd": 1.3118790484630738,
+    "brotli": 1.2110972427673703
+  },
+  "scope": "Recorded output/count/guard/consumption claims checked; timed decoders are not rerun. RSS is whole child, and fixed-row CIs describe development-host sampling."
+}

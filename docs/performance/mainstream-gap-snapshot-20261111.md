@@ -1,5 +1,11 @@
 # Mainstream codec performance evidence, 2026-11-11
 
+The subsequent [current-source modern decode epoch](modern-decode-current-20261111.md)
+now supersedes the older decoder table below for its declared whole-buffer
+scope: cold-context Vort/reference time is Deflate 1.457x, Zstd 1.312x and
+Brotli 1.211x, with raw paired samples and 64 KiB/1 MiB/full inputs. Encoding
+rows here remain historical and require their own refreshed matrix.
+
 This assessment summarizes the latest reproducible reports available in the
 repository. It does not measure the 2026-11-11 HEAD or establish an industry-best
 ranking. Recent work closes functional resource/ownership defects; those test
