@@ -1,0 +1,14 @@
+{
+  "valid": true,
+  "scope": "archived byte and gate verification; no performance claim",
+  "source_files": 6,
+  "live_source_files_verified": 6,
+  "evidence_members": 17,
+  "before_wrong_successes": 2,
+  "after_unchanged_refusals": 2,
+  "full_tests": 700,
+  "focused_tests": 10,
+  "root_tests": 94,
+  "actual_wasi_exit_code": 0,
+  "test_contract_corrections_separate": true
+}

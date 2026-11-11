@@ -17,6 +17,15 @@ separate. These development-host observations are not an industry-best claim.
 
 ## 2026-11-11 Raw Deflate borrow correction and follow-up routing
 
+The later `e0f3cd17` [contiguous wrapper correction](deflate-contiguous-borrows-20261111.md)
+extends write admission to zlib/gzip prefixes, Stored/concatenated facades,
+complete dictionary sets and scalar reset receivers. The actual checksum-ignore
+probe returned successful `abcabc` before the fix; corrected aliases refuse
+without writes and independent retries return `abcdef`. Final full Deflate
+validation passes 700 tests. The auto-gzip optional dictionary remains ignored
+and may safely share output. These are functional results, not a fresh timing
+epoch. See [the contract](../formats/deflate-contiguous-wrapper-borrows.md).
+
 The follow-up `b6709ae9` closes the shared legacy chunk-joining borrow boundary
 for Raw Deflate/zlib/gzip, including reusable consumers and outer PNG buffers.
 The previous join could overwrite an unread payload or dictionary and still
