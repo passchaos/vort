@@ -4,6 +4,7 @@ const h = @import("tests/helpers.zig");
 const f = @import("tests/fixtures.zig");
 
 pub fn contracts(comptime B: type) !void {
+    try @import("tests/chunk_alias.zig").contracts(B);
     try h.observerContract();
     const stored = try B.encodeStoredStreamAlloc(h.a, f.stored_plain);
     defer h.a.free(stored);

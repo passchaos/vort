@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-11-11 01:25:46 UTC",
+  "cwd": "/home/passchaos/project-z/vort",
+  "before": {
+    "command": "zig build -j2 test-br-decode-memory -Doptimize=ReleaseFast --summary all",
+    "exit_code": 1,
+    "passed": 24,
+    "failed": 1,
+    "failure": "Prefix preservation differs at index 0: cap-zero chunk append wrote the 24-byte external compressed fixture into a 128-byte output allocation initially filled with A5.",
+    "log": "/tmp/vort-br-chunk-alias-before-20261111.log",
+    "log_provenance": "Exact observed terminal output reconstructed from the tool result."
+  },
+  "native": {
+    "command": "zig build -j2 test-br-decode-memory -Doptimize=ReleaseFast --summary all",
+    "exit_code": 0,
+    "passed": 25,
+    "failed": 0,
+    "steps_succeeded": 5,
+    "steps_total": 5,
+    "run_ms": 148,
+    "run_max_rss": "9M",
+    "log": "/tmp/vort-br-chunk-alias-native-20261111.log"
+  },
+  "x86": {
+    "command": "zig build -j2 test-br-decode-memory -Dtarget=x86-linux-musl -Doptimize=ReleaseFast --summary all",
+    "exit_code": 0,
+    "passed": 25,
+    "failed": 0,
+    "steps_succeeded": 5,
+    "steps_total": 5,
+    "run_ms": 109,
+    "run_max_rss": "9M"
+  },
+  "intermediate_native_run": {
+    "exit_code": 1,
+    "reason": "The first expanded-test compilation captured an inherited test destination with spare capacity, where disjoint retry validly succeeded without allocating. That fixture was corrected to capacity 48 before the final native and x86 runs so quota and OOM retries require real growth."
+  },
+  "checks": [
+    "zig fmt --check src/br.zig src/br/decode/tests.zig src/br/decode/tests/chunk_alias.zig",
+    "git diff --check -- src/br.zig src/br/decode/tests.zig src/br/decode/tests/chunk_alias.zig"
+  ],
+  "preflight_precedence": [
+    "IntegerOverflow",
+    "OutputTooSmall",
+    "InvalidBlockPlan for destructive actual joined span",
+    "original decode validation and quota handling"
+  ],
+  "changed_files": [
+    "src/br.zig",
+    "src/br/decode/tests.zig",
+    "src/br/decode/tests/chunk_alias.zig"
+  ],
+  "source_sha256": {
+    "src/br.zig": "71744d4685bce49a13d1d61ee053f7fc9d8fe63f8b90f31f63d5695c7e8e9276",
+    "src/br/decode/tests.zig": "debbade7d6740d0bd0ffac4d486649ced69a50eaffa72b1868043fdd3875e1e6",
+    "src/br/decode/tests/chunk_alias.zig": "d53fcc515191bd55c48dec0ced5d17760672a9c5f95536c55e4361a40c30ddd1"
+  },
+  "wasm": {
+    "command": "zig build -j2 test-br-decode-memory-wasm -Doptimize=ReleaseFast --summary all",
+    "exit_code": 0,
+    "tests": 25
+  },
+  "pending": [
+    "broad codec regressions",
+    "native/WASI compilation and remote synchronization"
+  ]
+}

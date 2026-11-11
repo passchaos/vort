@@ -58,6 +58,18 @@ The preexisting capacity may itself exceed the cap: this rejects admission befor
 an allocator request, while the profile truthfully records that existing peak
 and returns its live count to zero.
 
+Chunked full/prefix append, caller-buffer into, and eager `StreamDecoder`
+chunk constructors/resets validate the compressed join span before copying.
+That written scratch span must be separate from the complete append allocation
+(including spare capacity) or caller output slice. Overlap returns
+`InvalidBlockPlan` with no scratch/output write or heap request. Chunk-length
+overflow and insufficient join scratch retain precedence. Unused scratch past
+the joined span may overlap output; exactly adjacent spans remain valid.
+This check applies to default and explicit options, including cap zero and
+inherited policies. Use independent compressed scratch to retry; ordinary
+decode/limit/allocator validation then follows. Eager reset retains its existing
+error diagnostics when join validation fails.
+
 ## Zero-heap operations and failure precedence
 
 Caller-buffer into APIs, fixed/caller-history size/summary APIs, probes and the
