@@ -5569,6 +5569,14 @@ test "Deflate zlib chunk decode borrow contracts" {
     try @import("deflate/decode/tests/zlib_chunk_append_borrows.zig").contracts(@This());
 }
 
+test "Deflate contiguous wrapper borrow contracts" {
+    try @import("deflate/decode/tests/contiguous_wrapper_borrows.zig").contracts(@This());
+}
+
+test "Deflate contiguous PNG borrow contracts" {
+    try @import("deflate/decode/tests/contiguous_png_borrows.zig").contracts(@This());
+}
+
 pub fn decodeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!DecodeResult {
     return decodeRawChunksWithDictionary(chunks, compressed_scratch, output, "");
 }
@@ -8454,6 +8462,7 @@ fn inspectZlibStreamAllocWithOptionalDictionaryLimited(
 }
 
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
+    if (input.len != 0) try decode_output_alias.validate(input, "", output);
     const header = try parseZlibHeader(input, null);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = header.data_offset + stored.result.input_read;
@@ -8462,6 +8471,7 @@ pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn decodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    if (input.len != 0) try decode_output_alias.validate(input, dictionary, output);
     const header = try parseZlibHeader(input, dictionary);
 
     // Stored deflate blocks do not reference history, so the dictionary is only
@@ -8955,6 +8965,7 @@ pub const RawDeflateDecoder = struct {
     }
 
     pub fn resetWithDictionary(self: *RawDeflateDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, dictionary, scratch);
         const decoded = decodeRawAutoWithDictionary(input, dictionary, scratch) catch |err| {
             self.recordError(err);
             return err;
@@ -8967,6 +8978,7 @@ pub const RawDeflateDecoder = struct {
     }
 
     pub fn resetWithDictionaryExactSize(self: *RawDeflateDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, dictionary, scratch);
         if (scratch.len < expected_output_len) {
             self.recordError(error.OutputTooSmall);
             return error.OutputTooSmall;
@@ -9486,6 +9498,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithOptions(self: *ZlibDecoder, input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         const written = decodeZlibWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
@@ -9501,6 +9514,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithOptionsExactSize(self: *ZlibDecoder, input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         try self.resetWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -9605,6 +9619,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithDictionaryAndOptions(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, dictionary, scratch);
         const written = decodeZlibWithDictionaryAndOptions(input, scratch, dictionary, options) catch |err| {
             self.recordError(err);
             return err;
@@ -9620,6 +9635,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, dictionary, scratch);
         try self.resetWithDictionaryAndOptions(input, dictionary, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -9632,6 +9648,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedWithOptions(self: *ZlibDecoder, input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         const written = decodeZlibConcatenatedWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
@@ -9647,6 +9664,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedWithOptionsExactSize(self: *ZlibDecoder, input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         try self.resetConcatenatedWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -9659,6 +9677,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedWithDictionaryAndOptions(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, dictionary, scratch);
         const written = decodeZlibConcatenatedWithDictionaryAndOptions(input, scratch, dictionary, options) catch |err| {
             self.recordError(err);
             return err;
@@ -9674,6 +9693,7 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetConcatenatedWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, dictionary, scratch);
         try self.resetConcatenatedWithDictionaryAndOptions(input, dictionary, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -10523,6 +10543,9 @@ pub const PngZlibScanlineDecoder = struct {
         row_count: usize,
         bytes_per_pixel: usize,
     ) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", zlib_scratch);
+        if (decode_output_alias.overlaps(std.mem.asBytes(self), filtered_row_scratch) or
+            decode_output_alias.overlaps(std.mem.asBytes(self), previous_row_scratch)) return error.InvalidBlockPlan;
         const expected_payload_len = try validateConfig(row_len, row_count, bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
         self.* = .{
             .filtered_row_scratch = filtered_row_scratch[0..row_len],
@@ -10554,6 +10577,9 @@ pub const PngZlibScanlineDecoder = struct {
         info: PngImageInfo,
         options: ZlibDecodeOptions,
     ) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", zlib_scratch);
+        if (decode_output_alias.overlaps(std.mem.asBytes(self), filtered_row_scratch) or
+            decode_output_alias.overlaps(std.mem.asBytes(self), previous_row_scratch)) return error.InvalidBlockPlan;
         const expected_payload_len = try validateConfig(info.row_len, info.height, info.bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
         self.* = .{
             .filtered_row_scratch = filtered_row_scratch[0..info.row_len],
@@ -14648,6 +14674,7 @@ fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, d
 }
 
 fn decodeZlibPrefixWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!DecodeResult {
+    if (input.len != 0) try decode_output_alias.validate(input, dictionary orelse "", output);
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
@@ -14974,6 +15001,7 @@ pub fn decodeZlibConcatenatedWithDictionaryAndOptions(input: []const u8, output:
 
 fn decodeZlibConcatenatedWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     if (input.len == 0) return error.TruncatedFrame;
+    try decode_output_alias.validate(input, dictionary orelse "", output);
 
     var offset: usize = 0;
     var out_offset: usize = 0;
@@ -15023,6 +15051,7 @@ pub fn decodeZlibConcatenatedWithDictionarySet(input: []const u8, output: []u8, 
 
 pub fn decodeZlibConcatenatedWithDictionarySetAndOptions(input: []const u8, output: []u8, dictionaries: ZlibDictionarySet, options: ZlibDecodeOptions) Error!usize {
     if (input.len == 0) return error.TruncatedFrame;
+    try decode_output_alias.validateSet(input, dictionaries, output);
     var offset: usize = 0;
     var out_offset: usize = 0;
     while (offset < input.len) {
@@ -16224,6 +16253,7 @@ pub fn inspectGzipMemberFromChunksAllocLimited(
 }
 
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
+    if (input.len != 0) try decode_output_alias.validate(input, "", output);
     const data_offset = try parseGzipHeader(input);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Best, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = data_offset + stored.result.input_read;
@@ -16242,6 +16272,7 @@ pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecod
 }
 
 fn decodeGzipPrefixWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!DecodeResult {
+    if (input.len != 0) try decode_output_alias.validate(input, "", output);
     const data_offset = try parseGzipHeader(input);
 
     if (options.ignore_crc32) {
@@ -16545,6 +16576,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetWithOptions(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         const written = decodeGzipWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
@@ -16557,6 +16589,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetWithOptionsExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         try self.resetWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -16615,6 +16648,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetConcatenatedWithOptions(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         const written = decodeGzipConcatenatedWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
@@ -16627,6 +16661,7 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetConcatenatedWithOptionsExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
+        try decode_output_alias.validateReceiver(std.mem.asBytes(self), input, "", scratch);
         try self.resetConcatenatedWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
@@ -17002,6 +17037,7 @@ pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
 
 pub fn decodeGzipConcatenatedWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
     if (input.len == 0) return error.TruncatedFrame;
+    try decode_output_alias.validate(input, "", output);
 
     var offset: usize = 0;
     var out_offset: usize = 0;

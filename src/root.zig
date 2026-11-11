@@ -3638,6 +3638,10 @@ test "root Deflate chunk borrow contracts" {
     try @import("tests/deflate_chunk_borrows.zig").contracts(@This());
 }
 
+test "root contiguous Deflate wrapper borrow contracts" {
+    try @import("tests/deflate_contiguous_wrapper_borrows.zig").contracts(@This());
+}
+
 pub const decodedRawDeflateSize = deflate.decodedRawAutoSize;
 pub const decodedRawDeflateSizeWithDictionary = deflate.decodedRawAutoSizeWithDictionary;
 pub const decodedRawDeflateChunksSize = deflate.decodedRawChunksSize;
