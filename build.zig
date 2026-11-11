@@ -454,6 +454,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .ReleaseFast,
     });
+    const decode_compare_compile = @import("build/decode_compare.zig").register(b, target, vort_mod_releasefast, benchmark_provenance_mod);
 
     const lib = b.addLibrary(.{
         .name = "vort",
@@ -7872,6 +7873,7 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(decode_compare_compile);
     check_step.dependOn(br_prefix_decode_gates.compile_all);
     check_step.dependOn(zlib_or_gzip_auto_gates.compile_all);
     check_step.dependOn(gzip_direct_chunk_gates.compile_all);
