@@ -162,9 +162,10 @@ counters in the summary.
 The widened smoke campaign covers 3,768 valid wires (600 feature variants),
 93,862 truncation cuts and 108,963 mutations. A `--deep` campaign now covers
 12,816 valid wires (7,968 variants), around 370,000 truncation cuts and
-around 340,000 mutations; multi-seed deep campaigns (seeds 1-3 on the final
-generator, seeds 1-6 on the pre-concatenation generator, plus the earlier
-legacy-generator seeds 1-13) complete with zero cross-decoder
+around 340,000 mutations; deep seeds 1-6 on the final generator (roughly
+77,000 valid wires, 2.2 million truncation cuts and 2 million mutations in
+total), seeds 1-6 on the pre-concatenation generator, and the earlier
+legacy-generator seeds 1-13 all complete with zero cross-decoder
 disagreements and no Vort/reference one-sided truncation mismatches.
 
 The extended generator immediately found a real interop defect: the
