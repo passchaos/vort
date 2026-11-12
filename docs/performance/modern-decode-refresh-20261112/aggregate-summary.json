@@ -1,0 +1,99 @@
+{
+  "source_revision": "21e4a1d0c0323c7db2317fd6e7cda4c5069e8e1d",
+  "source_digest": "fcfefbcabf545b7e321426f227e03c7a752a862a6f891e56be91c72b8882e711",
+  "probe_sha256": "a69c106fec63a70490be2dd57a76e233ddbaaaadcb37439d2d6abab52897a91f",
+  "rows": 360,
+  "measured_pairs": 2160,
+  "warmup_pairs": 720,
+  "groups": {
+    "deflate/cold": {
+      "time_ratio_geomean": 1.4520742488976144,
+      "throughput_ratio_geomean": 0.6886700186021341,
+      "ci95": [
+        1.450315760554499,
+        1.4538616310199781
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 72
+    },
+    "deflate/prepared": {
+      "time_ratio_geomean": 1.4519299748107273,
+      "throughput_ratio_geomean": 0.688738449752275,
+      "ci95": [
+        1.450119073880384,
+        1.4538083205570103
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 72
+    },
+    "zstd/cold": {
+      "time_ratio_geomean": 1.3057481750858506,
+      "throughput_ratio_geomean": 0.76584445537077,
+      "ci95": [
+        1.3037665421207758,
+        1.307696521799339
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 72
+    },
+    "zstd/prepared": {
+      "time_ratio_geomean": 1.2870137817593832,
+      "throughput_ratio_geomean": 0.7769924566254236,
+      "ci95": [
+        1.2853926432911185,
+        1.2887068853017627
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 72
+    },
+    "brotli/cold": {
+      "time_ratio_geomean": 1.220584608217403,
+      "throughput_ratio_geomean": 0.8192795429891954,
+      "ci95": [
+        1.21923675869573,
+        1.2219937954330333
+      ],
+      "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+      "seed": 539365650,
+      "resamples": 2000,
+      "rows": 72
+    }
+  },
+  "weakest": {
+    "deflate/cold": {
+      "key": "deflate/mr/65536/9",
+      "time_ratio": 1.6570024291313696,
+      "throughput_ratio": 0.6034994170311615
+    },
+    "deflate/prepared": {
+      "key": "deflate/mr/65536/9",
+      "time_ratio": 1.6525473938210014,
+      "throughput_ratio": 0.6051263665653857
+    },
+    "zstd/cold": {
+      "key": "zstd/mozilla/1048576/3",
+      "time_ratio": 1.6690769045067408,
+      "throughput_ratio": 0.5991335673628101
+    },
+    "zstd/prepared": {
+      "key": "zstd/mozilla/1048576/3",
+      "time_ratio": 1.6832472882963503,
+      "throughput_ratio": 0.5940897733523878
+    },
+    "brotli/cold": {
+      "key": "brotli/mozilla/full/11",
+      "time_ratio": 2.0636463314848728,
+      "throughput_ratio": 0.48457915716617084
+    }
+  },
+  "scope": "current committed codec source; development-host fixed-row observations; not full-industry/dedicated-host acceptance",
+  "derived_authorship": "main all-raw-row aggregate recomputation"
+}

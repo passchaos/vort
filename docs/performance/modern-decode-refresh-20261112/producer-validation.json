@@ -1,0 +1,57 @@
+{
+  "authorship": "main current-source completed validation receipt",
+  "utc": "2026-11-12T10:34:56.196142+00:00",
+  "source_revision": "21e4a1d0c0323c7db2317fd6e7cda4c5069e8e1d",
+  "source_digest": "fcfefbcabf545b7e321426f227e03c7a752a862a6f891e56be91c72b8882e711",
+  "probe_sha256": "a69c106fec63a70490be2dd57a76e233ddbaaaadcb37439d2d6abab52897a91f",
+  "complete_rows": 360,
+  "cold_rows": 216,
+  "zstd_prepared_rows": 72,
+  "deflate_reference_only_prepared_rows": 72,
+  "measured_pairs": 2160,
+  "warmup_pairs": 720,
+  "raw_stdout_stderr_per_child_retained": true,
+  "fixtures": {
+    "wires": 216,
+    "plain": 36,
+    "recompressed": false,
+    "source": "reused original frozen fields/bytes checked before sampling"
+  },
+  "references": {
+    "deflate": "1.26",
+    "zstd": "1.6.0",
+    "brotli": "1.2.0"
+  },
+  "validation": {
+    "every_iteration_count": true,
+    "full_output_per_batch": true,
+    "guards_per_batch": true,
+    "input_immutable_per_batch": true,
+    "exact_consumption_codecs": [
+      "deflate"
+    ]
+  },
+  "compiler_boundary_observations": 0,
+  "load1_range": [
+    0.1767578125,
+    1.29638671875
+  ],
+  "runner_affinity": "initialallowed{0,15} validation thenCPU0; every codec childtasksetCPU15",
+  "startup_failure": "CPU0-only parent failedavailable-affinity validation; originalstartup-affinity.log kept; no rows sampled before correction",
+  "aggregate_bootstrap": "allfive72-rowgroupsseed0x20261112;sizegroupsseed0x20261111+index;actualseeds retained separately",
+  "dedicated_host_acceptance": false,
+  "industry_leadership_proven": false,
+  "codec_candidates_included": false,
+  "coding_gain_attribution_from_previous_epoch": false,
+  "scope": "current committed source; observational pinned development-host comparison against explicit modernreferenceversions",
+  "sha256": {
+    "manifest.json": "3c715008b06b8f9fcc11ffcc1a6d52e51bee1f17ce3196cd53985502b22e3688",
+    "summary.json": "76be38e0a73581933230aabc5491118b193348e1f604c4fbe8bbcb4c4e7ef708",
+    "aggregate-summary.json": "90430b2a3b1e3b1a649682f5d1c2849499f1b34ee8df0a86c9e2aada66ec6351",
+    "matrix.csv": "1c220c30ab5cac14835b430db49245b2ca8eca9adeb294ca577807a1d0d1a301",
+    "references.json": "dabe56a098cfc5a56123568dcf78f85f00804153160222e8b8ae8af50d7ba25f",
+    "refresh.py": "7b490f3e57176e223df1cc01f69494a8c94b54e3ead209bbe9849c529ad42978",
+    "startup-affinity.log": "f356998faef98f6af55f497f4b9413d63b525ecbe05c58e530fae768b76d7ec9",
+    "host-observations.jsonl": "b2f2de8326e1d833bce0a676e8c234dddefeec38bb8aeec5d2881fad200ff1ce"
+  }
+}

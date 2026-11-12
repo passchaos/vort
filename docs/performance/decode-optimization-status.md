@@ -4,6 +4,22 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-12 complete current committed decoder matrix
+
+The [current-source refresh](modern-decode-refresh-20261112.md) binds committed
+`21e4a1d0` codec source to all360 lifecycle rows/2160measured/720warmup pairs.
+All72-row cold throughput Vort/reference is **68.87% / 76.58% / 81.93%** versus
+libdeflate1.26/libzstd1.6.0/libbrotli1.2.0. Zstd matched prepared is77.70%.
+Weakest cold rows are mr64K/L9 60.35%, mozilla1M/L3 59.91% and fullMozilla/q11
+48.46%. Deflate reference-only-prepared is separately labeled; no Brotli
+prepared rows are claimed.
+
+Every raw paired observation and stdout/stderr/RSS is retained; frozen wires
+are reused and complete output/guards/input immutability/version/loader scope
+are checked. CI/order provenance and currentsource/competitor epochs remain
+distinct. These dev-host results update the current measured ranking, not
+industry leadership or attribution of changes since the November11 epoch.
+
 ## 2026-11-12 fused dense preparation screen
 
 The [fused canonical constructor](deflate/owner-dense-construction-20261112.md)
