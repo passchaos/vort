@@ -1,0 +1,48 @@
+{
+  "artifact_kind": "archive-derived decision from terminal protocol gates and original frozen screen summary",
+  "adoption": {
+    "owner-word": false,
+    "owner-only": false
+  },
+  "variants": {
+    "owner-word": {
+      "speed_geomean": 1.0002092237149147,
+      "ci95": [
+        0.9960687882714572,
+        1.0044665189209887
+      ],
+      "method": "fixed-row balanced process-order bootstrap of baseline/candidate median durations; 2000 resamples",
+      "seed": 539365650,
+      "weakest": [
+        0.9852887655547395,
+        "deflate_reymont_1048576_9_cold"
+      ],
+      "target": 1.0239784118597959,
+      "rows": 12,
+      "target_pass": false,
+      "controls_pass": true,
+      "aggregate_pass": false,
+      "dedicated_host_acceptance": false
+    },
+    "owner-only": {
+      "speed_geomean": 0.9696129246760212,
+      "ci95": [
+        0.9673505196994259,
+        0.972015704454312
+      ],
+      "method": "fixed-row balanced process-order bootstrap of baseline/candidate median durations; 2000 resamples",
+      "seed": 539365650,
+      "weakest": [
+        0.8911048953036738,
+        "deflate_nci_65536_9_cold"
+      ],
+      "target": 1.042354522425546,
+      "rows": 12,
+      "target_pass": false,
+      "controls_pass": false,
+      "aggregate_pass": false,
+      "dedicated_host_acceptance": false
+    }
+  },
+  "scope": "both experiments rejected; isolated prototype code remains outside mainline; no performance leadership or complete matrix claim"
+}

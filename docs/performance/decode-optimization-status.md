@@ -4,6 +4,30 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-12 mapped owner and handoff rejection
+
+The [mapped owner / normalized handoff screen](deflate/mapped-owner-handoff-20261112.md)
+constructs checked canonical/semantic tables in final owner storage and mints
+an opaque borrow for a separate u32 match entry. Private generic/window tables
+retain full-width behavior; valid incomplete distance trees remain supported.
+Codegen materializes the word but carries normalized length separately across
+next-entry/refill, increasing the scoped symbol by 70 bytes and local stack
+reservation by 16 bytes. It does not achieve a single-value handoff.
+
+Both isolated variants are rejected. Twelve cold public-operation rows and
+four AB/BA process pairs per variant/row retain 192 child events: owner + word
+is 1.000209x (95% CI 0.996069–1.004467x), target reymont64K L6 1.023978x,
+weakest control 0.985289x. Owner-only scalar is 0.969613x, target 1.042355x,
+weakest nci64K L9 0.891105x. Neither reaches the 20% target; the scalar control
+also fails 0.98x. No prototype codec source or complete-ranking update is
+adopted.
+
+Native Debug/Safe and x86 Safe each pass 105 aggregate/import shim tests;
+full Deflate Safe passes 738/738 without those new imports. Both variants pass
+all 72 frozen wires. The first two fixture failures and corrected short-tail
+error expectations retain separate source/log epochs. WASI is compile-only
+in this screen, and development-host timing is not dedicated-host acceptance.
+
 ## 2026-11-12 missing long-distance secondary correction
 
 The [distance secondary hole correction](deflate/distance-secondary-holes-20261112.md)

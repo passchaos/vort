@@ -1,0 +1,14 @@
+{
+  "source_sha256": {
+    "src/deflate.zig": "77d4d63414d1ce232c37741c730208de48a7420a7439099cc1f353925a888f88",
+    "src/deflate/semantic/decoder.zig": "a4aaefa589024f7c8bc27176ecbf6af1d1a71d3a59bed574d820bf68256c2faf",
+    "src/deflate/semantic/linear_entry.zig": "8547798bae45fc01ef52b76d994a33cbad5d94cdb209322c52ad5de18e2fe1bb",
+    "src/deflate/semantic/mapped_owner.zig": "5066ae65f71196f525f88c3a25279c1db9ce585ae4aace45e2fffe093a1b9b2f",
+    "src/deflate/semantic/mapped_match_word.zig": "3a0982b0c47889220d8af6968f56b2ffca658c6894d553e2e01ea538e5cd530d",
+    "src/deflate/semantic/mapped_owner_tests.zig": "f2c9c832757cbedc7cdd5912be3925becf2d4c63aa7d111ed11d639fca8ce683",
+    "src/deflate/semantic/mapped_handoff_tests.zig": "c244007007a2c605d090749378e2c9a28fed3993e76a5991ad7c430615e45a2e",
+    "src/deflate/semantic/mapped_full_width_tests.zig": "dd12862d344f3025ecb388ae9b955144dccf52b1ce9c791be7dae62fe029686a",
+    "src/mapped_owner_test_root.zig": "20f9616e41e62cd3e142e44c3b5f0f8a6d3bd1b5e2b114b5395def154246898c"
+  },
+  "scope": "separate source epoch; production unchanged in handoff-v2, only corrected fixture error expectations"
+}

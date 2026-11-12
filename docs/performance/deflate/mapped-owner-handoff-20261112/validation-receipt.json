@@ -1,0 +1,209 @@
+{
+  "schema": "vort.deflate.mapped-owner-archive-validation.v1",
+  "valid": true,
+  "scope": "offline byte/source/recorded-test/static-counter/statistics verification; no compiler, test, codec, oracle or benchmark execution",
+  "cpu_affinity": [
+    0
+  ],
+  "base_revision": "7aaa936142aafdebe8351962e8c49059571d42c5",
+  "baseline_git_blobs_verified": 2069,
+  "prototype_modified_files_are_uncommitted_overlays": true,
+  "original_files_verified": 1101,
+  "source_overlay_files": {
+    "timing-source": 7,
+    "handoff-v1-source": 9,
+    "handoff-v2-source": 9,
+    "owner-only-source": 5
+  },
+  "capture_registry_files": {
+    "baseline": 2069,
+    "owner-word": 2075,
+    "owner-only": 2071
+  },
+  "original_timing_replay_inventory_files": 2073,
+  "timing_inventory_is_archive_reconstruction": true,
+  "test_epochs": {
+    "original_failed": {
+      "handoff-safe.log": {
+        "reported_passed": 103,
+        "reported_failed": 2,
+        "error": "wanted InvalidHuffmanCode; old scalar returned TruncatedFrame"
+      },
+      "handoff-debug.log": {
+        "reported_passed": 103,
+        "reported_failed": 2,
+        "error": "wanted InvalidHuffmanCode; old scalar returned TruncatedFrame"
+      }
+    },
+    "corrected_and_supporting_runs": {
+      "handoff-safe-v2.log": {
+        "tests": 105,
+        "anonymous_import_tests": 2,
+        "named_tests": 103
+      },
+      "handoff-debug-v2.log": {
+        "tests": 105,
+        "anonymous_import_tests": 2,
+        "named_tests": 103
+      },
+      "handoff-x86-v2.log": {
+        "tests": 105,
+        "anonymous_import_tests": 2,
+        "named_tests": 103
+      },
+      "owner-safe-v2.log": {
+        "tests": 11,
+        "anonymous_import_tests": 2,
+        "named_tests": 9
+      },
+      "public-safe.log": {
+        "tests": 8,
+        "anonymous_import_tests": 7,
+        "named_tests": 1
+      },
+      "holes-safe.log": {
+        "tests": 10,
+        "anonymous_import_tests": 8,
+        "named_tests": 2
+      },
+      "full-safe.log": {
+        "tests": 738,
+        "anonymous_import_tests": 13,
+        "named_tests": 725
+      }
+    },
+    "new_test_declarations": {
+      "mapped_owner_tests": 8,
+      "mapped_handoff_tests": 6,
+      "mapped_full_width_tests": 3
+    },
+    "new_test_declarations_total": 17,
+    "full_deflate_shim_tests": 0,
+    "wasi_compiled_only": true,
+    "wasi_runtime_tested": false,
+    "full_safe_exit_handle_observation": "terminal log and producer observation; old unified handle unavailable"
+  },
+  "static_audit": {
+    "raw_capture": "new main CPU0 nm/objdump capture",
+    "parsed": {
+      "baseline": {
+        "symbol_bytes": 3659,
+        "stack_reservation_bytes": 296,
+        "pushes": 6,
+        "instruction_lines": 897,
+        "negative_rbp_references": 131,
+        "static_shift_call_sites": [
+          11,
+          16,
+          4,
+          8
+        ]
+      },
+      "owner_word": {
+        "symbol_bytes": 3729,
+        "stack_reservation_bytes": 312,
+        "pushes": 6,
+        "instruction_lines": 894,
+        "negative_rbp_references": 129,
+        "static_shift_call_sites": [
+          11,
+          16,
+          4,
+          9
+        ]
+      }
+    },
+    "text_delta_bytes": 70,
+    "stack_delta_bytes": 16,
+    "carried_match_values": 2,
+    "single_carried_value_proven": false,
+    "runtime_spill_reduction_proven": false,
+    "private_full_width_correctness_from_candidate_disassembly": false
+  },
+  "screen_and_smoke": {
+    "events": 192,
+    "process_pairs": 96,
+    "pairs_per_variant": 48,
+    "raw_measured_vort_reference_pairs": 384,
+    "raw_warmup_vort_reference_pairs": 384,
+    "compiler_observations": 0,
+    "load1_range": [
+      0.8720703125,
+      1.2158203125
+    ],
+    "bootstrap_resamples": 2000,
+    "bootstrap_seed": 539365650,
+    "variants": {
+      "owner-word": {
+        "geomean": 1.0002092237149147,
+        "ci95": [
+          0.9960687882714572,
+          1.0044665189209887
+        ],
+        "target": 1.0239784118597959,
+        "weakest": [
+          0.9852887655547395,
+          "deflate_reymont_1048576_9_cold"
+        ],
+        "row_geomeans": {
+          "deflate_reymont_65536_6_cold": 1.0239784118597959,
+          "deflate_reymont_65536_9_cold": 1.01621384845958,
+          "deflate_nci_65536_6_cold": 0.9939956887029282,
+          "deflate_nci_65536_9_cold": 1.001566071352966,
+          "deflate_xml_65536_6_cold": 0.9895049419799388,
+          "deflate_xml_65536_9_cold": 1.000924939647287,
+          "deflate_reymont_1048576_6_cold": 0.9977876807708712,
+          "deflate_reymont_1048576_9_cold": 0.9852887655547395,
+          "deflate_nci_1048576_6_cold": 0.9920166220217302,
+          "deflate_nci_1048576_9_cold": 1.0057020437894417,
+          "deflate_xml_1048576_6_cold": 0.9981345917922392,
+          "deflate_xml_1048576_9_cold": 0.9980486521560945
+        },
+        "target_pass": false,
+        "controls_pass": true,
+        "aggregate_pass": false,
+        "decision": "REJECT"
+      },
+      "owner-only": {
+        "geomean": 0.9696129246760212,
+        "ci95": [
+          0.9673505196994259,
+          0.972015704454312
+        ],
+        "target": 1.042354522425546,
+        "weakest": [
+          0.8911048953036738,
+          "deflate_nci_65536_9_cold"
+        ],
+        "row_geomeans": {
+          "deflate_reymont_65536_6_cold": 1.042354522425546,
+          "deflate_reymont_65536_9_cold": 1.0201888180738115,
+          "deflate_nci_65536_6_cold": 0.9046663520982826,
+          "deflate_nci_65536_9_cold": 0.8911048953036738,
+          "deflate_xml_65536_6_cold": 0.9065642459796619,
+          "deflate_xml_65536_9_cold": 0.9192275122450767,
+          "deflate_reymont_1048576_6_cold": 1.0150757379933304,
+          "deflate_reymont_1048576_9_cold": 1.0013351030677797,
+          "deflate_nci_1048576_6_cold": 0.9802832372048865,
+          "deflate_nci_1048576_9_cold": 0.9865623002220175,
+          "deflate_xml_1048576_6_cold": 1.0008839585362912,
+          "deflate_xml_1048576_9_cold": 0.9824448016706113
+        },
+        "target_pass": false,
+        "controls_pass": false,
+        "aggregate_pass": false,
+        "decision": "REJECT"
+      }
+    },
+    "smoke_events": 144,
+    "smoke_wires_per_variant": 72,
+    "smoke_times_are_performance_samples": false,
+    "dedicated_host_acceptance": false,
+    "full_industry_matrix": false
+  },
+  "ordinary_fixture_bytes_archived": false,
+  "external_fixture_files_verified": 108,
+  "external_fixture_bytes_verified": 371820359,
+  "prototype_adopted": false,
+  "verified_at_utc": "2026-11-12T04:06:33.445142+00:00"
+}

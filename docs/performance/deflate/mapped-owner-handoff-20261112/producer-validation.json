@@ -1,0 +1,74 @@
+{
+  "authorship": "main-authored validation receipt",
+  "recorded_at": "2026-11-12T03:53:04.878295+00:00",
+  "source_epochs": {
+    "original_failed": "handoff-v1-freeze.json",
+    "corrected": "handoff-v2-source.json",
+    "original_timing": "timing-freeze.json",
+    "owner_only": "owner-only-source.json"
+  },
+  "tests": {
+    "native_ReleaseSafe": {
+      "exit_code": 0,
+      "aggregate_import_tests": 105,
+      "log": "handoff-safe-v2.log"
+    },
+    "native_Debug": {
+      "exit_code": 0,
+      "aggregate_import_tests": 105,
+      "log": "handoff-debug-v2.log"
+    },
+    "x86_linux_musl_ReleaseSafe": {
+      "exit_code": 0,
+      "aggregate_import_tests": 105,
+      "log": "handoff-x86-v2.log"
+    },
+    "full_Deflate_ReleaseSafe": {
+      "aggregate_import_tests": 738,
+      "log": "full-safe.log",
+      "scope": "complete src/deflate.zig test root, no shim constructor/handoff/full-width modules",
+      "observation": "existing process exited and log ends All 738 tests passed; old unified session handle unavailable after compaction"
+    },
+    "wasm32_wasi_ReleaseSafe": {
+      "exit_code": 0,
+      "runtime_tested": false,
+      "log": "handoff-wasi-compile-v2.log",
+      "command": "zig test -OReleaseSafe -target wasm32-wasi -fno-emit-bin src/mapped_owner_test_root.zig"
+    }
+  },
+  "new_test_decl_counts": {
+    "mapped_owner_tests": 8,
+    "mapped_handoff_tests": 6,
+    "mapped_full_width_tests": 3
+  },
+  "sha256": {
+    "handoff-safe-v2.log": "003ca4e8667d5e558f10d4377c917f221084da5b2a1387b64ebe1fa3e3a3d5bf",
+    "handoff-debug-v2.log": "003ca4e8667d5e558f10d4377c917f221084da5b2a1387b64ebe1fa3e3a3d5bf",
+    "handoff-x86-v2.log": "003ca4e8667d5e558f10d4377c917f221084da5b2a1387b64ebe1fa3e3a3d5bf",
+    "handoff-wasi-compile-v2.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "full-safe.log": "e6212f3cf76c84f38883ff1cd9b02c24182adb45db86341cbd28bf1915fd9e59",
+    "build.log": "bf0bae7447a95e9daee959a7a96f5d37c00846bd6d87987cdd05a650f8856b93",
+    "owner-only-build.log": "2c65b3052ab542dde64f1a1ab63c0d46d190f5af48fbb5fb3d7ac15a33b7c50e",
+    "handoff-safe-v2": "2902ce2806e003aa59d05beb99add5e2ca50e1f3b23a64f36e2a2482ae7f890b",
+    "handoff-debug-v2": "1ac5e48327ef3001cf9213861e0f41fc47d75e5f2fd1b08d0a43bbb87209b0b9",
+    "handoff-x86-v2": "c32789cd9bedde678259988b5674e4cd2bf57239ce70bfd92b0cbaa9fbe7a72d",
+    "candidate-compare": "2d2d18228696054e15296b760b2a7c5060a0e746032c20d119130eea339f2258",
+    "owner-only-compare": "a081724939d287ef018fa650cd5e65b7e13b9829020b3bbd658fada02e0c6e16"
+  },
+  "smoke_validation_sha256": "14e0cf7b6344141a469814b1c22a09c31386b1c77ffb5e6a0c91b397036bb05d",
+  "fmt_and_diff_check": {
+    "exit_code": 0,
+    "scope": "nine current prototype Zig files and git diff --check"
+  },
+  "adoption": "both variants rejected by whole-operation screen; prototype code remains isolated",
+  "performance": {
+    "events": 192,
+    "process_pairs": 96,
+    "raw_measured_vort_reference_pairs": 384,
+    "raw_warmup_vort_reference_pairs": 384,
+    "summary": "screen/summary.json",
+    "independent_recompute": "independent-statistics.json",
+    "dedicated_host_acceptance": false,
+    "full_matrix_ranking_updated": false
+  }
+}

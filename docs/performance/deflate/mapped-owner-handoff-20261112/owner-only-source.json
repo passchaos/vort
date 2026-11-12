@@ -1,0 +1,10 @@
+{
+  "source_sha256": {
+    "src/deflate.zig": "e5391b41964382c60314e15f6d94bd39eb117fa2a75e204b601bedf60536d58b",
+    "src/deflate/semantic/decoder.zig": "a4aaefa589024f7c8bc27176ecbf6af1d1a71d3a59bed574d820bf68256c2faf",
+    "src/deflate/semantic/linear_entry.zig": "8547798bae45fc01ef52b76d994a33cbad5d94cdb209322c52ad5de18e2fe1bb",
+    "src/deflate/semantic/mapped_owner.zig": "5066ae65f71196f525f88c3a25279c1db9ce585ae4aace45e2fffe093a1b9b2f",
+    "src/deflate/semantic/mapped_match_word.zig": "3a0982b0c47889220d8af6968f56b2ffca658c6894d553e2e01ea538e5cd530d"
+  },
+  "scope": "separate source epoch; production unchanged in handoff-v2, only corrected fixture error expectations"
+}

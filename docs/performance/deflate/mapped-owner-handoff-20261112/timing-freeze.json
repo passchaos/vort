@@ -1,0 +1,14 @@
+{
+  "base_revision": "7aaa9361",
+  "source_sha256": {
+    "src/deflate.zig": "77d4d63414d1ce232c37741c730208de48a7420a7439099cc1f353925a888f88",
+    "src/deflate/semantic/decoder.zig": "a4aaefa589024f7c8bc27176ecbf6af1d1a71d3a59bed574d820bf68256c2faf",
+    "src/deflate/semantic/linear_entry.zig": "8547798bae45fc01ef52b76d994a33cbad5d94cdb209322c52ad5de18e2fe1bb",
+    "src/deflate/semantic/mapped_owner.zig": "5066ae65f71196f525f88c3a25279c1db9ce585ae4aace45e2fffe093a1b9b2f",
+    "src/deflate/semantic/mapped_match_word.zig": "3a0982b0c47889220d8af6968f56b2ffca658c6894d553e2e01ea538e5cd530d",
+    "src/deflate/semantic/mapped_owner_tests.zig": "f2c9c832757cbedc7cdd5912be3925becf2d4c63aa7d111ed11d639fca8ce683",
+    "src/mapped_owner_test_root.zig": "587a5b15e9d71bdad437a3074619e826cc004689c92df84b3b7c85e9af65da86"
+  },
+  "probe_sha256": "2d2d18228696054e15296b760b2a7c5060a0e746032c20d119130eea339f2258",
+  "scope": "mapped owner and mapped-word typed ordinary executor; private full-width wrapper retained; no A/B yet"
+}

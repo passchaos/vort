@@ -1,0 +1,63 @@
+{
+  "authorship": "main independently recomputed from all raw measured durations, without running codec or benchmark",
+  "event_count": 192,
+  "raw_measured_pair_count": 384,
+  "process_pair_count": 96,
+  "compiler_observations": 0,
+  "load1_range": [
+    0.8720703125,
+    1.2158203125
+  ],
+  "events_sha256": "6c9ae8c5fa624837016a843f2999164d0ac638edf56afd8ecf19aa5e75fba837",
+  "statistics": {
+    "owner-word": {
+      "speed_geomean": 1.0002092237149147,
+      "row_speed_geomeans": {
+        "deflate_reymont_65536_6_cold": 1.0239784118597959,
+        "deflate_reymont_65536_9_cold": 1.01621384845958,
+        "deflate_nci_65536_6_cold": 0.9939956887029282,
+        "deflate_nci_65536_9_cold": 1.001566071352966,
+        "deflate_xml_65536_6_cold": 0.9895049419799388,
+        "deflate_xml_65536_9_cold": 1.000924939647287,
+        "deflate_reymont_1048576_6_cold": 0.9977876807708712,
+        "deflate_reymont_1048576_9_cold": 0.9852887655547395,
+        "deflate_nci_1048576_6_cold": 0.9920166220217302,
+        "deflate_nci_1048576_9_cold": 1.0057020437894417,
+        "deflate_xml_1048576_6_cold": 0.9981345917922392,
+        "deflate_xml_1048576_9_cold": 0.9980486521560945
+      },
+      "target": 1.0239784118597959,
+      "weakest": [
+        0.9852887655547395,
+        "deflate_reymont_1048576_9_cold"
+      ],
+      "size_65536": 1.0042917970465524,
+      "size_1048576": 0.9961432465608595
+    },
+    "owner-only": {
+      "speed_geomean": 0.9696129246760212,
+      "row_speed_geomeans": {
+        "deflate_reymont_65536_6_cold": 1.042354522425546,
+        "deflate_reymont_65536_9_cold": 1.0201888180738115,
+        "deflate_nci_65536_6_cold": 0.9046663520982826,
+        "deflate_nci_65536_9_cold": 0.8911048953036738,
+        "deflate_xml_65536_6_cold": 0.9065642459796619,
+        "deflate_xml_65536_9_cold": 0.9192275122450767,
+        "deflate_reymont_1048576_6_cold": 1.0150757379933304,
+        "deflate_reymont_1048576_9_cold": 1.0013351030677797,
+        "deflate_nci_1048576_6_cold": 0.9802832372048865,
+        "deflate_nci_1048576_9_cold": 0.9865623002220175,
+        "deflate_xml_1048576_6_cold": 1.0008839585362912,
+        "deflate_xml_1048576_9_cold": 0.9824448016706113
+      },
+      "target": 1.042354522425546,
+      "weakest": [
+        0.8911048953036738,
+        "deflate_nci_65536_9_cold"
+      ],
+      "size_65536": 0.9454875482496421,
+      "size_1048576": 0.9943538922741636
+    }
+  },
+  "adoption": "both rejected; no source changes adopted; no industry ranking update"
+}

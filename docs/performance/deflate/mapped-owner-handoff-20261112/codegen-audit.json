@@ -1,0 +1,70 @@
+{
+  "authorship": "main-authored derived summary of Hume read-only static audit; raw disassembly newly recaptured by main on CPU0",
+  "recorded_at": "2026-11-12T03:53:04.843616+00:00",
+  "baseline": {
+    "binary": "/tmp/vort-distance-secondary-holes-20261112.c19f5cdd/after-compare",
+    "sha256": "65b75eeec00bf7933d0baa3886e6097fc7275a813d72190f601be286944cce96",
+    "symbol": "deflate.semantic.linear_entry.aligned",
+    "start": "0x113f1c0",
+    "stop": "0x114000b",
+    "symbol_bytes": 3659,
+    "local_stack_reservation_bytes": 296,
+    "pushes": 6,
+    "static_instruction_lines_including_padding": 897,
+    "negative_rbp_operand_references": 131,
+    "shrx_shlx_bzhi_call_sites": [
+      11,
+      16,
+      4,
+      8
+    ]
+  },
+  "owner_word": {
+    "binary": "/tmp/vort-mapped-owner-candidate-20261112.7aaa9361/candidate-compare",
+    "sha256": "2d2d18228696054e15296b760b2a7c5060a0e746032c20d119130eea339f2258",
+    "symbol": "deflate.semantic.linear_entry.alignedMapped",
+    "start": "0x113fe80",
+    "stop": "0x1140d11",
+    "symbol_bytes": 3729,
+    "local_stack_reservation_bytes": 312,
+    "pushes": 6,
+    "static_instruction_lines_including_padding": 894,
+    "negative_rbp_operand_references": 129,
+    "shrx_shlx_bzhi_call_sites": [
+      11,
+      16,
+      4,
+      9
+    ]
+  },
+  "live_copy_state": "packed word in edx plus normalized length in ecx cross next-entry and refill; full distance restored after refill; two values, not a single carried value",
+  "normalized_length_addresses": [
+    "0x114011e",
+    "0x1140120"
+  ],
+  "pack_addresses": [
+    "0x1140123",
+    "0x1140126",
+    "0x114012c"
+  ],
+  "post_refill_length_from_cl": [
+    "0x114018e",
+    "0x11401f4",
+    "0x1140244"
+  ],
+  "post_refill_distance_from_word": "0x1140253",
+  "owner_accessor": "no getter function call or optional tag in hot loop; compact semantic pointer cached at owner+0x840, hot table offsets owner+0x860/+0x2860",
+  "private_scope": "candidate-compare does not emit old aligned full-width symbol; private correctness comes from separate shim tests, not candidate disassembly",
+  "limitations": [
+    "static whole-symbol counters include cold/tail and padding",
+    "negative-rbp operands are not runtime spills",
+    "static call sites do not establish runtime call counts",
+    "no compiler barriers, inline asm or forced materialization used",
+    "development-host screen remains separate from complete modern-reference matrix"
+  ],
+  "raw_sha256": {
+    "candidate.nm.txt": "ec2118f8766e8f514a618df0511308b49887c8dcfa34f82fa94996ffae17e397",
+    "candidate-mapped.objdump.txt": "2cfd08c486afb30e3eb3b7c7069729f82372cab77fdf7b3649b23bad7cfdaa4d",
+    "baseline-aligned.objdump.txt": "577d4b8e716713e44d2bf02c8792218672d74d5194cb947210353c407217b5d5"
+  }
+}
