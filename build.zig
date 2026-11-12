@@ -2479,6 +2479,27 @@ pub fn build(b: *std.Build) void {
     const afl_smoke_step = b.step("run-afl-smoke", "Run AFL-style file-input fuzz driver smoke");
     afl_smoke_step.dependOn(&run_afl_smoke.step);
 
+    const codec_differential_fuzz_exe = b.addExecutable(.{
+        .name = "vort-codec-differential-fuzz",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/codec_differential_fuzz.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    codec_differential_fuzz_exe.root_module.linkSystemLibrary("z", .{});
+    codec_differential_fuzz_exe.root_module.linkSystemLibrary("zstd", .{});
+    codec_differential_fuzz_exe.root_module.linkSystemLibrary("brotlidec", .{});
+    codec_differential_fuzz_exe.root_module.linkSystemLibrary("brotlicommon", .{});
+    const run_codec_differential_fuzz = b.addRunArtifact(codec_differential_fuzz_exe);
+    if (b.args) |args| run_codec_differential_fuzz.addArgs(args);
+    const codec_differential_fuzz_step = b.step("run-codec-differential-fuzz", "Run structure-aware Deflate/Zstd/Brotli differential fuzzing against system references");
+    codec_differential_fuzz_step.dependOn(&run_codec_differential_fuzz.step);
+
     const checksum_diff_exe = b.addExecutable(.{
         .name = "vort-checksum-diff",
         .root_module = b.createModule(.{
@@ -7956,6 +7977,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(br_large_wasm_check);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
+    check_step.dependOn(&codec_differential_fuzz_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&zlib_dictionary_resume_probe.step);
@@ -8098,6 +8120,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(fuzz_target_step);
     ci_smoke_step.dependOn(libfuzzer_smoke_step);
     ci_smoke_step.dependOn(afl_smoke_step);
+    ci_smoke_step.dependOn(codec_differential_fuzz_step);
     ci_smoke_step.dependOn(checksum_bench_gate_step);
     ci_smoke_step.dependOn(checksum_diff_step);
     ci_smoke_step.dependOn(checksum_zlib_diff_step);

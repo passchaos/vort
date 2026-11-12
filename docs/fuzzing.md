@@ -78,3 +78,45 @@ that raw Deflate already had. Verified gates:
   error expectations)
 - `zig build run-native-fuzz-corpus-coverage-smoke` (1 native mode,
   7 exact error expectations)
+
+## 2026-11-12: structure-aware codec differential fuzzing
+
+`tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
+complements the raw-byte target with generated valid wires. A deterministic
+SplitMix64 generator feeds eight content patterns (RLE, periodic, random,
+text-like, mixed runs and sparse binary) across boundary sizes from 0 bytes
+through 8 KiB (`--deep` extends the schedule to 64 KiB) into:
+
+- raw Deflate levels 0/1/6/9, zlib levels 0/6/9 and gzip levels 0/6/9 (level
+  0 exercises the stored-block encoder explicitly);
+- standard Zstd frames at levels 1/3/9;
+- RFC Brotli qualities 0/5/11 (q11 only for inputs up to 1 KiB in smoke).
+
+Every valid wire is checked three ways: Vort one-shot and exact-size decode
+must reproduce the source; the installed system references (zlib, libzstd,
+libbrotli via `@cImport`) must accept the same wire and reproduce the source;
+then systematic prefix truncation and five-position/three-mask single-byte
+mutations are replayed through both Vort and the references. Truncation
+requires both decoders to reject or both to produce identical bytes; mutation
+agreement is required whenever both accept, while one-sided acceptance is
+retained as a counted divergence signal rather than a hard failure. The
+reference destination carries bounded 4x/1 MiB headroom so mutated RLE
+expansion cannot alias the original output buffer.
+
+The default smoke campaign covers 3,168 valid wires, 75,531 truncation cuts
+and 44,055 mutations with zero cross-decoder disagreements. Because the tool
+links system libraries, it runs on native targets only and is wired into
+`check` (compile) and `ci-smoke` (execution); hosted CI already installs
+`zlib1g-dev`, `libzstd-dev` and `libbrotli-dev`.
+
+The first `--deep` campaign (3,640 valid wires, 91,267 truncation cuts,
+45,795 mutations, sizes to 64 KiB) found a real Brotli decoder panic: a
+malformed complex prefix-code description could end a code-16 repeat exactly
+on the alphabet boundary and then issue one more direct length symbol,
+indexing `lengths[alphabet_size]` out of bounds instead of returning
+`InvalidHuffmanCode`. All three complex prefix-code readers (runtime,
+resumable large-command, and profiled) now reject an overfull alphabet after
+a flushed repeat, and a focused regression test pins the crafted bitstream.
+After the fix, an independent-seed deep campaign and a rerun with the final
+binary (up to 3,888 valid wires, 99,451 truncation cuts and 48,315 mutations
+per campaign) both completed with zero cross-decoder disagreements.
