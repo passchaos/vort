@@ -46,7 +46,8 @@ Each variant uses four balanced AB/BA process pairs per row, with two measured
 and two warmup Vort/reference batches in each child. Batches use 500 decodes
 for 64 KiB and 100 for 1 MiB. All 192 child events, 96 process pairs
 and 384 measured Vort/reference pairs are retained. The screen uses reymont,
-nci and XML, 64 KiB/1 MiB, and libdeflate-produced L6/L9 frozen wires. The
+nci and XML, 64 KiB/1 MiB, and Python zlib 1.2.11-produced L6/L9 frozen raw
+Deflate wires (`compressobj`, `window_bits=-15`). The
 public `decodeRawDeflate` call includes preparation and execution; caller
 buffers, process startup, loading and verification are outside timing. No
 prepared-executor microbenchmark is substituted for the public operation.
