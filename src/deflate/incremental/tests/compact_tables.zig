@@ -87,6 +87,27 @@ test "compact lookup matches sparse canonical alphabets with 15-bit tails" {
     }
 }
 
+test "validDynamicAlphabet accepts literal-only blocks with a zero distance alphabet" {
+    // A dynamic block with no distance symbols still declares one distance
+    // code slot whose length is zero. zlib's inftrees treats an all-zero
+    // LENS/DISTS alphabet as a deferred error marker rather than rejecting
+    // the header, so the incremental validator must accept it and rely on
+    // symbol decoding to fail only if a distance is ever requested.
+    const empty: [30]u4 = @splat(0);
+    try std.testing.expect(compact_tables.validDynamicAlphabet(empty[0..]));
+    try std.testing.expect(compact_tables.validDynamicAlphabet(empty[0..1]));
+
+    const table = try huffman.HuffmanTable(30).init(empty[0..1]);
+    try std.testing.expectEqual(@as(usize, 0), table.len);
+    try std.testing.expectEqual(@as(u4, 0), table.max_bits);
+
+    // Oversubscribed and incomplete multi-symbol alphabets stay invalid.
+    var oversubscribed: [4]u4 = .{ 1, 1, 1, 1 };
+    try std.testing.expect(!compact_tables.validDynamicAlphabet(&oversubscribed));
+    oversubscribed = .{ 1, 2, 0, 0 };
+    try std.testing.expect(!compact_tables.validDynamicAlphabet(&oversubscribed));
+}
+
 test "compact lookup reuse clears poisoned and previous alphabet slots" {
     inline for (.{ 7, 10, 11 }) |lookup_bits| {
         inline for (.{ 19, 30, 32, 286 }) |max_symbols| {

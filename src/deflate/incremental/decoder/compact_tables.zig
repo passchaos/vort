@@ -81,7 +81,13 @@ pub fn validDynamicAlphabet(lengths: []const u4) bool {
             active += 1;
         }
     }
-    if (active == 0) return false;
+    // zlib's inftrees accepts a LENS/DISTS alphabet with no active symbols by
+    // installing an error-marker table and deferring the failure until a symbol
+    // is actually decoded. A literal-only dynamic block therefore carries a
+    // zero-length distance alphabet legally, and its distance table is never
+    // consulted. The code-length alphabet keeps its own stricter check because
+    // zlib rejects every incomplete CODES set.
+    if (active == 0) return true;
     if (active == 1) return true; // RFC permits one-bit incomplete singleton.
     var available: isize = 1;
     for (1..16) |bits| {

@@ -59,6 +59,52 @@ test "gzip incremental concatenation streams mixed members cumulatively" {
     try std.testing.expect(snapshot.done);
 }
 
+test "gzip incremental decoder accepts literal-only dynamic distance alphabet" {
+    // Regression for the zero-length distance alphabet that a literal-only
+    // dynamic block carries: the gzip streaming decoder reached the raw
+    // dynamic header validator and failed before producing any output.
+    const size: usize = 128;
+    const payload = try std.testing.allocator.alloc(u8, size);
+    defer std.testing.allocator.free(payload);
+    var rng_state: u64 = 12345 +% size;
+    const alphabet = "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789\n.,;";
+    for (payload) |*byte| {
+        rng_state +%= 0x9e3779b97f4a7c15;
+        var z = rng_state;
+        z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
+        z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
+        z = z ^ (z >> 31);
+        byte.* = alphabet[@as(usize, @truncate(z)) % alphabet.len];
+    }
+
+    const encoded = try deflate.encodeGzipBestAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const header_info = try deflate.parseGzipHeaderInfo(encoded);
+    const raw_header = try deflate.parseRawDeflateHeaderInfo(encoded[header_info.data_offset..]);
+    try std.testing.expectEqual(deflate.RawDeflateBlockType.dynamic, raw_header.block_type);
+    try std.testing.expectEqual(@as(?u16, 1), raw_header.dynamic_hdist);
+
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(.{ .expected_output_len = payload.len }, &history);
+    var output: [size]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const result = try decoder.step(
+            encoded[input_offset .. input_offset + 1],
+            output[output_offset..][0..@min(3, output.len - output_offset)],
+        );
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(3, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
 test "gzip incremental concatenation keeps strict default and cumulative limits" {
     const first = try deflate.encodeGzipFixedAlloc(std.testing.allocator, "first");
     defer std.testing.allocator.free(first);

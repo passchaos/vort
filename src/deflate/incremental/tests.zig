@@ -989,6 +989,63 @@ test "raw deflate incremental decoder validates dynamic counts" {
     try std.testing.expectError(error.TruncatedFrame, truncated.finish());
 }
 
+test "raw deflate incremental decoder accepts literal-only dynamic distance alphabet" {
+    // Regression: a dynamic block whose single declared distance code has
+    // length zero (literal-only payload) was rejected with
+    // InvalidDynamicBlockHeader even though the one-shot decoder and zlib
+    // accept it. Deterministic SplitMix text reliably triggers level-6
+    // emission of that header shape on these sizes.
+    const sizes = [_]usize{ 110, 128, 256, 512 };
+    for (sizes) |size| {
+        const payload = try std.testing.allocator.alloc(u8, size);
+        defer std.testing.allocator.free(payload);
+        var rng_state: u64 = 12345 +% size;
+        const alphabet = "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789\n.,;";
+        for (payload) |*byte| {
+            rng_state +%= 0x9e3779b97f4a7c15;
+            var z = rng_state;
+            z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
+            z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
+            z = z ^ (z >> 31);
+            byte.* = alphabet[@as(usize, @truncate(z)) % alphabet.len];
+        }
+
+        const encoded = try deflate.encodeRawLevelAlloc(std.testing.allocator, payload, 6);
+        defer std.testing.allocator.free(encoded);
+        const header = try deflate.parseRawDeflateHeaderInfo(encoded);
+        try std.testing.expectEqual(deflate.RawDeflateBlockType.dynamic, header.block_type);
+        try std.testing.expectEqual(@as(?u16, 1), header.dynamic_hdist);
+
+        const oracle = try deflate.decodeRawAutoAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(oracle);
+        try std.testing.expectEqualSlices(u8, payload, oracle);
+
+        var history: [32 * 1024]u8 = undefined;
+        var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder
+            .initWithHistory(.{ .expected_output_len = payload.len }, &history);
+        const output = try std.testing.allocator.alloc(u8, payload.len);
+        defer std.testing.allocator.free(output);
+        var input_offset: usize = 0;
+        var output_offset: usize = 0;
+        while (input_offset < encoded.len) {
+            const result = try decoder.step(
+                encoded[input_offset .. input_offset + 1],
+                output[output_offset..][0..@min(3, output.len - output_offset)],
+            );
+            input_offset += result.progress.input_read;
+            output_offset += result.progress.output_written;
+        }
+        while (output_offset < output.len) {
+            const result = try decoder.step("", output[output_offset..][0..@min(3, output.len - output_offset)]);
+            output_offset += result.progress.output_written;
+        }
+        try decoder.finish();
+        try std.testing.expectEqual(encoded.len, input_offset);
+        try std.testing.expectEqual(payload.len, output_offset);
+        try std.testing.expectEqualSlices(u8, payload, output);
+    }
+}
+
 test "raw deflate incremental decoder expands dynamic repeat codes" {
     const payload = ("aaaaabbbbbcccccdddddeeeee\n" ** 100);
     const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
