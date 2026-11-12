@@ -1,0 +1,274 @@
+{
+  "schema": "vort.deflate.exact-copy-archive-validation.v1",
+  "valid": true,
+  "scope": "offline original-byte/source/probe/recorded-test/ordering/raw-ratio/bootstrap validation; no compiler,test,codec,oracle,perf or benchmark execution",
+  "cpu_affinity": [
+    0
+  ],
+  "source_revision": "21e4a1d0c0323c7db2317fd6e7cda4c5069e8e1d",
+  "baseline_git_blobs_verified": 2072,
+  "original_files_verified": 4953,
+  "candidate_source_registry_files": {
+    "v1": 2075,
+    "v2": 2075,
+    "v3": 2075
+  },
+  "small_screens": {
+    "v1": {
+      "events": 160,
+      "rows": 12,
+      "rounds": 2,
+      "warmup": 2,
+      "process_sweeps": 4,
+      "measured_pairs": 320,
+      "warmup_pairs": 320,
+      "speed_geomean": 1.028060765735492,
+      "ci95": [
+        1.0247440430786117,
+        1.031231170343654
+      ],
+      "weakest": [
+        0.9988604053150546,
+        "deflate_reymont_1048576_9_cold"
+      ],
+      "controls_below_098": [],
+      "bootstrap_upper_order_index": 1949,
+      "pmu_events": 64,
+      "adopted": false
+    },
+    "v2": {
+      "events": 160,
+      "rows": 12,
+      "rounds": 2,
+      "warmup": 2,
+      "process_sweeps": 4,
+      "measured_pairs": 320,
+      "warmup_pairs": 320,
+      "speed_geomean": 1.0052257636616815,
+      "ci95": [
+        1.0012720951150809,
+        1.0092364394024478
+      ],
+      "weakest": [
+        0.975901888099464,
+        "deflate_nci_65536_6_cold"
+      ],
+      "controls_below_098": [
+        [
+          0.975901888099464,
+          "deflate_nci_65536_6_cold"
+        ]
+      ],
+      "bootstrap_upper_order_index": 1949,
+      "pmu_events": 64,
+      "adopted": false
+    },
+    "v3": {
+      "events": 160,
+      "rows": 12,
+      "rounds": 2,
+      "warmup": 2,
+      "process_sweeps": 4,
+      "measured_pairs": 320,
+      "warmup_pairs": 320,
+      "speed_geomean": 1.0312899868075671,
+      "ci95": [
+        1.0268493376240244,
+        1.03584580623215
+      ],
+      "weakest": [
+        0.9916537081517761,
+        "deflate_reymont_65536_6_cold"
+      ],
+      "controls_below_098": [],
+      "bootstrap_upper_order_index": 1949,
+      "pmu_events": 64,
+      "adopted": false
+    }
+  },
+  "full_cold_final": {
+    "events": 576,
+    "rows": 72,
+    "rounds": 2,
+    "warmup": 2,
+    "process_sweeps": 4,
+    "measured_pairs": 1152,
+    "warmup_pairs": 1152,
+    "speed_geomean": 1.0051537516535274,
+    "ci95": [
+      1.0036886340104947,
+      1.0066313157192643
+    ],
+    "weakest": [
+      0.9712646890844143,
+      "deflate_x-ray_65536_9_cold"
+    ],
+    "controls_below_098": [
+      [
+        0.9712646890844143,
+        "deflate_x-ray_65536_9_cold"
+      ],
+      [
+        0.9717211611022921,
+        "deflate_x-ray_65536_6_cold"
+      ],
+      [
+        0.9723085957922482,
+        "deflate_mr_1048576_6_cold"
+      ],
+      [
+        0.9734199107229476,
+        "deflate_ooffice_65536_9_cold"
+      ],
+      [
+        0.9742481250592734,
+        "deflate_x-ray_1048576_6_cold"
+      ],
+      [
+        0.9755634871180207,
+        "deflate_ooffice_65536_6_cold"
+      ],
+      [
+        0.9765670139977836,
+        "deflate_sao_65536_6_cold"
+      ],
+      [
+        0.9767111444646218,
+        "deflate_sao_1048576_6_cold"
+      ],
+      [
+        0.977306958689365,
+        "deflate_x-ray_full_9_cold"
+      ]
+    ],
+    "bootstrap_upper_order_index": 1950,
+    "pmu_events": 0,
+    "adopted": false
+  },
+  "smoke": {
+    "v1": {
+      "wires": 72,
+      "timings_are_performance_evidence": false
+    },
+    "v2": {
+      "wires": 72,
+      "timings_are_performance_evidence": false
+    },
+    "v3": {
+      "wires": 72,
+      "timings_are_performance_evidence": false
+    }
+  },
+  "functional_test_scope": {
+    "runs": {
+      "v1": {
+        "kernel": {
+          "tests": 3,
+          "anonymous_import_tests": 1,
+          "named_tests": 2
+        },
+        "full_deflate": {
+          "tests": 738,
+          "anonymous_import_tests": 13,
+          "named_tests": 725
+        },
+        "pages_safe": {
+          "tests": 1,
+          "anonymous_import_tests": 0,
+          "named_tests": 1
+        },
+        "pages_debug": {
+          "tests": 1,
+          "anonymous_import_tests": 0,
+          "named_tests": 1
+        },
+        "pages_x86": {
+          "tests": 1,
+          "anonymous_import_tests": 0,
+          "named_tests": 1
+        }
+      },
+      "v2": {
+        "kernel": {
+          "tests": 3,
+          "anonymous_import_tests": 1,
+          "named_tests": 2
+        },
+        "full_deflate": {
+          "tests": 738,
+          "anonymous_import_tests": 13,
+          "named_tests": 725
+        },
+        "pages_safe": {
+          "tests": 1,
+          "anonymous_import_tests": 0,
+          "named_tests": 1
+        }
+      },
+      "v3": {
+        "kernel": {
+          "tests": 3,
+          "anonymous_import_tests": 1,
+          "named_tests": 2
+        },
+        "full_deflate": {
+          "tests": 738,
+          "anonymous_import_tests": 13,
+          "named_tests": 725
+        },
+        "pages_safe": {
+          "tests": 1,
+          "anonymous_import_tests": 0,
+          "named_tests": 1
+        }
+      }
+    },
+    "linux_guard_page_exact_span_cases": 1996,
+    "kernel_public_facade_lengths": "3..258",
+    "validated_core_lengths": "16..258",
+    "private_lengths_above_258_tested": false
+  },
+  "static_evidence": {
+    "original_agent_artifacts": 4,
+    "counters": {
+      "baseline": {
+        "text_bytes": 3659,
+        "stack_bytes": 296,
+        "instructions": 897,
+        "vector_stack_references": 2
+      },
+      "v1": {
+        "text_bytes": 4171,
+        "stack_bytes": 696,
+        "instructions": 971,
+        "vector_stack_references": 28
+      },
+      "v2": {
+        "text_bytes": 4017,
+        "stack_bytes": 312,
+        "instructions": 963,
+        "vector_stack_references": 2
+      },
+      "v3": {
+        "text_bytes": 3883,
+        "stack_bytes": 312,
+        "instructions": 930,
+        "vector_stack_references": 2
+      }
+    },
+    "vector_stack_is_dynamic_spill_count": false,
+    "private_above_258_contract_proven": false
+  },
+  "external_fixture_files_verified": 108,
+  "big_source_and_corpus_not_duplicated": true,
+  "test_executable_bytes_archived": false,
+  "test_executable_identity_records": 11,
+  "codec_adoption": {
+    "v1": false,
+    "v2": false,
+    "v3": false
+  },
+  "all_three_variants_rejected": true,
+  "dedicated_host_acceptance": false,
+  "verified_at_utc": "2026-11-12T11:33:16.830504+00:00"
+}

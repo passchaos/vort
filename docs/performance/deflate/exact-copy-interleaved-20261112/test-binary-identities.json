@@ -1,0 +1,115 @@
+{
+  "artifact_kind": "compact archive identity index for original test executables; bytes external, logs/source retained",
+  "tests": {
+    "v1/full-safe": {
+      "sha256": "4eda89c8d6d1a32b665f3fd45443856c1e4b1326d68cc16ef6428adbe549f2da",
+      "bytes": 35378904,
+      "source_epoch": "v1",
+      "original_file": "/tmp/vort-wide-copy-buckets-20261112.21e4a1d0/full-safe",
+      "raw_log_member": "v1-raw.tar.gz:full-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "full-safe"
+    },
+    "v1/kernel-safe": {
+      "sha256": "84b05a8f58f47b962868891df05bd9a3f35b43b642734726c69040c2e7856ec6",
+      "bytes": 3836416,
+      "source_epoch": "v1",
+      "original_file": "/tmp/vort-wide-copy-buckets-20261112.21e4a1d0/kernel-safe",
+      "raw_log_member": "v1-raw.tar.gz:kernel-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "kernel-safe"
+    },
+    "v1/pages-debug": {
+      "sha256": "956a16d5d45be7227ea5f9d5bc22f368f0501de1e26717bc72b2e45d1622fd2d",
+      "bytes": 16678328,
+      "source_epoch": "v1",
+      "original_file": "/tmp/vort-wide-copy-buckets-20261112.21e4a1d0/pages-debug",
+      "raw_log_member": "v1-raw.tar.gz:pages-debug.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "pages-debug"
+    },
+    "v1/pages-safe": {
+      "sha256": "99dad4fc3e5693dd25089ea72c6de3686a7089a885767c2fb1922ec78aab646b",
+      "bytes": 3821312,
+      "source_epoch": "v1",
+      "original_file": "/tmp/vort-wide-copy-buckets-20261112.21e4a1d0/pages-safe",
+      "raw_log_member": "v1-raw.tar.gz:pages-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "pages-safe"
+    },
+    "v1/pages-x86": {
+      "sha256": "20e3a508374837b46102a7d84d1eebc0ce31431b8729e6792bb61c854593d60c",
+      "bytes": 3182508,
+      "source_epoch": "v1",
+      "original_file": "/tmp/vort-wide-copy-buckets-20261112.21e4a1d0/pages-x86",
+      "raw_log_member": "v1-raw.tar.gz:pages-x86.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "pages-x86"
+    },
+    "v2/full-safe": {
+      "sha256": "77818c96deaa765de5db8b60086c0d33b74f44d6cbfb217158f4b1256ae78a20",
+      "bytes": 35392064,
+      "source_epoch": "v2",
+      "original_file": "/tmp/vort-wide-copy-interleaved-20261112.21e4a1d0/full-safe",
+      "raw_log_member": "v2-raw.tar.gz:full-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "full-safe"
+    },
+    "v2/kernel-safe": {
+      "sha256": "c72535295be1b487554b8c95589771fcb504655e0e120f9e89319e9bbd1739c8",
+      "bytes": 3836784,
+      "source_epoch": "v2",
+      "original_file": "/tmp/vort-wide-copy-interleaved-20261112.21e4a1d0/kernel-safe",
+      "raw_log_member": "v2-raw.tar.gz:kernel-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "kernel-safe"
+    },
+    "v2/pages-safe": {
+      "sha256": "bf3db5b47884f0722334001d7a2afb4cea99196513df561ce928e6dfcc555fdb",
+      "bytes": 3824216,
+      "source_epoch": "v2",
+      "original_file": "/tmp/vort-wide-copy-interleaved-20261112.21e4a1d0/pages-safe",
+      "raw_log_member": "v2-raw.tar.gz:pages-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "pages-safe"
+    },
+    "v3/full-safe": {
+      "sha256": "142a0e5a8a95b8220f68d99a3a805380cc775169c03ed0c2b23fe912106176e6",
+      "bytes": 35388008,
+      "source_epoch": "v3",
+      "original_file": "/tmp/vort-wide-copy-interleaved32-20261112.21e4a1d0/full-safe",
+      "raw_log_member": "v3-raw.tar.gz:full-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "full-safe"
+    },
+    "v3/kernel-safe": {
+      "sha256": "ef74cbe434f671f688317fb3e49bee770704c8b1bd6916f31e2b11c301519a0c",
+      "bytes": 3838624,
+      "source_epoch": "v3",
+      "original_file": "/tmp/vort-wide-copy-interleaved32-20261112.21e4a1d0/kernel-safe",
+      "raw_log_member": "v3-raw.tar.gz:kernel-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "kernel-safe"
+    },
+    "v3/pages-safe": {
+      "sha256": "a17c87a1de0e38f614604f47ebcace05a056931b4683fdafed9d6861f3a1112d",
+      "bytes": 3824008,
+      "source_epoch": "v3",
+      "original_file": "/tmp/vort-wide-copy-interleaved32-20261112.21e4a1d0/pages-safe",
+      "raw_log_member": "v3-raw.tar.gz:pages-safe.log",
+      "compiler_argv": null,
+      "build_argv_scope": "complete original test build argv was not retained; validation label/source/log do not reconstruct an original command",
+      "validation_label": "pages-safe"
+    }
+  }
+}

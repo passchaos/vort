@@ -4,6 +4,34 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-12 exact-copy full-matrix rejection
+
+The [three exact-copy trials](deflate/exact-copy-interleaved-20261112/README.md)
+translate libdeflate's limited-live-value copy technique into exact-span Vort
+non-overlap buckets. Aggregate arrays, interleaved16 and interleaved32 remain
+isolated prototypes; none is adopted.
+
+The final interleaved32 twelve-row screen reached 1.031290x, but expansion to
+all 72 cold rows reaches only **1.005154x** (95% CI 1.003689–1.006631x).
+Nine controls fall below 0.98x; weakest x-ray64K/L9 is 0.971265x. Size-group
+geomeans are 1.010916x/1.001974x/1.002596x for 64K/1M/full. It fails both the
+3% aggregate and control gates. The declared nci64K/L9 and XML64K/L6 rows
+improve 1.078267x and 1.075562x, insufficient for a 20% cliff-repair claim.
+
+The expansion retains 576 child events, four balanced AB/BA process sweeps,
+**two** measured and two warmup paired batches per child: 1152 measured and
+1152 warmup pairs. Each process's complete Vort batches form its median;
+baseline/candidate outer pairs feed fixed-row log statistics. Reference timing
+does not normalize candidate gains. Ordinary timing and earlier PMU screens
+stay separate; the full expansion has no PMU observations.
+
+Final candidate exhaustive copy, protected-page contracts and full Deflate
+738/738 tests pass, as do all 72 frozen-wire smokes. Good copy code generation
+does not establish a whole-operation win. The current ranking below still
+measures committed 21e4a1d0 codec source. Next pursue final execution-table
+construction/lifetime from the [reference study](reference-decoder-study-20261112.md),
+including exact tails and resource ownership, rather than another copy bucket.
+
 ## 2026-11-12 complete current committed decoder matrix
 
 The [current-source refresh](modern-decode-refresh-20261112.md) binds committed

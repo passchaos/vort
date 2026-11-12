@@ -1,0 +1,868 @@
+{
+  "authorship": "main independent raw-event recomputation",
+  "events": 576,
+  "rows_count": 72,
+  "raw_measured_pairs": 1152,
+  "raw_warmup_pairs": 1152,
+  "rounds_per_process": 2,
+  "process_sweeps": 4,
+  "method": "per-process all-batch median; paired baseline/control log ratios; fixed rows; outer AB/BA-stratified bootstrap",
+  "seed": 539365650,
+  "resamples": 2000,
+  "row_order": [
+    "deflate_dickens_65536_6_cold",
+    "deflate_dickens_65536_9_cold",
+    "deflate_dickens_1048576_6_cold",
+    "deflate_dickens_1048576_9_cold",
+    "deflate_dickens_full_6_cold",
+    "deflate_dickens_full_9_cold",
+    "deflate_mozilla_65536_6_cold",
+    "deflate_mozilla_65536_9_cold",
+    "deflate_mozilla_1048576_6_cold",
+    "deflate_mozilla_1048576_9_cold",
+    "deflate_mozilla_full_6_cold",
+    "deflate_mozilla_full_9_cold",
+    "deflate_mr_65536_6_cold",
+    "deflate_mr_65536_9_cold",
+    "deflate_mr_1048576_6_cold",
+    "deflate_mr_1048576_9_cold",
+    "deflate_mr_full_6_cold",
+    "deflate_mr_full_9_cold",
+    "deflate_nci_65536_6_cold",
+    "deflate_nci_65536_9_cold",
+    "deflate_nci_1048576_6_cold",
+    "deflate_nci_1048576_9_cold",
+    "deflate_nci_full_6_cold",
+    "deflate_nci_full_9_cold",
+    "deflate_ooffice_65536_6_cold",
+    "deflate_ooffice_65536_9_cold",
+    "deflate_ooffice_1048576_6_cold",
+    "deflate_ooffice_1048576_9_cold",
+    "deflate_ooffice_full_6_cold",
+    "deflate_ooffice_full_9_cold",
+    "deflate_osdb_65536_6_cold",
+    "deflate_osdb_65536_9_cold",
+    "deflate_osdb_1048576_6_cold",
+    "deflate_osdb_1048576_9_cold",
+    "deflate_osdb_full_6_cold",
+    "deflate_osdb_full_9_cold",
+    "deflate_reymont_65536_6_cold",
+    "deflate_reymont_65536_9_cold",
+    "deflate_reymont_1048576_6_cold",
+    "deflate_reymont_1048576_9_cold",
+    "deflate_reymont_full_6_cold",
+    "deflate_reymont_full_9_cold",
+    "deflate_samba_65536_6_cold",
+    "deflate_samba_65536_9_cold",
+    "deflate_samba_1048576_6_cold",
+    "deflate_samba_1048576_9_cold",
+    "deflate_samba_full_6_cold",
+    "deflate_samba_full_9_cold",
+    "deflate_sao_65536_6_cold",
+    "deflate_sao_65536_9_cold",
+    "deflate_sao_1048576_6_cold",
+    "deflate_sao_1048576_9_cold",
+    "deflate_sao_full_6_cold",
+    "deflate_sao_full_9_cold",
+    "deflate_webster_65536_6_cold",
+    "deflate_webster_65536_9_cold",
+    "deflate_webster_1048576_6_cold",
+    "deflate_webster_1048576_9_cold",
+    "deflate_webster_full_6_cold",
+    "deflate_webster_full_9_cold",
+    "deflate_xml_65536_6_cold",
+    "deflate_xml_65536_9_cold",
+    "deflate_xml_1048576_6_cold",
+    "deflate_xml_1048576_9_cold",
+    "deflate_xml_full_6_cold",
+    "deflate_xml_full_9_cold",
+    "deflate_x-ray_65536_6_cold",
+    "deflate_x-ray_65536_9_cold",
+    "deflate_x-ray_1048576_6_cold",
+    "deflate_x-ray_1048576_9_cold",
+    "deflate_x-ray_full_6_cold",
+    "deflate_x-ray_full_9_cold"
+  ],
+  "speed_geomean": 1.0051537516535274,
+  "ci95": [
+    1.0036886340104947,
+    1.0066313157192643
+  ],
+  "weakest": [
+    0.9712646890844143,
+    "deflate_x-ray_65536_9_cold"
+  ],
+  "controls_below_098": [
+    [
+      0.9712646890844143,
+      "deflate_x-ray_65536_9_cold"
+    ],
+    [
+      0.9717211611022921,
+      "deflate_x-ray_65536_6_cold"
+    ],
+    [
+      0.9723085957922482,
+      "deflate_mr_1048576_6_cold"
+    ],
+    [
+      0.9734199107229476,
+      "deflate_ooffice_65536_9_cold"
+    ],
+    [
+      0.9742481250592734,
+      "deflate_x-ray_1048576_6_cold"
+    ],
+    [
+      0.9755634871180207,
+      "deflate_ooffice_65536_6_cold"
+    ],
+    [
+      0.9765670139977836,
+      "deflate_sao_65536_6_cold"
+    ],
+    [
+      0.9767111444646218,
+      "deflate_sao_1048576_6_cold"
+    ],
+    [
+      0.977306958689365,
+      "deflate_x-ray_full_9_cold"
+    ]
+  ],
+  "size_groups": {
+    "65536": 1.010916446299873,
+    "1048576": 1.0019740093666376,
+    "full": 1.0025955566448024
+  },
+  "gates": {
+    "aggregate_103": false,
+    "confidence_excludes_parity": true,
+    "controls_098": false
+  },
+  "rows": {
+    "deflate_dickens_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0524053314187563,
+        1.00207819073241,
+        1.0530013866364927,
+        1.010581218218851
+      ],
+      "speed_geomean": 1.0292507777680995,
+      "input_size": "65536"
+    },
+    "deflate_dickens_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0094556025778292,
+        1.0078780063075654,
+        0.9958874154720955,
+        1.003369829730188
+      ],
+      "speed_geomean": 1.0041338747703794,
+      "input_size": "65536"
+    },
+    "deflate_dickens_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0018264584883236,
+        1.0201156862580147,
+        0.9878223888647312,
+        0.9842112755020033
+      ],
+      "speed_geomean": 0.9983947326858706,
+      "input_size": "1048576"
+    },
+    "deflate_dickens_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0042901492993972,
+        1.0026515989466074,
+        0.983341823285163,
+        1.0027794466359012
+      ],
+      "speed_geomean": 0.9982281139263199,
+      "input_size": "1048576"
+    },
+    "deflate_dickens_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0370527740405668,
+        0.9873194173149598,
+        1.001024729428304,
+        1.0389476977206868
+      ],
+      "speed_geomean": 1.0158375371846606,
+      "input_size": "full"
+    },
+    "deflate_dickens_full_9_cold": {
+      "paired_speed_ratios": [
+        0.9987200916875644,
+        0.9845868519191141,
+        1.0401440470598673,
+        1.0238853090253612
+      ],
+      "speed_geomean": 1.0116042717341165,
+      "input_size": "full"
+    },
+    "deflate_mozilla_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9922843392785102,
+        0.9992608149136317,
+        0.9935182081915952,
+        0.9972454909260315
+      ],
+      "speed_geomean": 0.9955732673915899,
+      "input_size": "65536"
+    },
+    "deflate_mozilla_65536_9_cold": {
+      "paired_speed_ratios": [
+        0.9915419601784705,
+        0.990124242736018,
+        1.0015463212071003,
+        0.9738728060966864
+      ],
+      "speed_geomean": 0.9892214335001627,
+      "input_size": "65536"
+    },
+    "deflate_mozilla_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0101924584132354,
+        1.0305396486035798,
+        1.0377730936550291,
+        1.011963223282865
+      ],
+      "speed_geomean": 1.0225486763578209,
+      "input_size": "1048576"
+    },
+    "deflate_mozilla_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9921794893634734,
+        1.0039663488477204,
+        0.9685091975947616,
+        0.9836454192977003
+      ],
+      "speed_geomean": 0.9869904059284466,
+      "input_size": "1048576"
+    },
+    "deflate_mozilla_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0006266912155333,
+        0.9800207485788591,
+        0.9861901453913682,
+        0.9795562334505922
+      ],
+      "speed_geomean": 0.9865619153863814,
+      "input_size": "full"
+    },
+    "deflate_mozilla_full_9_cold": {
+      "paired_speed_ratios": [
+        0.985895140051751,
+        0.9947651288363177,
+        0.9900572388438714,
+        0.9874740990277866
+      ],
+      "speed_geomean": 0.9895422089845418,
+      "input_size": "full"
+    },
+    "deflate_mr_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0235325269358928,
+        1.0173526446917316,
+        0.99887254202908,
+        1.0037896430735667
+      ],
+      "speed_geomean": 1.0108378331659065,
+      "input_size": "65536"
+    },
+    "deflate_mr_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.008747576648804,
+        1.0369297115333307,
+        0.9996518425382961,
+        1.008913813146435
+      ],
+      "speed_geomean": 1.013464791252578,
+      "input_size": "65536"
+    },
+    "deflate_mr_1048576_6_cold": {
+      "paired_speed_ratios": [
+        0.9584468547512146,
+        0.9826709541348876,
+        0.9704069894675175,
+        0.9778819479638694
+      ],
+      "speed_geomean": 0.9723085957922482,
+      "input_size": "1048576"
+    },
+    "deflate_mr_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.016907380960445,
+        0.9782798402536157,
+        0.9556968089798498,
+        0.9888150114546583
+      ],
+      "speed_geomean": 0.9846795592661691,
+      "input_size": "1048576"
+    },
+    "deflate_mr_full_6_cold": {
+      "paired_speed_ratios": [
+        0.9902080694499429,
+        0.9980307940768233,
+        1.0039474330191769,
+        0.9989034843384598
+      ],
+      "speed_geomean": 0.9977603145816942,
+      "input_size": "full"
+    },
+    "deflate_mr_full_9_cold": {
+      "paired_speed_ratios": [
+        0.9863639428563159,
+        0.9888937633182133,
+        0.9775670336878497,
+        0.9748604262841797
+      ],
+      "speed_geomean": 0.9819038289662043,
+      "input_size": "full"
+    },
+    "deflate_nci_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0420646353841851,
+        1.0379567825879958,
+        1.0893537686433297,
+        1.036992355895039
+      ],
+      "speed_geomean": 1.051367640506918,
+      "input_size": "65536"
+    },
+    "deflate_nci_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0763874384094505,
+        1.0859862501678008,
+        1.0787504599637234,
+        1.0719903982807948
+      ],
+      "speed_geomean": 1.078266739865044,
+      "input_size": "65536"
+    },
+    "deflate_nci_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0107670688057104,
+        1.051335412130916,
+        1.0054371946684846,
+        1.0300007828103115
+      ],
+      "speed_geomean": 1.0242269988785295,
+      "input_size": "1048576"
+    },
+    "deflate_nci_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0150234332673318,
+        1.0416851832531924,
+        1.037030684813148,
+        0.987741328616553
+      ],
+      "speed_geomean": 1.0201448631455168,
+      "input_size": "1048576"
+    },
+    "deflate_nci_full_6_cold": {
+      "paired_speed_ratios": [
+        0.9984357601528214,
+        1.0189157678898733,
+        1.0221879465003696,
+        1.0338163577299904
+      ],
+      "speed_geomean": 1.0182587281401596,
+      "input_size": "full"
+    },
+    "deflate_nci_full_9_cold": {
+      "paired_speed_ratios": [
+        1.0056804497165324,
+        1.052341898747573,
+        1.0299807356458872,
+        1.0430815767013555
+      ],
+      "speed_geomean": 1.0326212585000836,
+      "input_size": "full"
+    },
+    "deflate_ooffice_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9495764296156036,
+        0.9717381784035742,
+        0.999826479474119,
+        0.981789364444129
+      ],
+      "speed_geomean": 0.9755634871180207,
+      "input_size": "65536"
+    },
+    "deflate_ooffice_65536_9_cold": {
+      "paired_speed_ratios": [
+        0.9785239848031876,
+        0.9739364193592673,
+        0.9799157643700269,
+        0.9614131879510512
+      ],
+      "speed_geomean": 0.9734199107229476,
+      "input_size": "65536"
+    },
+    "deflate_ooffice_1048576_6_cold": {
+      "paired_speed_ratios": [
+        0.98034213172414,
+        0.9926652928837342,
+        0.9729138473240704,
+        0.9779729853051181
+      ],
+      "speed_geomean": 0.9809467599529904,
+      "input_size": "1048576"
+    },
+    "deflate_ooffice_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9872567901493667,
+        0.9837927811441948,
+        0.9862355164748273,
+        0.981802066453375
+      ],
+      "speed_geomean": 0.9847694908996344,
+      "input_size": "1048576"
+    },
+    "deflate_ooffice_full_6_cold": {
+      "paired_speed_ratios": [
+        0.984500387388572,
+        0.9659871958782056,
+        0.9881632749268787,
+        1.0045363882451805
+      ],
+      "speed_geomean": 0.9857014852463131,
+      "input_size": "full"
+    },
+    "deflate_ooffice_full_9_cold": {
+      "paired_speed_ratios": [
+        0.973898306611093,
+        0.9973156969850971,
+        0.9747259120024253,
+        0.9859055958954916
+      ],
+      "speed_geomean": 0.9829151455597579,
+      "input_size": "full"
+    },
+    "deflate_osdb_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9817282271884487,
+        1.010091929445733,
+        1.0003815898103838,
+        1.0686967599523298
+      ],
+      "speed_geomean": 1.0147126876936012,
+      "input_size": "65536"
+    },
+    "deflate_osdb_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0063028300372443,
+        0.9951264968397855,
+        1.0242159855782647,
+        1.0478119856179342
+      ],
+      "speed_geomean": 1.0181704159890543,
+      "input_size": "65536"
+    },
+    "deflate_osdb_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0303848508102658,
+        1.001765248809908,
+        1.0160107506910148,
+        1.0081180732938113
+      ],
+      "speed_geomean": 1.014013606808802,
+      "input_size": "1048576"
+    },
+    "deflate_osdb_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0062099766802732,
+        0.9921820687216347,
+        1.0059886858502114,
+        1.0171142699384754
+      ],
+      "speed_geomean": 1.0053347841112468,
+      "input_size": "1048576"
+    },
+    "deflate_osdb_full_6_cold": {
+      "paired_speed_ratios": [
+        1.067451143054199,
+        1.0135648702825406,
+        1.006376090811639,
+        1.0037836238593745
+      ],
+      "speed_geomean": 1.0224686317818052,
+      "input_size": "full"
+    },
+    "deflate_osdb_full_9_cold": {
+      "paired_speed_ratios": [
+        1.0127699551865113,
+        0.9840582258226424,
+        0.9914044581968511,
+        1.006106001551402
+      ],
+      "speed_geomean": 0.998519505688876,
+      "input_size": "full"
+    },
+    "deflate_reymont_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0087546889686836,
+        1.0142927446067465,
+        1.006559295813807,
+        1.03663035248879
+      ],
+      "speed_geomean": 1.0164898409492646,
+      "input_size": "65536"
+    },
+    "deflate_reymont_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.036744887226511,
+        1.0238722870619754,
+        1.0341034238934472,
+        1.0336022144984107
+      ],
+      "speed_geomean": 1.0320690973639044,
+      "input_size": "65536"
+    },
+    "deflate_reymont_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0113079048802955,
+        0.9839694255096197,
+        1.0009812719989677,
+        1.00427325850808
+      ],
+      "speed_geomean": 1.0000822382145356,
+      "input_size": "1048576"
+    },
+    "deflate_reymont_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.023668810002502,
+        1.0112961889258956,
+        1.0097783314340898,
+        0.9988670114034442
+      ],
+      "speed_geomean": 1.010864371283718,
+      "input_size": "1048576"
+    },
+    "deflate_reymont_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0237579565451753,
+        0.9991471440467073,
+        1.0183490750534938,
+        1.0408442355551402
+      ],
+      "speed_geomean": 1.0204160688992299,
+      "input_size": "full"
+    },
+    "deflate_reymont_full_9_cold": {
+      "paired_speed_ratios": [
+        1.0081716653563146,
+        1.0039739519613935,
+        1.0070445661092722,
+        1.0095858345003585
+      ],
+      "speed_geomean": 1.0071918847040724,
+      "input_size": "full"
+    },
+    "deflate_samba_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9773414144424754,
+        1.0071275132220596,
+        1.020735662028226,
+        1.0389448348885582
+      ],
+      "speed_geomean": 1.010785806235994,
+      "input_size": "65536"
+    },
+    "deflate_samba_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0260551438072427,
+        1.0102058654484336,
+        0.9884816751439806,
+        1.0518135421706283
+      ],
+      "speed_geomean": 1.018877547692993,
+      "input_size": "65536"
+    },
+    "deflate_samba_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0094047085532885,
+        1.0178126598217916,
+        1.0102550153962668,
+        1.0018950359061816
+      ],
+      "speed_geomean": 1.0098261287680619,
+      "input_size": "1048576"
+    },
+    "deflate_samba_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0144851129077848,
+        1.0060212044207613,
+        1.0153691826921127,
+        1.0005012637092638
+      ],
+      "speed_geomean": 1.0090753753811197,
+      "input_size": "1048576"
+    },
+    "deflate_samba_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0069339860027158,
+        0.9999151343137722,
+        1.012584525113663,
+        0.999161093362828
+      ],
+      "speed_geomean": 1.004633684110775,
+      "input_size": "full"
+    },
+    "deflate_samba_full_9_cold": {
+      "paired_speed_ratios": [
+        1.0489336769211526,
+        1.0010274753316373,
+        0.9989361928600232,
+        1.0087553088965477
+      ],
+      "speed_geomean": 1.0142135352839101,
+      "input_size": "full"
+    },
+    "deflate_sao_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9855742686815141,
+        0.9857291260317917,
+        0.9344148154753752,
+        1.001893460568351
+      ],
+      "speed_geomean": 0.9765670139977836,
+      "input_size": "65536"
+    },
+    "deflate_sao_65536_9_cold": {
+      "paired_speed_ratios": [
+        0.9704204711520734,
+        1.0100709551833742,
+        0.9867762195116853,
+        0.972424909008092
+      ],
+      "speed_geomean": 0.9847968381646183,
+      "input_size": "65536"
+    },
+    "deflate_sao_1048576_6_cold": {
+      "paired_speed_ratios": [
+        0.9981425493752267,
+        0.958450587022883,
+        0.9877605034158933,
+        0.9630539547716152
+      ],
+      "speed_geomean": 0.9767111444646218,
+      "input_size": "1048576"
+    },
+    "deflate_sao_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9966932604360488,
+        0.980708203977327,
+        1.0028996801285857,
+        0.9830099037171913
+      ],
+      "speed_geomean": 0.9907844434824298,
+      "input_size": "1048576"
+    },
+    "deflate_sao_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0132237510772055,
+        0.9484495426085142,
+        1.0073290846753462,
+        0.9622695417846049
+      ],
+      "speed_geomean": 0.9824193921933959,
+      "input_size": "full"
+    },
+    "deflate_sao_full_9_cold": {
+      "paired_speed_ratios": [
+        0.9983206291915971,
+        0.9801236436237565,
+        0.9937465486572244,
+        0.9733392488037296
+      ],
+      "speed_geomean": 0.9863310275889535,
+      "input_size": "full"
+    },
+    "deflate_webster_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9648401254961216,
+        1.0038357595099057,
+        1.0019772859845277,
+        1.0086064735191473
+      ],
+      "speed_geomean": 0.9946594467328829,
+      "input_size": "65536"
+    },
+    "deflate_webster_65536_9_cold": {
+      "paired_speed_ratios": [
+        0.9845847803417612,
+        1.01623382397707,
+        1.0217881041060342,
+        0.9671061128900976
+      ],
+      "speed_geomean": 0.9971728228189632,
+      "input_size": "65536"
+    },
+    "deflate_webster_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0153507564737623,
+        0.9889016471168446,
+        1.0163521529269466,
+        1.0243477948351312
+      ],
+      "speed_geomean": 1.0111491271990127,
+      "input_size": "1048576"
+    },
+    "deflate_webster_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0070949635406858,
+        0.9769475369230533,
+        1.027618103171118,
+        1.0060726897045715
+      ],
+      "speed_geomean": 1.0042704712020156,
+      "input_size": "1048576"
+    },
+    "deflate_webster_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0187111866471763,
+        1.007316296283583,
+        1.001441894382034,
+        1.0025424701597314
+      ],
+      "speed_geomean": 1.007479847157665,
+      "input_size": "full"
+    },
+    "deflate_webster_full_9_cold": {
+      "paired_speed_ratios": [
+        1.020792450510158,
+        1.0104350961031345,
+        1.0095641117845437,
+        0.9790825937863964
+      ],
+      "speed_geomean": 1.0048466207782114,
+      "input_size": "full"
+    },
+    "deflate_xml_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0545234662301417,
+        1.06614861982057,
+        1.0817194643641836,
+        1.1004051728594746
+      ],
+      "speed_geomean": 1.07556166882032,
+      "input_size": "65536"
+    },
+    "deflate_xml_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0590611223565152,
+        1.0719175992213663,
+        1.077862934718019,
+        1.0693884482436062
+      ],
+      "speed_geomean": 1.0695358917302817,
+      "input_size": "65536"
+    },
+    "deflate_xml_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0356337165197198,
+        1.0545214357999493,
+        1.0353363266949658,
+        1.005139604534896
+      ],
+      "speed_geomean": 1.032505461989393,
+      "input_size": "1048576"
+    },
+    "deflate_xml_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0792061938063353,
+        1.0425972435373985,
+        1.0419910420796785,
+        1.056680927865524
+      ],
+      "speed_geomean": 1.0550115493928593,
+      "input_size": "1048576"
+    },
+    "deflate_xml_full_6_cold": {
+      "paired_speed_ratios": [
+        1.0128139516653036,
+        1.028169142327466,
+        1.0802014039579637,
+        0.9900458948930041
+      ],
+      "speed_geomean": 1.0272793930761666,
+      "input_size": "full"
+    },
+    "deflate_xml_full_9_cold": {
+      "paired_speed_ratios": [
+        1.0262785046128198,
+        1.0473720212952424,
+        0.9980833731134944,
+        1.0482725076683268
+      ],
+      "speed_geomean": 1.0297974319120218,
+      "input_size": "full"
+    },
+    "deflate_x-ray_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9435109787837243,
+        0.9475598011429723,
+        0.9979628908193947,
+        0.9993063870510478
+      ],
+      "speed_geomean": 0.9717211611022921,
+      "input_size": "65536"
+    },
+    "deflate_x-ray_65536_9_cold": {
+      "paired_speed_ratios": [
+        0.9683142426035874,
+        0.9975756896522058,
+        0.9503672960711833,
+        0.9693859927631625
+      ],
+      "speed_geomean": 0.9712646890844143,
+      "input_size": "65536"
+    },
+    "deflate_x-ray_1048576_6_cold": {
+      "paired_speed_ratios": [
+        0.9740602090162682,
+        0.9775899677564952,
+        0.9843644246749023,
+        0.9611249832190757
+      ],
+      "speed_geomean": 0.9742481250592734,
+      "input_size": "1048576"
+    },
+    "deflate_x-ray_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9785048479871638,
+        0.981974094276016,
+        0.9823894051382269,
+        0.9969510555080004
+      ],
+      "speed_geomean": 0.984929465131353,
+      "input_size": "1048576"
+    },
+    "deflate_x-ray_full_6_cold": {
+      "paired_speed_ratios": [
+        0.9904495698928817,
+        0.9870436272834077,
+        0.9741804436417567,
+        0.9692312490440598
+      ],
+      "speed_geomean": 0.9801868749494289,
+      "input_size": "full"
+    },
+    "deflate_x-ray_full_9_cold": {
+      "paired_speed_ratios": [
+        0.9631205139385383,
+        0.9781843429507066,
+        0.987105195973841,
+        0.9809778153916188
+      ],
+      "speed_geomean": 0.977306958689365,
+      "input_size": "full"
+    }
+  },
+  "source_events_sha256": "99d0f8ed0f89c02500faf994a30b5b07948c37ef8093803c05d648e06cba2dba",
+  "adopted": false,
+  "dedicated_host_acceptance": false
+}
