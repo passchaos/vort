@@ -7,13 +7,18 @@ current full matrix remains the separate [21e4a1d0 refresh](modern-decode-refres
 | Reference | Checked source revision | Scope |
 | --- | --- | --- |
 | libdeflate 1.26 | `92e6a0db9fa848d742f9eb286c92afc60f2c3dda` | inflate tables, match copy, bounded tail and x86 whole-decoder dispatch |
+| zlib-ng 2.3.2 | `6d9f3dc072369dc719a5fbe71d4e086a96a680bd` | direct inflate tables, actual fast-loop bounds, safe copy and stream state |
+| zlib-rs 0.6.1 | `2e487e34e1d2a79c24545b4f843437611d77be2c` | direct tables, initialized output, reader/writer lending and CPU specialization |
 | Zstd 1.6.0 | `01b7154f1172432f8abe9b3bb9909e14a1176b7d` | HUF DTable installation, sequence modes/ownership and literal placement |
 | libbrotli 1.2.0 | `558fc647cdaf391228d614ca85f711e02e4e583b` | stable Huffman groups, guarded reader phases and distance history |
 
 Local `~/Work/brotli` is clean and matches the pinned revision. Zstd uses the
 checked local pinned source. The exact libdeflate source accompanies the
-reference build. No local zlib-ng/zlib-rs inflate source was located in this
-round, so their specific implementations are not claimed studied.
+reference build. No zlib-ng/zlib-rs checkout was initially present under
+`~/Work`; pinned sources were fetched for the supplementary
+[Deflate family study](reference-deflate-family-study-20261112.md). Their source
+mechanisms are studied, but no new performance comparison against these two
+libraries is claimed.
 
 ## Deflate mechanisms and next targets
 
@@ -48,6 +53,45 @@ its empty/singleton completion must not replace Vort's canonical-zero and
 invalid-hole contracts. Whole-decoder CPU selection occurs outside the symbol
 loop; both current Skylake comparisons already use BMI2-capable builds.
 
+### Concrete preparation and tail boundary
+
+The [completed exact-copy expansion](deflate/exact-copy-interleaved-20261112/README.md)
+rejects interleaved32 after all 72 cold rows: 1.005154x overall, nine controls
+below 0.98x. Its small-screen 1.031290x is not the complete-matrix result. The
+next candidate must remove preparation/execution work beyond copy scheduling.
+
+The current public dynamic path in `src/deflate.zig` first builds the literal
+canonical table, then a distance decoder, then a semantic plan. A singleton
+distance decoder can require another canonical distance construction before
+the generic semantic initializer succeeds. Direct construction should resolve
+this lifecycle once, not add a parallel plan beside the same intermediates.
+
+The canonical tables also carry real tail contracts. Ordinary and window
+semantic tails call `compact_distance.decodeValue`; the window's one-byte
+remainder after a packed literal pair calls `compact_literal.decodeValue`
+after restoring the saved reader. `HuffmanTable.decodeValue` consumes one bit
+at a time through width 15, so missing codes can report truncation before
+invalid-code rejection. A final-table-only replacement must preserve these
+reader/error/output transitions, not simply use a zero primary entry to
+reject sooner.
+
+The proposed first construction slice is a stable owner built from code
+lengths: count and validate canonical space, order symbols by width and symbol,
+fill semantic primary/pair/secondary entries directly, and retain only the
+canonical bands/symbol order needed by checked tails. The canonical oracle
+remains unchanged. Existing arbitrary private semantic tables keep their
+current full-width executor; they do not gain a trusted capability from an
+initializer boolean. Incomplete literal shapes unsupported by the semantic
+route choose a bounded existing fallback before execution. Incomplete distance
+holes retain defined sentinels and the precise checked-tail behavior.
+
+This is a design boundary, not implemented performance evidence. Before a
+timing screen, compare complete primary tables, used secondary slots, EOB,
+singleton-zero, valid holes, every truncated code/extra width, prefilled reader
+reservoirs, partial window publication and private outliers against the old
+oracle. Then inspect whole-decoder text/stack and cold public-operation
+controls; a smaller isolated constructor or symbol alone is insufficient.
+
 ## Zstd mechanisms and next targets
 
 The first priority is an installed HUF execution plan. Upstream
@@ -75,6 +119,51 @@ Upstream uses output slack for this purpose; Vort must respect its cropped
 frame-output slice and literal collision/overcopy bounds. Otherwise use an
 explicit retained bounded scratch. This addresses stack and checks, not a
 claim that HUF literals or most literal copies disappear.
+
+### First measurable X1 lifetime slice
+
+Use one fixed installed X1 slot first, replacing only the repeated
+`CompleteHuffmanLiteralLookup.buildComplete` at `src/zstd.zig:12858`. Keep the
+existing parser, X2 policy, sequence executor and 512 KiB workspace admission.
+A miss still uses the current builder; direct weights-to-X1 construction is
+a later independently measured change. This isolates table reuse from changing
+decoder scheduling or public allocation policy.
+
+The owner has a tree semantic key, one 4 KiB lookup and a validity flag. Compare
+`max_bit_count`, `symbol_count_minus_one` and active nodes' prefix/symbol/weight;
+tree addresses, unused nodes and struct padding are not keys. A nullable owner
+borrow travels through `SequenceFrameState` and `LiteralOnlySection`. Ordinary
+frame decode owns a local slot; reusable decode borrows the existing workspace
+slot when that workspace is already admitted. Dictionary snapshots and other
+source/incremental/oracle paths retain their original value lifetime with a
+null default borrow. Attach the frame-owned borrow after dictionary state
+initialization, never inside a caller-owned prepared dictionary snapshot.
+
+Keep X2 selection first. On an X1 miss, retain the existing local staging
+lookup and commit tree/key/table only after all four streams pass their exact
+end checks. Builder/stream errors leave the old slot intact. A subsequent
+sequence/checksum failure may leave a new derived cache installed; it must not
+advance predecessor-tree validity, reps or public progress. Existing parser
+state ordering is unchanged. A matching cached table never substitutes for
+treeless predecessor checks, including the first block of a new frame.
+
+The workspace is currently named `SequenceDecodeWorkspace`, not
+`DecodeEntropyWorkspace`. Existing payload alone is 55,816 bytes before table
+headers, slot metadata and padding. Four additional X1 lookups would bring
+payload alone to 72,200 bytes and violate the 64 KiB cap. One slot adds 4,096
+lookup bytes plus its 1,026-byte tree key and validity/padding. Actual allocation
+and quota adoption must continue to use compiler `@sizeOf` and the existing
+64 KiB assertion; this source-only study has not compiled the enlarged type.
+Large prepared frames above the existing workspace threshold use the local
+frame slot initially, so they gain only within-frame reuse in this slice.
+
+Before timing, prove misses/hits and raw/RLE-between-treeless transitions,
+dictionary snapshots, cross-frame missing-predecessor rejection, failed table
+or stream staging, reset and OOM/quota boundaries against the null-slot oracle.
+Measure actual X1 route/hit counts on the original corpus. Then compare all 72
+Zstd wires under both cold and matched-prepared lifecycles with production X2
+policy enabled. First-miss commit copying and added local/retained memory belong
+in the result. This design has no measured gain or implementation claim yet.
 
 ## Brotli mechanisms and next targets
 
