@@ -1,0 +1,196 @@
+{
+  "schema": "vort.deflate.distance-secondary-hole-archive-validation.v1",
+  "valid": true,
+  "scope": "offline original-byte/source/recorded-contract/statistics verification; no compiler, codec, test, oracle or benchmark execution",
+  "cpu_affinity": [
+    0
+  ],
+  "base_revision": "c19f5cddea3f5806ac48ebc7578f9ff8bc665b05",
+  "baseline_registry_files": 2064,
+  "final_registry_files": 2069,
+  "complete_compiler_input_claim": false,
+  "baseline_git_blobs_verified": 2064,
+  "saved_final_source_commit": "d31dc3895d6a42e10205aff377731abecf4f27bd",
+  "saved_final_source_git_blobs_verified": 9,
+  "original_files_verified": 626,
+  "source_overlay_files": {
+    "before_v2": 5,
+    "final": 9
+  },
+  "initial_compile_failures_excluded": 3,
+  "before_v2": {
+    "debug": {
+      "returncode": 1,
+      "malformed_input_read": 305,
+      "malformed_output_written": 143,
+      "tests_passed": 7,
+      "tests_failed": 1
+    },
+    "fast": {
+      "returncode": 1,
+      "malformed_input_read": 305,
+      "malformed_output_written": 131,
+      "tests_passed": 7,
+      "tests_failed": 1
+    },
+    "safe": {
+      "returncode": 0,
+      "tests": 8,
+      "anonymous_import_tests": 7,
+      "named_tests": 1,
+      "scope": "this seed correctly rejects; no all-mode old failure claim"
+    }
+  },
+  "public_cases": 6,
+  "root_duplicate_public_calls": 6,
+  "direct_mode_cases": 18,
+  "intermediate_direct_mode_cases": 15,
+  "final_runs": [
+    {
+      "label": "fast",
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    {
+      "label": "safe",
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    {
+      "label": "debug",
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    {
+      "label": "x86-safe",
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    {
+      "label": "wasi-safe",
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    {
+      "label": "root-fast",
+      "tests": 92,
+      "anonymous_import_tests": 89,
+      "named_tests": 3
+    },
+    {
+      "label": "root-safe",
+      "tests": 92,
+      "anonymous_import_tests": 89,
+      "named_tests": 3
+    },
+    {
+      "label": "root-debug",
+      "tests": 92,
+      "anonymous_import_tests": 89,
+      "named_tests": 3
+    },
+    {
+      "label": "root-wasi-safe",
+      "tests": 92,
+      "anonymous_import_tests": 89,
+      "named_tests": 3
+    },
+    {
+      "label": "full-deflate-safe",
+      "tests": 738,
+      "anonymous_import_tests": 13,
+      "named_tests": 725
+    }
+  ],
+  "intermediate_success_logs": {
+    "after-debug.log": {
+      "tests": 8,
+      "anonymous_import_tests": 7,
+      "named_tests": 1
+    },
+    "after-fast.log": {
+      "tests": 8,
+      "anonymous_import_tests": 7,
+      "named_tests": 1
+    },
+    "after-root-safe.log": {
+      "tests": 90,
+      "anonymous_import_tests": 88,
+      "named_tests": 2
+    },
+    "after-safe.log": {
+      "tests": 8,
+      "anonymous_import_tests": 7,
+      "named_tests": 1
+    },
+    "modes-debug.log": {
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    "modes-fast.log": {
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    "modes-root-debug.log": {
+      "tests": 92,
+      "anonymous_import_tests": 89,
+      "named_tests": 3
+    },
+    "modes-safe.log": {
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    "modes-wasi-run.log": {
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    },
+    "modes-x86.log": {
+      "tests": 10,
+      "anonymous_import_tests": 8,
+      "named_tests": 2
+    }
+  },
+  "oracle": {
+    "main_independent_rows": 6,
+    "accepted_subset_cases": 4,
+    "missing_code_cases": 2,
+    "worker_retained_rows": 8,
+    "worker_saved_padded_fixtures": 6,
+    "worker_original_script_preserved": false,
+    "worker_extra_two_rows_have_saved_fixture_bytes": false,
+    "main_oracle_single_missing_has_128_literal_prefix": true,
+    "public_zig_single_missing_has_no_history": true,
+    "oracle_reexecuted_during_archive_verification": false,
+    "malformed_bare_bytes": 305,
+    "zlib_eager_header_contract_differs": true
+  },
+  "completed_nonregression_and_smoke": {
+    "events": 96,
+    "selected_rows": 12,
+    "outer_pairs_per_row": 4,
+    "child_measured_pairs": 2,
+    "child_warmup_pairs": 2,
+    "selected_geomean": 1.0047170721097083,
+    "weakest_row": "deflate_xml_65536_6_cold",
+    "weakest_geomean": 0.9953622357568752,
+    "all_selected_row_geomeans_at_least_0_98": true,
+    "performance_gain_claimed": false,
+    "smoke_events": 72,
+    "smoke_times_are_acceptance_samples": false,
+    "large_fixture_bytes_archived": false,
+    "external_fixture_files_verified": 108,
+    "external_fixture_bytes_verified": 371820359
+  },
+  "performance_gain_claimed": false,
+  "unmatched_before_debug_binary_used_for_claims": false,
+  "verified_at_utc": "2026-11-12T03:09:59.550210+00:00"
+}

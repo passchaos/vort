@@ -4,6 +4,28 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-12 missing long-distance secondary correction
+
+The [distance secondary hole correction](deflate/distance-secondary-holes-20261112.md)
+closes a public malformed-stream acceptance defect. Allocated incomplete long
+distance suffix ranges had undefined holes, and semantic readers did not reject
+zero widths. A real two-block fixture returned successful 305-byte consumption
+with 143-byte Debug or 131-byte ReleaseFast output; the independent canonical
+oracle rejects its missing code. The recorded ReleaseSafe build rejected it,
+so that result cannot stand in for all code-generation modes.
+
+The `d31dc389` increment initializes each allocated suffix range and rejects
+zero widths in ordinary/window/non-overlap, rolling and sink consumers. Valid
+incomplete distance codes retain their existing support. Six public scenarios
+and 18 direct modes pass in Debug/ReleaseSafe/ReleaseFast/x86/actual WASI; root
+facade tests also pass, and full Deflate ReleaseSafe is 738/738. Filtered 10/92
+counts include import tests and repeated public aggregates.
+
+All 72 frozen wires pass full-output/consumption/guard smoke. A 96-child,
+twelve-row non-regression pilot is 1.004717x, weakest row 0.995362x, without a
+new full-matrix or dedicated-host performance claim. A future prepared-range
+proof must include defined hole handling; no mapped-word executor is adopted.
+
 ## 2026-11-11 complete refreshed decode comparison
 
 The [complete refresh](modern-decode-refresh-20261111.md) binds the verified

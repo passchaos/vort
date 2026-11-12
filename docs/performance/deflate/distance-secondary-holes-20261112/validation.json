@@ -1,0 +1,260 @@
+{
+  "base_revision": "c19f5cdd",
+  "source_sha256": {
+    "src/deflate.zig": "30b6d4634c189f2a012d8a4db85ffcca7aa08f95e8fd44018b15fa72c71877d8",
+    "src/root.zig": "cc496d8e52cb4fb67c7f65f45af02328e7cf48bbc2bb65b8f9ecfee34365625b",
+    "src/deflate/semantic/decoder.zig": "40a27a65d08fbb82a507978d02a987971dbf91ac15b3b71edd99fef00b00fd3c",
+    "src/deflate/semantic/rolling_decoder.zig": "83b55075f97c53845242c9d30cd11f213d0fa0f7187ec2b9de120e8aed765785",
+    "src/deflate/semantic/distance_holes_tests.zig": "f08692f8e653f11732860acc30e1b2afd0679469b0afcaf4c4b1fa906c8e0eaa",
+    "src/deflate/semantic/distance_holes_modes.zig": "335715541e33d4e3a3ce5c92b1bbe0284d72902ab369046bf769c8bc1b763365",
+    "src/deflate/semantic/testdata/distance-hole-missing10.deflate": "ecb6529ba719d7db6d4859b52d0a9349ae3f4fa87c9b3304899a2abd85c1bc03",
+    "src/deflate/semantic/testdata/distance-hole-existing9.deflate": "1269f41cabd9f9bc9ed26bb63507fe809d0d2b1d95f0b4b49a5afb459df42aa2",
+    "src/deflate/semantic/testdata/distance-hole-existing10.deflate": "1be38d7ad939f05d8cacec9fc215e58b3c6e89449b3ea25fde92a6a6fedacb0c"
+  },
+  "source_unchanged": true,
+  "public_cases": 6,
+  "direct_mode_cases": 18,
+  "mode_scope": "ordinary/non-overlap/window/sink x3 fixtures +2nonzero rolling bases x3; canonical tables built in-place; no private slot poisoning",
+  "filtered_scope": "Deflate10 contains2behavioral aggregates+8anonymous imports; root92 contains3aggregates+89imports; not92new independent cases",
+  "before": {
+    "debug": {
+      "returncode": 1,
+      "malformed_success_input_read": 305,
+      "malformed_success_output_written": 143,
+      "log": "before-debug-v2.log"
+    },
+    "fast": {
+      "returncode": 1,
+      "malformed_success_input_read": 305,
+      "malformed_success_output_written": 131,
+      "log": "before-fast-v2.log"
+    },
+    "safe": {
+      "returncode": 0,
+      "log": "before-safe-v2.log",
+      "scope": "this seed/build rejected; uninitialized behavior is not stable acrossmodes"
+    }
+  },
+  "runs": [
+    {
+      "label": "fast",
+      "returncode": 0,
+      "tests_passed": 10,
+      "log": "final-fast.log",
+      "log_sha256": "c68898941351b29df91d4508224294390990707315bd29d01b63c2416cb66bcf",
+      "executable": "final-fast",
+      "executable_sha256": "d1bfa3bfee15ee0c6d6ef488c5b13666bf7615c6cc31f824f94b0e03e300538f"
+    },
+    {
+      "label": "safe",
+      "returncode": 0,
+      "tests_passed": 10,
+      "log": "final-safe.log",
+      "log_sha256": "c68898941351b29df91d4508224294390990707315bd29d01b63c2416cb66bcf",
+      "executable": "final-safe",
+      "executable_sha256": "878ace2eac277cd48f5702a50e2ed2849ebf8e1489dc1edaf63a07156af6d970"
+    },
+    {
+      "label": "debug",
+      "returncode": 0,
+      "tests_passed": 10,
+      "log": "final-debug.log",
+      "log_sha256": "c68898941351b29df91d4508224294390990707315bd29d01b63c2416cb66bcf",
+      "executable": "final-debug",
+      "executable_sha256": "2eeff8fbbe8d488e5ab90dea970ab39d816eff19f4ef5636683a8f66aa2a7469"
+    },
+    {
+      "label": "x86-safe",
+      "returncode": 0,
+      "tests_passed": 10,
+      "log": "final-x86.log",
+      "log_sha256": "c68898941351b29df91d4508224294390990707315bd29d01b63c2416cb66bcf",
+      "executable": "final-x86",
+      "executable_sha256": "3426d3e2aa7586e267380bec8f01ca8f7a7c4b5b492a86be74b61fa571a4ea41"
+    },
+    {
+      "label": "wasi-safe",
+      "returncode": 0,
+      "tests_passed": 10,
+      "log": "final-wasi-run.log",
+      "log_sha256": "c68898941351b29df91d4508224294390990707315bd29d01b63c2416cb66bcf",
+      "executable": "final-wasi.wasm",
+      "executable_sha256": "9e08e06541b8e7cd0519e2f2c3a02abe7b341c13069d80abd785ac84802d2661"
+    },
+    {
+      "label": "root-fast",
+      "returncode": 0,
+      "tests_passed": 92,
+      "log": "final-root-fast.log",
+      "log_sha256": "1e227f78bb339e16437638752d427c786fab3807bf6aba4ed02ef28dc2d2c8c2",
+      "executable": "final-root-fast",
+      "executable_sha256": "f38cab3615c25139b601ec029381195f7a1c07b8fd41fe74ffc81f230d069f8f"
+    },
+    {
+      "label": "root-safe",
+      "returncode": 0,
+      "tests_passed": 92,
+      "log": "final-root-safe.log",
+      "log_sha256": "1e227f78bb339e16437638752d427c786fab3807bf6aba4ed02ef28dc2d2c8c2",
+      "executable": "final-root-safe",
+      "executable_sha256": "af4eb29ecec2a6e29cf2da82751f669c5faf7c87d35f55657bd3d6550b5b14e0"
+    },
+    {
+      "label": "root-debug",
+      "returncode": 0,
+      "tests_passed": 92,
+      "log": "final-root-debug.log",
+      "log_sha256": "1e227f78bb339e16437638752d427c786fab3807bf6aba4ed02ef28dc2d2c8c2",
+      "executable": "final-root-debug",
+      "executable_sha256": "c160519dc818b57c96f4d4ee9d7dc2807feb702bca79815ef784a5228f1387ff"
+    },
+    {
+      "label": "root-wasi-safe",
+      "returncode": 0,
+      "tests_passed": 92,
+      "log": "final-root-wasi-run.log",
+      "log_sha256": "1e227f78bb339e16437638752d427c786fab3807bf6aba4ed02ef28dc2d2c8c2",
+      "executable": "final-root-wasi.wasm",
+      "executable_sha256": "c0c9e3c6f86103095398858776c7d95ee74525719d36f009a80d67fbc0e5e1a8"
+    },
+    {
+      "label": "full-deflate-safe",
+      "returncode": 0,
+      "tests_passed": 738,
+      "log": "final-full-safe.log",
+      "log_sha256": "e6212f3cf76c84f38883ff1cd9b02c24182adb45db86341cbd28bf1915fd9e59",
+      "executable": "final-full-safe",
+      "executable_sha256": "f538fce2223398db2eee970b878b74ec59af10563848e052344c86de3b853bdb"
+    }
+  ],
+  "comparison_sha256": "65b75eeec00bf7933d0baa3886e6097fc7275a813d72190f601be286944cce96",
+  "nonregression": {
+    "scope": "independent measured Vort batch recomputation; functional correction nonregression pilot only",
+    "events_sha256": "f7435c71f8bdd93f5e857357bf3501bd5f5140c90b0e153dd3bfd6c5f411ee8f",
+    "events": 96,
+    "rows": {
+      "deflate_reymont_65536_6_cold": {
+        "ratios": [
+          0.9988682896614071,
+          1.0088049366451028,
+          0.9969080334651226,
+          0.985403567647293
+        ],
+        "geomean": 0.9974615481117947
+      },
+      "deflate_reymont_65536_9_cold": {
+        "ratios": [
+          0.9986127610915486,
+          1.0004074385546118,
+          1.0006524757559347,
+          1.0012433264112217
+        ],
+        "geomean": 1.0002285187729614
+      },
+      "deflate_nci_65536_6_cold": {
+        "ratios": [
+          0.9850184369008538,
+          0.9994303922789595,
+          1.004391583366969,
+          1.0086785470498842
+        ],
+        "geomean": 0.9993398137960837
+      },
+      "deflate_nci_65536_9_cold": {
+        "ratios": [
+          1.0119972369188956,
+          1.020192816155438,
+          1.020743824570628,
+          1.016996558227394
+        ],
+        "geomean": 1.0174766654844587
+      },
+      "deflate_xml_65536_6_cold": {
+        "ratios": [
+          0.9946845662814096,
+          0.9997228909222052,
+          0.9882330845625452,
+          0.9988499055966008
+        ],
+        "geomean": 0.9953622357568752
+      },
+      "deflate_xml_65536_9_cold": {
+        "ratios": [
+          1.002627088540243,
+          1.001371726789556,
+          0.9987755611970808,
+          1.026315235227472
+        ],
+        "geomean": 1.0072119285775727
+      },
+      "deflate_reymont_1048576_6_cold": {
+        "ratios": [
+          1.0027320396789543,
+          1.009763604381435,
+          1.0129413624838295,
+          1.012128717979915
+        ],
+        "geomean": 1.0093834147285123
+      },
+      "deflate_reymont_1048576_9_cold": {
+        "ratios": [
+          1.015848131940966,
+          1.002014696270892,
+          0.9993765016655998,
+          0.9918822935255489
+        ],
+        "geomean": 1.0022430127457203
+      },
+      "deflate_nci_1048576_6_cold": {
+        "ratios": [
+          0.9972373842905999,
+          1.0144572098050755,
+          1.015765782291077,
+          0.982324512603732
+        ],
+        "geomean": 1.0023518841095673
+      },
+      "deflate_nci_1048576_9_cold": {
+        "ratios": [
+          1.0098699523278658,
+          1.01104777883306,
+          1.0099263883396778,
+          1.003666587079797
+        ],
+        "geomean": 1.0086234917415475
+      },
+      "deflate_xml_1048576_6_cold": {
+        "ratios": [
+          0.9981308088128819,
+          1.0154330187084828,
+          1.019089208243088,
+          0.9888427182590248
+        ],
+        "geomean": 1.0052973578545956
+      },
+      "deflate_xml_1048576_9_cold": {
+        "ratios": [
+          1.0213143912749219,
+          0.984402521057211,
+          1.0224027737457828,
+          1.0197998702162914
+        ],
+        "geomean": 1.0118526771113299
+      }
+    },
+    "selected_geomean": 1.0047170721097083,
+    "weakest_row": "deflate_xml_65536_6_cold",
+    "weakest_geomean": 0.9953622357568752,
+    "performance_gain_claim": false
+  },
+  "smoke": {
+    "returncode": 0,
+    "events": 72,
+    "full_output": true,
+    "input_immutable": true,
+    "guards": true,
+    "exact_consumption": true,
+    "timings_used_for_performance_claims": false
+  },
+  "scope": "functional malformed-code rejection while valid incomplete-treecodes preserved. No performancegain or complete industryranking claim."
+}

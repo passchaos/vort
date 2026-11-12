@@ -1,0 +1,63 @@
+{
+  "artifact_kind": "new main-authored independent replay, not recovered worker stdout",
+  "zlib_runtime": "1.2.11",
+  "rows": [
+    {
+      "name": "single-block-existing10.deflate",
+      "padded_bytes": 175,
+      "sha256": "a08d5304f9151931da4e0395ac2e556bb0edaff9743e1c5a64b7a1c1a34d9f31",
+      "result": "accepted",
+      "output_bytes": 131,
+      "output_sha256": "3c29725085c0e486282716b0eaa714c7b1acfb3e5bc29fe15a4302b026f12194",
+      "input_read": 159,
+      "zlib": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "name": "single-block-existing9.deflate",
+      "padded_bytes": 175,
+      "sha256": "f899df2e1823ef2d9fefde74afc8f6862acd371249de17827fe2f2164ffa4ffb",
+      "result": "accepted",
+      "output_bytes": 131,
+      "output_sha256": "3c29725085c0e486282716b0eaa714c7b1acfb3e5bc29fe15a4302b026f12194",
+      "input_read": 159,
+      "zlib": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "name": "single-block-missing10.deflate",
+      "padded_bytes": 176,
+      "sha256": "807ae685a4bf838fded8b2116537d0792c9f3d709cb1d03b1509b585f80be277",
+      "result": "rejected",
+      "error": "missing Huffman code at bit 1262",
+      "zlib": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "name": "two-block-existing10.deflate",
+      "padded_bytes": 320,
+      "sha256": "1be38d7ad939f05d8cacec9fc215e58b3c6e89449b3ea25fde92a6a6fedacb0c",
+      "result": "accepted",
+      "output_bytes": 131,
+      "output_sha256": "3c29725085c0e486282716b0eaa714c7b1acfb3e5bc29fe15a4302b026f12194",
+      "input_read": 304,
+      "zlib": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "name": "two-block-existing9.deflate",
+      "padded_bytes": 320,
+      "sha256": "1269f41cabd9f9bc9ed26bb63507fe809d0d2b1d95f0b4b49a5afb459df42aa2",
+      "result": "accepted",
+      "output_bytes": 131,
+      "output_sha256": "3c29725085c0e486282716b0eaa714c7b1acfb3e5bc29fe15a4302b026f12194",
+      "input_read": 304,
+      "zlib": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "name": "two-block-missing10.deflate",
+      "padded_bytes": 321,
+      "sha256": "ecb6529ba719d7db6d4859b52d0a9349ae3f4fa87c9b3304899a2abd85c1bc03",
+      "result": "rejected",
+      "error": "missing Huffman code at bit 2422",
+      "zlib": "Error -3 while decompressing data: invalid distances set"
+    }
+  ],
+  "scope": "canonical bit decoder allows valid incomplete subsets; zlib eager header errors have a different contract"
+}

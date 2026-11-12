@@ -1,0 +1,18 @@
+{
+  "artifact_kind": "later saved Git commit identity for byte-identical final source; not a new test/performance capture epoch",
+  "commit": "d31dc3895d6a42e10205aff377731abecf4f27bd",
+  "parent": "c19f5cddea3f5806ac48ebc7578f9ff8bc665b05",
+  "subject": "fix(deflate): reject missing long-distance secondary codes",
+  "source_sha256": {
+    "src/deflate.zig": "30b6d4634c189f2a012d8a4db85ffcca7aa08f95e8fd44018b15fa72c71877d8",
+    "src/deflate/semantic/decoder.zig": "40a27a65d08fbb82a507978d02a987971dbf91ac15b3b71edd99fef00b00fd3c",
+    "src/deflate/semantic/distance_holes_modes.zig": "335715541e33d4e3a3ce5c92b1bbe0284d72902ab369046bf769c8bc1b763365",
+    "src/deflate/semantic/distance_holes_tests.zig": "f08692f8e653f11732860acc30e1b2afd0679469b0afcaf4c4b1fa906c8e0eaa",
+    "src/deflate/semantic/rolling_decoder.zig": "83b55075f97c53845242c9d30cd11f213d0fa0f7187ec2b9de120e8aed765785",
+    "src/deflate/semantic/testdata/distance-hole-existing10.deflate": "1be38d7ad939f05d8cacec9fc215e58b3c6e89449b3ea25fde92a6a6fedacb0c",
+    "src/deflate/semantic/testdata/distance-hole-existing9.deflate": "1269f41cabd9f9bc9ed26bb63507fe809d0d2b1d95f0b4b49a5afb459df42aa2",
+    "src/deflate/semantic/testdata/distance-hole-missing10.deflate": "ecb6529ba719d7db6d4859b52d0a9349ae3f4fa87c9b3304899a2abd85c1bc03",
+    "src/root.zig": "cc496d8e52cb4fb67c7f65f45af02328e7cf48bbc2bb65b8f9ecfee34365625b"
+  },
+  "scope": "Nine final frozen files match this saved commit exactly; original before/final validation and nonregression manifests retain their c19f5cdd capture identities."
+}
