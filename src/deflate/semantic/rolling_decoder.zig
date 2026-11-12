@@ -160,6 +160,7 @@ fn decodeMode(comptime S: type, comptime observed: bool, reader: anytype, window
             const secondary = decoder.distance_secondary[slot];
             const symbol: u16 = secondary >> 4;
             if (symbol >= tables.distance_table.len) return error.InvalidHuffmanCode;
+            if ((secondary & 0xf) == 0) return error.InvalidHuffmanCode;
             const metadata = tables.distance_table[symbol];
             distance_entry = (@as(u32, metadata.base) << 16) | (@as(u32, metadata.extra_bits) << 8) | @as(u32, secondary & 0xf);
         }

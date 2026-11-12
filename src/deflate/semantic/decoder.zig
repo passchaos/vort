@@ -185,6 +185,10 @@ pub const SemanticDynamicDecoder = struct {
             if (self.distance_secondary_len + size > self.distance_secondary.len or size > 256) return false;
             const start = self.distance_secondary_len;
             self.distance_secondary_len += size;
+            // Incomplete distance alphabets are accepted. Every allocated
+            // suffix slot must therefore have a defined invalid-code sentinel
+            // before the existing codes populate their repeated entries.
+            @memset(self.distance_secondary[start..][0..size], 0);
             self.distance[prefix] = (@as(u32, @intCast(start)) << 16) |
                 exceptional_flag |
                 secondary_flag |
@@ -679,6 +683,7 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
             const secondary = decoder.distance_secondary[secondary_index_];
             const symbol: u16 = secondary >> 4;
             if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
+            if ((secondary & 0x0f) == 0) return error.InvalidHuffmanCode;
             const metadata = distance_table[symbol];
             distance_entry = (@as(u32, @intCast(metadata.base)) << 16) |
                 (@as(u32, metadata.extra_bits) << 8) |

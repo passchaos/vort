@@ -3638,6 +3638,10 @@ test "root public generic semantic linear contracts" {
     try @import("deflate/semantic/public_linear_contracts.zig").rootContracts(@This());
 }
 
+test "root long distance secondary hole contracts" {
+    try @import("deflate/semantic/distance_holes_tests.zig").contracts(@This());
+}
+
 test "root Deflate chunk borrow contracts" {
     try @import("tests/deflate_chunk_borrows.zig").contracts(@This());
 }

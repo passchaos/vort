@@ -7167,6 +7167,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             const symbol: u16 = secondary >> 4;
             if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
             distance_code_bits = @truncate(secondary & 0x0f);
+            if (distance_code_bits == 0) return error.InvalidHuffmanCode;
             const metadata = distance_table[symbol];
             distance_base = metadata.base;
             distance_extra_bits = metadata.extra_bits;
@@ -23662,6 +23663,26 @@ test "Deflate public generic semantic linear contracts" {
         pub const slicesOverlap = D.slicesOverlapForSemanticDecode;
     };
     try @import("deflate/semantic/public_linear_contracts.zig").contracts(Api);
+}
+
+test "Deflate long distance secondary hole contracts" {
+    const D = @This();
+    const Api = struct {
+        pub const decodeRawDeflate = D.decodeRawAuto;
+    };
+    try @import("deflate/semantic/distance_holes_tests.zig").contracts(Api);
+}
+
+test "Deflate long distance secondary execution modes" {
+    const D = @This();
+    const Api = struct {
+        pub fn sink(reader: *bitstream.BufferedBitReader, output: []u8, initial: usize, decoder: *const SemanticDynamicDecoder) D.Error!usize {
+            var receiver = LinearSemanticSink{ .output = output, .pos = initial };
+            try D.decodeSemanticDynamicBlockIntoSinkMode(false, false, reader, &receiver, decoder);
+            return receiver.pos;
+        }
+    };
+    try @import("deflate/semantic/distance_holes_modes.zig").contracts(Api);
 }
 
 test "deflate portable secondary lookups decode the guarded reference OSDB dynamic block" {
