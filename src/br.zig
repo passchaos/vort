@@ -24557,11 +24557,16 @@ fn readComplexPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_
         switch (symbol) {
             0 => {
                 try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                // A flushed repeat can land exactly on alphabet_size; the next
+                // direct length write would otherwise index out of bounds on
+                // hostile streams, so treat an overfull alphabet as corrupt.
+                if (index >= alphabet_size) return error.InvalidHuffmanCode;
                 lengths[index] = 0;
                 index += 1;
             },
             1...15 => {
                 try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                if (index >= alphabet_size) return error.InvalidHuffmanCode;
                 const length: u4 = @intCast(symbol);
                 lengths[index] = length;
                 index += 1;
@@ -24761,11 +24766,13 @@ fn readPrefixCodeRuntimeResumable(
         switch (symbol) {
             0 => {
                 try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                if (index >= alphabet_size_limit) return error.InvalidHuffmanCode;
                 tree.lengths[index] = 0;
                 index += 1;
             },
             1...15 => {
                 try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                if (index >= alphabet_size_limit) return error.InvalidHuffmanCode;
                 const length: u4 = @intCast(symbol);
                 tree.lengths[index] = length;
                 index += 1;
@@ -24830,6 +24837,22 @@ fn readPrefixCodeRuntimeResumable(
     tree.active = false;
     tree.stage = .code_lengths;
     return result;
+}
+
+test "complex prefix code rejects an RLE flush that fills the alphabet" {
+    // Reproduces the differential-fuzz panic. The 2-bit kind=2 prefix is
+    // followed by code-length-code lengths: CLC symbol 1 gets length 1, CLC
+    // symbols 0 and 16 get length 2 (all other header entries stay zero), so
+    // the target alphabet is decoded with codes 0->1, 10->0, 11->16. The
+    // payload emits one length-8 symbol then code 16 repeating it 25 times;
+    // 1 + 25 = 26 fills the whole alphabet, and the trailing code-0 symbol
+    // must be rejected as corrupt instead of indexing lengths[26].
+    const bytes = [_]u8{ 0x1e, 0x30, 0x30, 0x6c, 0x00 };
+    var reader = bitstream.BitReader.init(&bytes);
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        readPrefixCodeRuntime(26, 26, &reader),
+    );
 }
 
 test "resumable prefix code accepts hskip 3 and resumes symbol lengths" {
@@ -24909,11 +24932,13 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
         switch (symbol) {
             0 => {
                 try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                if (index >= alphabet_size) return error.InvalidHuffmanCode;
                 lengths[index] = 0;
                 index += 1;
             },
             1...15 => {
                 try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                if (index >= alphabet_size) return error.InvalidHuffmanCode;
                 const length: u4 = @intCast(symbol);
                 lengths[index] = length;
                 index += 1;
