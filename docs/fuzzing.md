@@ -120,3 +120,63 @@ a flushed repeat, and a focused regression test pins the crafted bitstream.
 After the fix, an independent-seed deep campaign and a rerun with the final
 binary (up to 3,888 valid wires, 99,451 truncation cuts and 48,315 mutations
 per campaign) both completed with zero cross-decoder disagreements.
+
+## 2026-11-13: format-feature variants and expanded mutation matrix
+
+The generator now reaches format surfaces that valid-wire generation
+previously skipped. Every baseline wire keeps its original checks, and the
+new variants run through the same round-trip, exact-size, reference-interop,
+truncation and mutation pipeline:
+
+- raw Deflate and zlib preset dictionaries (deep; level 0 excluded). The
+  reference installs raw-Deflate dictionaries proactively before the first
+  `inflate` call (raw streams cannot signal `Z_NEED_DICT`) and zlib
+  dictionaries reactively on `Z_NEED_DICT`, matching Vort's two contracts;
+- rich gzip headers with randomized FEXTRA/FNAME/FCOMMENT/FHCRC, MTIME, XFL
+  and OS fields through both the stored and best encoders;
+- Zstd content checksums, unknown content size, explicit Window_Log 10
+  frames, two-frame concatenation and skippable frames in leading, trailing
+  and interspersed positions. The libzstd one-shot API rejects skippable and
+  concatenated suffixes while Vort's frame loop accepts them, so those
+  variants use a `ZSTD_decompressStream` reference whose completion rule is
+  full input consumption plus a zero final hint (the API buffers partial
+  magic bytes and returns a positive hint for truncated streams, and returns
+  0 at every frame boundary);
+- Brotli explicit window widths (10/16/24 in deep), disabled literal context
+  modeling, a metadata meta-block prefix and the opt-in Large Window
+  extension (lgwin 30), checked against a libbrotli streaming decoder with
+  `BROTLI_DECODER_PARAM_LARGE_WINDOW` enabled;
+- deep-only two-member concatenated gzip streams. The one-shot gzip facade
+  validates exactly one member, so Vort uses `GzipIncrementalDecoder` with
+  `allow_concatenated` while the reference runs one `inflate` state per
+  member (a single inflate call stops at the first `Z_STREAM_END` and does
+  not auto-continue);
+- deep campaigns add eight RNG-driven random sizes per pattern alongside the
+  fixed boundary schedule.
+
+The mutation matrix keeps five-position XOR flips for every wire and adds,
+for wires up to 2 KiB, fixed-position overwrite (0x00/0xff/random), single
+random-byte insertion and single-byte deletion operators, each with separate
+counters in the summary.
+
+The widened smoke campaign covers 3,768 valid wires (600 feature variants),
+93,862 truncation cuts and 108,963 mutations. A `--deep` campaign now covers
+12,816 valid wires (7,968 variants), around 370,000 truncation cuts and
+around 340,000 mutations; multi-seed deep campaigns (seeds 1-3 on the final
+generator, seeds 1-6 on the pre-concatenation generator, plus the earlier
+legacy-generator seeds 1-13) complete with zero cross-decoder
+disagreements and no Vort/reference one-sided truncation mismatches.
+
+The extended generator immediately found a real interop defect: the
+resumable raw Deflate decoder rejected legal literal-only dynamic blocks
+with `InvalidDynamicBlockHeader`. A level-6 block with no distance symbols
+still declares one distance code slot with length zero; zlib's `inftrees`
+treats an all-zero LENS/DISTS alphabet as a deferred error marker rather
+than rejecting the header, while Vort's `validDynamicAlphabet` required at
+least one active symbol. The one-shot decoder accepted the same wires, so
+the defect was invisible until the gzip concatenation variant drove the
+streaming decoder. `validDynamicAlphabet` now accepts a zero-symbol
+alphabet (the empty Huffman table fails only if a distance symbol is ever
+actually decoded), matching zlib semantics; oversubscribed and incomplete
+multi-symbol alphabets remain rejected. Focused raw and gzip streaming
+regression tests pin the previously failing sizes.
