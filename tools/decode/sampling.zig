@@ -1,5 +1,6 @@
 //! Run shape, order, and raw sample helpers shared by the decoder probe/tests.
 const std = @import("std");
+const perf = @import("perf_group.zig");
 
 pub const Codec = enum { deflate, zstd, brotli };
 pub const Lifecycle = enum { cold, prepared };
@@ -11,8 +12,9 @@ pub const Pair = struct {
     reference_ns: u64,
     vort_mix: u64,
     reference_mix: u64,
+    vort_counters: ?perf.Counts = null,
 };
-pub const Sample = struct { ns: u64, mix: u64 };
+pub const Sample = struct { ns: u64, mix: u64, counters: ?perf.Counts = null };
 
 pub const GuardedBuffer = struct {
     pub const guard_bytes = 64;
@@ -49,6 +51,7 @@ pub fn makePair(pair_id: usize, vort: Sample, reference: Sample) Pair {
         .reference_ns = reference.ns,
         .vort_mix = vort.mix,
         .reference_mix = reference.mix,
+        .vort_counters = vort.counters,
     };
 }
 
@@ -81,11 +84,12 @@ pub const Options = struct {
     brotli_decoder: ?[]const u8,
     brotli_common: ?[]const u8,
     output_path: ?[]const u8,
+    perf_group: ?perf.Kind = null,
 };
 
 /// Arguments exclude argv[0]. Every timing/lifecycle setting is explicit.
 pub fn parseOptions(arguments: []const []const u8) !Options {
-    const fields = enum { codec, input, encoded_input, iterations, rounds, warmup, lifecycle, reference, reference_version, brotli_encoder, brotli_decoder, brotli_common, output };
+    const fields = enum { codec, input, encoded_input, iterations, rounds, warmup, lifecycle, reference, reference_version, brotli_encoder, brotli_decoder, brotli_common, output, perf_group };
     var seen = std.EnumSet(fields).initEmpty();
     var codec: ?Codec = null;
     var input: ?[]const u8 = null;
@@ -100,6 +104,7 @@ pub fn parseOptions(arguments: []const []const u8) !Options {
     var decoder: ?[]const u8 = null;
     var common: ?[]const u8 = null;
     var output: ?[]const u8 = null;
+    var perf_group: ?perf.Kind = null;
     var i: usize = 0;
     while (i < arguments.len) : (i += 2) {
         const flag = arguments[i];
@@ -129,6 +134,12 @@ pub fn parseOptions(arguments: []const []const u8) !Options {
             .brotli_decoder => decoder = value,
             .brotli_common => common = value,
             .output => output = value,
+            .perf_group => perf_group = if (std.mem.eql(u8, value, "branches"))
+                .branches
+            else if (std.mem.eql(u8, value, "branch-misses"))
+                .branch_misses
+            else
+                return error.InvalidPerfGroup,
         }
     }
     const selected_codec = codec orelse return error.MissingCodec;
@@ -170,6 +181,7 @@ pub fn parseOptions(arguments: []const []const u8) !Options {
         .brotli_decoder = decoder,
         .brotli_common = common,
         .output_path = output,
+        .perf_group = perf_group,
     };
 }
 

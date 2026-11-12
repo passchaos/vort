@@ -62,6 +62,8 @@ def task_id(task):
 def arguments(probe, task, references, config):
     fixture = task["fixture"]
     args = [str(probe), "--codec", fixture["codec"], "--input", fixture["input_path"], "--encoded-input", fixture["encoded_input_path"], "--iterations", str(task["iterations"]), "--rounds", str(config["rounds"]), "--warmup", str(config["warmup"]), "--lifecycle", task["lifecycle"]]
+    if config.get("perf_group") is not None:
+        args += ["--perf-group", config["perf_group"]]
     reference = references[fixture["codec"]]
     if fixture["codec"] == "brotli":
         for role in ("encoder", "decoder", "common"):
@@ -73,12 +75,25 @@ def arguments(probe, task, references, config):
     return args
 
 
+def timing_metadata(config):
+    group = config.get("perf_group")
+    if group is None:
+        return {"sampling_mode": "paired-wall-time", "perf_group": None,
+                "wall_time_scope": "declared paired API lifecycles; development-host observations"}
+    require(group in {"branches", "branch-misses"}, "Unknown PMU group")
+    return {"sampling_mode": "pmu-diagnostic-with-batch-control-overhead", "perf_group": group,
+            "wall_time_scope": "Vort reset/enable/disable overhead included; reference has no PMU control overhead",
+            "wall_time_for_throughput_gate": False}
+
+
 def run(args):
     out = Path(args.out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     probe = Path(args.probe).resolve()
     require(probe.is_file(), "Build the probe before starting the campaign")
     config = {"cpu": args.cpu, "target_cpu": args.target_cpu, "rounds": args.rounds, "warmup": args.warmup, "sizes": args.sizes.split(","), "lifecycles": args.lifecycles.split(","), "iterations": {"65536": args.iterations_64k, "1048576": args.iterations_1m, "full": args.iterations_full}}
+    if args.perf_group is not None:
+        config["perf_group"] = args.perf_group
     require(config["rounds"] >= 2 and config["rounds"] % 2 == 0 and config["warmup"] >= 0 and config["warmup"] % 2 == 0, "Sampling counts must balance order")
     require(set(config["sizes"]) <= {"65536", "1048576", "full"}, "Unexpected matrix size")
     require(set(config["lifecycles"]) <= {"cold", "prepared"}, "Unexpected lifecycle")
@@ -142,17 +157,21 @@ def run(args):
         report = {"task": task, "probe": probe_report, "argv": pinned, "rss_kib": int(rss_path.read_text().strip()), "rss_scope": "whole isolated child including loaded libraries, input/output buffers, validation and contexts; not codec-only heap", "completed_unix": time.time()}
         write_json(path, report)
         completed.append(report)
-        print(f"row {index + 1}/{len(selected)} {key}: median-time-ratio={probe_report['summary']['vort_median_ns'] / probe_report['summary']['reference_median_ns']:.4f}", flush=True)
+        timing_label = "pmu-diagnostic-wall-ratio" if config.get("perf_group") is not None else "median-time-ratio"
+        print(f"row {index + 1}/{len(selected)} {key}: {timing_label}={probe_report['summary']['vort_median_ns'] / probe_report['summary']['reference_median_ns']:.4f}", flush=True)
     require(source_state()["digest"] == state["digest"] and sha256(probe) == probe_hash, "Source or probe changed at campaign completion")
     require(environment(args.cpu) == host, "Host environment changed before summary publication")
     summary = {"schema": "vort.decode-matrix-summary.v1", "complete": len(completed) == len(manifest["tasks"]), "completed_rows": len(completed), "expected_rows": len(manifest["tasks"]), "elapsed_seconds": time.time() - started, "groups": summarize(completed, resamples=args.bootstrap), "interpretation": "time ratios above one mean Vort slower; Deflate prepared rows retain only reference context and are separately labeled; developer-host observations do not prove industry leadership"}
+    timing = timing_metadata(config)
+    summary.update(timing)
     write_json(out / "summary.json", summary)
     with (out / "matrix.csv").open("w", newline="") as target:
         writer = csv.writer(target)
-        writer.writerow(("codec", "name", "size", "level", "lifecycle", "input_bytes", "encoded_bytes", "vort_median_ns", "reference_median_ns", "time_ratio", "rss_kib"))
+        extra_columns = ("sampling_mode", "perf_group", "wall_time_scope", "wall_time_for_throughput_gate") if config.get("perf_group") is not None else ()
+        writer.writerow(("codec", "name", "size", "level", "lifecycle", "input_bytes", "encoded_bytes", "vort_median_ns", "reference_median_ns", "time_ratio", "rss_kib") + extra_columns)
         for row in completed:
             fixture, probe_report = row["task"]["fixture"], row["probe"]
-            writer.writerow((fixture["codec"], fixture["name"], fixture["size"], fixture["level"], row["task"]["lifecycle"], fixture["input_bytes"], fixture["encoded_bytes"], probe_report["summary"]["vort_median_ns"], probe_report["summary"]["reference_median_ns"], probe_report["summary"]["vort_median_ns"] / probe_report["summary"]["reference_median_ns"], row["rss_kib"]))
+            writer.writerow((fixture["codec"], fixture["name"], fixture["size"], fixture["level"], row["task"]["lifecycle"], fixture["input_bytes"], fixture["encoded_bytes"], probe_report["summary"]["vort_median_ns"], probe_report["summary"]["reference_median_ns"], probe_report["summary"]["vort_median_ns"] / probe_report["summary"]["reference_median_ns"], row["rss_kib"]) + tuple(timing[column] for column in extra_columns))
     print(json.dumps(summary), flush=True)
 
 
@@ -164,6 +183,7 @@ def main():
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--cpu", type=int, default=15)
     parser.add_argument("--target-cpu", default="skylake+pku+sgx")
+    parser.add_argument("--perf-group", choices=("branches", "branch-misses"), help="Count a Vort-only PMU group; counter batches include boundary ioctl timing")
     parser.add_argument("--sizes", default="65536,1048576,full")
     parser.add_argument("--lifecycles", default="cold,prepared")
     parser.add_argument("--iterations-64k", type=int, default=100)

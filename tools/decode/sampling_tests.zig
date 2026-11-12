@@ -1,5 +1,6 @@
 const std = @import("std");
 const sampling = @import("sampling.zig");
+const perf = @import("perf_group.zig");
 
 const shape = [_][]const u8{
     "--input",  "payload", "--encoded-input", "wire", "--iterations", "3",
@@ -68,6 +69,17 @@ test "CLI accepts explicit cold lifecycles and declared Deflate version" {
     const br = try sampling.parseOptions(&(shape ++ brotli));
     try std.testing.expectEqual(sampling.Codec.brotli, br.codec);
     try std.testing.expectEqualStrings("/pinned/libbrotlicommon.so", br.brotli_common.?);
+}
+
+test "PMU groups are explicit optional diagnostics and reject unsupported or duplicate selections" {
+    try std.testing.expect((try sampling.parseOptions(&(shape ++ deflate))).perf_group == null);
+    const branches = try sampling.parseOptions(&(shape ++ deflate ++ .{ "--perf-group", "branches" }));
+    try std.testing.expectEqual(perf.Kind.branches, branches.perf_group.?);
+    const misses = try sampling.parseOptions(&(shape ++ deflate ++ .{ "--perf-group", "branch-misses" }));
+    try std.testing.expectEqual(perf.Kind.branch_misses, misses.perf_group.?);
+    try std.testing.expectError(error.InvalidPerfGroup, sampling.parseOptions(&(shape ++ deflate ++ .{ "--perf-group", "all" })));
+    try std.testing.expectError(error.DuplicateOption, sampling.parseOptions(&(shape ++ deflate ++ .{ "--perf-group", "branches", "--perf-group", "branch-misses" })));
+    try std.testing.expectError(error.MissingOptionValue, sampling.parseOptions(&(shape ++ deflate ++ .{"--perf-group"})));
 }
 
 test "CLI rejects ambiguous timing settings, implicit libraries, and unsupported prepared Brotli" {

@@ -32,6 +32,15 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, vort: *std.Buil
         }),
     });
     b.step("test-decode-sampling", "Test balanced paired sampling and retained warmups").dependOn(&b.addRunArtifact(tests).step);
+    const perf_tests = b.addTest(.{
+        .name = "vort-decode-perf-group-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/decode/perf_group_tests.zig"),
+            .target = target,
+            .optimize = .ReleaseSafe,
+        }),
+    });
+    b.step("test-decode-perf-group", "Test raw PMU group reads without requiring hardware counters").dependOn(&b.addRunArtifact(perf_tests).step);
     const evidence_tests = b.addSystemCommand(&.{ "python3", "tools/decode/evidence_test.py" });
     b.step("test-decode-evidence", "Validate raw decoder matrix evidence and statistical accounting").dependOn(&evidence_tests.step);
     return &probe.step;

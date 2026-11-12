@@ -7,6 +7,7 @@ import unittest
 
 from evidence import bootstrap_log_mean, validate_manifest, validate_report
 from fixtures import LEVELS, SILESIA, sha256
+from pmu_evidence import SCOPE, THREAD_POLICY
 
 
 class EvidenceTests(unittest.TestCase):
@@ -85,6 +86,74 @@ class EvidenceTests(unittest.TestCase):
         Path(self.fixture["input_path"]).write_bytes(b"changed data")
         with self.assertRaisesRegex(ValueError, "Frozen bytes"):
             validate_report(self.report, self.task, self.manifest)
+
+    def pmu_fixture(self, kind="branches"):
+        report, manifest = copy.deepcopy(self.report), copy.deepcopy(self.manifest)
+        manifest["config"]["perf_group"] = kind
+        report["sampling_mode"] = "pmu-diagnostic-with-batch-control-overhead"
+        report["pmu"] = {"group": kind.replace("-", "_"), "scope": SCOPE, "thread_policy": THREAD_POLICY,
+                         "exclude_kernel": True, "exclude_hypervisor": True, "scaled": False, "reference_counted": False,
+                         "header_time_scope": "cumulative per open group; reset clears counts only"}
+        report["pmu"]["hardware"] = {"hardware_configs": [0, 1, 4 if kind == "branches" else 5], "events": ["cycles", "instructions", kind],
+                                     "read_format": 15, "pid_argument": 0, "cpu_argument": -1, "disabled_at_open": True, "inherit": False,
+                                     "exclude_kernel": True, "exclude_hv": True, "values_scaled": False, "strict_full_running_time": True}
+        third = 500 if kind == "branches" else 0
+        for pair in report["warmup_pairs"] + report["pairs"]:
+            elapsed = 100 * (pair["pair_id"] + 1)
+            pair["vort_counters"] = {"cycles": 3000, "instructions": 2700, "third_event": third,
+                                     "time_enabled": elapsed, "time_running": elapsed, "event_ids": [11, 12, 13],
+                                     "raw_words": [3, elapsed, elapsed, third, 13, 3000, 11, 2700, 12]}
+        return report, manifest
+
+    def test_raw_pmu_ids_define_event_order_and_zero_branch_misses_are_valid(self):
+        for kind in ("branches", "branch-misses"):
+            report, manifest = self.pmu_fixture(kind)
+            validate_report(report, self.task, manifest)
+
+    def test_matrix_retains_pmu_diagnostic_scope_in_summary_and_csv_metadata(self):
+        from matrix import arguments, timing_metadata
+        normal = timing_metadata({})
+        self.assertEqual(normal["sampling_mode"], "paired-wall-time")
+        for kind in ("branches", "branch-misses"):
+            report, manifest = self.pmu_fixture(kind)
+            metadata = timing_metadata(manifest["config"])
+            self.assertEqual(metadata["sampling_mode"], report["sampling_mode"])
+            self.assertEqual(metadata["perf_group"], kind)
+            self.assertIs(metadata["wall_time_for_throughput_gate"], False)
+            argv = arguments("probe", self.task, manifest["references"], manifest["config"])
+            self.assertEqual(argv[argv.index("--perf-group") + 1], kind)
+
+    def test_pmu_rejects_missing_scaled_ambiguous_and_unmatched_raw_counts(self):
+        mutations = (
+            lambda r: r.pop("pmu"),
+            lambda r: r.pop("sampling_mode"),
+            lambda r: r["pmu"].update(scope="whole process including reference and validation"),
+            lambda r: r["pmu"].update(reference_counted=True),
+            lambda r: r["pmu"].update(scaled=True),
+            lambda r: r["pmu"].update(exclude_kernel=False),
+            lambda r: r["pmu"]["hardware"].update(inherit=True),
+            lambda r: r["pmu"]["hardware"].update(hardware_configs=[0, 1, 5]),
+            lambda r: r["pmu"]["hardware"].update(pid_argument=False),
+            lambda r: r["pairs"][0].pop("vort_counters"),
+            lambda r: r["warmup_pairs"][0].pop("vort_counters"),
+            lambda r: r["pairs"][0]["vort_counters"].update(cycles=1),
+            lambda r: r["pairs"][0]["vort_counters"].update(time_running=99),
+            lambda r: r["pairs"][0]["vort_counters"]["raw_words"].pop(),
+            lambda r: r["pairs"][0]["vort_counters"]["raw_words"].__setitem__(0, 2),
+            lambda r: r["pairs"][0]["vort_counters"]["raw_words"].__setitem__(4, 12),
+            lambda r: r["pairs"][0]["vort_counters"]["event_ids"].__setitem__(0, True),
+            lambda r: r["pairs"][0].update(reference_counters={"cycles": 1}),
+            lambda r: r["pairs"][0].update(vort_counters=copy.deepcopy(r["warmup_pairs"][0]["vort_counters"])),
+        )
+        for mutate in mutations:
+            report, manifest = self.pmu_fixture()
+            mutate(report)
+            with self.assertRaises(ValueError):
+                validate_report(report, self.task, manifest)
+        report, manifest = self.pmu_fixture()
+        manifest["config"].pop("perf_group")
+        with self.assertRaisesRegex(ValueError, "Undeclared"):
+            validate_report(report, self.task, manifest)
 
     def test_matrix_rejects_missing_duplicate_and_unknown_rows(self):
         fixtures = [{"key": f"{codec}/{name}/65536/{level}", "codec": codec, "name": name, "size": "65536", "level": level} for codec, levels in LEVELS.items() for name in SILESIA for level in levels]

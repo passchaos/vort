@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 import random
 import statistics
+from pmu_evidence import validate_pmu
 
 from fixtures import LEVELS, SILESIA, sha256
 
@@ -28,6 +29,8 @@ def reference_files(reference, codec):
 def validate_manifest(manifest):
     require(manifest.get("schema") == "vort.decode-matrix.v1", "Wrong matrix schema")
     config = manifest["config"]
+    pmu_group = config.get("perf_group")
+    require(pmu_group is None or type(pmu_group) is str and pmu_group in {"branches", "branch-misses"}, "Unknown PMU group")
     for key, allowed in (("sizes", {"65536", "1048576", "full"}), ("lifecycles", {"cold", "prepared"})):
         values = config[key]
         require(bool(values) and len(values) == len(set(values)) and set(values) <= allowed, f"Invalid or duplicate {key}")
@@ -127,6 +130,7 @@ def validate_report(report, task, manifest, verify_files=True):
             require(type(pair["vort_mix"]) is int and type(pair["reference_mix"]) is int and pair["vort_mix"] == expected_mix and pair["reference_mix"] == expected_mix, "Per-batch checksum disagreement or unexpected value")
     for side in ("vort", "reference"):
         require(report["summary"][f"{side}_median_ns"] == median([p[f"{side}_ns"] for p in report["pairs"]]), "Median does not include every sample")
+    validate_pmu(report, config)
     return report
 
 

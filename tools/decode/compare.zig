@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const vort = @import("vort");
 const benchmark_provenance = @import("benchmark_provenance");
 const sampling = @import("sampling.zig");
+const perf = @import("perf_group.zig");
 const libdeflate = @import("libdeflate_runtime.zig");
 const libzstd = @import("libzstd_runtime");
 const libbrotli = @import("libbrotli_runtime");
@@ -47,6 +48,7 @@ const State = struct {
     deflate_context: ?*libdeflate.Decompressor = null,
     zstd_context: ?*anyopaque = null,
     zstd_decoder: *vort.ZstdNativeFrameDecoder,
+    counters: ?*perf.Group = null,
 
     fn validateBatch(self: State, output: sampling.GuardedBuffer, consumed: ?usize) !void {
         try self.input.validate();
@@ -75,7 +77,7 @@ pub fn main(init: std.process.Init) !void {
                 "  --iterations N --rounds N --warmup N --lifecycle cold|prepared\n" ++
                 "  --reference ABSOLUTE_LIB [--reference-version PINNED_HEADER_VERSION]\n" ++
                 "  --brotli-encoder ABSOLUTE_LIB --brotli-decoder ABSOLUTE_LIB --brotli-common ABSOLUTE_LIB\n" ++
-                "  [--output JSONPATH]\n" ++
+                "  [--output JSONPATH] [--perf-group branches|branch-misses]\n" ++
                 "Rounds must be even and >=2; warmup counts paired batches and must be even (0 allowed).\n" ++
                 "Deflate requires --reference-version, declared from a pinned header; Zstd/Brotli query versions.\n" ++
                 "Brotli supports cold only. Deflate prepared reuses only the reference context.\n",
@@ -170,10 +172,13 @@ pub fn main(init: std.process.Init) !void {
     // A retained workspace is primed outside timing, even with --warmup 0.
     // Cold contexts and the reference Brotli one-shot state remain per-call.
     if (options.lifecycle == .prepared) try primePrepared(reference, &state);
+    var counters = if (options.perf_group) |kind| try perf.Group.open(kind) else null;
+    defer if (counters) |*group| group.deinit();
+    if (counters) |*group| state.counters = group;
     for (pairs, 0..) |*pair, pair_id| {
         const first = sampling.firstForPair(pair_id);
-        const first_sample = try measure(reference, &state, first);
-        const second_sample = try measure(reference, &state, if (first == .vort) .reference else .vort);
+        const first_sample = try measureChecked(init.gpa, reference, &state, first, pair_id);
+        const second_sample = try measureChecked(init.gpa, reference, &state, if (first == .vort) .reference else .vort, pair_id);
         pair.* = sampling.makePair(pair_id, if (first == .vort) first_sample else second_sample, if (first == .reference) first_sample else second_sample);
     }
     // procfs reports st_size=0; a size-based whole-file read loses the maps.
@@ -255,6 +260,18 @@ pub fn main(init: std.process.Init) !void {
             .reference_median_ns = try sampling.median(init.gpa, measured, .reference),
         },
         .provenance = provenance,
+        .sampling_mode = if (options.perf_group != null) "pmu-diagnostic-with-batch-control-overhead" else "paired-wall-time",
+        .pmu = if (options.perf_group) |kind| .{
+            .group = kind,
+            .scope = "Vort public decode batch and loop/count/mix bookkeeping; userspace boundary ioctl setup; timers and full validation outside counters",
+            .thread_policy = "calling-thread-only; no inheritance",
+            .exclude_kernel = true,
+            .exclude_hypervisor = true,
+            .scaled = false,
+            .reference_counted = false,
+            .header_time_scope = "cumulative per open group; reset clears counts only",
+            .hardware = perf.metadata(kind),
+        } else null,
     };
     // Publish only after every decode, output, guard, version, and map check.
     const json = try std.json.Stringify.valueAlloc(init.gpa, report, .{ .whitespace = .indent_2 });
@@ -314,6 +331,9 @@ fn measureOnce(comptime codec: sampling.Codec, comptime implementation: sampling
     var mix: u64 = 0;
     var consumed: ?usize = null;
     const start = std.Io.Clock.awake.now(state.io);
+    const group = if (comptime implementation == .vort) state.counters else null;
+    if (group) |counter| try counter.begin();
+    errdefer if (group) |counter| counter.stopQuietly();
     for (0..state.options.iterations) |_| {
         const outcome = try decodeOnce(codec, implementation, prepared, runtime, state, output.data);
         if (outcome.written != state.original_input.len) return error.OutputSizeMismatch;
@@ -321,10 +341,12 @@ fn measureOnce(comptime codec: sampling.Codec, comptime implementation: sampling
         mix +%= outcome.written;
         if (output.data.len > 0) mix +%= output.data[0];
     }
+    if (group) |counter| try counter.stop();
     const duration = start.durationTo(std.Io.Clock.awake.now(state.io)).nanoseconds;
     if (duration <= 0) return error.InvalidTimerDuration;
+    const counts = if (group) |counter| try counter.read() else null;
     try state.validateBatch(output, consumed);
-    return .{ .ns = @intCast(duration), .mix = mix };
+    return .{ .ns = @intCast(duration), .mix = mix, .counters = counts };
 }
 
 fn measureForCodec(comptime codec: sampling.Codec, runtime: anytype, state: *State, implementation: sampling.Implementation) !sampling.Sample {
@@ -343,6 +365,29 @@ fn measureForCodec(comptime codec: sampling.Codec, runtime: anytype, state: *Sta
 fn measure(reference: Reference, state: *State, implementation: sampling.Implementation) !sampling.Sample {
     return switch (reference) {
         inline else => |runtime, codec| measureForCodec(codec, runtime, state, implementation),
+    };
+}
+
+fn measureChecked(allocator: std.mem.Allocator, reference: Reference, state: *State, implementation: sampling.Implementation, pair_id: usize) !sampling.Sample {
+    return measure(reference, state, implementation) catch |err| {
+        if (implementation == .vort) {
+            if (state.counters) |group| {
+                // Keep failed raw reads in stderr; successful output is still
+                // published only after all codec and counter validation passes.
+                const diagnostic = .{
+                    .schema = "vort.decode-pmu-failure.v1",
+                    .error_name = @errorName(err),
+                    .pair_id = pair_id,
+                    .implementation = implementation,
+                    .group = state.options.perf_group.?,
+                    .diagnostic = group.diagnostic(),
+                };
+                const json = std.json.Stringify.valueAlloc(allocator, diagnostic, .{}) catch return err;
+                defer allocator.free(json);
+                std.debug.print("{s}\n", .{json});
+            }
+        }
+        return err;
     };
 }
 
