@@ -1,0 +1,57 @@
+{
+  "authorship": "main-authored derived bounded inner-loop inspection",
+  "loop_scope": "only the 26-byte sixteen-byte copy-loop body, not complete scalar function equivalence",
+  "baseline_range": [
+    "0x1145a00",
+    "0x1145a1a"
+  ],
+  "owner_only_range": [
+    "0x11466a0",
+    "0x11466ba"
+  ],
+  "bytes": "4889cac5fa6f040ec5fa7f040f4883c1104883c2204839da76e6",
+  "sha256": "dc84e82411b2f8ade64306811733d766d83514546f5b3c359786b07e53b7a743",
+  "identical_inner_loop_bytes": true,
+  "sample_period": 1000,
+  "exact_counters": false,
+  "cause_proven": false,
+  "hypothesis": "surrounding register/control flow, branch history and layout differ; sampled miss concentration alone does not prove which causes regression",
+  "samples": {
+    "nci": {
+      "baseline": {
+        "sample_count": 117,
+        "weighted_samples_per_vort_call": 58.5,
+        "offsets": [
+          "0x555",
+          "0x558"
+        ]
+      },
+      "owner-only": {
+        "sample_count": 776,
+        "weighted_samples_per_vort_call": 388.0,
+        "offsets": [
+          "0x535",
+          "0x538"
+        ]
+      }
+    },
+    "xml": {
+      "baseline": {
+        "sample_count": 208,
+        "weighted_samples_per_vort_call": 104.0,
+        "offsets": [
+          "0x555",
+          "0x558"
+        ]
+      },
+      "owner-only": {
+        "sample_count": 944,
+        "weighted_samples_per_vort_call": 472.0,
+        "offsets": [
+          "0x535",
+          "0x538"
+        ]
+      }
+    }
+  }
+}

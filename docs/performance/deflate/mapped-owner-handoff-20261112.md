@@ -28,9 +28,10 @@ window entries retain full-width `usize` behavior for private outliers. The
 RLE258 and deep-distance non-overlap entries retain their scalar executors.
 
 The owner-only control uses exactly the same owner branch and preparation;
-its ordinary call selects the original scalar entry instead of the typed
+its ordinary call selects the full-width scalar entry instead of the typed
 mapped entry. These two isolated source trees differ at that call only. This
-control separates the combined proposal from its preparation-only variant;
+control separates the combined proposal from the owner/scalar variant. It
+does not prove that scalar payload machine code matches the baseline, and
 its result does not identify the cause of the regression.
 
 | Whole public raw decode speed, baseline / candidate time | Owner + word | Owner + scalar |

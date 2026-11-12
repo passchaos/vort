@@ -4,6 +4,27 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-12 Vort-batch PMU diagnosis
+
+The [scoped PMU diagnosis](deflate/pmu-batch-profile-20261112.md) adds optional
+three-event groups to the public decoder probe, retaining raw nine-word reads,
+IDs and cumulative/full-running kernel times. Reference decoding, clocks and
+full validation stay outside counters; PMU wall ratios are explicitly
+diagnostic in raw and final summary/CSV outputs.
+
+The new instrumented cohort completes 144 four-row/three-mode child events.
+Owner-only nci64K L9 and XML64K L6 instructions remain 0.991871x/1.000266x,
+while cycles rise 1.101504x/1.092142x and misses 1.738043x/1.494908x. Four
+precise branch recordings place added bounded sample weight at the sixteen-
+byte copy-loop cmp/jbe. The 26-byte inner body matches, but the full scalar
+entry's register/control flow differs and stack grows 16 bytes. This is not a
+preparation-only or layout-only control; no prototype is adopted and no old
+timing/code-layout identity is inherited.
+
+Pure Zig contracts pass 13/13, final Python evidence tests 9/9, all comparator
+builds and other-codec PMU smoke pass. Next retain the original scalar kernel
+while isolating owner preparation, with fresh codegen and operation controls.
+
 ## 2026-11-12 mapped owner and handoff rejection
 
 The [mapped owner / normalized handoff screen](deflate/mapped-owner-handoff-20261112.md)

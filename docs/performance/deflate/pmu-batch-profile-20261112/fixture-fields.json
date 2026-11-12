@@ -1,0 +1,175 @@
+{
+  "artifact_kind": "original task fixture field registry; ordinary bytes external, no regeneration",
+  "four_deflate_cases": 4,
+  "fixtures": [
+    {
+      "key": "deflate/reymont/65536/6",
+      "codec": "deflate",
+      "name": "reymont",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 37,
+      "encoded_bytes": 18792,
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "encoded_sha256": "93159be7c00758f86eee3518f3abb76ddcf5a42aedc48d434bffdc198deee2bc",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/65536/9",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "65536",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.9.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 49,
+      "encoded_bytes": 4836,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "encoded_sha256": "e06f43c3fa9c5514e3dbd9d286dcb24959d53f1219b1f5c1475ba95234a7ecca",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/xml/65536/6",
+      "codec": "deflate",
+      "name": "xml",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.deflate.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 101,
+      "encoded_bytes": 5449,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "encoded_sha256": "42f4318deeaa394cd4d75f5953a5b3c301bf9785426c54e14597830a329c52d3",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 6,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "deflate/nci/1048576/9",
+      "codec": "deflate",
+      "name": "nci",
+      "size": "1048576",
+      "level": 9,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.deflate.9.wire",
+      "input_bytes": 1048576,
+      "input_first_byte": 49,
+      "encoded_bytes": 100947,
+      "input_sha256": "3d234780bf0ef1a8f13459589904c5f6b0abe8da8c3e2119f20201c6bea6010d",
+      "encoded_sha256": "d11436e4104619c68a2332f7dab94e203a506e9023a7c49ec8d1e65f6f83b498",
+      "generator": {
+        "api": "python.zlib.compressobj",
+        "version": "1.2.11",
+        "level": 9,
+        "window_bits": -15
+      }
+    },
+    {
+      "key": "zstd/nci/65536/3",
+      "codec": "zstd",
+      "name": "nci",
+      "size": "65536",
+      "level": 3,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.zstd.3.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 49,
+      "encoded_bytes": 5230,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "encoded_sha256": "2cbe87a9f0b39e4d2d2303a243f8ef6e6555273f62f0df5db6aa7b9135d23780",
+      "generator": {
+        "api": "ZSTD_compress",
+        "version": "1.6.0",
+        "level": 3
+      }
+    },
+    {
+      "key": "brotli/nci/65536/6",
+      "codec": "brotli",
+      "name": "nci",
+      "size": "65536",
+      "level": 6,
+      "scope": "silesia",
+      "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "encoded_input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.brotli.6.wire",
+      "input_bytes": 65536,
+      "input_first_byte": 49,
+      "encoded_bytes": 4214,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "encoded_sha256": "3af839ce88d3a9e353e996eda3e602d8bb282537383ff1b321fa82b3183d2cdf",
+      "generator": {
+        "api": "BrotliEncoderCompress",
+        "version": "1.2.0",
+        "quality": 6,
+        "window_bits": 22,
+        "mode": "generic"
+      }
+    }
+  ],
+  "files": {
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.plain": {
+      "sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.65536.deflate.6.wire": {
+      "sha256": "93159be7c00758f86eee3518f3abb76ddcf5a42aedc48d434bffdc198deee2bc",
+      "bytes": 18792
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain": {
+      "sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.deflate.9.wire": {
+      "sha256": "e06f43c3fa9c5514e3dbd9d286dcb24959d53f1219b1f5c1475ba95234a7ecca",
+      "bytes": 4836
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.plain": {
+      "sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "bytes": 65536
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/xml.65536.deflate.6.wire": {
+      "sha256": "42f4318deeaa394cd4d75f5953a5b3c301bf9785426c54e14597830a329c52d3",
+      "bytes": 5449
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.plain": {
+      "sha256": "3d234780bf0ef1a8f13459589904c5f6b0abe8da8c3e2119f20201c6bea6010d",
+      "bytes": 1048576
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.1048576.deflate.9.wire": {
+      "sha256": "d11436e4104619c68a2332f7dab94e203a506e9023a7c49ec8d1e65f6f83b498",
+      "bytes": 100947
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.zstd.3.wire": {
+      "sha256": "2cbe87a9f0b39e4d2d2303a243f8ef6e6555273f62f0df5db6aa7b9135d23780",
+      "bytes": 5230
+    },
+    "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.brotli.6.wire": {
+      "sha256": "3af839ce88d3a9e353e996eda3e602d8bb282537383ff1b321fa82b3183d2cdf",
+      "bytes": 4214
+    }
+  },
+  "scope": "only these four diagnostic cases and other-codec smoke inputs; no complete corpus fixture sweep"
+}

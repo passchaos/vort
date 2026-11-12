@@ -1,0 +1,1106 @@
+{
+  "authorship": "main independently recomputed derived summary from original raw measured batches",
+  "schema": "vort.deflate-pmu-paired-summary.v1",
+  "source_events_sha256": "ac1c4e4d053fd8941839ddf99110d0f63b5c363c6aaf0dffcdf6ffc874bcfc19",
+  "event_count": 144,
+  "measured_vort_reference_pairs": 288,
+  "counter_processes": 96,
+  "counter_measured_batches": 192,
+  "wall_processes": 48,
+  "raw_counter_reads_complete_unscaled": true,
+  "compiler_boundary_observations": 0,
+  "scope": "instrumented cohort only; Vort batch plus loop/mix/userspace control boundary; counter timers/validation/reference outside; PMU wall ratios diagnostic",
+  "bootstrap": "2000 fixed-row balanced process-order paired log ratio resamples; seed 0x20261112",
+  "prototype_adopted": false,
+  "hypothesis_limit": "whole Vort operation counters cannot localize misses/stalls to preparation, refill, copy or frontend; physical sampling still needed",
+  "rows": {
+    "deflate_reymont_65536_6_cold": {
+      "wall-time": {
+        "sampling_mode": "paired-wall-time",
+        "counter_group": null,
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0021521103344109,
+              "ci95": [
+                0.9932119162143775,
+                1.011172777785059
+              ],
+              "paired_ratios": [
+                1.028293006806449,
+                0.9937558152904169,
+                0.9926683148233432,
+                0.9943375864327036
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.99140581318595,
+              "ci95": [
+                0.9714301022191584,
+                1.0117922886819828
+              ],
+              "paired_ratios": [
+                1.0299719859204604,
+                0.9939334753085043,
+                0.9670933497071972,
+                0.9757863021012785
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": false
+      },
+      "branches": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branches",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.9708760525405407,
+              "ci95": [
+                0.9557831696890607,
+                0.9862072688550827
+              ],
+              "paired_ratios": [
+                0.955883927058513,
+                0.9556824229401946,
+                0.972727090489197,
+                0.9998742572836806
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 0.993793069758949,
+              "ci95": [
+                0.9927209387765581,
+                0.9948663586345589
+              ],
+              "paired_ratios": [
+                0.9971025331889476,
+                0.9926351990876255,
+                0.9963642229626869,
+                0.9890909765457495
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0485315837469784,
+              "ci95": [
+                1.0485274088900998,
+                1.0485357586204798
+              ],
+              "paired_ratios": [
+                1.048519062426963,
+                1.0485357554196764,
+                1.0485357579444279,
+                1.0485357592965316
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.0436204854797597,
+              "ci95": [
+                1.0436153292123187,
+                1.0436256417726764
+              ],
+              "paired_ratios": [
+                1.0436050362038518,
+                1.043625622322305,
+                1.0436256376858215,
+                1.0436256458595314
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.9600474361432069,
+              "ci95": [
+                0.9521902309888305,
+                0.9679694767378438
+              ],
+              "paired_ratios": [
+                0.9505468381926887,
+                0.9538364650335819,
+                0.9591852857941212,
+                0.9768341130466889
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 0.9769249615634622,
+              "ci95": [
+                0.9756298677701141,
+                0.9782217745210026
+              ],
+              "paired_ratios": [
+                0.981291418227682,
+                0.9732644383102306,
+                0.9780010461881528,
+                0.9751617331733278
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0005583081771348,
+              "ci95": [
+                1.0005490584653596,
+                1.0005675579744202
+              ],
+              "paired_ratios": [
+                1.0006137872624294,
+                1.0005213283553869,
+                1.0005767893438904,
+                1.0005213308222471
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.01308856815409,
+              "ci95": [
+                1.0130771379918568,
+                1.0130999984452853
+              ],
+              "paired_ratios": [
+                1.013156676208907,
+                1.013043308522598,
+                1.0131109685908135,
+                1.013043323852317
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      },
+      "branch-misses": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branch-misses",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0025150555932152,
+              "ci95": [
+                0.9998428898532885,
+                1.0051943629249
+              ],
+              "paired_ratios": [
+                1.010866146021832,
+                0.9991543983431257,
+                1.0005318557851828,
+                0.999554403154553
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 0.9962548240087745,
+              "ci95": [
+                0.9940982482555997,
+                0.9984160781918603
+              ],
+              "paired_ratios": [
+                0.9946908232876627,
+                0.9935060262429478,
+                0.998186472044265,
+                0.9986457371542197
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0485412783022117,
+              "ci95": [
+                1.048508027759829,
+                1.0485745298990434
+              ],
+              "paired_ratios": [
+                1.0485745305152994,
+                1.0484802982487835,
+                1.0485357580042465,
+                1.0485745292827873
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 0.9383939087975113,
+              "ci95": [
+                0.937241623184582,
+                0.9395476110804868
+              ],
+              "paired_ratios": [
+                0.9382347526141084,
+                0.9362495449909655,
+                0.9395715228773662,
+                0.939523699892155
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.9864905231745795,
+              "ci95": [
+                0.9841642093206583,
+                0.9888223358427186
+              ],
+              "paired_ratios": [
+                0.99758077547815,
+                0.9784385429050808,
+                0.9899233814235783,
+                0.9801407925015354
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 0.9797074626492353,
+              "ci95": [
+                0.9780753308259307,
+                0.9813423180401472
+              ],
+              "paired_ratios": [
+                0.9775979498099503,
+                0.9785529449567969,
+                0.9822064598535777,
+                0.9804789364956665
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0005675592073104,
+              "ci95": [
+                1.0005398285849472,
+                1.0005952905982465
+              ],
+              "paired_ratios": [
+                1.0005583279227908,
+                1.0005213295891382,
+                1.000576791809534,
+                1.0006137897289666
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 0.935225281169313,
+              "ci95": [
+                0.9342493550182488,
+                0.9362022267825233
+              ],
+              "paired_ratios": [
+                0.935703610358808,
+                0.9327973598576997,
+                0.9390156040140627,
+                0.9333972786882774
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      }
+    },
+    "deflate_nci_65536_9_cold": {
+      "wall-time": {
+        "sampling_mode": "paired-wall-time",
+        "counter_group": null,
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.9707725371693833,
+              "ci95": [
+                0.9610716099692977,
+                0.9805713842201492
+              ],
+              "paired_ratios": [
+                0.9599645192423202,
+                0.9621799774620861,
+                0.9775208948846867,
+                0.9836313930300644
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0986032312403982,
+              "ci95": [
+                1.0941012738516516,
+                1.1031237130754774
+              ],
+              "paired_ratios": [
+                1.0921059391689436,
+                1.1007617483024907,
+                1.1054907460456445,
+                1.0961002541152076
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": false
+      },
+      "branches": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branches",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.9758703050667217,
+              "ci95": [
+                0.9702141668234109,
+                0.9815594173697003
+              ],
+              "paired_ratios": [
+                0.9666163746716941,
+                0.9802939556235173,
+                0.9828265127008114,
+                0.9738253501287498
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 0.9758335528012888,
+              "ci95": [
+                0.9701340398894119,
+                0.9815665502071602
+              ],
+              "paired_ratios": [
+                0.9665209754753546,
+                0.980281698177849,
+                0.9828530862878418,
+                0.973760610719565
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.020408366553234,
+              "ci95": [
+                1.0203772006514251,
+                1.020439533406959
+              ],
+              "paired_ratios": [
+                1.020409003579667,
+                1.020409003579667,
+                1.0203453987143802,
+                1.0204700641476792
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.0327881755138635,
+              "ci95": [
+                1.0327478645416432,
+                1.032828488059531
+              ],
+              "paired_ratios": [
+                1.032789498888839,
+                1.032789498888839,
+                1.032706231872833,
+                1.0328674787021157
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.10218915068458,
+              "ci95": [
+                1.0995124318983882,
+                1.1048723858349823
+              ],
+              "paired_ratios": [
+                1.1024374025368529,
+                1.1044700474297344,
+                1.1052748708048137,
+                1.096595221748833
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.103232683357031,
+              "ci95": [
+                1.0977819456018156,
+                1.1087104852684708
+              ],
+              "paired_ratios": [
+                1.0989905648421243,
+                1.1122050062393625,
+                1.1052269439971378,
+                1.0965746555453186
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 0.9918549451632381,
+              "ci95": [
+                0.9917928672855181,
+                0.9919170269265103
+              ],
+              "paired_ratios": [
+                0.9918546922830096,
+                0.9919793654875281,
+                0.9917928672855181,
+                0.9917928672855181
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.0159641318156387,
+              "ci95": [
+                1.0158828664332853,
+                1.0160454036988031
+              ],
+              "paired_ratios": [
+                1.0159647769827609,
+                1.0161260368133618,
+                1.0158828664332853,
+                1.0158828664332853
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      },
+      "branch-misses": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branch-misses",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 0.9761405242272917,
+              "ci95": [
+                0.969582663698265,
+                0.9827427394424411
+              ],
+              "paired_ratios": [
+                0.9745760435315618,
+                0.9646148681611603,
+                0.9862212609401905,
+                0.9792764871101309
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 0.9764685059279823,
+              "ci95": [
+                0.9733363798689987,
+                0.9796107109420448
+              ],
+              "paired_ratios": [
+                0.9745689368287759,
+                0.9721053817488291,
+                0.979801055194505,
+                0.9794204036674324
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0204236292653839,
+              "ci95": [
+                1.020345396636623,
+                1.0205018678924511
+              ],
+              "paired_ratios": [
+                1.0203453987143802,
+                1.0203453945588656,
+                1.0205336726284118,
+                1.0204700641476792
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 0.795555069379989,
+              "ci95": [
+                0.7871024999025215,
+                0.8040984096665699
+              ],
+              "paired_ratios": [
+                0.7805983867942224,
+                0.7958723780193445,
+                0.8124094644890304,
+                0.793660806675631
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0995493295488716,
+              "ci95": [
+                1.094653024583234,
+                1.1044675353376725
+              ],
+              "paired_ratios": [
+                1.1029712665883866,
+                1.1059658338952028,
+                1.0920159944618006,
+                1.0972964226772033
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.1015038303500848,
+              "ci95": [
+                1.1001809018591329,
+                1.1028283496155984
+              ],
+              "paired_ratios": [
+                1.1030013271138137,
+                1.099939373537051,
+                1.1057249135512435,
+                1.0973676885618828
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 0.9918706528251678,
+              "ci95": [
+                0.9917928652077608,
+                0.99194844654356
+              ],
+              "paired_ratios": [
+                0.9917928631300036,
+                0.9919175285633025,
+                0.9919793654875281,
+                0.9917928672855181
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.7380430602473125,
+              "ci95": [
+                1.7172223494186043,
+                1.7591162147968702
+              ],
+              "paired_ratios": [
+                1.740090039392234,
+                1.7538558118146312,
+                1.7643923954954694,
+                1.694655179092172
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      }
+    },
+    "deflate_xml_65536_6_cold": {
+      "wall-time": {
+        "sampling_mode": "paired-wall-time",
+        "counter_group": null,
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0058420439469904,
+              "ci95": [
+                1.0016975159833417,
+                1.0100037199136713
+              ],
+              "paired_ratios": [
+                1.0109440054100312,
+                1.0090643089828757,
+                1.0004877590696752,
+                1.0029087356953053
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0860266481068572,
+              "ci95": [
+                1.0816165459286096,
+                1.0904547317049489
+              ],
+              "paired_ratios": [
+                1.0919224437795347,
+                1.079758292462473,
+                1.0834779974307962,
+                1.088988992461626
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": false
+      },
+      "branches": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branches",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0038297761686357,
+              "ci95": [
+                1.0018316784812853,
+                1.0058318589509414
+              ],
+              "paired_ratios": [
+                1.0038710730925429,
+                1.0029347761178256,
+                1.0087373103132398,
+                0.9997964269621956
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.0044480304025982,
+              "ci95": [
+                0.9999263633713706,
+                1.0089901444122138
+              ],
+              "paired_ratios": [
+                0.9999960745851193,
+                1.0084718069129317,
+                1.0095087483282281,
+                0.9998566570172943
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0237566935861397,
+              "ci95": [
+                1.0237234827802406,
+                1.0237899054694366
+              ],
+              "paired_ratios": [
+                1.0237899054694366,
+                1.0236570644907785,
+                1.0237899053791433,
+                1.0237899054694366
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.0272622664464777,
+              "ci95": [
+                1.027219979431732,
+                1.0273045552020301
+              ],
+              "paired_ratios": [
+                1.0273045552020301,
+                1.027135411284035,
+                1.0273045545422612,
+                1.0273045552020301
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0937764764562916,
+              "ci95": [
+                1.0813095297834348,
+                1.1063871606576385
+              ],
+              "paired_ratios": [
+                1.1178456787172517,
+                1.095046098556949,
+                1.0748804411635053,
+                1.0877770721503113
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.0923561223311664,
+              "ci95": [
+                1.088144318598421,
+                1.0965842283965896
+              ],
+              "paired_ratios": [
+                1.0889885619686477,
+                1.0950160335736872,
+                1.098154669063322,
+                1.0873007297317336
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0002134973755277,
+              "ci95": [
+                1.0001802875508639,
+                1.0002467083028852
+              ],
+              "paired_ratios": [
+                1.0001138712099387,
+                1.0002467083024171,
+                1.000246704506963,
+                1.0002467120988074
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.0156639016306284,
+              "ci95": [
+                1.0156216209758833,
+                1.0157061840455306
+              ],
+              "paired_ratios": [
+                1.0155370651362972,
+                1.015706183855774,
+                1.0157061596924513,
+                1.0157062083986106
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      },
+      "branch-misses": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branch-misses",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0000610116021769,
+              "ci95": [
+                0.9923931420247752,
+                1.007788128086239
+              ],
+              "paired_ratios": [
+                1.0089789070189499,
+                0.9818288725852258,
+                1.0030710807522298,
+                1.006598754489613
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.0060355822037388,
+              "ci95": [
+                1.0037585186990865,
+                1.0083178113115792
+              ],
+              "paired_ratios": [
+                1.010103221933787,
+                1.004396113258845,
+                1.0031213288868348,
+                1.0065355564966398
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.023742913166573,
+              "ci95": [
+                1.0236570664782947,
+                1.02382876705419
+              ],
+              "paired_ratios": [
+                1.0238676263183306,
+                1.0236570645805678,
+                1.0236570683760218,
+                1.0237899092648906
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 0.9519778053834096,
+              "ci95": [
+                0.9476240760630199,
+                0.956351537318205
+              ],
+              "paired_ratios": [
+                0.963938238392373,
+                0.9315860225982269,
+                0.9664636484973075,
+                0.9463452291795558
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0832004642006345,
+              "ci95": [
+                1.0766674790206439,
+                1.0897730901204024
+              ],
+              "paired_ratios": [
+                1.0989581836530433,
+                1.0684364085025337,
+                1.084961960445884,
+                1.0806647656081465
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.0921418533911782,
+              "ci95": [
+                1.0900038107407257,
+                1.0942840898126343
+              ],
+              "paired_ratios": [
+                1.0891109776555568,
+                1.0908973757539848,
+                1.0955321150932964,
+                1.0930374862767844
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0002656940023016,
+              "ci95": [
+                1.0002467102010804,
+                1.0002846781638188
+              ],
+              "paired_ratios": [
+                1.0003226456698968,
+                1.0002467083033533,
+                1.0002467120988074,
+                1.0002467120988074
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.4949076376997066,
+              "ci95": [
+                1.4763340248758272,
+                1.51371492331546
+              ],
+              "paired_ratios": [
+                1.4826570443674163,
+                1.470037970875444,
+                1.532555197743974,
+                1.4951062594293034
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      }
+    },
+    "deflate_nci_1048576_9_cold": {
+      "wall-time": {
+        "sampling_mode": "paired-wall-time",
+        "counter_group": null,
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0054781134404587,
+              "ci95": [
+                0.9998965706521724,
+                1.0110908130711742
+              ],
+              "paired_ratios": [
+                0.9746075758876284,
+                1.025841761071279,
+                0.9863451798978383,
+                1.0364572698401735
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0113750272021922,
+              "ci95": [
+                1.0032590503684755,
+                1.0195566591425747
+              ],
+              "paired_ratios": [
+                0.9947001506435211,
+                1.0383079220662175,
+                1.0011440335862862,
+                1.0118915951657208
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": false
+      },
+      "branches": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branches",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.014793736959145,
+              "ci95": [
+                1.0008917505836157,
+                1.0288888163690337
+              ],
+              "paired_ratios": [
+                1.0411905697884476,
+                0.9954081021884483,
+                1.0064056080956825,
+                1.016732409192261
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.0065029296750725,
+              "ci95": [
+                1.005700694694993,
+                1.0073058045880532
+              ],
+              "paired_ratios": [
+                1.0064712009581882,
+                1.0081411003025187,
+                1.0058386299115132,
+                1.005562778394155
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.01036277366894,
+              "ci95": [
+                1.0103498233641273,
+                1.0103757241397455
+              ],
+              "paired_ratios": [
+                1.0103813337238792,
+                1.0103701145867559,
+                1.010344215817516,
+                1.010355430941861
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.010892866169114,
+              "ci95": [
+                1.0108763401917695,
+                1.0109093924166277
+              ],
+              "paired_ratios": [
+                1.0109165639093736,
+                1.010902220974757,
+                1.0108691808670707,
+                1.0108834995671732
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0191880809341725,
+              "ci95": [
+                1.0184992734588563,
+                1.0198773542475608
+              ],
+              "paired_ratios": [
+                1.0268722189641943,
+                1.012877410029544,
+                1.026925674723721,
+                1.010194599560385
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.0094443485559104,
+              "ci95": [
+                1.0090458580396444,
+                1.009842996443311
+              ],
+              "paired_ratios": [
+                1.0104221276950283,
+                1.0092641971251466,
+                1.0103659771722515,
+                1.0077274637419622
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 0.9999376630040754,
+              "ci95": [
+                0.9999311873299875,
+                0.9999441387201005
+              ],
+              "paired_ratios": [
+                0.9999496891614345,
+                0.9999385883095755,
+                0.9999385870763595,
+                0.9999237876383752
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 1.0048530370570972,
+              "ci95": [
+                1.0048447710199728,
+                1.0048613031622196
+              ],
+              "paired_ratios": [
+                1.0048684239078087,
+                1.0048541824670896,
+                1.00485417460227,
+                1.0048353675256758
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      },
+      "branch-misses": {
+        "sampling_mode": "pmu-diagnostic-with-batch-control-overhead",
+        "counter_group": "branch-misses",
+        "wall_time_for_throughput_gate": false,
+        "ratios": {
+          "owner-word": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0062046914585008,
+              "ci95": [
+                0.9923818932630525,
+                1.0202200261676129
+              ],
+              "paired_ratios": [
+                0.9863835563414484,
+                1.008376890300769,
+                1.0322022567206894,
+                0.9984167069138091
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.006047779402799,
+              "ci95": [
+                1.0057817742078818,
+                1.0063138549497206
+              ],
+              "paired_ratios": [
+                1.0047550764966624,
+                1.0068095210386476,
+                1.0051035978551894,
+                1.007525569329091
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 1.0103692465648961,
+              "ci95": [
+                1.0103627721274018,
+                1.0103757210438788
+              ],
+              "paired_ratios": [
+                1.0103813262860932,
+                1.0103701158327605,
+                1.0103701158455491,
+                1.010355428462631
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 0.9934478234417279,
+              "ci95": [
+                0.9927782663458926,
+                0.9941178321053702
+              ],
+              "paired_ratios": [
+                0.993242219087755,
+                0.9943111427844185,
+                0.9939245590091438,
+                0.9923145303207007
+              ]
+            }
+          },
+          "owner-only": {
+            "wall_ns": {
+              "candidate_over_baseline_geomean": 1.0103128539553974,
+              "ci95": [
+                0.9971430701502939,
+                1.0236565779007527
+              ],
+              "paired_ratios": [
+                0.9995988581908941,
+                0.994693315424809,
+                1.0403125838199432,
+                1.0072672442659263
+              ]
+            },
+            "cycles": {
+              "candidate_over_baseline_geomean": 1.00828992817985,
+              "ci95": [
+                1.0070628673950048,
+                1.0095184840830425
+              ],
+              "paired_ratios": [
+                1.0065797457918033,
+                1.0075462208789734,
+                1.0089400421947614,
+                1.0100972576015534
+              ]
+            },
+            "instructions": {
+              "candidate_over_baseline_geomean": 0.999924712622679,
+              "ci95": [
+                0.9999126907733902,
+                0.9999367346165053
+              ],
+              "paired_ratios": [
+                0.9999237851720099,
+                0.9999126895402279,
+                0.9999126920065524,
+                0.9999496842287018
+              ]
+            },
+            "third_event": {
+              "candidate_over_baseline_geomean": 0.9998865263228665,
+              "ci95": [
+                0.9994608718765513,
+                1.000312362048622
+              ],
+              "paired_ratios": [
+                1.0007327357909517,
+                0.9998921648909859,
+                0.9997867595567855,
+                0.9991350904217489
+              ]
+            }
+          }
+        },
+        "counter_control_overhead_in_wall_time": true
+      }
+    }
+  }
+}

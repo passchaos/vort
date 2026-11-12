@@ -1,0 +1,74 @@
+{
+  "authorship": "main-authored validation receipt",
+  "recorded_utc": "2026-11-12T04:54:46.344332+00:00",
+  "zig_contracts": {
+    "sampling_tests": 8,
+    "pure_pmu_tests": 5,
+    "aggregate_total": 13,
+    "exit_code": 0,
+    "log": "unit-build.log"
+  },
+  "python_evidence_tests": {
+    "initial": 8,
+    "final": 9,
+    "exit_code": 0,
+    "log": "final-python-gate.log"
+  },
+  "comparator_builds": {
+    "baseline": 0,
+    "owner-word": 0,
+    "owner-only": 0,
+    "mode": "ReleaseFast x86_64-linux-gnu skylake+pku+sgx"
+  },
+  "runtime": {
+    "pilot_events": 144,
+    "wall_control_events": 48,
+    "pmu_events": 96,
+    "measured_pairs": 288,
+    "warmup_pairs": 288,
+    "pmu_measured_batches": 192,
+    "pmu_warmup_batches": 192,
+    "other_codec_pmu_smoke_events": 6,
+    "initial_deflate_hardware_smoke_events": 2,
+    "full_output_guards_immutable_input": true,
+    "exact_consumption_scope": "Deflate only; selected Zstd/Brotli APIs do not expose consumption",
+    "strict_running_equal_enabled": true,
+    "raw_nine_words_and_event_ids_checked": true
+  },
+  "physical_sampling": {
+    "recordings": 4,
+    "total_samples": 9512,
+    "each_record_vort_api_calls": 2000,
+    "all_sample_flags_exact_user": true,
+    "recorded_lost_events": 0,
+    "counter_event": "branch-misses:upp",
+    "scope": "bounded Vort code IP domains; period/call estimators, no full public-decoder denominator or exact per-branch counts"
+  },
+  "source_epochs": {
+    "compiled_and_measured": "source-freeze.json/common-source",
+    "final_tools": "final-tool-source.json/final-tool-source",
+    "post_measurement_changes": "only matrix.py/evidence_test.py summary metadata/test correction; no probe rebuild or source-epoch substitution"
+  },
+  "schema_checks": "raw/semantic/ID bindings, full running and cumulative header advance; PMU wall times diagnostic",
+  "counter_oracle_scope": "real Linux PMU + independent Python validation; CI parsing uses synthetic raw-read fixtures",
+  "codec_prototypes_adopted": false,
+  "dedicated_host_acceptance": false,
+  "complete_industry_matrix_updated": false,
+  "sha256": {
+    "unit-build.log": "d13a6af9337f8fe01a648e9ed3586a978e905d15160c69ab530ba148d67058fa",
+    "baseline-build.log": "6a1d34eaef27f83844002f9e8ba98fc2671ae4b5040ddd4d0fcaea01a5935a07",
+    "owner-word-build.log": "79d72ae7b30c90c2f9fa7c6f98a88a744219db935079e72d1e7eddd432d57295",
+    "owner-only-build.log": "96ef624c1a9379047c07be20888c1f0ea4ae32ee85046505f8294550fbbf0c2b",
+    "final-python-gate.log": "a468c4fb2b5076438db3ed8e8c6d3546c264220177d386e75d095cb2886dd494",
+    "probe-freeze.json": "6d48c5482e8a79590b8605c2e0443709a70b4526564d18a87cb9b404a070b8e6",
+    "source-freeze.json": "e26e044dd41a41c6c09596c40497641b69dfe828e97c5096fcb00563a396f65d",
+    "final-tool-source.json": "e896f9a9ad76b78690ab252267d18ba0c03fe66a09e6b1878d0def6fece9d752",
+    "events.json": "ac1c4e4d053fd8941839ddf99110d0f63b5c363c6aaf0dffcdf6ffc874bcfc19",
+    "paired-summary.json": "2aab1503259f0194b2ea2a320ce15e0bd2fc21a459bd9dbe5c1d5f2cdd1d6de4",
+    "copy-loop-analysis.json": "e038c220f6069c127f3c070ea25a90af4f377b1104b36659ca4600fb9a695cbe",
+    "validation.json": "2805cf48221cf457829de16937eee545d10df1b16d77ae56f298d96a282acb3a",
+    "codec-pmu-smoke.json": "6aa0ffc11904cde1ac89a1ad442861089cb668dcf930f6fcf3e39803108a24c4",
+    "branch-sampling/bounded-summary.json": "fb6df40d8fbd4fc8a3898fe2f740169e2d9e94e553457a85fd7114626ee1c90f",
+    "branch-sampling/exact-ip-validation.json": "79f760214532ad7f08a1a5e2e9cf20673bceb859bc4e3a04b22e6ccb245299ed"
+  }
+}

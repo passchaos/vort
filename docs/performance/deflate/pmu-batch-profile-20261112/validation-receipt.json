@@ -1,0 +1,128 @@
+{
+  "schema": "vort.deflate.pmu-archive-validation.v1",
+  "valid": true,
+  "scope": "offline original byte/source/PMU/statistical/sample-record verification; no compiler, test, codec, oracle, perf or benchmark execution",
+  "cpu_affinity": [
+    0
+  ],
+  "base_revision": "485ca30f2c61dd57673dd04e996a69171081e194",
+  "baseline_git_blobs_verified": 2069,
+  "final_tool_commit": "07523cb9fb82825f47b5d799b5240297d50352c7",
+  "final_tool_git_blobs_verified": 10,
+  "original_files_verified": 678,
+  "source_epochs": {
+    "measured_common_files": 10,
+    "final_tool_files": 10,
+    "post_measurement_changes": [
+      "tools/decode/matrix.py",
+      "tools/decode/evidence_test.py"
+    ],
+    "probe_not_rebuilt_after_marker_fix": true
+  },
+  "cohort_registry_files": {
+    "baseline": 2072,
+    "owner-word": 2074,
+    "owner-only": 2074
+  },
+  "counter_pilot": {
+    "pilot_events": 144,
+    "wall_control_events": 48,
+    "pmu_events": 96,
+    "measured_pairs": 288,
+    "warmup_pairs": 288,
+    "pmu_measured_batches": 192,
+    "pmu_warmup_batches": 192,
+    "raw_counter_reads_verified": 384,
+    "paired_statistics_recomputed": true,
+    "bootstrap_resamples": 2000,
+    "pmu_wall_time_is_throughput_acceptance": false
+  },
+  "codec_smoke": {
+    "other_codec_pmu_smoke_events": 6,
+    "initial_deflate_hardware_checks": 2,
+    "deflate_consumption_verified": true,
+    "zstd_brotli_consumption_api_exposed": false,
+    "smoke_times_used_as_performance": false
+  },
+  "physical_profile": {
+    "records": [
+      {
+        "name": "nci-baseline",
+        "samples": 1825,
+        "bounded_samples": 1078,
+        "exact_user_flags": "0x4002",
+        "recorded_lost_events": 0
+      },
+      {
+        "name": "nci-owner-only",
+        "samples": 2294,
+        "bounded_samples": 1589,
+        "exact_user_flags": "0x4002",
+        "recorded_lost_events": 0
+      },
+      {
+        "name": "xml-baseline",
+        "samples": 2543,
+        "bounded_samples": 1489,
+        "exact_user_flags": "0x4002",
+        "recorded_lost_events": 0
+      },
+      {
+        "name": "xml-owner-only",
+        "samples": 2850,
+        "bounded_samples": 1823,
+        "exact_user_flags": "0x4002",
+        "recorded_lost_events": 0
+      }
+    ],
+    "total_exact_user_samples": 9512,
+    "single_record_per_case_variant": true,
+    "known_calls_per_record": 2000,
+    "whole_process_percentages_used": false,
+    "complete_public_decoder_denominator": false,
+    "sample_period_per_call_estimates_are_exact_misses": false,
+    "scalar_static": {
+      "baseline": {
+        "text_bytes": 3659,
+        "stack_reservation_bytes": 296,
+        "instruction_lines": 897
+      },
+      "owner-only": {
+        "text_bytes": 3649,
+        "stack_reservation_bytes": 312,
+        "instruction_lines": 902
+      }
+    },
+    "inner_loop_equal_bytes": 26,
+    "inner_loop_sha256": "dc84e82411b2f8ade64306811733d766d83514546f5b3c359786b07e53b7a743",
+    "whole_scalar_equivalence_claimed": false,
+    "copy_loop_sample_estimates": {
+      "nci-baseline": {
+        "samples": 117,
+        "weighted_samples_per_call": 58.5
+      },
+      "nci-owner-only": {
+        "samples": 776,
+        "weighted_samples_per_call": 388.0
+      },
+      "xml-baseline": {
+        "samples": 208,
+        "weighted_samples_per_call": 104.0
+      },
+      "xml-owner-only": {
+        "samples": 944,
+        "weighted_samples_per_call": 472.0
+      }
+    },
+    "decode_once_5293_domain": "Zstd-excluded",
+    "raw_caller_domain": "all routes; not prep-only",
+    "cause_proven": false
+  },
+  "fixture_tasks_verified": 6,
+  "external_fixture_files_verified": 10,
+  "external_fixture_bytes_verified": 1384652,
+  "ordinary_complete_corpus_swept": false,
+  "codec_prototypes_adopted": false,
+  "throughput_or_industry_acceptance_claimed": false,
+  "verified_at_utc": "2026-11-12T05:08:34.340093+00:00"
+}

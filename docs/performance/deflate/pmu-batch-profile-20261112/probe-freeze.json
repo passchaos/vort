@@ -1,0 +1,17 @@
+{
+  "baseline": {
+    "sha256": "75cde056539cf5ac164a3bcdd41efa5a2cd327e0a7aa97e615160bbec90287e4",
+    "bytes": 8375944,
+    "build_log": "baseline-build.log"
+  },
+  "owner-word": {
+    "sha256": "bfc95dd40cc7b31da52d6941427da1d16e2eaeb0420fbae789bc8c43644ce115",
+    "bytes": 8393560,
+    "build_log": "owner-word-build.log"
+  },
+  "owner-only": {
+    "sha256": "e646296c2a646103b80876e3cb8e6712867ddd87a2a06b3115eff390f446cbb2",
+    "bytes": 8394512,
+    "build_log": "owner-only-build.log"
+  }
+}
