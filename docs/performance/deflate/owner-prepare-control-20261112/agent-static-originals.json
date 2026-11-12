@@ -1,0 +1,13 @@
+{
+  "scope": "exact original agent tool artifact bytes; not recaptured main stdout",
+  "files": {
+    "baseline.txt": {
+      "source": "/home/passchaos/.trae/cli/sessions/2026/11/12/rollout-2026-11-12T04-50-16-01a1cc60-2a83-7b31-bae5-81011e0abc3e.artifacts/tool-results/exec_command-code-mode-nested_29_call_8PEE7ardSLNfcNxGSxnFgKJT_exec-df9781fd-abc1-4306-bfe0-3befb5ee87ab.txt",
+      "sha256": "047541a7659c106dd36950cfe19e3643ba293eddc8a3730d9b72bc05975f2397"
+    },
+    "control.txt": {
+      "source": "/home/passchaos/.trae/cli/sessions/2026/11/12/rollout-2026-11-12T04-50-16-01a1cc60-2a83-7b31-bae5-81011e0abc3e.artifacts/tool-results/exec_command-code-mode-nested_29_call_8PEE7ardSLNfcNxGSxnFgKJT_exec-a24e02d9-31a7-4940-8fe7-3f9868aea5e4.txt",
+      "sha256": "d909b88661c959ac6d5777b6a9c5407f167c556493a7c837bd1bd64f55142055"
+    }
+  }
+}

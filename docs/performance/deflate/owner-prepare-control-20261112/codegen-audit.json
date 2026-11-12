@@ -1,0 +1,69 @@
+{
+  "authorship": "main-authored derived summary of independent agent full-symbol audit; original raw tool artifacts retained separately",
+  "baseline_sha256": "4a8ae400ddb5736e7a5f46190041e6271fdb2bc9d58ffb1d54ad841b0f786a85",
+  "control_sha256": "91ef93c63a1991f348521c95185d3f8fce29c2850d347c16f8fe707a9305c21a",
+  "baseline_scalar_range": [
+    "0x11454c0",
+    "0x114630b"
+  ],
+  "control_scalar_range": [
+    "0x1146180",
+    "0x1146fcb"
+  ],
+  "symbol_bytes": [
+    3659,
+    3659
+  ],
+  "stack_reservation_bytes": [
+    296,
+    296
+  ],
+  "pushes": [
+    6,
+    6
+  ],
+  "static_instructions_including_padding": [
+    897,
+    897
+  ],
+  "conditional_jumps": [
+    90,
+    90
+  ],
+  "jmp": [
+    43,
+    43
+  ],
+  "negative_rbp_operand_refs": [
+    131,
+    131
+  ],
+  "different_symbol_bytes": 46,
+  "masked_fields": {
+    "call_rel32": 8,
+    "rip_disp32": 17
+  },
+  "nonrelocation_byte_differences": 0,
+  "direct_function_relative_branch_targets_match": true,
+  "jump_table_addresses": [
+    "0x1009c94",
+    "0x1009cb4"
+  ],
+  "jump_table_function_relative_targets": [
+    "0x931",
+    "0x8c0",
+    "0x950",
+    "0xccc"
+  ],
+  "caller_bytes": [
+    33038,
+    39054
+  ],
+  "caller_stack_bytes": [
+    77480,
+    82168
+  ],
+  "caller_difference_limit": "all routes and caller registers/stack/addresses differ; scalar body equality does not prove preparation-only timing or helper/binary equivalence",
+  "helper_bodies_compared": false,
+  "source_scalar_bytes_retained": true
+}

@@ -1,0 +1,12 @@
+{
+  "base_revision": "cf478328",
+  "source_sha256": {
+    "src/deflate.zig": "e5391b41964382c60314e15f6d94bd39eb117fa2a75e204b601bedf60536d58b",
+    "src/deflate/semantic/mapped_owner.zig": "5066ae65f71196f525f88c3a25279c1db9ce585ae4aace45e2fffe093a1b9b2f",
+    "src/deflate/semantic/mapped_owner_tests.zig": "f2c9c832757cbedc7cdd5912be3925becf2d4c63aa7d111ed11d639fca8ce683",
+    "src/owner_prepare_test_root.zig": "587a5b15e9d71bdad437a3074619e826cc004689c92df84b3b7c85e9af65da86",
+    "src/deflate/semantic/decoder.zig": "40a27a65d08fbb82a507978d02a987971dbf91ac15b3b71edd99fef00b00fd3c",
+    "src/deflate/semantic/linear_entry.zig": "01b84bac7ad6c5bb493664c8913cefa0d913367f262f5a84ce9693f0d7081eea"
+  },
+  "scope": "owner preparation/public dispatch only; decoder.zig and linear_entry.zig retain byte-identical baseline implementation; no mapped-word implementation or generic executor refactor"
+}

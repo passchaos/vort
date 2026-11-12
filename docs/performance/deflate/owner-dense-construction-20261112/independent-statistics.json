@@ -1,0 +1,364 @@
+{
+  "authorship": "main independent recomputation from all raw measured Vort batches",
+  "events": 160,
+  "ordinary_wall_events": 96,
+  "pmu_events": 64,
+  "ordinary_speed_geomean": 1.0161967969538732,
+  "speed_ci95": [
+    1.0115169431874778,
+    1.0208318191838939
+  ],
+  "bootstrap": "2000 fixed-row balanced process-order resamples; seed0x20261112",
+  "weakest": [
+    0.9967958215397039,
+    "deflate_nci_1048576_9_cold"
+  ],
+  "target_reymont64K_L6": 1.0096590452278693,
+  "rows": {
+    "deflate_reymont_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0115512367283672,
+        1.0172858145410244,
+        0.9802249851234847,
+        1.0302492790741233
+      ],
+      "speed_geomean": 1.0096590452278693
+    },
+    "deflate_reymont_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0106986790288974,
+        1.0433648343745177,
+        1.011387244187352,
+        1.005361086678228
+      ],
+      "speed_geomean": 1.0175935819085156
+    },
+    "deflate_nci_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0492575287464883,
+        1.0381880199284566,
+        1.0291187490743272,
+        1.0213537879910242
+      ],
+      "speed_geomean": 1.0344272445802007
+    },
+    "deflate_nci_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0123147062602513,
+        1.0310354478638972,
+        1.029915665259543,
+        1.0533052987209002
+      ],
+      "speed_geomean": 1.0315404648303024
+    },
+    "deflate_xml_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.025344831344676,
+        1.0026305172904584,
+        1.0192326955712603,
+        1.0188687813311923
+      ],
+      "speed_geomean": 1.0164841638002862
+    },
+    "deflate_xml_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.045390982562093,
+        1.0423632670424268,
+        1.0543474560671355,
+        1.0367126373212996
+      ],
+      "speed_geomean": 1.044684133503037
+    },
+    "deflate_reymont_1048576_6_cold": {
+      "paired_speed_ratios": [
+        0.9862477041893235,
+        1.0171678246172007,
+        0.9849246320761164,
+        1.003492226044082
+      ],
+      "speed_geomean": 0.9978698654846355
+    },
+    "deflate_reymont_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9926701969543021,
+        0.998410613634558,
+        1.129664305414301,
+        1.0132171056062402
+      ],
+      "speed_geomean": 1.0320281013371728
+    },
+    "deflate_nci_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0032571330977333,
+        1.0174443322945272,
+        1.0132697348096658,
+        0.9983188316097275
+      ],
+      "speed_geomean": 1.0080435888873025
+    },
+    "deflate_nci_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9904211094761969,
+        1.0215628615138923,
+        0.9989585892906402,
+        0.9767701197344368
+      ],
+      "speed_geomean": 0.9967958215397039
+    },
+    "deflate_xml_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.003114979198745,
+        1.0004763303548203,
+        0.9988331628211022,
+        0.9880769438117545
+      ],
+      "speed_geomean": 0.9976088958222327
+    },
+    "deflate_xml_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0213900853999915,
+        0.9971139967253575,
+        0.9909025061230557,
+        1.0271627642469943
+      ],
+      "speed_geomean": 1.00902438322564
+    }
+  },
+  "pmu": {
+    "deflate_reymont_65536_6_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9967874311901318,
+        "paired_ratios": [
+          0.9988333184173579,
+          0.9968748290552465,
+          0.995689361859973,
+          0.9957554558005162
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9981180000028047,
+        "paired_ratios": [
+          0.9980810473527061,
+          0.9981733938842622,
+          0.9981365120357382,
+          0.9980810498152739
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9965041575581856,
+        "paired_ratios": [
+          0.99645911316618,
+          0.9965715978019956,
+          0.9965267956640603,
+          0.9964591281751095
+        ]
+      }
+    },
+    "deflate_reymont_65536_6_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9967831530344915,
+        "paired_ratios": [
+          0.9949274200035375,
+          0.9972541599455016,
+          0.99731406657643,
+          0.9976393152540981
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9981410977602614,
+        "paired_ratios": [
+          0.9981365108032717,
+          0.9981179517555029,
+          0.9981734172592147,
+          0.9981365120357382
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 1.0050581165385308,
+        "paired_ratios": [
+          1.0066573328896788,
+          1.0061870448146317,
+          1.0016049299978578,
+          1.0057912761177616
+        ]
+      }
+    },
+    "deflate_nci_65536_9_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9632548571948891,
+        "paired_ratios": [
+          0.9649156463732436,
+          0.9575691367301603,
+          0.9604443594733727,
+          0.9701371408644628
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9860071212095874,
+        "paired_ratios": [
+          0.9860540934703441,
+          0.9859294198424393,
+          0.9859294280949976,
+          0.9861155566343575
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9883563776736597,
+        "paired_ratios": [
+          0.9884171024519113,
+          0.9882558025005889,
+          0.9882558559339129,
+          0.9884967718738344
+        ]
+      }
+    },
+    "deflate_nci_65536_9_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9622443803712928,
+        "paired_ratios": [
+          0.9552768881945736,
+          0.9722507550081113,
+          0.9627687649583813,
+          0.9587645814528019
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9860071212095874,
+        "paired_ratios": [
+          0.9861155566343575,
+          0.9859294280949976,
+          0.9859294239394832,
+          0.9860540893727822
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.8530583290748895,
+        "paired_ratios": [
+          0.834927004495689,
+          0.8716366380141584,
+          0.8474339196480636,
+          0.8586676132103586
+        ]
+      }
+    },
+    "deflate_xml_65536_6_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9779149739314653,
+        "paired_ratios": [
+          0.9788567807358614,
+          0.9816426015617271,
+          0.9790896649353981,
+          0.9720964719273892
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9945323346509547,
+        "paired_ratios": [
+          0.994617637703659,
+          0.994617637703659,
+          0.9944847829553872,
+          0.994409296305603
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9887028187533593,
+        "paired_ratios": [
+          0.9888112999394215,
+          0.9888112999394215,
+          0.9886421164360865,
+          0.98854658480906
+        ]
+      }
+    },
+    "deflate_xml_65536_6_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9816554760813667,
+        "paired_ratios": [
+          0.9841477001381365,
+          0.9800642481130293,
+          0.9810446411361161,
+          0.9813699959200646
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9945655473132858,
+        "paired_ratios": [
+          0.9945421371944719,
+          0.9944847829344529,
+          0.994617637703659,
+          0.994617637703659
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9944813353493094,
+        "paired_ratios": [
+          1.0006836623945792,
+          0.9975996074315391,
+          0.9858352957236954,
+          0.9938689079050785
+        ]
+      }
+    },
+    "deflate_nci_1048576_9_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9970938597147527,
+        "paired_ratios": [
+          0.999667515795941,
+          0.9942570369343374,
+          0.996570977294963,
+          0.9978877208228673
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9985032335364228,
+        "paired_ratios": [
+          0.9984865805241834,
+          0.9985124771181169,
+          0.9985013959154214,
+          0.998512480814137
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9970561685953488,
+        "paired_ratios": [
+          0.9970349209627509,
+          0.9970679458547004,
+          0.9970538385290849,
+          0.9970679694033731
+        ]
+      }
+    },
+    "deflate_nci_1048576_9_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9959799199082932,
+        "paired_ratios": [
+          0.9971461232549215,
+          0.9947176396488651,
+          0.9936841958511259,
+          0.9983787377035406
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9984939875775847,
+        "paired_ratios": [
+          0.9985124795809073,
+          0.9984865842238725,
+          0.9985013909899498,
+          0.9984754959129656
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9970311313840979,
+        "paired_ratios": [
+          0.9969082322940243,
+          0.9959846821874349,
+          0.9972923378224073,
+          0.9979402788139616
+        ]
+      }
+    }
+  },
+  "source_events_sha256": "67f23937c2214e025d2b6c860c7812167f89a95b6ff470870ee1329e817bf927",
+  "adopted": false,
+  "dedicated_host_acceptance": false
+}

@@ -1,0 +1,50 @@
+{
+  "authorship": "main completed validation receipt",
+  "utc": "2026-11-12T05:41:52.344759+00:00",
+  "source_epochs": "v1 source and compile failure separate from v2 corrected zero-capacity/helper-oracle handling",
+  "v2_tests": {
+    "dense_native_ReleaseSafe": 90,
+    "dense_x86_ReleaseSafe": 90,
+    "owner_ReleaseSafe": 96,
+    "full_Deflate_ReleaseSafe": 738,
+    "dense_focused_declarations": 6,
+    "owner_focused_declarations": 8,
+    "exit_codes": 0
+  },
+  "ordinary_smoke": {
+    "wires": 72,
+    "full_output": true,
+    "exact_consumption": true,
+    "guards": true,
+    "input_immutable": true,
+    "timings_not_performance": true
+  },
+  "measured_events": 160,
+  "ordinary_wall_events": 96,
+  "pmu_events": 64,
+  "paired_speed_geomean": 1.0161967969538732,
+  "speed_ci95": [
+    1.0115169431874778,
+    1.0208318191838939
+  ],
+  "weakest": 0.9967958215397039,
+  "adoption": "not adopted; aggregate gain below3%, new helper remains isolated and archived",
+  "source_no_moves_during_borrow": true,
+  "runtime_allocation_probe_performed": false,
+  "dedicated_host_acceptance": false,
+  "sha256": {
+    "dense-safe-v2.log": "e14570149d685c6f67e3edd040224f2346552d8a08e61b7c4a78945ad2838b78",
+    "owner-safe-v2.log": "1aaaf0d94ad6d8472cc33cd2bfc6e65b09c1391a7427da2b3676f0f9bcc787d9",
+    "dense-x86-v2.log": "e14570149d685c6f67e3edd040224f2346552d8a08e61b7c4a78945ad2838b78",
+    "full-safe-v2.log": "e6212f3cf76c84f38883ff1cd9b02c24182adb45db86341cbd28bf1915fd9e59",
+    "build-v2.log": "e1ae200fa8da271183dc04afd56f2e70df5f747e2fe125f846bbb620b5a11a09",
+    "source-v2-freeze.json": "56d64471b3ffee32f67e3fb4e6961cd07744efe1deaedb6c54f61980be3954c7",
+    "probe-v2-freeze.json": "cf334ffb2e26f467f89ef4786db8e426152ec284f3626318f74a5a1c0908fc1a",
+    "v1-validation.json": "86931acf772746a487d276b13f952af7ac21d6284e0f6d43a8177b432a367874",
+    "independent-statistics.json": "8d0038510ced57a306632d55f888efcaa768660e94e1558cfd44bf5881b78fc3",
+    "codegen-audit.json": "eecb7c54dff3169bbd02c35922b138f22deec2ccf2d1583f613295e0b03b2e1a",
+    "agent-static-originals.json": "f7f87c2e9a4166eb468810126daa9f304b966caea1eca5816ffc59bd136b7724",
+    "smoke/validation.json": "8fd7a2dc5d79bfb91b8fca45557f24110135b9de8564b8f70b7bcc27563e4f39",
+    "events.json": "67f23937c2214e025d2b6c860c7812167f89a95b6ff470870ee1329e817bf927"
+  }
+}

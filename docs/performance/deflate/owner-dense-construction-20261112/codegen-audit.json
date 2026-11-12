@@ -1,0 +1,67 @@
+{
+  "authorship": "main-authored derived summary from independent full-symbol audit; original tool files retained",
+  "baseline_sha256": "4a8ae400ddb5736e7a5f46190041e6271fdb2bc9d58ffb1d54ad841b0f786a85",
+  "dense_v2_sha256": "f165198bc381a5af85b87aeab03b699fec37002382e851228a3d1f8f337fa567",
+  "baseline_scalar_range": [
+    "0x11454c0",
+    "0x114630b"
+  ],
+  "dense_scalar_range": [
+    "0x1145fc0",
+    "0x1146e0b"
+  ],
+  "symbol_bytes": [
+    3659,
+    3659
+  ],
+  "stack_bytes": [
+    296,
+    296
+  ],
+  "instructions_static": [
+    897,
+    897
+  ],
+  "cond_jumps": [
+    90,
+    90
+  ],
+  "jmp": [
+    43,
+    43
+  ],
+  "negative_rbp_references": [
+    131,
+    131
+  ],
+  "raw_byte_differences": 43,
+  "masked_fields": {
+    "call_rel32": 8,
+    "rip_disp32": 17
+  },
+  "nonrelocation_byte_differences": 0,
+  "direct_branch_relative_targets_match": true,
+  "jump_table_raw_words": [
+    "5dc11300 ecc01300 7cc11300 f8c41300",
+    "3dcc1300 cccb1300 5ccc1300 d8cf1300"
+  ],
+  "jump_table_relative_targets": [
+    "0x931",
+    "0x8c0",
+    "0x950",
+    "0xccc"
+  ],
+  "caller_bytes": [
+    33038,
+    38572
+  ],
+  "caller_stack_bytes": [
+    77480,
+    82152
+  ],
+  "previous_owner_caller_bytes": 39054,
+  "previous_owner_caller_stack_bytes": 82168,
+  "all_helper_bodies_compared": false,
+  "whole_operation_cause_proven": false,
+  "scope": "scalar nonreloc equality only; caller/helper/address effects remain"
+}

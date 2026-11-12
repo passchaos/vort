@@ -1,0 +1,151 @@
+{
+  "schema": "vort.deflate.owner-dense-archive-validation.v1",
+  "valid": true,
+  "scope": "offline original byte/source/static mask/self-target/recorded-test/statistics/smoke verification; no compiler,test,codec,oracle,perf or benchmark execution",
+  "cpu_affinity": [
+    0
+  ],
+  "base_revision": "cf47832821e0dce4261ab9d1cc6d56505bd121a3",
+  "baseline_git_blobs_verified": 2072,
+  "source_registry_files": {
+    "baseline": 2072,
+    "v2_control": 2078
+  },
+  "source_epochs": {
+    "v1_files": 10,
+    "v2_files": 10,
+    "only_v2_changes": [
+      "dense_decode_init.zig",
+      "dense_decode_init_tests.zig"
+    ],
+    "v1_zero_capacity_failure": "old oracle and candidate empty-array indexing; no timing reused",
+    "original_huffman_init_decoder_entry_bytes_unchanged": true
+  },
+  "original_files_verified": 915,
+  "tests": {
+    "dense-safe-v2.log": {
+      "tests": 90,
+      "anonymous_import_tests": 2,
+      "named_tests": 88
+    },
+    "dense-x86-v2.log": {
+      "tests": 90,
+      "anonymous_import_tests": 2,
+      "named_tests": 88
+    },
+    "owner-safe-v2.log": {
+      "tests": 96,
+      "anonymous_import_tests": 2,
+      "named_tests": 94
+    },
+    "full-safe-v2.log": {
+      "tests": 738,
+      "anonymous_import_tests": 13,
+      "named_tests": 725
+    },
+    "owner-safe.log": {
+      "tests": 96,
+      "anonymous_import_tests": 2,
+      "named_tests": 94
+    },
+    "full-safe.log": {
+      "tests": 738,
+      "anonymous_import_tests": 13,
+      "named_tests": 725
+    }
+  },
+  "new_dense_test_declarations": 6,
+  "new_owner_test_declarations": 8,
+  "runtime_allocation_probe_performed": false,
+  "measurements": {
+    "events": 160,
+    "ordinary_wall_events": 96,
+    "pmu_events": 64,
+    "measured_pairs": 320,
+    "warmup_pairs": 320,
+    "raw_pmu_reads": 256,
+    "ordinary_geomean": 1.0161967969538732,
+    "ci95": [
+      1.0115169431874778,
+      1.0208318191838939
+    ],
+    "weakest": [
+      0.9967958215397039,
+      "deflate_nci_1048576_9_cold"
+    ],
+    "target": 1.0096590452278693,
+    "bootstrap_resamples": 2000,
+    "adopted": false,
+    "pmu_wall_times_are_acceptance": false
+  },
+  "smoke": {
+    "wires": 72,
+    "full_output_exact_consumption_guards_immutable_input": true,
+    "timings_are_performance_evidence": false
+  },
+  "static_audit": {
+    "raw_authorship": "two exact original agent tool artifacts; main summary separately derived",
+    "scalar": {
+      "baseline": {
+        "text_bytes": 3659,
+        "stack_bytes": 296,
+        "instructions_with_padding": 897,
+        "jcc": 90,
+        "jmp": 43,
+        "negative_rbp_references": 131,
+        "masked_fields": {
+          "call_rel32": 8,
+          "rip_disp32": 17
+        },
+        "jump_table_relative_targets": [
+          "0x931",
+          "0x8c0",
+          "0x950",
+          "0xccc"
+        ]
+      },
+      "control": {
+        "text_bytes": 3659,
+        "stack_bytes": 296,
+        "instructions_with_padding": 897,
+        "jcc": 90,
+        "jmp": 43,
+        "negative_rbp_references": 131,
+        "masked_fields": {
+          "call_rel32": 8,
+          "rip_disp32": 17
+        },
+        "jump_table_relative_targets": [
+          "0x931",
+          "0x8c0",
+          "0x950",
+          "0xccc"
+        ]
+      }
+    },
+    "unmasked_different_bytes": 43,
+    "nonrelocation_different_bytes": 0,
+    "normalized_scalar_sha256": "97c3ff8da464ed49c52b20a43b6bf59f3ceeb55431cdf6b374395a211b16e945",
+    "direct_relative_branches_match": true,
+    "caller": [
+      {
+        "symbol": "deflate.decodeRawAutoWithDictionaryFromReader__anon_57944",
+        "text_bytes": 33038,
+        "stack_reservation_bytes": 77480,
+        "scope": "all caller routes; helpers/body equivalence not established"
+      },
+      {
+        "symbol": "deflate.decodeRawAutoWithDictionaryFromReader__anon_57936",
+        "text_bytes": 38572,
+        "stack_reservation_bytes": 82152,
+        "scope": "all caller routes; helpers/body equivalence not established"
+      }
+    ],
+    "helper_bodies_fully_compared": false,
+    "whole_binary_or_timing_equal_claimed": false
+  },
+  "external_original_fixture_files_verified": 108,
+  "ordinary_fixture_bytes_duplicated": false,
+  "helper_owner_core_adopted": false,
+  "verified_at_utc": "2026-11-12T05:53:03.573226+00:00"
+}

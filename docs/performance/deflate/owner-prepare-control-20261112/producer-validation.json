@@ -1,0 +1,50 @@
+{
+  "authorship": "main-authored completed validation receipt",
+  "recorded_utc": "2026-11-12T05:24:32.309089+00:00",
+  "owner_constructor_tests": {
+    "aggregate_import_total": 96,
+    "new_constructor_declarations": 8,
+    "exit_code": 0,
+    "log": "owner-safe.log"
+  },
+  "full_Deflate_ReleaseSafe": {
+    "aggregate_import_total": 738,
+    "exit_code": 0,
+    "log": "full-safe.log"
+  },
+  "ordinary_wire_smoke": {
+    "wires": 72,
+    "full_output": true,
+    "exact_consumption": true,
+    "guards": true,
+    "input_immutable": true,
+    "timings_not_performance": true
+  },
+  "builds": {
+    "baseline": 0,
+    "control": 0,
+    "mode": "ReleaseFast x86_64-linux-gnu skylake+pku+sgx"
+  },
+  "measurements": {
+    "events": 160,
+    "ordinary_wall_events": 96,
+    "pmu_events": 64,
+    "warmup_pairs": 320,
+    "measured_pairs": 320,
+    "scope": "12 cold ordinary rows; four rows two Vort-only PMU groups; no dedicated-host or complete-matrix acceptance"
+  },
+  "adoption": "not adopted; cold speed GM1.004636 below1.03 and target row0.989457; original scalar retained while next fused dense construction candidate is independent",
+  "sha256": {
+    "baseline-build.log": "0245463429cace774b8327e5627acc288e103d9fb8cffc90db0d54cf81419af0",
+    "control-build.log": "bcc5f6a724e9a12bfdf4b6ce17ff6d6d8eefd6769a67f60f74f38cc723b6d08b",
+    "owner-safe.log": "1aaaf0d94ad6d8472cc33cd2bfc6e65b09c1391a7427da2b3676f0f9bcc787d9",
+    "full-safe.log": "e6212f3cf76c84f38883ff1cd9b02c24182adb45db86341cbd28bf1915fd9e59",
+    "source-freeze.json": "66da0841658e2e6d698217777cb06fad07291a0f44e86f1646591ff2a6d9670e",
+    "probe-freeze.json": "c0c37a75e7ccd6f36d3b6f5d730d4c7d2fb80f08c756efe39a62f45cd65eaca2",
+    "events.json": "642f7e24345477adfb7d6a9da61c4e832d45ba4517f7e93b5573671504f6e8d9",
+    "independent-statistics.json": "93f5758354c3cb71635094d60f1787618dd19e104c28d00f7b8e0a293c9bf618",
+    "codegen-audit.json": "2f118791ed38076fa04a5b552d8f5fbc1b352f9fccc5d98ce851e5a87e16af36",
+    "agent-static-originals.json": "fe7ec60f81ee7622ae78af9cfcd1cafcf851918f8886f10e27ed21d83c3085cb",
+    "smoke/validation.json": "c028a758b266a56b2f301c9fa546224365eb7282419090a6cf57446e635a52f5"
+  }
+}

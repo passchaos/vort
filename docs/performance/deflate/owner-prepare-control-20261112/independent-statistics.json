@@ -1,0 +1,364 @@
+{
+  "authorship": "main independent recomputation from every raw measured Vort batch",
+  "event_count": 160,
+  "ordinary_wall_events": 96,
+  "pmu_events": 64,
+  "ordinary_speed_geomean": 1.004636342695135,
+  "speed_ci95": [
+    1.0020490196676917,
+    1.0071769245616522
+  ],
+  "bootstrap": "fixed-row balanced process-order, 2000 resamples, seed0x20261112",
+  "weakest": [
+    0.9894570042045981,
+    "deflate_reymont_65536_6_cold"
+  ],
+  "target_reymont64K_L6": 0.9894570042045981,
+  "rows": {
+    "deflate_reymont_65536_6_cold": {
+      "paired_speed_ratios": [
+        0.9552481540335981,
+        0.9842590752716464,
+        1.0062270435621308,
+        1.013132129343153
+      ],
+      "speed_geomean": 0.9894570042045981
+    },
+    "deflate_reymont_65536_9_cold": {
+      "paired_speed_ratios": [
+        0.9950562770243175,
+        1.00153173816079,
+        1.0146572302464651,
+        1.0118243311632684
+      ],
+      "speed_geomean": 1.0057364919918257
+    },
+    "deflate_nci_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0139888228832874,
+        1.0139442152739218,
+        1.0114728029146367,
+        1.013299254565904
+      ],
+      "speed_geomean": 1.0131757594985513
+    },
+    "deflate_nci_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.0399150740045946,
+        1.0391018006434625,
+        1.0374909142200923,
+        1.0279822840874788
+      ],
+      "speed_geomean": 1.036111456501023
+    },
+    "deflate_xml_65536_6_cold": {
+      "paired_speed_ratios": [
+        1.0134491379592783,
+        0.9871872509447066,
+        0.9996416809846556,
+        1.0137198891930315
+      ],
+      "speed_geomean": 1.003438949968607
+    },
+    "deflate_xml_65536_9_cold": {
+      "paired_speed_ratios": [
+        1.020519034304495,
+        1.0185581382823485,
+        1.0225616545510212,
+        1.0083667937253136
+      ],
+      "speed_geomean": 1.0174867039314532
+    },
+    "deflate_reymont_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0054207208807304,
+        1.0034540651063588,
+        1.0098325745871828,
+        0.9581518025451915
+      ],
+      "speed_geomean": 0.9939905515936625
+    },
+    "deflate_reymont_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.991301622583268,
+        1.006448349934463,
+        1.0057931061412195,
+        1.0034640543392859
+      ],
+      "speed_geomean": 1.0017329192977418
+    },
+    "deflate_nci_1048576_6_cold": {
+      "paired_speed_ratios": [
+        0.9921791138824754,
+        1.0050439983050092,
+        0.9814709325236177,
+        0.994464377399235
+      ],
+      "speed_geomean": 0.9932543071040646
+    },
+    "deflate_nci_1048576_9_cold": {
+      "paired_speed_ratios": [
+        0.9914768488769825,
+        0.9941357216361549,
+        1.0036272850326584,
+        0.9859502152896226
+      ],
+      "speed_geomean": 0.9937769646422996
+    },
+    "deflate_xml_1048576_6_cold": {
+      "paired_speed_ratios": [
+        1.0025680354920665,
+        1.0056263942041253,
+        0.9999352702953457,
+        1.0040027485166656
+      ],
+      "speed_geomean": 1.0030309329984215
+    },
+    "deflate_xml_1048576_9_cold": {
+      "paired_speed_ratios": [
+        1.0017202192531827,
+        1.0090492074285589,
+        1.0043302541516563,
+        1.0063083829852462
+      ],
+      "speed_geomean": 1.0053484330907636
+    }
+  },
+  "pmu": {
+    "deflate_reymont_65536_6_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9998258777855619,
+        "paired_ratios": [
+          0.9980848434219801,
+          1.0023996644254045,
+          1.001329217048155,
+          0.9974984531796699
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9997146791563608,
+        "paired_ratios": [
+          0.9997608914454397,
+          0.999668470235812,
+          0.9996684665388214,
+          0.999760892677657
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 1.0005525723332216,
+        "paired_ratios": [
+          1.0006089596863637,
+          1.000496195675283,
+          1.0004961731182291,
+          1.0006089672090555
+        ]
+      }
+    },
+    "deflate_reymont_65536_6_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9995432962805629,
+        "paired_ratios": [
+          1.0006515707486854,
+          0.9971885205959427,
+          1.0013358421072311,
+          0.9990023955801491
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9997377841094751,
+        "paired_ratios": [
+          0.9997054271743083,
+          0.9997239262942845,
+          0.9997608914454397,
+          0.999760892677657
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9967246675203223,
+        "paired_ratios": [
+          0.9946185458303924,
+          0.9970298480740801,
+          0.9974244802944998,
+          0.9978289277014362
+        ]
+      }
+    },
+    "deflate_nci_65536_9_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9630686286114484,
+        "paired_ratios": [
+          0.9673423089955705,
+          0.9633812231848587,
+          0.9612714750151383,
+          0.9602946938578352
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.990200984329492,
+        "paired_ratios": [
+          0.9903253551735964,
+          0.990200681969078,
+          0.9901389559150282,
+          0.990138955956006
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 1.0004030913844346,
+        "paired_ratios": [
+          1.0005643825304644,
+          1.0004031226998638,
+          1.0003224399096222,
+          1.000322439900957
+        ]
+      }
+    },
+    "deflate_nci_65536_9_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9675777210300468,
+        "paired_ratios": [
+          0.9726965622657717,
+          0.9595416979684992,
+          0.9721437630610461,
+          0.965987957603752
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9902478923616441,
+        "paired_ratios": [
+          0.9903253593293698,
+          0.990263629659356,
+          0.9901389600705427,
+          0.990263629659356
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.880576118392992,
+        "paired_ratios": [
+          0.8729193457053629,
+          0.8830264670909707,
+          0.8921623429222589,
+          0.8743310152469558
+        ]
+      }
+    },
+    "deflate_xml_65536_6_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9845410244939665,
+        "paired_ratios": [
+          1.0408911765956321,
+          0.9754495203731816,
+          0.9409339482646867,
+          0.9834810692817152
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9994230805900985,
+        "paired_ratios": [
+          0.9994041175225278,
+          0.9994041137293355,
+          0.9994041099338815,
+          0.9994799833344148
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 1.001836457781213,
+        "paired_ratios": [
+          1.001812273402396,
+          1.0018122491952828,
+          1.0018122250319603,
+          1.0019090870052387
+        ]
+      }
+    },
+    "deflate_xml_65536_6_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 0.9933780740575817,
+        "paired_ratios": [
+          0.9973257921040339,
+          0.9850365169192471,
+          0.9934118721922396,
+          0.997790931691834
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.999489501984036,
+        "paired_ratios": [
+          0.999612838101647,
+          0.9995369584113967,
+          0.9994041137270738,
+          0.9994041137270738
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9798983029721707,
+        "paired_ratios": [
+          0.9835684178115643,
+          0.9853075532108126,
+          0.9710514126910607,
+          0.9797277528727105
+        ]
+      }
+    },
+    "deflate_nci_1048576_9_cold_branches": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 1.000573722802451,
+        "paired_ratios": [
+          1.0034070649930786,
+          0.9992418482626648,
+          0.9982808798674109,
+          1.0013729394637285
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9993991124290754,
+        "paired_ratios": [
+          0.9993870928798964,
+          0.9993981839119233,
+          0.9994240817339651,
+          0.9993870916474361
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9996881595775834,
+        "paired_ratios": [
+          0.9996728313614722,
+          0.9996869757433571,
+          0.9997200084494529,
+          0.9996728234992257
+        ]
+      }
+    },
+    "deflate_nci_1048576_9_cold_branch-misses": {
+      "cycles": {
+        "candidate_over_baseline_geomean": 1.001649429057951,
+        "paired_ratios": [
+          1.0007172059754974,
+          1.0019452496907093,
+          1.0022163563775917,
+          1.0017195447681246
+        ]
+      },
+      "instructions": {
+        "candidate_over_baseline_geomean": 0.9994092884610768,
+        "paired_ratios": [
+          0.9993870928798964,
+          0.9994129904159521,
+          0.9994240805021559,
+          0.9994129904159521
+        ]
+      },
+      "third_event": {
+        "candidate_over_baseline_geomean": 0.9924462122524732,
+        "paired_ratios": [
+          0.9922481107505027,
+          0.9923568237274367,
+          0.993304120555425,
+          0.9918763520360024
+        ]
+      }
+    }
+  },
+  "source_events_sha256": "642f7e24345477adfb7d6a9da61c4e832d45ba4517f7e93b5573671504f6e8d9",
+  "dedicated_host_acceptance": false,
+  "prototype_adopted": false
+}

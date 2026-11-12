@@ -4,6 +4,37 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-12 fused dense preparation screen
+
+The [fused canonical constructor](deflate/owner-dense-construction-20261112.md)
+removes the owner-generated list's extra sparse validation/counting scan while
+retaining the original scalar and dense oracle source. Corrected-v2 native/
+x86 dedicated tests pass90/90, owner96/96, fullDeflate738/738 and smoke72/72.
+The original zero-capacity compile failure and corrected empty-metadata oracle
+remain separate epochs.
+
+Twelve ordinary cold rows reach 1.016197x (95% CI1.011517–1.020832x), weakest
+nci1M L9 0.996796x, below the 3% aggregate adoption bar. The 160 events retain
+96 ordinary and64 PMU observations separately. Scalar non-relocation bytes/
+relative branches match; caller code/stack still differ. No helper or owner
+prototype is adopted. Next target a larger measured preparation/execution
+cost, with fresh whole-operation/resource gates.
+
+## 2026-11-12 original scalar owner-preparation control
+
+The [preparation control](deflate/owner-prepare-control-20261112.md) retains
+original scalar source and proves full-symbol non-relocation byte consistency:
+3659 bytes, stack296, identical direct/real jump-table relative targets, with
+all 46 byte differences in call/RIP relocations. Caller text/stack/registers
+still differ, and helper bodies are not all compared.
+
+Twelve ordinary cold rows are 1.004636x (95% CI 1.002049–1.007177x), weakest
+reymont64K L6 0.989457x; below the 3% adoption gate, so the owner is not adopted.
+The 160 events separate 96 ordinary and 64 PMU observations. Constructor Safe
+96/96, full Deflate Safe738/738 and all72 ordinary-wire smoke pass. Next test
+fused checked dense in-place preparation, avoiding the generated-list sparse
+API's extra scan while preserving scalar and incomplete-tree contracts.
+
 ## 2026-11-12 Vort-batch PMU diagnosis
 
 The [scoped PMU diagnosis](deflate/pmu-batch-profile-20261112.md) adds optional

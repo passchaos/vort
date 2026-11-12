@@ -1,0 +1,16 @@
+{
+  "base_revision": "cf478328",
+  "source_sha256": {
+    "src/deflate.zig": "e5391b41964382c60314e15f6d94bd39eb117fa2a75e204b601bedf60536d58b",
+    "src/deflate/semantic/mapped_owner.zig": "4f59cbbe02226fddfa7ed787e5da382f696251a46cb9a61d7153aba0ebc36bfa",
+    "src/deflate/semantic/mapped_owner_tests.zig": "f2c9c832757cbedc7cdd5912be3925becf2d4c63aa7d111ed11d639fca8ce683",
+    "src/owner_prepare_test_root.zig": "587a5b15e9d71bdad437a3074619e826cc004689c92df84b3b7c85e9af65da86",
+    "src/huffman/dense_decode_init.zig": "53fe660f1289188dd11c80d1eb670896e12a448cc7db6f999b0d02829ffc6902",
+    "src/huffman/dense_decode_init_tests.zig": "dca6db58b1965878a4c088fcf60e67cb86e7d843734cbaeae4ea1162a3733f74",
+    "src/dense_huffman_test_root.zig": "2b157e1ffb0733b3e996ffb0b7a1a58a87a3c28b9266657db73be90afd7d8bf0",
+    "src/deflate/semantic/decoder.zig": "40a27a65d08fbb82a507978d02a987971dbf91ac15b3b71edd99fef00b00fd3c",
+    "src/deflate/semantic/linear_entry.zig": "01b84bac7ad6c5bb493664c8913cefa0d913367f262f5a84ce9693f0d7081eea",
+    "src/huffman.zig": "6d79eeb354d47ad67c2592236902fc7f55a2f1486d071866cfde3d9ed4e762a3"
+  },
+  "scope": "fused checked dense canonical construction; original scalar and original huffman.init oracle retained byte-identical"
+}

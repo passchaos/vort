@@ -1,0 +1,13 @@
+{
+  "scope": "v2 zero-capacity corrected source; independent frozen baseline reused by exact hash",
+  "probes": {
+    "baseline": {
+      "sha256": "4a8ae400ddb5736e7a5f46190041e6271fdb2bc9d58ffb1d54ad841b0f786a85",
+      "bytes": 8376224
+    },
+    "control": {
+      "sha256": "f165198bc381a5af85b87aeab03b699fec37002382e851228a3d1f8f337fa567",
+      "bytes": 8388952
+    }
+  }
+}

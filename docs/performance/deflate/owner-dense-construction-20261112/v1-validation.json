@@ -1,0 +1,12 @@
+{
+  "scope": "original source epoch; dense test compile fails on zero-capacity oracle and candidate array indexing; owner96/fullDeflate738/build pass for ordinary capacities; no timing measured",
+  "sha256": {
+    "dense-safe.log": "c8c94a020fcae659d6f9bd791c26261bc9dc12c8e225a97d4669c47868a602eb",
+    "owner-safe": "0790d454eabcbc809689d561c21f38ce6763edcb7cdb454e4150c247b9ce0a0d",
+    "owner-safe.log": "1aaaf0d94ad6d8472cc33cd2bfc6e65b09c1391a7427da2b3676f0f9bcc787d9",
+    "full-safe": "38c4e1f681cabe6c6b26cd5f1aae631caaa4a753093362178b6e5081069465b9",
+    "full-safe.log": "e6212f3cf76c84f38883ff1cd9b02c24182adb45db86341cbd28bf1915fd9e59",
+    "build.log": "435d657ffd641a4de1c32c8010d6f267476f620a697df22ae082bc9ff3cbf954",
+    "candidate-v1-compare": "12d1acd34c92606bf47e1547a7d7a5c7202ec9f26b8186d05e667c1a327ac84f"
+  }
+}
