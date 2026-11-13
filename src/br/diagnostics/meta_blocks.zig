@@ -2,10 +2,16 @@ const std = @import("std");
 const bit_count = @import("../../io/bit_count.zig");
 const summary = @import("../summary/types.zig");
 const dispatch = @import("../decoder/prepared_dispatch.zig");
+const distance_shape = @import("distance_shape.zig");
+
+pub const DistanceBlockShape = distance_shape.DistanceBlockShape;
 
 pub const Options = struct {
     max_output_len: usize = 256 * 1024 * 1024,
     max_meta_blocks: usize = 4096,
+    /// When true, every compressed record also captures a header-only distance
+    /// plane shape in `Report.distance_shapes`. Production decode is unchanged.
+    capture_distance_shape: bool = false,
 };
 
 pub const Record = struct {
@@ -36,10 +42,15 @@ pub const Report = struct {
     records: []Record,
     output: []u8,
     replay_history_bytes: usize,
+    /// Parallel to compressed records; empty unless the option requested
+    /// distance shape capture. Stored separately so ordinary reports keep
+    /// their original record size and JSON shape.
+    distance_shapes: []DistanceBlockShape = &.{},
 
     pub fn deinit(self: *Report, allocator: std.mem.Allocator) void {
         allocator.free(self.records);
         allocator.free(self.output);
+        if (self.distance_shapes.len != 0) allocator.free(self.distance_shapes);
         self.* = undefined;
     }
 };
@@ -66,6 +77,8 @@ pub fn inspect(comptime Codec: type, io: std.Io, allocator: std.mem.Allocator, s
     errdefer output.deinit(allocator);
     var records: std.ArrayList(Record) = .empty;
     errdefer records.deinit(allocator);
+    var shapes: std.ArrayList(DistanceBlockShape) = .empty;
+    errdefer shapes.deinit(allocator);
     var written: usize = 0;
     var last_distances = Codec.initial_distances;
     var replay_distances = last_distances;
@@ -75,7 +88,7 @@ pub fn inspect(comptime Codec: type, io: std.Io, allocator: std.mem.Allocator, s
         switch (meta) {
             .end => {
                 try Codec.finish(reader);
-                return own(allocator, window_bits, history_bytes, &output, &records);
+                return own(allocator, window_bits, history_bytes, &output, &records, &shapes);
             },
             else => {},
         }
@@ -141,9 +154,17 @@ pub fn inspect(comptime Codec: type, io: std.Io, allocator: std.mem.Allocator, s
                 record.payload_end = reader.bitPosition();
                 record.decoded_end = written;
                 records.appendAssumeCapacity(record);
+                if (options.capture_distance_shape) {
+                    try shapes.append(allocator, distance_shape.capture(
+                        record.meta_block_index,
+                        @intFromEnum(route),
+                        header,
+                        Codec.inline_distance_tree_count,
+                    ));
+                }
                 if (compressed.final) {
                     try Codec.finish(reader);
-                    return own(allocator, window_bits, history_bytes, &output, &records);
+                    return own(allocator, window_bits, history_bytes, &output, &records, &shapes);
                 }
                 continue;
             },
@@ -160,10 +181,16 @@ fn limitedEnd(comptime Error: type, start: usize, len: usize, limit: usize) Erro
     return end;
 }
 
-fn own(allocator: std.mem.Allocator, window_bits: u5, history_bytes: usize, output: *std.ArrayList(u8), records: *std.ArrayList(Record)) std.mem.Allocator.Error!Report {
+fn own(allocator: std.mem.Allocator, window_bits: u5, history_bytes: usize, output: *std.ArrayList(u8), records: *std.ArrayList(Record), shapes: *std.ArrayList(DistanceBlockShape)) std.mem.Allocator.Error!Report {
     const bytes = try output.toOwnedSlice(allocator);
     errdefer allocator.free(bytes);
-    return .{ .window_bits = window_bits, .records = try records.toOwnedSlice(allocator), .output = bytes, .replay_history_bytes = history_bytes };
+    return .{
+        .window_bits = window_bits,
+        .records = try records.toOwnedSlice(allocator),
+        .output = bytes,
+        .replay_history_bytes = history_bytes,
+        .distance_shapes = try shapes.toOwnedSlice(allocator),
+    };
 }
 
 fn seedShape(stats: *summary.MetaBlockStats, header: anytype) void {

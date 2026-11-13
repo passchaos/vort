@@ -18334,6 +18334,7 @@ fn processLargeCompressedMetaBlock(
 /// prepared path and skipped the wider lookups.
 pub const DecodeMetaBlockDiagnosticOptions = meta_block_diagnostics.Options;
 pub const DecodeMetaBlockDiagnosticReport = meta_block_diagnostics.Report;
+pub const DecodeDistanceBlockShape = meta_block_diagnostics.DistanceBlockShape;
 
 pub fn diagnoseMetaBlocksAlloc(io: std.Io, allocator: std.mem.Allocator, stream: []const u8, options: DecodeMetaBlockDiagnosticOptions) Error!DecodeMetaBlockDiagnosticReport {
     return meta_block_diagnostics.inspect(MetaBlockDiagnosticCodec, io, allocator, stream, options);
@@ -18345,6 +18346,7 @@ const MetaBlockDiagnosticCodec = struct {
     pub const Header = MinimalCompressedHeader;
     pub const History = LiteralHistory;
     pub const initial_distances = initial_last_distances;
+    pub const inline_distance_tree_count = br.inline_distance_tree_count;
     pub const readWindow = readWindowBitsValue;
     pub const readMeta = readStreamMetaBlockHeader;
     pub const finish = ensureZeroPaddingAndEnd;
@@ -18388,6 +18390,7 @@ const MetaBlockDiagnosticCodec = struct {
 };
 
 test "br meta-block diagnostic contracts" {
+    _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
 }
 

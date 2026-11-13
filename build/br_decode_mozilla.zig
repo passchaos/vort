@@ -84,4 +84,36 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, br: *std.Build.
     });
     b.step("test-br-payload-counts", "Test payload diagnostic paths and output sizes")
         .dependOn(&b.addRunArtifact(counts_tests).step);
+
+    const distance_shape = b.addExecutable(.{
+        .name = "vort-br-distance-shape",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/decode_mozilla/distance_shape_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "br", .module = br },
+            },
+        }),
+    });
+    b.step("build-br-distance-shape", "Build Brotli distance plane shape diagnostics")
+        .dependOn(&b.addInstallArtifact(distance_shape, .{}).step);
+    const distance_shape_run = b.addRunArtifact(distance_shape);
+    if (b.args) |args| distance_shape_run.addArgs(args);
+    b.step("run-br-distance-shape", "Inspect Brotli distance context maps and tree tiers without timing")
+        .dependOn(&distance_shape_run.step);
+    const distance_shape_tests = b.addTest(.{
+        .name = "vort-br-distance-shape-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/decode_mozilla/distance_shape_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseSafe,
+            .imports = &.{
+                .{ .name = "br", .module = safe_br },
+            },
+        }),
+        .filters = &.{"distance shape probe"},
+    });
+    b.step("test-br-distance-shape", "Test distance shape diagnostic option parsing")
+        .dependOn(&b.addRunArtifact(distance_shape_tests).step);
 }

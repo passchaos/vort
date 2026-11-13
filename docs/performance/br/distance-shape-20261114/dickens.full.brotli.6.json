@@ -1,0 +1,139 @@
+{
+  "schema": "vort.brotli.distance-shape.v1",
+  "diagnostic": true,
+  "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.brotli.6.wire",
+  "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/dickens.full.plain",
+  "wire_bytes": 3288816,
+  "plain_bytes": 10192446,
+  "compressed_meta_blocks": 2,
+  "output_validated_against_plain": true,
+  "blocks": [
+    {
+      "meta_block_index": 0,
+      "route": "paired_wide_literal",
+      "block_type_count": 25,
+      "tree_count": 25,
+      "npostfix": 0,
+      "ndirect": 0,
+      "distinct_tree_histogram": [
+        0,
+        25,
+        0,
+        0,
+        0
+      ],
+      "referenced_tree_count": 25,
+      "referenced_inline_count": 25,
+      "referenced_packed_count": 0,
+      "referenced_single_symbol_count": 0,
+      "referenced_tail9_ineligible_count": 23,
+      "packed_context_slots": 0,
+      "packed_context3_rows": 0,
+      "tree_max_bits_histogram": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        4,
+        5,
+        6,
+        6
+      ]
+    },
+    {
+      "meta_block_index": 1,
+      "route": "flat_literal_tail",
+      "block_type_count": 3,
+      "tree_count": 3,
+      "npostfix": 0,
+      "ndirect": 0,
+      "distinct_tree_histogram": [
+        0,
+        3,
+        0,
+        0,
+        0
+      ],
+      "referenced_tree_count": 3,
+      "referenced_inline_count": 3,
+      "referenced_packed_count": 0,
+      "referenced_single_symbol_count": 0,
+      "referenced_tail9_ineligible_count": 3,
+      "packed_context_slots": 0,
+      "packed_context3_rows": 0,
+      "tree_max_bits_histogram": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        2
+      ]
+    }
+  ],
+  "aggregate": {
+    "distance_block_types": 28,
+    "context_slots": 112,
+    "packed_context_slots": 0,
+    "packed_context3_rows": 0,
+    "distinct_tree_histogram": [
+      0,
+      28,
+      0,
+      0,
+      0
+    ],
+    "referenced_trees": 28,
+    "referenced_inline_trees": 28,
+    "referenced_packed_trees": 0,
+    "referenced_single_symbol_trees": 0,
+    "referenced_tail9_ineligible_trees": 26,
+    "tree_max_bits_histogram": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      1,
+      1,
+      4,
+      6,
+      6,
+      8
+    ]
+  },
+  "build": {
+    "mode": "ReleaseFast",
+    "target_arch": "x86_64",
+    "target_cpu_model": "skylake",
+    "pointer_bits": 64
+  },
+  "interpretation": {
+    "timing_included": false,
+    "production_decode_changed": false,
+    "scope": "Header-only distance plane shape; replay counters and payload routes come from the existing meta-block diagnostic"
+  }
+}

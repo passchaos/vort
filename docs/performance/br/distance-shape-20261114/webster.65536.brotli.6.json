@@ -1,0 +1,99 @@
+{
+  "schema": "vort.brotli.distance-shape.v1",
+  "diagnostic": true,
+  "input_path": "webster.65536.brotli.6.wire",
+  "plain_path": "webster.65536.plain",
+  "wire_bytes": 22121,
+  "plain_bytes": 65536,
+  "compressed_meta_blocks": 1,
+  "output_validated_against_plain": true,
+  "blocks": [
+    {
+      "meta_block_index": 0,
+      "route": "external_auxiliary_zero_postfix",
+      "block_type_count": 4,
+      "tree_count": 4,
+      "npostfix": 0,
+      "ndirect": 0,
+      "distinct_tree_histogram": [
+        0,
+        4,
+        0,
+        0,
+        0
+      ],
+      "referenced_tree_count": 4,
+      "referenced_inline_count": 4,
+      "referenced_packed_count": 0,
+      "referenced_single_symbol_count": 0,
+      "referenced_tail9_ineligible_count": 0,
+      "packed_context_slots": 0,
+      "packed_context3_rows": 0,
+      "tree_max_bits_histogram": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "aggregate": {
+    "distance_block_types": 4,
+    "context_slots": 16,
+    "packed_context_slots": 0,
+    "packed_context3_rows": 0,
+    "distinct_tree_histogram": [
+      0,
+      4,
+      0,
+      0,
+      0
+    ],
+    "referenced_trees": 4,
+    "referenced_inline_trees": 4,
+    "referenced_packed_trees": 0,
+    "referenced_single_symbol_trees": 0,
+    "referenced_tail9_ineligible_trees": 0,
+    "tree_max_bits_histogram": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "build": {
+    "mode": "ReleaseFast",
+    "target_arch": "x86_64",
+    "target_cpu_model": "skylake",
+    "pointer_bits": 64
+  },
+  "interpretation": {
+    "timing_included": false,
+    "production_decode_changed": false,
+    "scope": "Header-only distance plane shape; replay counters and payload routes come from the existing meta-block diagnostic"
+  }
+}
