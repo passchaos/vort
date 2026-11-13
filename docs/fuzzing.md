@@ -156,6 +156,13 @@ truncation and mutation pipeline:
   the reference rejects the wire without it, pinning the dictionary contract,
   while truncated and mutated prefixes still run through the full agreement
   pipeline;
+- deep-only Zstd standard full dictionary frames trained from a deterministic
+  eight-sample corpus. The frame header carries the Dictionary_ID and the
+  reference receives the full serialized dictionary through
+  `ZSTD_decompress_usingDict`; without it the reference rejects the frame with
+  a dictionary mismatch. The trainer's substring scan is quadratic, so the
+  variant runs only at the representative level and on inputs up to 2 KiB with
+  bounded phrase options, keeping a full deep campaign around seven minutes;
 - deep-only Brotli RAW shared-prefix dictionary frames with an overlapping
   payload. The installed libbrotli 1.0.9 exports no `AttachDictionary`
   symbol, so this is a Vort-to-Vort contract variant: attached-prefix decode
@@ -172,13 +179,15 @@ counters in the summary.
 
 The widened smoke campaign covers 3,768 valid wires (600 feature variants),
 93,862 truncation cuts and 108,963 mutations. A `--deep` campaign covers
-roughly 14,000 valid wires (about 9,200 feature variants), around 400,000
+roughly 14,100 valid wires (about 9,300 feature variants), around 400,000
 truncation cuts and around 375,000 mutations once the dictionary variants
-are included; deep seeds 1-3 on the dictionary-enabled generator, seeds
-1-6 on the pre-dictionary generator (roughly 77,000 valid wires, 2.2
-million truncation cuts and 2 million mutations), and the earlier
-legacy-generator seeds 1-13 all complete with zero cross-decoder
-disagreements and no Vort/reference one-sided truncation mismatches.
+are included; the Zstd-only deep campaign adds roughly 5,380 wires per
+seed with the trained standard dictionary. Deep seeds 1-3 on the
+dictionary-enabled generator, seeds 1-6 on the pre-dictionary generator
+(roughly 77,000 valid wires, 2.2 million truncation cuts and 2 million
+mutations), and the earlier legacy-generator seeds 1-13 all complete with
+zero cross-decoder disagreements and no Vort/reference one-sided truncation
+mismatches.
 
 The extended generator immediately found a real interop defect: the
 resumable raw Deflate decoder rejected legal literal-only dynamic blocks

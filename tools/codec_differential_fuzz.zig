@@ -138,6 +138,10 @@ const WireCase = struct {
     /// so the reference side is skipped for this variant and both Vort paths
     /// must agree; a no-dictionary Vort decode must reject the wire.
     brotli_shared_dictionary: bool = false,
+    /// Owned serialized Zstd standard dictionary. Unlike `dictionary` (raw
+    /// bytes fed to every codec), this carries the full standard header and
+    /// is freed by `runCase` after the wire checks complete.
+    standard_dictionary_bytes: ?[]u8 = null,
 };
 
 const Stats = struct {
@@ -315,7 +319,10 @@ const Harness = struct {
                 vort.decodeZlibOrGzipAllocWithDictionary(a, wire, preset) catch return null
             else
                 vort.decodeZlibOrGzipAlloc(a, wire) catch return null,
-            .zstd => if (dict) |preset|
+            .zstd => if (wire_case.standard_dictionary_bytes) |bytes| blk: {
+                const view = vort.zstd.NativeDictionary.initFromStandardDictionary(bytes) catch break :blk null;
+                break :blk vort.zstd.decodeFrameAllocWithDictionary(a, wire, view.dictionary) catch null;
+            } else if (dict) |preset|
                 vort.zstd.decodeFrameAllocWithDictionary(
                     a,
                     wire,
@@ -356,7 +363,14 @@ const Harness = struct {
                 vort.decodeZlibOrGzipAllocWithDictionaryExactSize(a, wire, preset, expected) catch return null
             else
                 vort.decodeZlibOrGzipAllocExactSize(a, wire, expected) catch return null,
-            .zstd => if (dict) |preset|
+            .zstd => if (wire_case.standard_dictionary_bytes) |bytes|
+                vort.zstd.decodeFrameAllocWithDictionaryExactSize(
+                    a,
+                    wire,
+                    (vort.zstd.NativeDictionary.initFromStandardDictionary(bytes) catch return null).dictionary,
+                    expected,
+                ) catch return null
+            else if (dict) |preset|
                 vort.zstd.decodeFrameAllocWithDictionaryExactSize(
                     a,
                     wire,
@@ -395,8 +409,11 @@ const Harness = struct {
                 if (wire_case.zstd_stream_reference) {
                     return zstdDecompressStream(a, dst, wire_case.wire);
                 }
-                const dict_ptr = if (wire_case.dictionary) |preset| preset.ptr else null;
-                const dict_len = if (wire_case.dictionary) |preset| preset.len else 0;
+                // A standard dictionary passes its full serialized bytes; a
+                // raw-content dictionary passes just the history bytes.
+                const dict_source = wire_case.standard_dictionary_bytes orelse wire_case.dictionary;
+                const dict_ptr = if (dict_source) |preset| preset.ptr else null;
+                const dict_len = if (dict_source) |preset| preset.len else 0;
                 const dctx = c.ZSTD_createDCtx() orelse {
                     a.free(dst);
                     return null;
@@ -674,6 +691,67 @@ const Harness = struct {
     /// Build a deterministic 256-byte text-like preset dictionary. The content
     /// mixes common words and RNG bytes so dictionary-backed matches are
     /// realistic while every campaign stays reproducible.
+    /// Train a Vort standard full dictionary on a deterministic corpus whose
+    /// samples overlap the case input, then encode a dictionary-ID frame. The
+    /// returned WireCase owns the serialized dictionary through
+    /// `standard_dictionary_bytes`, which `runCase` frees after checks.
+    fn buildStandardDictionaryCase(
+        self: *Harness,
+        a: std.mem.Allocator,
+        input: []const u8,
+        level: u4,
+        cases: *std.ArrayList(WireCase),
+        source_owner: *std.ArrayList([]u8),
+    ) !?WireCase {
+        _ = cases;
+        _ = source_owner;
+        // Training needs a real corpus: eight short overlapping samples give
+        // the COVER selector enough boundary-safe phrases without the
+        // quadratic substring scan dominating the campaign. Tiny inputs are
+        // skipped rather than fed to the trainer.
+        if (input.len < 64) return null;
+        var samples: [8][]u8 = undefined;
+        var owned: usize = 0;
+        errdefer for (samples[0..owned]) |sample| a.free(sample);
+        const shared = input[0..@min(input.len, 32)];
+        for (0..samples.len) |index| {
+            const suffix_len = 8 + (index * 5) % 16;
+            const sample = try a.alloc(u8, shared.len + suffix_len);
+            samples[owned] = sample;
+            owned += 1;
+            @memcpy(sample[0..shared.len], shared);
+            var rng = Rng{ .state = self.rng.state +% @as(u64, index) *% 0x9e3779b97f4a7c15 };
+            for (sample[shared.len..]) |*byte| byte.* = rng.byte();
+        }
+        defer for (samples) |sample| a.free(sample);
+
+        const dictionary_id: u32 = 0x766f_7274; // "vort"
+        const trained = vort.zstd.trainStandardDictionaryAlloc(a, &samples, .{
+            .target_size = 128,
+            .min_phrase_len = 4,
+            .max_phrase_len = 8,
+            .max_phrases = 64,
+        }, dictionary_id) catch return null;
+        const dict_wire = vort.zstd.encodeFrameWithLevelAndOptionsAndDictionaryAlloc(
+            a,
+            input,
+            @intCast(level),
+            .{},
+            trained.asDictionary(),
+        ) catch |err| switch (err) {
+            else => {
+                trained.deinit(a);
+                return null;
+            },
+        };
+        return WireCase{
+            .label = "standard-trained-dictionary",
+            .wire = dict_wire,
+            .source = input,
+            .standard_dictionary_bytes = trained.bytes,
+        };
+    }
+
     fn buildDictionary(self: *Harness) ![]u8 {
         const a = self.allocator;
         const dict = try a.alloc(u8, 256);
@@ -840,6 +918,19 @@ const Harness = struct {
                 .source = input,
                 .dictionary = dictionary,
             });
+        }
+        // Standard full dictionary trained from a deterministic corpus. The
+        // frame header carries the Dictionary_ID, so the reference decoder can
+        // select the dictionary from the handed bytes itself; without them it
+        // rejects the frame with a dictionary mismatch. Training has a
+        // quadratic substring scan, so it runs once per case at the
+        // representative level and only on bounded inputs; larger inputs keep
+        // every other variant without paying the training cost.
+        if (level == 3 and input.len <= self.max_mutation_wire) {
+            const trained = try self.buildStandardDictionaryCase(a, input, level, cases, source_owner);
+            if (trained) |entry| {
+                try cases.append(a, entry);
+            }
         }
 
         // Structural variants use one representative level so the campaign
@@ -1338,6 +1429,7 @@ const Harness = struct {
                 for (variant_cases.items) |wire_case| {
                     a.free(wire_case.wire);
                     if (wire_case.dictionary) |dictionary| a.free(dictionary);
+                    if (wire_case.standard_dictionary_bytes) |bytes| a.free(bytes);
                 }
                 variant_cases.deinit(a);
             }
