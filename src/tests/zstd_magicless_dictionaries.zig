@@ -18,6 +18,52 @@ pub fn contracts(comptime Z: type) !void {
     try std.testing.expectError(error.InvalidDictionaryMetadata, Z.standardDictionaryFromContentAlloc(denied.allocator(), h.plain, 0));
     try std.testing.expectEqual(@as(usize, 0), denied.alloc_index);
     try std.testing.expect(!denied.has_induced_failure);
+
+    try trainedStandardDictionaryFrame(Z);
+}
+
+/// A trained standard full dictionary must round-trip through a frame that
+/// declares its Dictionary_ID, and fail without the dictionary. This pins the
+/// public training-to-decode path exercised by the differential fuzz
+/// generator's `standard-trained-dictionary` variant.
+fn trainedStandardDictionaryFrame(Z: type) !void {
+    const corpus = [_][]const u8{
+        "shared zstd dictionary phrase alpha beta gamma delta sample zero",
+        "shared zstd dictionary phrase alpha beta gamma delta sample one",
+        "shared zstd dictionary phrase alpha beta gamma delta sample two",
+        "shared zstd dictionary phrase alpha beta gamma delta sample three",
+        "shared zstd dictionary phrase alpha beta gamma delta sample four",
+        "shared zstd dictionary phrase alpha beta gamma delta sample five",
+        "shared zstd dictionary phrase alpha beta gamma delta sample six",
+        "shared zstd dictionary phrase alpha beta gamma delta sample seven",
+    };
+    const dictionary_id: u32 = 0x766f_7274;
+    const trained = try Z.trainStandardDictionaryAlloc(a, &corpus, .{
+        .target_size = 128,
+        .min_phrase_len = 4,
+        .max_phrase_len = 8,
+        .max_phrases = 64,
+    }, dictionary_id);
+    defer trained.deinit(a);
+    try std.testing.expectEqual(dictionary_id, trained.view.id);
+
+    const payload = "shared zstd dictionary phrase alpha beta gamma delta appears in this payload twice";
+    const dictionary = trained.asDictionary();
+    const encoded = try Z.encodeFrameWithDictionaryAlloc(a, payload, dictionary);
+    defer a.free(encoded);
+    try std.testing.expectEqual(dictionary_id, Z.standardDictionaryId(trained.bytes).?);
+
+    const decoded = try Z.decodeFrameAllocWithDictionary(a, encoded, dictionary);
+    defer a.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const exact = try Z.decodeFrameAllocWithDictionaryExactSize(a, encoded, dictionary, payload.len);
+    defer a.free(exact);
+    try std.testing.expectEqualSlices(u8, payload, exact);
+
+    // The frame declares a Dictionary_ID, so a decoder without the dictionary
+    // cannot resolve it and must fail rather than emit plain output.
+    try std.testing.expectError(error.NeedDictionary, Z.decodeFrameAlloc(a, encoded));
 }
 fn Suite(comptime Z: type) type {
     return struct {
