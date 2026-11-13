@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v1",
+  "schema": "vort.brotli.distance-shape.v2",
   "diagnostic": true,
   "input_path": "osdb.65536.brotli.6.wire",
   "plain_path": "osdb.65536.plain",
@@ -46,6 +46,12 @@
         0,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        477,
+        141,
+        368,
+        3187
       ]
     }
   ],
@@ -83,6 +89,12 @@
       0,
       0,
       0
+    ],
+    "distance_context_histogram": [
+      477,
+      141,
+      368,
+      3187
     ]
   },
   "build": {

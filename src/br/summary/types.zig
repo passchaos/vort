@@ -42,6 +42,9 @@ pub const StreamSummary = struct {
     /// Copy-length command shape indexed by floor(log2(copy length)); the last
     /// bucket includes every copy length greater than or equal to 256.
     copy_length_log2_histogram: [9]Counter = @splat(0),
+    /// Applied copies per RFC 7932 distance context (copy length 2, 3, 4,
+    /// then 5+). Populated only on summary/diagnostic replay paths.
+    distance_context_histogram: [4]Counter = @splat(0),
     lz77_copy_count: Counter = 0,
     lz77_copy_bytes: Counter = 0,
     max_lz77_distance: usize = 0,
@@ -103,6 +106,9 @@ pub const MetaBlockStats = struct {
     direct_distance_copy_count: Counter = 0,
     regular_distance_copy_count: Counter = 0,
     copy_length_log2_histogram: [9]Counter = @splat(0),
+    /// Applied copies per RFC 7932 distance context (copy length 2, 3, 4,
+    /// then 5+). Populated only on summary/diagnostic replay paths.
+    distance_context_histogram: [4]Counter = @splat(0),
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
     max_lz77_distance: usize = 0,

@@ -33,6 +33,10 @@ new opt-in `capture_distance_shape` option, after the ordinary production
 execute and replay validation have already passed. The probe validates full
 output against the plain bytes and emits JSON; no timers are involved.
 
+The same diagnostic replay also fills a new
+`MetaBlockStats.distance_context_histogram` (applied copies per context) so
+the per-block JSON carries both header shape and decoded context frequency.
+
 Fixtures are the frozen 64 KiB, 1 MiB and full-file producer wires from the
 current decode matrix (twelve corpora, qualities 6 and 11, plus the mozilla
 1 MiB q11 row; 49 frame runs). Raw per-block JSON and `aggregate.csv` are
@@ -87,7 +91,32 @@ collapses to one tree per row uniformly. A single-tree fast path therefore
 cannot cover q11 payloads, while it would cover q6 — but q6 is not the cliff
 row and the cached-pointer screen already showed parity there.
 
-### 4. What the hot inline dispatch actually costs
+### 4. Applied copies concentrate in context three, but not exclusively
+
+The probe now also replays every applied copy through the summary path and
+counts the four RFC 7932 contexts (copy length 2, 3, 4, 5+). Context-three
+share across full-file fixtures:
+
+| Fixture | q11 ctx3 | q6 ctx3 | Fixture | q11 ctx3 | q6 ctx3 |
+| --- | ---: | ---: | --- | ---: | ---: |
+| dickens | 99.1% | 99.8% | samba | 92.0% | 98.6% |
+| mozilla | 70.7% | 87.8% | sao | 49.8% | 81.7% |
+| mr | 95.7% | 98.8% | webster | 97.6% | 99.6% |
+| nci | 92.3% | 98.4% | x-ray | 84.5% | 96.6% |
+| ooffice | 63.9% | 85.6% | xml | 95.6% | 99.4% |
+| osdb | 74.7% | 81.9% | | | |
+
+On the mozilla full q11 cliff row the four contexts split 6.10% / 10.76% /
+12.39% / 70.74% over 3,770,833 applied copies; the mozilla 1 MiB q11 row is
+9.06% / 7.55% / 6.96% / 76.43%. On 64 KiB frames context three ranges from
+31.9% (x-ray q11) to 93.5% (reymont q11). Context three is the dominant
+single case, but a context-three-only fast kernel would still leave 30-50%
+of copies on the generic path for the slowest rows (mozilla, sao, ooffice);
+the existing auxiliary-tier optimization already special-cases this case
+where it exceeds 99%. A structural kernel must therefore keep all four
+contexts cheap rather than bet everything on context three.
+
+### 5. What the hot inline dispatch actually costs
 
 With packed expansion ruled out on q11, the surviving per-match sequence in
 `readMinimalDistance` is: block-switch check, copy-length context
@@ -109,11 +138,11 @@ combined surface lives in the surrounding state work, not the indirection.
    reader staging, ring update) rather than replace one pointer load. Any
    such candidate needs its own live-state/codegen audit and must keep
    packed-tier q6 frames on their existing fallback.
-3. An unmeasured prerequisite for that design is the per-context (0..3)
-   frequency on the wide10 generic blocks; the existing counters only prove
-   context-three dominance on the auxiliary tiers. A context histogram
-   replay is the next diagnostic if a context-specialized kernel is
-   proposed.
+3. Context three is dominant (50-99%) but never exclusive on the slow rows
+   (mozilla q11 leaves 29% on contexts 0-2). The next kernel must make all
+   four contexts cheap; a context-three-only specialization cannot meet the
+   0.98x control floor on mozilla/sao/ooffice where the other three contexts
+   carry 30-50% of copies.
 
 ## Validation
 
@@ -121,8 +150,11 @@ combined surface lives in the surrounding state work, not the indirection.
   option-parsing tests.
 - `zig build test-br` passes (full Brotli suite, record-optimal object linked).
 - The distance-shape unit test covers inline/packed tier split, distinct-tree
-  histograms, single-symbol and width accounting.
+  histograms, single-symbol and width accounting; a separate summary test
+  covers the new distance-context histogram and its null-stats no-op.
+- The context histogram is populated only on summary/diagnostic replay;
+  production payload decoders pass `stats = null` and pay no per-copy cost.
 - Every probe run validated complete decoded output against the plain bytes.
-- Raw JSON for 49 frame runs (24 full-file, 24 64 KiB, one mozilla 1 MiB q11)
-  and `aggregate.csv` are retained in
-  `docs/performance/br/distance-shape-20261114/`.
+- Raw JSON (schema `vort.brotli.distance-shape.v2`) for 49 frame runs
+  (24 full-file, 24 64 KiB, one mozilla 1 MiB q11) and `aggregate.csv` are
+  retained in `docs/performance/br/distance-shape-20261114/`.

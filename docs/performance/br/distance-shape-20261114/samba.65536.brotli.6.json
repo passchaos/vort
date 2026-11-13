@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v1",
+  "schema": "vort.brotli.distance-shape.v2",
   "diagnostic": true,
   "input_path": "samba.65536.brotli.6.wire",
   "plain_path": "samba.65536.plain",
@@ -46,6 +46,12 @@
         0,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        39,
+        24,
+        1289,
+        5622
       ]
     }
   ],
@@ -83,6 +89,12 @@
       0,
       0,
       0
+    ],
+    "distance_context_histogram": [
+      39,
+      24,
+      1289,
+      5622
     ]
   },
   "build": {

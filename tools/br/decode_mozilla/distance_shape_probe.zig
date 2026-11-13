@@ -60,23 +60,7 @@ fn run(init: std.process.Init) !void {
     defer report.deinit(a);
     if (!std.mem.eql(u8, report.output, plain)) return error.OutputMismatch;
 
-    var block_reports = std.ArrayList(struct {
-        meta_block_index: usize,
-        route: []const u8,
-        block_type_count: u16,
-        tree_count: u16,
-        npostfix: u2,
-        ndirect: u16,
-        distinct_tree_histogram: [5]u32,
-        referenced_tree_count: u16,
-        referenced_inline_count: u16,
-        referenced_packed_count: u16,
-        referenced_single_symbol_count: u16,
-        referenced_tail9_ineligible_count: u16,
-        packed_context_slots: u32,
-        packed_context3_rows: u32,
-        tree_max_bits_histogram: [16]u32,
-    }).empty;
+    var block_reports = std.ArrayList(BlockReport).empty;
     defer block_reports.deinit(a);
 
     var shape_index: usize = 0;
@@ -100,13 +84,19 @@ fn run(init: std.process.Init) !void {
             .packed_context_slots = shape.packed_context_slots,
             .packed_context3_rows = shape.packed_context3_rows,
             .tree_max_bits_histogram = shape.tree_max_bits_histogram,
+            .distance_context_histogram = .{
+                record.stats.distance_context_histogram[0],
+                record.stats.distance_context_histogram[1],
+                record.stats.distance_context_histogram[2],
+                record.stats.distance_context_histogram[3],
+            },
         });
     }
     if (shape_index != report.distance_shapes.len) return error.ShapeRecordMismatch;
 
-    const aggregate = aggregateShapes(report.distance_shapes);
+    const aggregate = aggregateShapes(report.distance_shapes, block_reports.items);
     const out_report = .{
-        .schema = "vort.brotli.distance-shape.v1",
+        .schema = "vort.brotli.distance-shape.v2",
         .diagnostic = true,
         .input_path = options.input,
         .plain_path = options.plain,
@@ -145,9 +135,29 @@ const Aggregate = struct {
     referenced_single_symbol_trees: u64 = 0,
     referenced_tail9_ineligible_trees: u64 = 0,
     tree_max_bits_histogram: [16]u64 = @splat(0),
+    distance_context_histogram: [4]u64 = @splat(0),
 };
 
-fn aggregateShapes(shapes: []const br.DecodeDistanceBlockShape) Aggregate {
+const BlockReport = struct {
+    meta_block_index: usize,
+    route: []const u8,
+    block_type_count: u16,
+    tree_count: u16,
+    npostfix: u2,
+    ndirect: u16,
+    distinct_tree_histogram: [5]u32,
+    referenced_tree_count: u16,
+    referenced_inline_count: u16,
+    referenced_packed_count: u16,
+    referenced_single_symbol_count: u16,
+    referenced_tail9_ineligible_count: u16,
+    packed_context_slots: u32,
+    packed_context3_rows: u32,
+    tree_max_bits_histogram: [16]u32,
+    distance_context_histogram: [4]u64,
+};
+
+fn aggregateShapes(shapes: []const br.DecodeDistanceBlockShape, blocks: []const BlockReport) Aggregate {
     var total: Aggregate = .{};
     for (shapes) |shape| {
         total.distance_block_types += shape.block_type_count;
@@ -164,6 +174,11 @@ fn aggregateShapes(shapes: []const br.DecodeDistanceBlockShape) Aggregate {
         total.referenced_tail9_ineligible_trees += shape.referenced_tail9_ineligible_count;
         for (shape.tree_max_bits_histogram, 0..) |value, bits| {
             total.tree_max_bits_histogram[bits] += value;
+        }
+    }
+    for (blocks) |block| {
+        for (block.distance_context_histogram, 0..) |value, context| {
+            total.distance_context_histogram[context] += value;
         }
     }
     return total;

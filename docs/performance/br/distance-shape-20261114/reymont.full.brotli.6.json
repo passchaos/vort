@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v1",
+  "schema": "vort.brotli.distance-shape.v2",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.brotli.6.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.plain",
@@ -46,6 +46,12 @@
         3,
         5,
         1
+      ],
+      "distance_context_histogram": [
+        1027,
+        826,
+        716,
+        522356
       ]
     }
   ],
@@ -83,6 +89,12 @@
       3,
       5,
       1
+    ],
+    "distance_context_histogram": [
+      1027,
+      826,
+      716,
+      522356
     ]
   },
   "build": {

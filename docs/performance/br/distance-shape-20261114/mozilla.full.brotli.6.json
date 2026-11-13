@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v1",
+  "schema": "vort.brotli.distance-shape.v2",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.brotli.6.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
@@ -46,6 +46,12 @@
         0,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        1063,
+        955,
+        213,
+        17683
       ]
     },
     {
@@ -86,6 +92,12 @@
         0,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        1453,
+        1003,
+        413,
+        13270
       ]
     },
     {
@@ -126,6 +138,12 @@
         0,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        3580,
+        2246,
+        697,
+        32252
       ]
     },
     {
@@ -166,6 +184,12 @@
         1,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        27259,
+        24529,
+        6511,
+        404155
       ]
     },
     {
@@ -206,6 +230,12 @@
         4,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        30613,
+        31580,
+        7442,
+        506675
       ]
     },
     {
@@ -246,6 +276,12 @@
         6,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        30284,
+        29074,
+        8571,
+        503980
       ]
     },
     {
@@ -286,6 +322,12 @@
         1,
         0,
         1
+      ],
+      "distance_context_histogram": [
+        28971,
+        35480,
+        10370,
+        550353
       ]
     },
     {
@@ -326,6 +368,12 @@
         3,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        29268,
+        31383,
+        9014,
+        520824
       ]
     },
     {
@@ -366,6 +414,12 @@
         0,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        23626,
+        25086,
+        6338,
+        361451
       ]
     },
     {
@@ -406,6 +460,12 @@
         2,
         0,
         0
+      ],
+      "distance_context_histogram": [
+        6109,
+        6648,
+        1809,
+        123269
       ]
     }
   ],
@@ -443,6 +503,12 @@
       17,
       0,
       1
+    ],
+    "distance_context_histogram": [
+      182226,
+      187984,
+      51378,
+      3033912
     ]
   },
   "build": {

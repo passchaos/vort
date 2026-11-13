@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v1",
+  "schema": "vort.brotli.distance-shape.v2",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.brotli.6.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mr.full.plain",
@@ -46,6 +46,12 @@
         24,
         2,
         0
+      ],
+      "distance_context_histogram": [
+        2312,
+        5904,
+        972,
+        757261
       ]
     },
     {
@@ -86,6 +92,12 @@
         3,
         1,
         0
+      ],
+      "distance_context_histogram": [
+        411,
+        1176,
+        154,
+        146273
       ]
     }
   ],
@@ -123,6 +135,12 @@
       27,
       3,
       0
+    ],
+    "distance_context_histogram": [
+      2723,
+      7080,
+      1126,
+      903534
     ]
   },
   "build": {

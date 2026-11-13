@@ -16772,6 +16772,18 @@ test "br stream summary classifies distance coding paths" {
     try std.testing.expectEqual(@as(usize, 1), stats.regular_distance_copy_count);
 }
 
+test "br stream summary records distance contexts by copy length" {
+    var stats: StreamSummaryMetaBlockStats = .{};
+    try recordSummaryDistanceContext(&stats, 2);
+    try recordSummaryDistanceContext(&stats, 3);
+    try recordSummaryDistanceContext(&stats, 4);
+    try recordSummaryDistanceContext(&stats, 5);
+    try recordSummaryDistanceContext(&stats, 64);
+    try std.testing.expectEqual([_]Counter{ 1, 1, 1, 2 }, stats.distance_context_histogram);
+    // Null stats remain a no-op so production (non-summary) paths pay nothing.
+    try recordSummaryDistanceContext(null, 7);
+}
+
 fn recordSummaryCommand(stats: ?*StreamSummaryMetaBlockStats, lengths: InsertCopyLengths) SummaryError!void {
     const s = stats orelse return;
     if (lengths.copy_len == 0) return error.CorruptFrame;
@@ -23765,6 +23777,13 @@ fn readMinimalDistanceLargeWindow(
         try readRegularDistanceWithOptions(true, header, reader, symbol), .update_ring = true };
 }
 
+fn recordSummaryDistanceContext(stats: ?*StreamSummaryMetaBlockStats, copy_len: usize) SummaryError!void {
+    const s = stats orelse return;
+    const context = distanceContext(copy_len);
+    s.distance_context_histogram[context] =
+        std.math.add(Counter, s.distance_context_histogram[context], 1) catch return error.IntegerOverflow;
+}
+
 fn recordSummaryDistanceCode(
     stats: ?*StreamSummaryMetaBlockStats,
     implicit: bool,
@@ -23792,6 +23811,7 @@ fn readSummaryMinimalDistance(
     stats: ?*StreamSummaryMetaBlockStats,
 ) SummaryError!DecodedBrotliDistance {
     const implicit = lengths.distance_symbol_zero;
+    try recordSummaryDistanceContext(stats, lengths.copy_len);
     const symbol: u16 = if (implicit) 0 else blk: {
         try ensureDistanceBlock(header, reader);
         const context = distanceContext(lengths.copy_len);
@@ -23831,6 +23851,7 @@ fn readSummaryMinimalDistanceLargeWindow(
     stats: ?*StreamSummaryMetaBlockStats,
 ) SummaryError!DecodedBrotliDistance {
     const implicit = lengths.distance_symbol_zero;
+    try recordSummaryDistanceContext(stats, lengths.copy_len);
     const symbol: u16 = if (implicit) 0 else blk: {
         try ensureLargeDistanceBlock(header, reader);
         const context = distanceContext(lengths.copy_len);

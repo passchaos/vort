@@ -33,6 +33,8 @@ pub fn apply(summary: *types.StreamSummary, stats: types.MetaBlockStats) Error!v
     next.regular_distance_copy_count = std.math.add(Counter, next.regular_distance_copy_count, stats.regular_distance_copy_count) catch return error.IntegerOverflow;
     for (&next.copy_length_log2_histogram, stats.copy_length_log2_histogram) |*total, count|
         total.* = std.math.add(Counter, total.*, count) catch return error.IntegerOverflow;
+    for (&next.distance_context_histogram, stats.distance_context_histogram) |*total, count|
+        total.* = std.math.add(Counter, total.*, count) catch return error.IntegerOverflow;
     next.lz77_copy_count = try core.stream_count.addLocal(next.lz77_copy_count, stats.lz77_copy_count);
     next.lz77_copy_bytes = try core.stream_count.addLocal(next.lz77_copy_bytes, stats.lz77_copy_bytes);
     next.max_lz77_distance = @max(next.max_lz77_distance, stats.max_lz77_distance);
