@@ -1,0 +1,4 @@
+blocks=65 raw=0 rle=0 compressed=65 (no_sequences=0 with_sequences=65)
+LL predefined=1 rle=0 compressed=54 repeat=1
+OF predefined=1 rle=0 compressed=54 repeat=10
+ML predefined=1 rle=0 compressed=54 repeat=10
