@@ -42,6 +42,9 @@ pub fn main(init: std.process.Init) !void {
         block = try vort.zstd.inspectNativeFrameBlockAt(frame, block.next_header_offset);
     }
 
+    var reuse = try vort.zstd.inspectNativeFrameNormalizedTableReuse(frame, a);
+    defer reuse.deinit(a);
+
     var stdout_buffer: [2048]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
@@ -50,6 +53,7 @@ pub fn main(init: std.process.Init) !void {
         \\LL {s}
         \\OF {s}
         \\ML {s}
+        \\normalized compressed_tables={d} unique={d} content_hits={d} hit_rate={d:.4}
         \\
     , .{
         counts.blocks,
@@ -61,6 +65,10 @@ pub fn main(init: std.process.Init) !void {
         counts.ll.format(),
         counts.of.format(),
         counts.ml.format(),
+        reuse.compressed_tables,
+        reuse.unique_signatures,
+        reuse.content_hits,
+        if (reuse.compressed_tables == 0) 0 else @as(f64, @floatFromInt(reuse.content_hits)) / @as(f64, @floatFromInt(reuse.compressed_tables)),
     });
     try stdout.flush();
 }

@@ -11996,6 +11996,31 @@ pub const NativeSequenceTableMode = enum {
     repeat,
 };
 
+/// Diagnostic content-reuse summary for compressed FSE sequence tables.
+/// `signatures` hashes the parsed normalized-count array of every
+/// compressed-mode LL/OF/ML table, including blocks whose wire mode is
+/// compressed rather than repeat. Production decoding never computes these
+/// hashes; the data supports retained-table feasibility studies only.
+pub const NativeNormalizedTableReuse = struct {
+    pub const TableKind = enum { literal_length, offset, match_length };
+
+    pub const Signature = struct {
+        kind: TableKind,
+        value_count: usize,
+        table_len: usize,
+        hash: u64,
+    };
+
+    compressed_tables: usize = 0,
+    unique_signatures: usize = 0,
+    content_hits: usize = 0,
+    signatures: std.ArrayList(Signature) = .empty,
+
+    pub fn deinit(self: *NativeNormalizedTableReuse, allocator: std.mem.Allocator) void {
+        self.signatures.deinit(allocator);
+    }
+};
+
 pub const NativeSkippableFrameHeader = struct {
     skippable_id: u4,
     payload_offset: usize,
@@ -19388,6 +19413,105 @@ fn inspectNativeFrameBlockSequenceModesWithState(
 fn validateNativeFrameBlockPayloadAvailable(frame: []const u8, block: NativeFrameBlockHeader) Error!void {
     const required_payload_len: usize = if (block.block_type == .rle) 1 else block.payload_len;
     if (block.payload_offset > frame.len or frame.len - block.payload_offset < required_payload_len) return error.TruncatedFrame;
+}
+
+/// Walk every compressed block and hash the normalized-count array of each
+/// compressed-mode LL/OF/ML sequence table. The summary reports how many of
+/// those tables reproduce an array already seen earlier in the same frame,
+/// which is the exact precondition for a content-addressed retained FSE
+/// table. Diagnostic only; the production decode path is unchanged.
+pub fn inspectNativeFrameNormalizedTableReuse(
+    frame: []const u8,
+    allocator: std.mem.Allocator,
+) Error!NativeNormalizedTableReuse {
+    const frame_header = try inspectNativeFrameHeader(frame);
+    var frame_state = try replayNativeFrameBlockInspectState(frame, frame_header.payload_offset, .{});
+    var reuse: NativeNormalizedTableReuse = .{};
+    errdefer reuse.deinit(allocator);
+    var seen = std.AutoHashMap(u64, void).init(allocator);
+    defer seen.deinit();
+
+    var block = try inspectNativeFrameFirstBlock(frame);
+    while (true) {
+        if (block.block_type == .compressed) {
+            const payload = frame[block.payload_offset..][0..block.payload_len];
+            const section = try parseLiteralsSection(payload, &frame_state);
+            if (section.sequence_count != 0) {
+                var offset = section.sequence_payload_offset;
+                if (offset < payload.len and !sequence_predefined.isModeByte(payload[offset])) {
+                    try collectNormalizedTableSignatures(payload, &offset, allocator, &reuse, &seen);
+                }
+            }
+        }
+        if (block.last) break;
+        block = try inspectNativeFrameBlockAt(frame, block.next_header_offset);
+    }
+    reuse.unique_signatures = seen.count();
+    return reuse;
+}
+
+fn collectNormalizedTableSignatures(
+    block: []const u8,
+    offset: *usize,
+    allocator: std.mem.Allocator,
+    reuse: *NativeNormalizedTableReuse,
+    seen: *std.AutoHashMap(u64, void),
+) Error!void {
+    if (offset.* >= block.len) return error.TruncatedFrame;
+    const mode_byte = block[offset.*];
+    offset.* += 1;
+    if ((mode_byte & 0x03) != 0) return error.CorruptFrame;
+    const modes = [_]SymbolMode{
+        @enumFromInt(mode_byte >> 6),
+        @enumFromInt((mode_byte >> 4) & 0x03),
+        @enumFromInt((mode_byte >> 2) & 0x03),
+    };
+    const kinds = [_]NativeNormalizedTableReuse.TableKind{
+        .literal_length,
+        .offset,
+        .match_length,
+    };
+    const limits = [_]struct { symbols: usize, accuracy: u4 }{
+        .{ .symbols = sequence_table_symbol_count_max.literal, .accuracy = sequence_table_accuracy_log_max.literal },
+        .{ .symbols = sequence_table_symbol_count_max.offset, .accuracy = sequence_table_accuracy_log_max.offset },
+        .{ .symbols = sequence_table_symbol_count_max.match, .accuracy = sequence_table_accuracy_log_max.match },
+    };
+    for (modes, kinds, limits) |mode, kind, limit| {
+        switch (mode) {
+            .compressed => {
+                var values: [256]u16 = undefined;
+                var probe = ForwardBitReader{ .bytes = block[offset.*..] };
+                const decoded = try decodeFseNormalizedCounts(
+                    &probe,
+                    limit.symbols,
+                    limit.accuracy,
+                    &values,
+                );
+                offset.* += probe.byteIndex();
+                const array = values[0..decoded.value_count];
+                var hasher = std.hash.XxHash64.init(0);
+                const kind_byte: u8 = @intCast(@intFromEnum(kind));
+                hasher.update(std.mem.asBytes(&kind_byte));
+                hasher.update(std.mem.sliceAsBytes(array));
+                const hash = hasher.final();
+                reuse.compressed_tables += 1;
+                const entry = try reuse.signatures.addOne(allocator);
+                entry.* = .{
+                    .kind = kind,
+                    .value_count = decoded.value_count,
+                    .table_len = decoded.table_len,
+                    .hash = hash,
+                };
+                if (seen.contains(hash)) reuse.content_hits += 1;
+                try seen.put(hash, {});
+            },
+            .rle => {
+                if (offset.* >= block.len) return error.TruncatedFrame;
+                offset.* += 1;
+            },
+            .predefined, .repeat => {},
+        }
+    }
 }
 
 fn nativeSequenceModeSummaryForLiteralBlock(block: NativeFrameBlockHeader) NativeSequenceModeSummary {

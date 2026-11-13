@@ -1,0 +1,5 @@
+blocks=1482 raw=112 rle=0 compressed=1370 (no_sequences=4 with_sequences=1366)
+LL predefined=234 rle=0 compressed=1132 repeat=0
+OF predefined=234 rle=0 compressed=1132 repeat=0
+ML predefined=234 rle=0 compressed=1132 repeat=0
+normalized compressed_tables=3502 unique=3502 content_hits=0 hit_rate=0.0000

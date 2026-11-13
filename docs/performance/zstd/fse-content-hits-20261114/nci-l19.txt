@@ -1,0 +1,5 @@
+blocks=256 raw=0 rle=0 compressed=256 (no_sequences=0 with_sequences=256)
+LL predefined=0 rle=0 compressed=236 repeat=2
+OF predefined=0 rle=0 compressed=236 repeat=20
+ML predefined=0 rle=0 compressed=236 repeat=20
+normalized compressed_tables=677 unique=677 content_hits=0 hit_rate=0.0000

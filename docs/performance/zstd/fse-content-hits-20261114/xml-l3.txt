@@ -1,0 +1,5 @@
+blocks=47 raw=0 rle=0 compressed=47 (no_sequences=0 with_sequences=47)
+LL predefined=1 rle=0 compressed=46 repeat=0
+OF predefined=1 rle=0 compressed=46 repeat=0
+ML predefined=1 rle=0 compressed=46 repeat=0
+normalized compressed_tables=139 unique=139 content_hits=0 hit_rate=0.0000
