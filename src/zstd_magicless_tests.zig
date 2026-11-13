@@ -67,6 +67,11 @@ fn Suite(comptime Z: type) type {
             try h.check(Z, a, magicless.frame, payload, .{ .format = .magicless, .expected_output_len = payload.len });
             try h.check(Z, a, normal.frame, payload, .{ .expected_output_len = payload.len });
             try std.testing.expectError(error.CorruptFrame, Z.decodedFrameSizeWithOptions(normal.frame, .{ .format = .magicless }));
+            // The format-specific opt-in must be load-bearing in both
+            // directions: a magicless wire cannot pass the standard decoder,
+            // whose first four bytes fail the magic-number classifier.
+            try std.testing.expectError(error.InvalidMagic, Z.decodedFrameSizeWithOptions(magicless.frame, .{}));
+            try std.testing.expectError(error.InvalidMagic, Z.decodeFrameAllocWithOptions(a, magicless.frame, .{}));
         }
 
         fn encoders() !void {
