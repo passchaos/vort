@@ -142,6 +142,11 @@ const WireCase = struct {
     /// bytes fed to every codec), this carries the full standard header and
     /// is freed by `runCase` after the wire checks complete.
     standard_dictionary_bytes: ?[]u8 = null,
+    /// Vort-native magicless Zstd frame with no standard magic number. The
+    /// system libzstd rejects it as an unknown frame descriptor, so it is a
+    /// Vort-to-Vort contract: both Vort decode paths must agree, and a
+    /// standard-format Vort decode must reject the wire.
+    zstd_magicless: bool = false,
 };
 
 const Stats = struct {
@@ -303,6 +308,21 @@ const Harness = struct {
         return a.realloc(output, written) catch output[0..written];
     }
 
+    /// Magicless frames have no magic-aware exact-size entry point, so decode
+    /// through the formatted options API and verify the length against the
+    /// caller-supplied expectation.
+    fn magiclessExactDecode(a: std.mem.Allocator, wire: []const u8, expected: usize) ?[]u8 {
+        const decoded = vort.zstd.decodeFrameAllocWithOptions(a, wire, .{
+            .format = .magicless,
+            .expected_output_len = expected,
+        }) catch return null;
+        if (decoded.len != expected) {
+            a.free(decoded);
+            return null;
+        }
+        return decoded;
+    }
+
     fn vortDecode(self: *Harness, codec: Codec, wire_case: WireCase) ?[]u8 {
         const a = self.allocator;
         const wire = wire_case.wire;
@@ -319,7 +339,9 @@ const Harness = struct {
                 vort.decodeZlibOrGzipAllocWithDictionary(a, wire, preset) catch return null
             else
                 vort.decodeZlibOrGzipAlloc(a, wire) catch return null,
-            .zstd => if (wire_case.standard_dictionary_bytes) |bytes| blk: {
+            .zstd => if (wire_case.zstd_magicless)
+                vort.zstd.decodeFrameAllocWithOptions(a, wire, .{ .format = .magicless }) catch return null
+            else if (wire_case.standard_dictionary_bytes) |bytes| blk: {
                 const view = vort.zstd.NativeDictionary.initFromStandardDictionary(bytes) catch break :blk null;
                 break :blk vort.zstd.decodeFrameAllocWithDictionary(a, wire, view.dictionary) catch null;
             } else if (dict) |preset|
@@ -363,7 +385,9 @@ const Harness = struct {
                 vort.decodeZlibOrGzipAllocWithDictionaryExactSize(a, wire, preset, expected) catch return null
             else
                 vort.decodeZlibOrGzipAllocExactSize(a, wire, expected) catch return null,
-            .zstd => if (wire_case.standard_dictionary_bytes) |bytes|
+            .zstd => if (wire_case.zstd_magicless)
+                magiclessExactDecode(a, wire, expected)
+            else if (wire_case.standard_dictionary_bytes) |bytes|
                 vort.zstd.decodeFrameAllocWithDictionaryExactSize(
                     a,
                     wire,
@@ -936,6 +960,21 @@ const Harness = struct {
         // Structural variants use one representative level so the campaign
         // cost stays bounded.
         if (level != 3) return;
+        // Magicless frame: Vort-native format with no standard magic number.
+        // libzstd rejects it as an unknown frame descriptor, so this is a
+        // Vort-to-Vort contract variant with its own truncation and mutation
+        // rules.
+        {
+            const encoded = try vort.zstd.encodeNativeFrameWithOptionsAlloc(a, input, .{
+                .format = .magicless,
+            });
+            try cases.append(a, .{
+                .label = "magicless-frame",
+                .wire = encoded.frame,
+                .source = input,
+                .zstd_magicless = true,
+            });
+        }
         // A small explicit Window_Log forces a non-single-segment frame with
         // a window descriptor once the content exceeds the window, exercising
         // cross-block history that single-segment frames never reach.
@@ -1198,10 +1237,11 @@ const Harness = struct {
 
         // 3. System reference interop on the complete valid wire. Brotli
         //    shared-dictionary wires have no reference implementation in the
-        //    installed libbrotli 1.0.9 (no AttachDictionary export), so they
-        //    rely on the two Vort decode contracts plus the no-dictionary
-        //    rejection check below.
-        if (!wire_case.brotli_shared_dictionary) {
+        //    installed libbrotli 1.0.9 (no AttachDictionary export), and
+        //    magicless Zstd frames are rejected outright by libzstd as unknown
+        //    frame descriptors; both rely on the two Vort decode contracts
+        //    plus the no-reference rejection check below.
+        if (!wire_case.brotli_shared_dictionary and !wire_case.zstd_magicless) {
             const reference = self.referenceDecode(codec, wire_case, input.len) orelse {
                 self.stats.reference_rejected_valid += 1;
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} system reference rejected Vort wire", .{level});
@@ -1213,7 +1253,7 @@ const Harness = struct {
                 return;
             }
             self.stats.reference_ok += 1;
-        } else {
+        } else if (wire_case.brotli_shared_dictionary) {
             // Without the attached prefix the wire must not decode: otherwise
             // the encoder emitted a stream that does not actually need the
             // advertised dictionary, weakening the contract variant.
@@ -1223,6 +1263,17 @@ const Harness = struct {
             if (self.vortDecode(codec, no_dict_case)) |decoded| {
                 a.free(decoded);
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} brotli wire decoded without its shared dictionary", .{level});
+                return;
+            }
+            self.stats.reference_ok += 1;
+        } else {
+            // The standard-format decoder must not accept a magicless wire:
+            // otherwise the format-specific opt-in would not be load-bearing.
+            var standard_case = wire_case;
+            standard_case.zstd_magicless = false;
+            if (self.vortDecode(codec, standard_case)) |decoded| {
+                a.free(decoded);
+                try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} magicless wire decoded through the standard format", .{level});
                 return;
             }
             self.stats.reference_ok += 1;
@@ -1243,11 +1294,11 @@ const Harness = struct {
             self.stats.truncation_cuts += 1;
             const vort_result = self.vortDecode(codec, prefix_case);
             defer if (vort_result) |decoded| a.free(decoded);
-            // Brotli shared-dictionary variants have no system reference; the
-            // truncation contract is that a prefix can never decode further
-            // than the full wire and any accepted prefix must reproduce the
-            // source prefix exactly.
-            if (wire_case.brotli_shared_dictionary) {
+            // Vort-only variants (Brotli shared dictionary, magicless Zstd)
+            // have no system reference; the truncation contract is that a
+            // prefix can never decode further than the full wire and any
+            // accepted prefix must reproduce the source prefix exactly.
+            if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless) {
                 if (vort_result) |decoded| {
                     if (decoded.len > input.len or !std.mem.eql(u8, decoded, input[0..decoded.len])) {
                         try self.fail(codec, pattern, wire_case.label, input.len, cut, "truncation", "prefix of {d} bytes: shared-dictionary decode output mismatch", .{cut});
@@ -1375,10 +1426,11 @@ const Harness = struct {
         // decode because the attached prefix can legitimately supply some
         // corrupted sequences. Only a full-output mismatch is a real defect;
         // accepted mutations are recorded rather than failing the campaign.
-        if (wire_case.brotli_shared_dictionary) {
+        // Magicless frames use the same rule since libzstd cannot parse them.
+        if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless) {
             if (vort_result) |decoded| {
                 if (decoded.len != expected_len) {
-                    try self.fail(codec, pattern, wire_case.label, expected_len, mutated.len, "mutation", "{s}: shared-dictionary decode changed output length", .{operator});
+                    try self.fail(codec, pattern, wire_case.label, expected_len, mutated.len, "mutation", "{s}: Vort-only decode changed output length", .{operator});
                     return;
                 }
                 if (!std.mem.eql(u8, decoded, wire_case.source)) {

@@ -169,6 +169,12 @@ truncation and mutation pipeline:
   must reproduce the source, no-prefix decode must reject it, and mutation
   output-length changes fail while content-only corruption is counted as a
   one-sided divergence rather than a hard interop failure;
+- deep-only Vort-native magicless Zstd frames with the standard magic
+  omitted. libzstd rejects them as unknown frame descriptors, so they run as
+  a Vort-to-Vort contract: magicless decode through the formatted options
+  API must reproduce the source, standard-format decode must reject the wire
+  with `InvalidMagic`, and truncation/mutation use the same prefix and
+  length rules as the other Vort-only variants;
 - deep campaigns add eight RNG-driven random sizes per pattern alongside the
   fixed boundary schedule.
 
@@ -181,13 +187,14 @@ The widened smoke campaign covers 3,768 valid wires (600 feature variants),
 93,862 truncation cuts and 108,963 mutations. A `--deep` campaign covers
 roughly 14,100 valid wires (about 9,300 feature variants), around 400,000
 truncation cuts and around 375,000 mutations once the dictionary variants
-are included; the Zstd-only deep campaign adds roughly 5,380 wires per
-seed with the trained standard dictionary. Deep seeds 1-3 on the
-dictionary-enabled generator, seeds 1-6 on the pre-dictionary generator
-(roughly 77,000 valid wires, 2.2 million truncation cuts and 2 million
-mutations), and the earlier legacy-generator seeds 1-13 all complete with
-zero cross-decoder disagreements and no Vort/reference one-sided truncation
-mismatches.
+are included; the Zstd-only deep campaign adds roughly 5,690 wires per
+seed once the magicless variant joins the trained standard dictionary.
+Deep seeds 1-3 on the dictionary-and-magicless generator, seeds 1-3 on the
+pre-magicless dictionary generator, seeds 1-6 on the pre-dictionary
+generator (roughly 77,000 valid wires, 2.2 million truncation cuts and 2
+million mutations), and the earlier legacy-generator seeds 1-13 all
+complete with zero cross-decoder disagreements and no Vort/reference
+one-sided truncation mismatches.
 
 The extended generator immediately found a real interop defect: the
 resumable raw Deflate decoder rejected legal literal-only dynamic blocks
