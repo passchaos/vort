@@ -185,10 +185,13 @@ truncation and mutation pipeline:
 - deep campaigns add eight RNG-driven random sizes per pattern alongside the
   fixed boundary schedule.
 
-The mutation matrix keeps five-position XOR flips for every wire and adds,
-for wires up to 2 KiB, fixed-position overwrite (0x00/0xff/random), single
-random-byte insertion and single-byte deletion operators, each with separate
-counters in the summary.
+The mutation matrix keeps five-position XOR flips for every wire, adds
+single-bit flips at the same sampled positions, and for wires up to 2 KiB
+runs fixed-position overwrite (0x00/0xff/random), adjacent two-byte
+overwrite with a deduplicated in-bounds start schedule, single
+random-byte insertion and single-byte deletion operators, each with
+separate counters in the summary. The two-byte schedule rejects starts
+whose pair would run past the wire end, so short wires stay safe.
 
 The widened smoke campaign covers 3,768 valid wires (600 feature variants),
 93,862 truncation cuts and 108,963 mutations. A `--deep` campaign covers

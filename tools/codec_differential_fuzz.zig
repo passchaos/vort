@@ -167,7 +167,9 @@ const Stats = struct {
     truncation_both_rejected: u64 = 0,
     truncation_agreed: u64 = 0,
     mutations_xor: u64 = 0,
+    mutations_bitflip: u64 = 0,
     mutations_overwrite: u64 = 0,
+    mutations_double_overwrite: u64 = 0,
     mutations_insert: u64 = 0,
     mutations_delete: u64 = 0,
     mutation_rejected: u64 = 0,
@@ -1475,6 +1477,17 @@ const Harness = struct {
             }
         }
 
+        // Single-bit flips at the sampled positions exercise header and
+        // payload bits that byte-wide XOR masks cannot reach precisely.
+        for (positions) |position| {
+            const bit = self.rng.bounded(8);
+            const mutated = try a.dupe(u8, wire);
+            defer a.free(mutated);
+            mutated[position] ^= @as(u8, 1) << @intCast(bit);
+            self.stats.mutations_bitflip += 1;
+            try self.compareMutation(codec, pattern, wire_case, mutated, input.len, "bitflip");
+        }
+
         if (wire.len > self.max_mutation_wire) return;
 
         const overwrite_positions = [_]usize{ 0, wire.len / 2, wire.len - 1 };
@@ -1486,6 +1499,38 @@ const Harness = struct {
                 mutated[position] = value;
                 self.stats.mutations_overwrite += 1;
                 try self.compareMutation(codec, pattern, wire_case, mutated, input.len, "overwrite");
+            }
+        }
+
+        // Two-byte overwrite at adjacent positions catches corruption that
+        // crosses byte boundaries inside length/distance encodings. The
+        // schedule is built from distinct in-bounds starts so very short
+        // wires never produce an overlapping or out-of-range pair.
+        if (wire.len >= 2) {
+            var double_positions: [3]usize = undefined;
+            var double_count: usize = 0;
+            const candidates = [_]usize{ 0, wire.len / 2, wire.len - 2 };
+            for (candidates) |candidate| {
+                if (candidate + 1 >= wire.len) continue;
+                var duplicate = false;
+                for (double_positions[0..double_count]) |existing| {
+                    if (existing == candidate) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) {
+                    double_positions[double_count] = candidate;
+                    double_count += 1;
+                }
+            }
+            for (double_positions[0..double_count]) |position| {
+                const mutated = try a.dupe(u8, wire);
+                defer a.free(mutated);
+                mutated[position] = self.rng.byte();
+                mutated[position + 1] = self.rng.byte();
+                self.stats.mutations_double_overwrite += 1;
+                try self.compareMutation(codec, pattern, wire_case, mutated, input.len, "double-overwrite");
             }
         }
 
@@ -1717,7 +1762,7 @@ pub fn main(init: std.process.Init) !void {
         \\codec differential fuzz: seed={d} deep={} only={s}
         \\  valid wires={d} (variants={d}) vort_roundtrip={d} exact_size={d} reference_interop={d}
         \\  truncation cuts={d} (both_rejected={d} agreed_accept={d})
-        \\  mutations xor={d} overwrite={d} insert={d} delete={d} (rejected={d} one_sided_divergence={d})
+        \\  mutations xor={d} bitflip={d} overwrite={d} double-overwrite={d} insert={d} delete={d} (rejected={d} one_sided_divergence={d})
         \\
     , .{
         seed,
@@ -1732,7 +1777,9 @@ pub fn main(init: std.process.Init) !void {
         harness.stats.truncation_both_rejected,
         harness.stats.truncation_agreed,
         harness.stats.mutations_xor,
+        harness.stats.mutations_bitflip,
         harness.stats.mutations_overwrite,
+        harness.stats.mutations_double_overwrite,
         harness.stats.mutations_insert,
         harness.stats.mutations_delete,
         harness.stats.mutation_rejected,
