@@ -151,6 +151,17 @@ truncation and mutation pipeline:
   `allow_concatenated` while the reference runs one `inflate` state per
   member (a single inflate call stops at the first `Z_STREAM_END` and does
   not auto-continue);
+- deep-only Zstd raw-content dictionary frames. Both Vort and the
+  `ZSTD_decompress_usingDict` reference are handed the same raw dictionary;
+  the reference rejects the wire without it, pinning the dictionary contract,
+  while truncated and mutated prefixes still run through the full agreement
+  pipeline;
+- deep-only Brotli RAW shared-prefix dictionary frames with an overlapping
+  payload. The installed libbrotli 1.0.9 exports no `AttachDictionary`
+  symbol, so this is a Vort-to-Vort contract variant: attached-prefix decode
+  must reproduce the source, no-prefix decode must reject it, and mutation
+  output-length changes fail while content-only corruption is counted as a
+  one-sided divergence rather than a hard interop failure;
 - deep campaigns add eight RNG-driven random sizes per pattern alongside the
   fixed boundary schedule.
 
@@ -160,11 +171,12 @@ random-byte insertion and single-byte deletion operators, each with separate
 counters in the summary.
 
 The widened smoke campaign covers 3,768 valid wires (600 feature variants),
-93,862 truncation cuts and 108,963 mutations. A `--deep` campaign now covers
-12,816 valid wires (7,968 variants), around 370,000 truncation cuts and
-around 340,000 mutations; deep seeds 1-6 on the final generator (roughly
-77,000 valid wires, 2.2 million truncation cuts and 2 million mutations in
-total), seeds 1-6 on the pre-concatenation generator, and the earlier
+93,862 truncation cuts and 108,963 mutations. A `--deep` campaign covers
+roughly 14,000 valid wires (about 9,200 feature variants), around 400,000
+truncation cuts and around 375,000 mutations once the dictionary variants
+are included; deep seeds 1-3 on the dictionary-enabled generator, seeds
+1-6 on the pre-dictionary generator (roughly 77,000 valid wires, 2.2
+million truncation cuts and 2 million mutations), and the earlier
 legacy-generator seeds 1-13 all complete with zero cross-decoder
 disagreements and no Vort/reference one-sided truncation mismatches.
 

@@ -133,6 +133,11 @@ const WireCase = struct {
     /// inflate call stops at the first member's Z_STREAM_END without
     /// auto-continuing into the next member.
     gzip_multi_member: bool = false,
+    /// Brotli RAW shared-prefix dictionary, attached to both Vort encode and
+    /// decode. The installed system libbrotli (1.0.9) exports no attach API,
+    /// so the reference side is skipped for this variant and both Vort paths
+    /// must agree; a no-dictionary Vort decode must reject the wire.
+    brotli_shared_dictionary: bool = false,
 };
 
 const Stats = struct {
@@ -310,8 +315,19 @@ const Harness = struct {
                 vort.decodeZlibOrGzipAllocWithDictionary(a, wire, preset) catch return null
             else
                 vort.decodeZlibOrGzipAlloc(a, wire) catch return null,
-            .zstd => vort.zstd.decodeFrameAlloc(a, wire) catch return null,
-            .br => if (wire_case.brotli_large_window)
+            .zstd => if (dict) |preset|
+                vort.zstd.decodeFrameAllocWithDictionary(
+                    a,
+                    wire,
+                    vort.zstd.NativeDictionary.initRawContent(preset),
+                ) catch return null
+            else
+                vort.zstd.decodeFrameAlloc(a, wire) catch return null,
+            .br => if (wire_case.brotli_shared_dictionary)
+                vort.br.decodeStreamAllocWithOptions(a, wire, .{
+                    .shared_dictionary = .{ .raw_prefixes = &.{dict.?} },
+                }) catch return null
+            else if (wire_case.brotli_large_window)
                 vort.br.decodeStreamAllocWithOptions(a, wire, .{ .allow_large_window = true }) catch return null
             else
                 vort.br.decodeStreamAlloc(a, wire) catch return null,
@@ -340,8 +356,20 @@ const Harness = struct {
                 vort.decodeZlibOrGzipAllocWithDictionaryExactSize(a, wire, preset, expected) catch return null
             else
                 vort.decodeZlibOrGzipAllocExactSize(a, wire, expected) catch return null,
-            .zstd => vort.zstd.decodeFrameAllocExactSize(a, wire, expected) catch return null,
-            .br => if (wire_case.brotli_large_window)
+            .zstd => if (dict) |preset|
+                vort.zstd.decodeFrameAllocWithDictionaryExactSize(
+                    a,
+                    wire,
+                    vort.zstd.NativeDictionary.initRawContent(preset),
+                    expected,
+                ) catch return null
+            else
+                vort.zstd.decodeFrameAllocExactSize(a, wire, expected) catch return null,
+            .br => if (wire_case.brotli_shared_dictionary)
+                vort.br.decodeStreamAllocExactSizeWithOptions(a, wire, expected, .{
+                    .shared_dictionary = .{ .raw_prefixes = &.{dict.?} },
+                }) catch return null
+            else if (wire_case.brotli_large_window)
                 vort.br.decodeStreamAllocExactSizeWithOptions(a, wire, expected, .{ .allow_large_window = true }) catch return null
             else
                 vort.br.decodeStreamAllocExactSize(a, wire, expected) catch return null,
@@ -367,7 +395,22 @@ const Harness = struct {
                 if (wire_case.zstd_stream_reference) {
                     return zstdDecompressStream(a, dst, wire_case.wire);
                 }
-                const result = c.ZSTD_decompress(dst.ptr, dst.len, wire_case.wire.ptr, wire_case.wire.len);
+                const dict_ptr = if (wire_case.dictionary) |preset| preset.ptr else null;
+                const dict_len = if (wire_case.dictionary) |preset| preset.len else 0;
+                const dctx = c.ZSTD_createDCtx() orelse {
+                    a.free(dst);
+                    return null;
+                };
+                defer _ = c.ZSTD_freeDCtx(dctx);
+                const result = c.ZSTD_decompress_usingDict(
+                    dctx,
+                    dst.ptr,
+                    dst.len,
+                    wire_case.wire.ptr,
+                    wire_case.wire.len,
+                    dict_ptr,
+                    dict_len,
+                );
                 if (c.ZSTD_isError(result) != 0) {
                     a.free(dst);
                     return null;
@@ -780,6 +823,24 @@ const Harness = struct {
             .wire = unsized_wire,
             .source = input,
         });
+        // Raw-content dictionary frame: the dictionary is not declared in the
+        // frame header, so both decoders must be handed the same bytes. The
+        // reference rejects the wire without the dictionary, pinning the
+        // dictionary contract rather than accidentally matching plain frames.
+        {
+            const dictionary = try self.buildDictionary();
+            const dict_wire = try vort.zstd.encodeFrameWithDictionaryAlloc(
+                a,
+                input,
+                vort.zstd.NativeDictionary.initRawContent(dictionary),
+            );
+            try cases.append(a, .{
+                .label = "raw-content-dictionary",
+                .wire = dict_wire,
+                .source = input,
+                .dictionary = dictionary,
+            });
+        }
 
         // Structural variants use one representative level so the campaign
         // cost stays bounded.
@@ -898,6 +959,30 @@ const Harness = struct {
             });
         }
         if (self.deep) {
+            // RAW shared-prefix dictionary. RFC 7932 makes the dictionary an
+            // explicit decoder parameter: the same wire must fail without it
+            // and reproduce the source with it, so this is a Vort-to-Vort
+            // contract variant rather than a libbrotli interop one (the linked
+            // libbrotli headers expose no attach-dictionary entry point). The
+            // payload is built to overlap the dictionary so the encoder has a
+            // real match to emit; a payload with no overlap would not need the
+            // dictionary and decode without it.
+            const br_dictionary = try self.buildDictionary();
+            const br_payload = try a.alloc(u8, @max(br_dictionary.len * 3, 64));
+            for (br_payload, 0..) |*byte, index| {
+                byte.* = br_dictionary[index % br_dictionary.len];
+            }
+            const with_shared_dict = try vort.br.encodePlannedStreamWithOptionsAlloc(a, br_payload, .{
+                .quality = level,
+                .shared_dictionary = .{ .raw_prefixes = &.{br_dictionary} },
+            });
+            try cases.append(a, .{
+                .label = "raw-shared-dictionary",
+                .wire = with_shared_dict,
+                .source = br_payload,
+                .dictionary = br_dictionary,
+                .brotli_shared_dictionary = true,
+            });
             const no_context = try vort.br.encodePlannedStreamWithOptionsAlloc(a, input, .{
                 .quality = level,
                 .disable_literal_context_modeling = true,
@@ -1020,8 +1105,12 @@ const Harness = struct {
             self.stats.exact_size_ok += 1;
         }
 
-        // 3. System reference interop on the complete valid wire.
-        {
+        // 3. System reference interop on the complete valid wire. Brotli
+        //    shared-dictionary wires have no reference implementation in the
+        //    installed libbrotli 1.0.9 (no AttachDictionary export), so they
+        //    rely on the two Vort decode contracts plus the no-dictionary
+        //    rejection check below.
+        if (!wire_case.brotli_shared_dictionary) {
             const reference = self.referenceDecode(codec, wire_case, input.len) orelse {
                 self.stats.reference_rejected_valid += 1;
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} system reference rejected Vort wire", .{level});
@@ -1030,6 +1119,19 @@ const Harness = struct {
             defer a.free(reference);
             if (!std.mem.eql(u8, reference, input)) {
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} reference decoded {d} bytes, expected {d}", .{ level, reference.len, input.len });
+                return;
+            }
+            self.stats.reference_ok += 1;
+        } else {
+            // Without the attached prefix the wire must not decode: otherwise
+            // the encoder emitted a stream that does not actually need the
+            // advertised dictionary, weakening the contract variant.
+            var no_dict_case = wire_case;
+            no_dict_case.dictionary = null;
+            no_dict_case.brotli_shared_dictionary = false;
+            if (self.vortDecode(codec, no_dict_case)) |decoded| {
+                a.free(decoded);
+                try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} brotli wire decoded without its shared dictionary", .{level});
                 return;
             }
             self.stats.reference_ok += 1;
@@ -1049,8 +1151,24 @@ const Harness = struct {
             prefix_case.wire = wire[0..cut];
             self.stats.truncation_cuts += 1;
             const vort_result = self.vortDecode(codec, prefix_case);
-            const reference_result = self.referenceDecode(codec, prefix_case, input.len);
             defer if (vort_result) |decoded| a.free(decoded);
+            // Brotli shared-dictionary variants have no system reference; the
+            // truncation contract is that a prefix can never decode further
+            // than the full wire and any accepted prefix must reproduce the
+            // source prefix exactly.
+            if (wire_case.brotli_shared_dictionary) {
+                if (vort_result) |decoded| {
+                    if (decoded.len > input.len or !std.mem.eql(u8, decoded, input[0..decoded.len])) {
+                        try self.fail(codec, pattern, wire_case.label, input.len, cut, "truncation", "prefix of {d} bytes: shared-dictionary decode output mismatch", .{cut});
+                        return;
+                    }
+                    self.stats.truncation_agreed += 1;
+                } else {
+                    self.stats.truncation_both_rejected += 1;
+                }
+                continue;
+            }
+            const reference_result = self.referenceDecode(codec, prefix_case, input.len);
             defer if (reference_result) |decoded| a.free(decoded);
             if (vort_result == null and reference_result == null) {
                 self.stats.truncation_both_rejected += 1;
@@ -1160,8 +1278,27 @@ const Harness = struct {
         var mutated_case = wire_case;
         mutated_case.wire = mutated;
         const vort_result = self.vortDecode(codec, mutated_case);
-        const reference_result = self.referenceDecode(codec, mutated_case, expected_len);
         defer if (vort_result) |decoded| a.free(decoded);
+        // Without a system reference, mutation evidence is the one-sided
+        // divergence count: a corrupted shared-dictionary wire may still
+        // decode because the attached prefix can legitimately supply some
+        // corrupted sequences. Only a full-output mismatch is a real defect;
+        // accepted mutations are recorded rather than failing the campaign.
+        if (wire_case.brotli_shared_dictionary) {
+            if (vort_result) |decoded| {
+                if (decoded.len != expected_len) {
+                    try self.fail(codec, pattern, wire_case.label, expected_len, mutated.len, "mutation", "{s}: shared-dictionary decode changed output length", .{operator});
+                    return;
+                }
+                if (!std.mem.eql(u8, decoded, wire_case.source)) {
+                    self.stats.one_sided_divergence += 1;
+                }
+            } else {
+                self.stats.mutation_rejected += 1;
+            }
+            return;
+        }
+        const reference_result = self.referenceDecode(codec, mutated_case, expected_len);
         defer if (reference_result) |decoded| a.free(decoded);
         if (vort_result == null) self.stats.mutation_rejected += 1;
         if (vort_result != null and reference_result != null) {
