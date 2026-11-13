@@ -3742,6 +3742,10 @@ test "Brotli general large history contracts" {
     try @import("br_large_history_tests.zig").contracts(@This());
 }
 
+test "Brotli RAW shared-prefix dictionary contracts" {
+    try @import("br_shared_dictionary_tests.zig").contracts(@This());
+}
+
 pub const default_window_bits: u5 = 16;
 const planned_chunk_max_input_len: usize = 64 * 1024;
 
