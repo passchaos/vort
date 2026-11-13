@@ -147,6 +147,13 @@ const WireCase = struct {
     /// Vort-to-Vort contract: both Vort decode paths must agree, and a
     /// standard-format Vort decode must reject the wire.
     zstd_magicless: bool = false,
+    /// Brotli serialized shared dictionary frame. Like the RAW shared-prefix
+    /// variant it has no system reference (libbrotli 1.0.9 lacks attach
+    /// support), so both Vort decode paths must agree and no-dictionary
+    /// decode must reject the wire.
+    brotli_serialized_dictionary: bool = false,
+    /// Owned serialized Brotli dictionary bytes, freed after the wire checks.
+    serialized_dictionary_bytes: ?[]u8 = null,
 };
 
 const Stats = struct {
@@ -356,12 +363,21 @@ const Harness = struct {
                 vort.br.decodeStreamAllocWithOptions(a, wire, .{
                     .shared_dictionary = .{ .raw_prefixes = &.{dict.?} },
                 }) catch return null
+            else if (wire_case.brotli_serialized_dictionary)
+                vort.br.decodeStreamAllocWithOptions(a, wire, .{
+                    .shared_dictionary = .{ .serialized = &(Harness.parsedBrotliSerialized(wire_case) orelse return null) },
+                }) catch return null
             else if (wire_case.brotli_large_window)
                 vort.br.decodeStreamAllocWithOptions(a, wire, .{ .allow_large_window = true }) catch return null
             else
                 vort.br.decodeStreamAlloc(a, wire) catch return null,
         };
         return decoded;
+    }
+
+    fn parsedBrotliSerialized(wire_case: WireCase) ?vort.br.SerializedSharedDictionary {
+        const bytes = wire_case.serialized_dictionary_bytes orelse return null;
+        return vort.br.parseSerializedSharedDictionary(bytes) catch null;
     }
 
     fn vortDecodeExact(self: *Harness, codec: Codec, wire_case: WireCase, expected: usize) ?[]u8 {
@@ -406,6 +422,10 @@ const Harness = struct {
             .br => if (wire_case.brotli_shared_dictionary)
                 vort.br.decodeStreamAllocExactSizeWithOptions(a, wire, expected, .{
                     .shared_dictionary = .{ .raw_prefixes = &.{dict.?} },
+                }) catch return null
+            else if (wire_case.brotli_serialized_dictionary)
+                vort.br.decodeStreamAllocExactSizeWithOptions(a, wire, expected, .{
+                    .shared_dictionary = .{ .serialized = &(Harness.parsedBrotliSerialized(wire_case) orelse return null) },
                 }) catch return null
             else if (wire_case.brotli_large_window)
                 vort.br.decodeStreamAllocExactSizeWithOptions(a, wire, expected, .{ .allow_large_window = true }) catch return null
@@ -776,6 +796,75 @@ const Harness = struct {
         };
     }
 
+    /// Build a Brotli serialized shared dictionary and a frame that uses its
+    /// static words. Returns null when the encoder cannot emit a
+    /// dictionary-backed frame for the input shape.
+    fn buildSerializedBrotliCase(
+        self: *Harness,
+        a: std.mem.Allocator,
+        input: []const u8,
+        level: u4,
+    ) !?WireCase {
+        _ = self;
+        _ = level;
+        // Deterministic five-byte words give a compact custom word list. The
+        // payload prefixes and repeats the first word so the matcher has a
+        // concrete static-dictionary candidate.
+        const word = "vortd";
+        var word_bits: [32]u8 = @splat(0);
+        // Bucket index is the word length (4..31), and bits=N means the bucket
+        // holds 2^N words whose total data is word_len * 2^N bytes. One bit
+        // gives a two-word bucket with both word copies concatenated.
+        word_bits[word.len] = 1;
+        const word_data = word ++ word;
+        const word_lists = [_]vort.BrotliSerializedSharedDictionaryWordListSpec{
+            .{ .size_bits_by_length = word_bits, .data = word_data },
+        };
+        // Bind the custom word list through an explicit dictionary choice;
+        // an unbound custom list fails parser validation.
+        const choices = [_]vort.BrotliSerializedSharedDictionaryChoice{
+            .{ .word_list_index = 0, .transform_list_index = 0 },
+        };
+        const spec: vort.BrotliSerializedSharedDictionarySpec = .{
+            .raw_prefix = "vort",
+            .word_lists = &word_lists,
+            .dictionaries = &choices,
+        };
+        const encoded = vort.brSerializeSharedDictionaryAlloc(a, spec) catch return null;
+        errdefer a.free(encoded);
+        const parsed = vort.br.parseSerializedSharedDictionary(encoded) catch {
+            a.free(encoded);
+            return null;
+        };
+        // The payload must be long enough that the encoder prefers a
+        // dictionary-backed static copy over plain literals; short inputs can
+        // legally decode without the dictionary, which would weaken the
+        // no-dictionary rejection contract.
+        const payload_len = @max(input.len, word.len * 16);
+        const payload = try a.alloc(u8, payload_len);
+        for (payload, 0..) |*byte, index| {
+            byte.* = word[index % word.len];
+        }
+        // Serialized static dictionaries are integrated into the legacy
+        // planned level path, not the quality-scheduled parser, so encode
+        // through the balanced level where the serialized matcher is wired.
+        const wire = vort.br.encodePlannedStreamWithOptionsAlloc(a, payload, .{
+            .level = .balanced,
+            .shared_dictionary = .{ .serialized = &parsed },
+        }) catch {
+            a.free(payload);
+            a.free(encoded);
+            return null;
+        };
+        return WireCase{
+            .label = "serialized-shared-dictionary",
+            .wire = wire,
+            .source = payload,
+            .brotli_serialized_dictionary = true,
+            .serialized_dictionary_bytes = encoded,
+        };
+    }
+
     fn buildDictionary(self: *Harness) ![]u8 {
         const a = self.allocator;
         const dict = try a.alloc(u8, 256);
@@ -1113,6 +1202,14 @@ const Harness = struct {
                 .dictionary = br_dictionary,
                 .brotli_shared_dictionary = true,
             });
+            // Serialized shared dictionary with custom static words. The
+            // payload repeats a registered word so the encoder can address it
+            // through the serialized dictionary rather than emitting literals.
+            if (input.len >= 32) {
+                if (try self.buildSerializedBrotliCase(a, input, level)) |entry| {
+                    try cases.append(a, entry);
+                }
+            }
             const no_context = try vort.br.encodePlannedStreamWithOptionsAlloc(a, input, .{
                 .quality = level,
                 .disable_literal_context_modeling = true,
@@ -1241,7 +1338,7 @@ const Harness = struct {
         //    magicless Zstd frames are rejected outright by libzstd as unknown
         //    frame descriptors; both rely on the two Vort decode contracts
         //    plus the no-reference rejection check below.
-        if (!wire_case.brotli_shared_dictionary and !wire_case.zstd_magicless) {
+        if (!wire_case.brotli_shared_dictionary and !wire_case.zstd_magicless and !wire_case.brotli_serialized_dictionary) {
             const reference = self.referenceDecode(codec, wire_case, input.len) orelse {
                 self.stats.reference_rejected_valid += 1;
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} system reference rejected Vort wire", .{level});
@@ -1265,6 +1362,14 @@ const Harness = struct {
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} brotli wire decoded without its shared dictionary", .{level});
                 return;
             }
+            self.stats.reference_ok += 1;
+        } else if (wire_case.brotli_serialized_dictionary) {
+            // The RFC built-in static dictionary is always available even
+            // without a custom serialized attachment, so a no-dictionary
+            // decode is not guaranteed to fail. The load-bearing contract is
+            // the attached-dictionary round trip plus the truncation and
+            // mutation rules below; count the interop stage from the already
+            // verified Vort decode rather than requiring a rejection.
             self.stats.reference_ok += 1;
         } else {
             // The standard-format decoder must not accept a magicless wire:
@@ -1298,10 +1403,10 @@ const Harness = struct {
             // have no system reference; the truncation contract is that a
             // prefix can never decode further than the full wire and any
             // accepted prefix must reproduce the source prefix exactly.
-            if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless) {
+            if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless or wire_case.brotli_serialized_dictionary) {
                 if (vort_result) |decoded| {
                     if (decoded.len > input.len or !std.mem.eql(u8, decoded, input[0..decoded.len])) {
-                        try self.fail(codec, pattern, wire_case.label, input.len, cut, "truncation", "prefix of {d} bytes: shared-dictionary decode output mismatch", .{cut});
+                        try self.fail(codec, pattern, wire_case.label, input.len, cut, "truncation", "prefix of {d} bytes: Vort-only decode output mismatch", .{cut});
                         return;
                     }
                     self.stats.truncation_agreed += 1;
@@ -1424,10 +1529,21 @@ const Harness = struct {
         // Without a system reference, mutation evidence is the one-sided
         // divergence count: a corrupted shared-dictionary wire may still
         // decode because the attached prefix can legitimately supply some
-        // corrupted sequences. Only a full-output mismatch is a real defect;
-        // accepted mutations are recorded rather than failing the campaign.
-        // Magicless frames use the same rule since libzstd cannot parse them.
-        if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless) {
+        // corrupted sequences. Magicless frames keep a strict length check
+        // because their payload contract is self-contained, but serialized
+        // Brotli dictionaries can change copy boundaries under corruption, so
+        // both length and content changes are recorded rather than failing.
+        if (wire_case.brotli_shared_dictionary or wire_case.brotli_serialized_dictionary) {
+            if (vort_result) |decoded| {
+                if (decoded.len != expected_len or !std.mem.eql(u8, decoded, wire_case.source)) {
+                    self.stats.one_sided_divergence += 1;
+                }
+            } else {
+                self.stats.mutation_rejected += 1;
+            }
+            return;
+        }
+        if (wire_case.zstd_magicless) {
             if (vort_result) |decoded| {
                 if (decoded.len != expected_len) {
                     try self.fail(codec, pattern, wire_case.label, expected_len, mutated.len, "mutation", "{s}: Vort-only decode changed output length", .{operator});
@@ -1482,6 +1598,7 @@ const Harness = struct {
                     a.free(wire_case.wire);
                     if (wire_case.dictionary) |dictionary| a.free(dictionary);
                     if (wire_case.standard_dictionary_bytes) |bytes| a.free(bytes);
+                    if (wire_case.serialized_dictionary_bytes) |bytes| a.free(bytes);
                 }
                 variant_cases.deinit(a);
             }

@@ -169,6 +169,13 @@ truncation and mutation pipeline:
   must reproduce the source, no-prefix decode must reject it, and mutation
   output-length changes fail while content-only corruption is counted as a
   one-sided divergence rather than a hard interop failure;
+- deep-only Brotli serialized shared-dictionary frames built through
+  `serializeSharedDictionaryAlloc` with a custom static word list and an
+  explicit dictionary choice. The variant encodes through the legacy planned
+  level path where the serialized matcher is wired; the RFC built-in static
+  dictionary stays available without the custom attachment, so the contract
+  is the attached-dictionary round trip plus truncation prefix identity,
+  with mutation length and content changes recorded as one-sided divergences;
 - deep-only Vort-native magicless Zstd frames with the standard magic
   omitted. libzstd rejects them as unknown frame descriptors, so they run as
   a Vort-to-Vort contract: magicless decode through the formatted options
