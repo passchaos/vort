@@ -2444,6 +2444,7 @@ test {
     _ = @import("tests/br_complete_lengths_resources.zig");
     _ = @import("tests/br_complete_lengths_transactions.zig");
     _ = @import("tests/br_general_large_window_contracts.zig");
+    _ = @import("tests/br_serialized_dictionary_contracts.zig");
     _ = @import("tests/br_general_large_window_resources.zig");
     _ = @import("tests/br_general_large_window_transactions.zig");
     _ = @import("tests/br_stream_counter_contracts.zig");
