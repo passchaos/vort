@@ -20625,6 +20625,20 @@ test "dynamic decode profile counts literals and matches" {
     try std.testing.expectEqual(profile.distance_extra_bits, sumProfileCounters(&profile.match_class_distance_extra_bits));
 }
 
+test "deflate profile rejects a stored block length/complement mismatch" {
+    // BFINAL=1, BTYPE=00 (stored), then LEN=1 with a deliberately wrong NLEN.
+    // The profiling entry point validates the one's-complement pair just like
+    // the decode path, independent of payload content.
+    const bad_stored = [_]u8{ 0x01, 0x01, 0x00, 0x00, 0x00 };
+    try std.testing.expectError(error.StoredLengthMismatch, profileDeflateBlocks(&bad_stored));
+    // The same shape with the correct complement parses as an empty stored
+    // block, proving the check is specifically the length pair.
+    const empty_stored = [_]u8{ 0x01, 0x00, 0x00, 0xff, 0xff };
+    const profile = try profileDeflateBlocks(&empty_stored);
+    try std.testing.expectEqual(@as(usize, 1), profile.stored_blocks);
+    try std.testing.expectEqual(@as(usize, 0), profile.output_bytes);
+}
+
 test "deflate profile walks stored fixed and dynamic blocks" {
     const stored_payload = "stored-profile-block";
     const fixed_payload = "fixed fixed fixed profile";
