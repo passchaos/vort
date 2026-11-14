@@ -24,6 +24,7 @@ pub const DistanceBlockShape = struct {
     /// Per-tree property vectors, indexed by absolute distance tree index.
     tree_single_symbol: [max_trees]bool = @splat(false),
     tree_max_bits: [max_trees]u4 = @splat(0),
+    tree_tail9_space_eligible: [max_trees]bool = @splat(false),
 
     /// Number of block-type rows whose four contexts resolve to 1..4 distinct
     /// trees. Index zero stays unused.
@@ -40,6 +41,11 @@ pub const DistanceBlockShape = struct {
     packed_context3_rows: u32 = 0,
     /// Referenced-tree count per maximum code width (index = max bits 0..15).
     tree_max_bits_histogram: [16]u32 = @splat(0),
+    /// Referenced inline trees whose own table has room for an internal
+    /// nine-bit tail lookup (single-symbol trees count as eligible).
+    referenced_tail9_space_eligible_count: u16 = 0,
+    /// Referenced inline trees lacking table space for the nine-bit tail.
+    referenced_tail9_space_ineligible_count: u16 = 0,
 };
 
 /// Capture the distance plane from a parsed `MinimalCompressedHeader`-shaped
@@ -66,6 +72,8 @@ pub fn capture(
             const tree = header.distance_trees[tree_index];
             shape.tree_single_symbol[tree_index] = tree.single_symbol != null;
             shape.tree_max_bits[tree_index] = tree.table.max_bits;
+            shape.tree_tail9_space_eligible[tree_index] =
+                tree.single_symbol != null or tree.table.canBuildTailLookup9();
         } else {
             // Packed-tier trees store nibble code lengths rather than a full
             // table; recover the single-symbol flag and maximum width.
@@ -98,6 +106,10 @@ pub fn capture(
                 shape.referenced_tree_count += 1;
                 if (tree_index < inline_tree_count) {
                     shape.referenced_inline_count += 1;
+                    if (shape.tree_tail9_space_eligible[tree_index])
+                        shape.referenced_tail9_space_eligible_count += 1
+                    else
+                        shape.referenced_tail9_space_ineligible_count += 1;
                 } else {
                     shape.referenced_packed_count += 1;
                 }
@@ -125,9 +137,16 @@ pub fn capture(
 }
 
 test "Brotli distance shape captures tier and distinct context structure" {
+    const FakeTable = struct {
+        max_bits: u4 = 0,
+        tail9_space: bool = true,
+        pub fn canBuildTailLookup9(self: *const @This()) bool {
+            return self.tail9_space;
+        }
+    };
     const FakeTree = struct {
         single_symbol: ?u16 = null,
-        table: struct { max_bits: u4 = 0 } = .{},
+        table: FakeTable = .{},
     };
     const FakePacked = struct {
         single_symbol_plus_one: u16 = 0,
@@ -151,7 +170,7 @@ test "Brotli distance shape captures tier and distinct context structure" {
         .distance_context_map = .{ 1, 1, 1, 1, 2, 2, 3, 3 },
         .distance_trees = .{
             .{ .single_symbol = 0 },
-            .{ .table = .{ .max_bits = 8 } },
+            .{ .table = .{ .max_bits = 8, .tail9_space = false } },
             .{ .table = .{ .max_bits = 10 } },
             undefined,
         },
@@ -167,6 +186,16 @@ test "Brotli distance shape captures tier and distinct context structure" {
     try std.testing.expectEqual(@as(u16, 1), shape.referenced_packed_count);
     try std.testing.expectEqual(@as(u16, 1), shape.referenced_single_symbol_count);
     try std.testing.expectEqual(@as(u16, 1), shape.referenced_tail9_ineligible_count);
+    // Tree 0 is a single symbol (space always available); tree 1 reports no
+    // tail-nine table space despite short codes. The packed tree at index 3
+    // is excluded from inline-space counts, so the two counts sum to the two
+    // referenced inline trees rather than all three referenced trees.
+    try std.testing.expectEqual(@as(u16, 1), shape.referenced_tail9_space_eligible_count);
+    try std.testing.expectEqual(@as(u16, 1), shape.referenced_tail9_space_ineligible_count);
+    try std.testing.expectEqual(
+        shape.referenced_inline_count,
+        shape.referenced_tail9_space_eligible_count + shape.referenced_tail9_space_ineligible_count,
+    );
     try std.testing.expectEqual(@as(u32, 2), shape.packed_context_slots);
     try std.testing.expectEqual(@as(u32, 1), shape.packed_context3_rows);
     try std.testing.expectEqual(@as(u16, 1), shape.context_rows[0][0]);

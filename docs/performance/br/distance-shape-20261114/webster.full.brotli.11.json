@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v2",
+  "schema": "vort.brotli.distance-shape.v3",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.plain",
@@ -27,6 +27,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 18,
+      "referenced_tail9_space_eligible_count": 19,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -73,6 +75,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 12,
+      "referenced_tail9_space_eligible_count": 13,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -119,6 +123,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 16,
+      "referenced_tail9_space_eligible_count": 16,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -165,6 +171,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 11,
+      "referenced_tail9_space_eligible_count": 12,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -211,6 +219,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 16,
+      "referenced_tail9_space_eligible_count": 16,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -256,6 +266,8 @@
     "referenced_packed_trees": 0,
     "referenced_single_symbol_trees": 0,
     "referenced_tail9_ineligible_trees": 73,
+    "referenced_tail9_space_eligible_trees": 76,
+    "referenced_tail9_space_ineligible_trees": 0,
     "tree_max_bits_histogram": [
       0,
       0,

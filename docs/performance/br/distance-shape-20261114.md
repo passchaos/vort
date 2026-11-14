@@ -36,6 +36,10 @@ output against the plain bytes and emits JSON; no timers are involved.
 The same diagnostic replay also fills a new
 `MetaBlockStats.distance_context_histogram` (applied copies per context) so
 the per-block JSON carries both header shape and decoded context frequency.
+Schema v3 additionally reports, per referenced inline tree, whether its
+entry array has room for an internal nine-bit tail lookup
+(`canBuildTailLookup9`); packed-tier trees are excluded so the two space
+counts reconcile exactly with the referenced inline tree count.
 
 Fixtures are the frozen 64 KiB, 1 MiB and full-file producer wires from the
 current decode matrix (twelve corpora, qualities 6 and 11, plus the mozilla
@@ -155,6 +159,8 @@ combined surface lives in the surrounding state work, not the indirection.
 - The context histogram is populated only on summary/diagnostic replay;
   production payload decoders pass `stats = null` and pay no per-copy cost.
 - Every probe run validated complete decoded output against the plain bytes.
-- Raw JSON (schema `vort.brotli.distance-shape.v2`) for 49 frame runs
+- Raw JSON (schema `vort.brotli.distance-shape.v3`) for 49 frame runs
   (24 full-file, 24 64 KiB, one mozilla 1 MiB q11) and `aggregate.csv` are
-  retained in `docs/performance/br/distance-shape-20261114/`.
+  retained in `docs/performance/br/distance-shape-20261114/`. Every
+  referenced inline tree across all runs has tail-nine table space; the
+  binding lookup limitation is code width, not table space.

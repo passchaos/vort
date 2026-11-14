@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v2",
+  "schema": "vort.brotli.distance-shape.v3",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.brotli.6.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.full.plain",
@@ -27,6 +27,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 35,
+      "referenced_tail9_space_eligible_count": 40,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -73,6 +75,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 28,
+      "referenced_tail9_space_eligible_count": 32,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -119,6 +123,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 43,
+      "referenced_tail9_space_eligible_count": 56,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -165,6 +171,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 39,
+      "referenced_tail9_space_eligible_count": 43,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -210,6 +218,8 @@
     "referenced_packed_trees": 0,
     "referenced_single_symbol_trees": 0,
     "referenced_tail9_ineligible_trees": 145,
+    "referenced_tail9_space_eligible_trees": 171,
+    "referenced_tail9_space_ineligible_trees": 0,
     "tree_max_bits_histogram": [
       0,
       0,

@@ -81,6 +81,8 @@ fn run(init: std.process.Init) !void {
             .referenced_packed_count = shape.referenced_packed_count,
             .referenced_single_symbol_count = shape.referenced_single_symbol_count,
             .referenced_tail9_ineligible_count = shape.referenced_tail9_ineligible_count,
+            .referenced_tail9_space_eligible_count = shape.referenced_tail9_space_eligible_count,
+            .referenced_tail9_space_ineligible_count = shape.referenced_tail9_space_ineligible_count,
             .packed_context_slots = shape.packed_context_slots,
             .packed_context3_rows = shape.packed_context3_rows,
             .tree_max_bits_histogram = shape.tree_max_bits_histogram,
@@ -96,7 +98,7 @@ fn run(init: std.process.Init) !void {
 
     const aggregate = aggregateShapes(report.distance_shapes, block_reports.items);
     const out_report = .{
-        .schema = "vort.brotli.distance-shape.v2",
+        .schema = "vort.brotli.distance-shape.v3",
         .diagnostic = true,
         .input_path = options.input,
         .plain_path = options.plain,
@@ -134,6 +136,8 @@ const Aggregate = struct {
     referenced_packed_trees: u64 = 0,
     referenced_single_symbol_trees: u64 = 0,
     referenced_tail9_ineligible_trees: u64 = 0,
+    referenced_tail9_space_eligible_trees: u64 = 0,
+    referenced_tail9_space_ineligible_trees: u64 = 0,
     tree_max_bits_histogram: [16]u64 = @splat(0),
     distance_context_histogram: [4]u64 = @splat(0),
 };
@@ -151,6 +155,8 @@ const BlockReport = struct {
     referenced_packed_count: u16,
     referenced_single_symbol_count: u16,
     referenced_tail9_ineligible_count: u16,
+    referenced_tail9_space_eligible_count: u16,
+    referenced_tail9_space_ineligible_count: u16,
     packed_context_slots: u32,
     packed_context3_rows: u32,
     tree_max_bits_histogram: [16]u32,
@@ -172,6 +178,8 @@ fn aggregateShapes(shapes: []const br.DecodeDistanceBlockShape, blocks: []const 
         total.referenced_packed_trees += shape.referenced_packed_count;
         total.referenced_single_symbol_trees += shape.referenced_single_symbol_count;
         total.referenced_tail9_ineligible_trees += shape.referenced_tail9_ineligible_count;
+        total.referenced_tail9_space_eligible_trees += shape.referenced_tail9_space_eligible_count;
+        total.referenced_tail9_space_ineligible_trees += shape.referenced_tail9_space_ineligible_count;
         for (shape.tree_max_bits_histogram, 0..) |value, bits| {
             total.tree_max_bits_histogram[bits] += value;
         }

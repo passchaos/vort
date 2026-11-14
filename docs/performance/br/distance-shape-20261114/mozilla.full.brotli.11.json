@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v2",
+  "schema": "vort.brotli.distance-shape.v3",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.full.plain",
@@ -27,6 +27,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 9,
+      "referenced_tail9_space_eligible_count": 24,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -73,6 +75,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 8,
+      "referenced_tail9_space_eligible_count": 20,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -119,6 +123,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 18,
+      "referenced_tail9_space_eligible_count": 37,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -165,6 +171,8 @@
       "referenced_packed_count": 33,
       "referenced_single_symbol_count": 1,
       "referenced_tail9_ineligible_count": 65,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 70,
       "packed_context3_rows": 32,
       "tree_max_bits_histogram": [
@@ -211,6 +219,8 @@
       "referenced_packed_count": 4,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 53,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 6,
       "packed_context3_rows": 5,
       "tree_max_bits_histogram": [
@@ -257,6 +267,8 @@
       "referenced_packed_count": 2,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 52,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 6,
       "packed_context3_rows": 2,
       "tree_max_bits_histogram": [
@@ -303,6 +315,8 @@
       "referenced_packed_count": 15,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 55,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 28,
       "packed_context3_rows": 14,
       "tree_max_bits_histogram": [
@@ -349,6 +363,8 @@
       "referenced_packed_count": 17,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 61,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 36,
       "packed_context3_rows": 19,
       "tree_max_bits_histogram": [
@@ -395,6 +411,8 @@
       "referenced_packed_count": 0,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 40,
+      "referenced_tail9_space_eligible_count": 62,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 0,
       "packed_context3_rows": 0,
       "tree_max_bits_histogram": [
@@ -440,6 +458,8 @@
     "referenced_packed_trees": 71,
     "referenced_single_symbol_trees": 1,
     "referenced_tail9_ineligible_trees": 361,
+    "referenced_tail9_space_eligible_trees": 463,
+    "referenced_tail9_space_ineligible_trees": 0,
     "tree_max_bits_histogram": [
       1,
       0,

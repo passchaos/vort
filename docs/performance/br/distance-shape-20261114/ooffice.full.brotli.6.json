@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v2",
+  "schema": "vort.brotli.distance-shape.v3",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.brotli.6.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.plain",
@@ -27,6 +27,8 @@
       "referenced_packed_count": 28,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 78,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 112,
       "packed_context3_rows": 28,
       "tree_max_bits_histogram": [
@@ -73,6 +75,8 @@
       "referenced_packed_count": 11,
       "referenced_single_symbol_count": 0,
       "referenced_tail9_ineligible_count": 41,
+      "referenced_tail9_space_eligible_count": 64,
+      "referenced_tail9_space_ineligible_count": 0,
       "packed_context_slots": 44,
       "packed_context3_rows": 11,
       "tree_max_bits_histogram": [
@@ -118,6 +122,8 @@
     "referenced_packed_trees": 39,
     "referenced_single_symbol_trees": 0,
     "referenced_tail9_ineligible_trees": 119,
+    "referenced_tail9_space_eligible_trees": 128,
+    "referenced_tail9_space_ineligible_trees": 0,
     "tree_max_bits_histogram": [
       0,
       0,
