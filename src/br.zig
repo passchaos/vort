@@ -18532,6 +18532,108 @@ test "br external literal executor rejects a symbol above the byte alphabet" {
     try std.testing.expectEqual(@as(usize, 0), written);
 }
 
+test "br wide9 literal executor rejects a symbol above the byte alphabet" {
+    // Drives the nine-bit wide external executor with all optional planes
+    // disabled, so command/distance lookups stay null and the literal packed
+    // lookup is the only entropy plane. Symbol 256 decodes successfully but
+    // fails the executor's 0..255 byte bound.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var literal_lookups: [1]WideExternalLiteralLookup9 = .{
+        try WideExternalLiteralLookup9.initSingle(256),
+    };
+
+    var reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processWideExternalLiteralLookup9CompressedPayloadNative(
+            false, // auxiliary_tail_lookups
+            false, // fixed_nine_bit_peek
+            false, // command_lookup10
+            false, // zero_postfix_distance
+            false, // force_utf8_context
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+            &literal_lookups,
+            null,
+            null,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
+test "br tail-lookup executor rejects a literal symbol above the byte alphabet" {
+    // All optional command/distance planes are null, so the executor takes
+    // its grammar-reader command path and only the eight-bit literal tail
+    // lookup is exercised. Symbol 256 passes the lookup decode and must be
+    // rejected by the payload byte bound.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var literal_lookups: [inline_literal_tree_count]TailLiteralLookup = undefined;
+    literal_lookups[0] = try TailLiteralLookup.initSingle(256);
+
+    var reader = bitstream.BitReader.init(&.{});
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processTailLookupCompressedPayload(
+            false, // auxiliary_tail_lookups
+            false, // command_lookup10
+            false, // zero_insert_command_lookup
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+            &literal_lookups,
+            null,
+            null,
+            null,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
