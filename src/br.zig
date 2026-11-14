@@ -18634,6 +18634,113 @@ test "br tail-lookup executor rejects a literal symbol above the byte alphabet" 
     try std.testing.expectEqual(@as(usize, 0), written);
 }
 
+test "br auxiliary10 executor rejects a literal symbol above the byte alphabet" {
+    // The auxiliary path needs prepared command and distance planes. Both are
+    // reduced to single-symbol lookups so no bit reads occur before the
+    // literal; command symbol 8 inserts exactly one literal.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var literal_lookups: [1]ExternalLiteralLookup = .{
+        try ExternalLiteralLookup.initSingle(256),
+    };
+    var command_lookups: [inline_command_tree_count]single_command_lookup.Lookup = undefined;
+    command_lookups[0] = try single_command_lookup.Lookup.initSingle(8);
+    var distance_lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
+    distance_lookups[0] = try ExternalDistanceLookup.initSingle(0);
+
+    var reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processWideExternalLiteralLookup10AuxiliaryPayloadNative(
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+            &literal_lookups,
+            &command_lookups,
+            &distance_lookups,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
+test "br single-tree external executor rejects a literal symbol above the byte alphabet" {
+    // The single-tree path uses one 10-bit literal lookup, one command lookup
+    // and one distance lookup. Symbol 256 is legal for the packed lookup
+    // (alphabet limit 4095) but illegal as a byte, so the executor bound
+    // check is the line of defense.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    const literal_lookup = try ExternalLiteralLookup.initSingle(256);
+    const command_lookup = try single_command_lookup.Lookup.initSingle(8);
+    const distance_lookup = try ExternalDistanceLookup.initSingle(0);
+
+    var reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processSingleTreeExternalLookupCompressedPayload(
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+            &literal_lookup,
+            &command_lookup,
+            &distance_lookup,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
+test "br paired literal lookup rejects symbol 256 at preparation" {
+    // The paired executor's decodeFast truncates to u8, so an over-range
+    // symbol can never reach its literal > 0xff check through a properly
+    // constructed lookup. The defense sits in prepareSingle/prepare instead;
+    // pin that contract here so no future change silently admits 256.
+    var lookups: paired_literal_lookup.Lookups = undefined;
+    try std.testing.expectError(error.InvalidHuffmanCode, lookups.prepareSingle(0, 256));
+    try lookups.prepareSingle(0, 255);
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
