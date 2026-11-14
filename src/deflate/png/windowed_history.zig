@@ -250,6 +250,44 @@ test "windowed history releases and compacts complete rows only" {
     );
 }
 
+test "PNG image state rejects scanlines wider than the 32 KiB lookback" {
+    // The windowed decoder cannot retain a full row when row_len reaches the
+    // DEFLATE lookback length, so ImageState.init must refuse it before any
+    // window allocation. A small valid row is accepted on the same buffers.
+    const wide_info: png.PngImageInfo = .{
+        .width = lookback_len,
+        .height = 1,
+        .bit_depth = 8,
+        .color_type = .grayscale,
+        .samples_per_pixel = 1,
+        .bits_per_pixel = 8,
+        .row_len = lookback_len,
+        .bytes_per_pixel = 1,
+        .zlib_payload_len = lookback_len + 1,
+    };
+    var scratch: [general_scratch_len]u8 = undefined;
+    var oversized_output: [lookback_len]u8 = undefined;
+    try std.testing.expectError(
+        error.UnsupportedDeflateFeature,
+        ImageState.init(&scratch, wide_info, &oversized_output, true),
+    );
+
+    const small_info: png.PngImageInfo = .{
+        .width = 4,
+        .height = 2,
+        .bit_depth = 8,
+        .color_type = .grayscale,
+        .samples_per_pixel = 1,
+        .bits_per_pixel = 8,
+        .row_len = 4,
+        .bytes_per_pixel = 1,
+        .zlib_payload_len = 10,
+    };
+    var small_output: [8]u8 = undefined;
+    const state = try ImageState.init(&scratch, small_info, &small_output, true);
+    try std.testing.expectEqual(@as(usize, 8), state.output.len);
+}
+
 test "windowed history compacts only at an output boundary" {
     var scratch: [general_scratch_len]u8 = undefined;
     var window = try Window.init(&scratch);
