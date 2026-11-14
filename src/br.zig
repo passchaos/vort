@@ -18901,6 +18901,23 @@ test "br large-window skip executor rejects a literal symbol above the byte alph
     );
 }
 
+test "br minimal static dictionary helper rejects non-dictionary distances" {
+    // The payload executor routes every distance past the backward window to
+    // the static-dictionary helper, so a distance inside the window is an
+    // InvalidMatch there even without a full header/executor setup. This pins
+    // the boundary independently of the RFC transform table.
+    var scratch: [64]u8 = undefined;
+    // Distance zero can never be a dictionary reference.
+    try std.testing.expectError(error.InvalidMatch, minimalStaticDictionaryWord(0, 4, 0, &scratch));
+    // Distance equal to the backward max is a valid LZ77 copy, not a
+    // dictionary address.
+    try std.testing.expectError(error.InvalidMatch, minimalStaticDictionaryWord(7, 4, 7, &scratch));
+    // A dictionary address one past the max still enters the transform lookup;
+    // an out-of-range transform index surfaces as UnsupportedBrotliFeature,
+    // documenting the two distinct error classes.
+    try std.testing.expectError(error.UnsupportedBrotliFeature, minimalStaticDictionaryWord(std.math.maxInt(usize), 4, 0, &scratch));
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
