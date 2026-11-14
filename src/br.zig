@@ -18408,6 +18408,47 @@ const MetaBlockDiagnosticCodec = struct {
     }
 };
 
+test "br insert/copy length readers reject out-of-range command symbols" {
+    var reader = bitstream.BitReader.init(&.{});
+    // Symbol 704 is one past the RFC 703 command alphabet (0..703); the
+    // staged and generic readers must reject it before touching the LUT.
+    try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengths(704, &reader));
+    try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengthsStaged(704, &reader));
+    try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengthsStaged(705, &reader));
+    // The compact entry table uses its own length constant; an out-of-range
+    // symbol hits the same error class rather than indexing out of bounds.
+    try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengthsStagedCompact(command_lut.entries.len, &reader));
+    // In-range symbol zero is accepted with no extra-bit reads (its entry has
+    // zero extra-bit widths), proving the checks above guard the boundary
+    // rather than rejecting every call.
+    const zero_lengths = try readInsertCopyLengths(0, &reader);
+    try std.testing.expectEqual(@as(usize, 0), zero_lengths.insert_len);
+    try std.testing.expectEqual(@as(usize, 2), zero_lengths.copy_len);
+    try std.testing.expectEqual(@as(usize, 0), reader.bitPosition());
+}
+
+test "br block length reader rejects symbols outside the 26-entry alphabet" {
+    // Build a single-symbol PrefixCode whose table decodes to symbol 25,
+    // then mutate the decoded symbol to 26 (one past the alphabet). The
+    // reader never advances because the bound check runs first.
+    var lengths: [26]u4 = @splat(0);
+    lengths[25] = 1;
+    var tree = try huffman.HuffmanTable(26).init(&lengths);
+    try std.testing.expectEqual(@as(u16, 25), tree.entries[0].symbol);
+    tree.entries[0].symbol = 26;
+    var prefix: PrefixCode(26) = .{ .table = tree };
+    // One zero byte supplies the single 1-bit code; the decoded symbol 26 is
+    // rejected by the alphabet bound before any extra-bit read.
+    var reader = bitstream.BitReader.init(&[_]u8{0});
+    try std.testing.expectError(error.InvalidHuffmanCode, readBlockLengthAny(&prefix, &reader));
+    // The legal symbol 25 passes the bound check and then needs its extra
+    // bits, so a reader with only the code bit reports TruncatedFrame.
+    tree.entries[0].symbol = 25;
+    prefix = .{ .table = tree };
+    reader = bitstream.BitReader.init(&[_]u8{0});
+    try std.testing.expectError(error.TruncatedFrame, readBlockLengthAny(&prefix, &reader));
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
