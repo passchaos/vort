@@ -18449,6 +18449,43 @@ test "br block length reader rejects symbols outside the 26-entry alphabet" {
     try std.testing.expectError(error.TruncatedFrame, readBlockLengthAny(&prefix, &reader));
 }
 
+test "br payload rejects a literal Huffman symbol above the byte alphabet" {
+    // Drive the prepared (cached) payload executor directly with a hand-built
+    // header whose only literal tree decodes to symbol 256, outside the
+    // 0..255 byte alphabet. No wire header is parsed, so the test isolates the
+    // payload's literal bound check.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    // Command symbol 8 has insert_base=1 with no extra bits, so the executor
+    // decodes exactly one literal before any distance handling.
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var reader = bitstream.BitReader.init(&.{});
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    // The prepared path uses `decodePrepared`, which returns the single
+    // symbol without reading bits; the literal > 0xff check fires on the first
+    // (and only) literal before the match stage.
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processDecodedCompressedPayload(&reader, output_slice, &written, 1, &last_distances, default_window_bits, &header),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
