@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain",
@@ -54,7 +54,10 @@
         1533,
         1412,
         15512
-      ]
+      ],
+      "distance_prepared_hits": 13959,
+      "distance_long_fallbacks": 1141,
+      "distance_prepared_builds": 22
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       1533,
       1412,
       15512
-    ]
+    ],
+    "distance_prepared_hits": 13959,
+    "distance_long_fallbacks": 1141,
+    "distance_prepared_builds": 22
   },
   "build": {
     "mode": "ReleaseFast",

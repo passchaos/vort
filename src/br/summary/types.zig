@@ -45,6 +45,9 @@ pub const StreamSummary = struct {
     /// Applied copies per RFC 7932 distance context (copy length 2, 3, 4,
     /// then 5+). Populated only on summary/diagnostic replay paths.
     distance_context_histogram: [4]Counter = @splat(0),
+    distance_prepared_hit_count: Counter = 0,
+    distance_long_fallback_count: Counter = 0,
+    distance_prepared_build_count: Counter = 0,
     lz77_copy_count: Counter = 0,
     lz77_copy_bytes: Counter = 0,
     max_lz77_distance: usize = 0,
@@ -109,6 +112,13 @@ pub const MetaBlockStats = struct {
     /// Applied copies per RFC 7932 distance context (copy length 2, 3, 4,
     /// then 5+). Populated only on summary/diagnostic replay paths.
     distance_context_histogram: [4]Counter = @splat(0),
+    /// Explicit distance symbols whose nine-bit prepared lookup hit.
+    distance_prepared_hit_count: Counter = 0,
+    /// Explicit distance symbols that missed the nine-bit root and used the
+    /// canonical long-code scan (code width greater than nine bits).
+    distance_long_fallback_count: Counter = 0,
+    /// Lazy prepared-lookup builds triggered during replay (one per tree).
+    distance_prepared_build_count: Counter = 0,
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
     max_lz77_distance: usize = 0,

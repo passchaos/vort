@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "nci.65536.brotli.6.wire",
   "plain_path": "nci.65536.plain",
@@ -54,7 +54,10 @@
         22,
         69,
         1309
-      ]
+      ],
+      "distance_prepared_hits": 1161,
+      "distance_long_fallbacks": 11,
+      "distance_prepared_builds": 2
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       22,
       69,
       1309
-    ]
+    ],
+    "distance_prepared_hits": 1161,
+    "distance_long_fallbacks": 11,
+    "distance_prepared_builds": 2
   },
   "build": {
     "mode": "ReleaseFast",

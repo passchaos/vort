@@ -16784,6 +16784,13 @@ test "br stream summary records distance contexts by copy length" {
     try recordSummaryDistanceContext(null, 7);
 }
 
+test "br stream summary distance lookup counters start at zero" {
+    const stats: StreamSummaryMetaBlockStats = .{};
+    try std.testing.expectEqual(@as(Counter, 0), stats.distance_prepared_hit_count);
+    try std.testing.expectEqual(@as(Counter, 0), stats.distance_long_fallback_count);
+    try std.testing.expectEqual(@as(Counter, 0), stats.distance_prepared_build_count);
+}
+
 fn recordSummaryCommand(stats: ?*StreamSummaryMetaBlockStats, lengths: InsertCopyLengths) SummaryError!void {
     const s = stats orelse return;
     if (lengths.copy_len == 0) return error.CorruptFrame;
@@ -23802,6 +23809,41 @@ fn recordSummaryDistanceCode(
     count.* = std.math.add(Counter, count.*, 1) catch return error.IntegerOverflow;
 }
 
+/// Diagnostic-only mirror of `PrefixCode.decodePrepared` that records how
+/// often the nine-bit root hits versus the canonical long-code fallback, and
+/// how many lazy prepared-lookup builds ran. It calls the same primitives as
+/// production decode so replay bit positions stay identical; production
+/// payload decoders never enter this path.
+fn decodePreparedDistanceTracked(
+    tree: *PrefixCode(max_distance_alphabet_size),
+    reader: anytype,
+    stats: *StreamSummaryMetaBlockStats,
+) SummaryError!u16 {
+    if (tree.single_symbol) |symbol| {
+        stats.distance_prepared_hit_count =
+            std.math.add(Counter, stats.distance_prepared_hit_count, 1) catch return error.IntegerOverflow;
+        return symbol;
+    }
+    if (!tree.prepared) {
+        tree.buildPreparedLookup();
+        tree.prepared = true;
+        stats.distance_prepared_build_count =
+            std.math.add(Counter, stats.distance_prepared_build_count, 1) catch return error.IntegerOverflow;
+    }
+    const packed_entry = tree.prepared_lookup[reader.peekBitsPadded(u16, PrefixCode(max_distance_alphabet_size).lookup_bits)];
+    if (packed_entry == 0) {
+        stats.distance_long_fallback_count =
+            std.math.add(Counter, stats.distance_long_fallback_count, 1) catch return error.IntegerOverflow;
+        return tree.table.decodeValueLongAfterLookup(reader, PrefixCode(max_distance_alphabet_size).lookup_bits);
+    }
+    stats.distance_prepared_hit_count =
+        std.math.add(Counter, stats.distance_prepared_hit_count, 1) catch return error.IntegerOverflow;
+    const bits: u4 = @truncate(packed_entry);
+    if (!reader.hasStagedBits(bits)) return error.TruncatedFrame;
+    reader.advanceBitsStagedAssumeAvailable(bits);
+    return (packed_entry >> 4) - 1;
+}
+
 fn readSummaryMinimalDistance(
     comptime tail_lookup: bool,
     header: *MinimalCompressedHeader,
@@ -23812,7 +23854,7 @@ fn readSummaryMinimalDistance(
 ) SummaryError!DecodedBrotliDistance {
     const implicit = lengths.distance_symbol_zero;
     try recordSummaryDistanceContext(stats, lengths.copy_len);
-    const symbol: u16 = if (implicit) 0 else blk: {
+    const symbol: u16 = if (implicit) 0 else outer: {
         try ensureDistanceBlock(header, reader);
         const context = distanceContext(lengths.copy_len);
         if (header.distance_block.current_type >= max_distance_block_types)
@@ -23821,12 +23863,31 @@ fn readSummaryMinimalDistance(
         if (tree_index >= max_distance_context_trees)
             return error.UnsupportedBrotliFeature;
         const tree = try distancePrefixForDecode(header, tree_index);
-        const decoded = if (comptime tail_lookup)
+        const decoded = if (stats) |tracked| blk: {
+            if (comptime tail_lookup) {
+                // Tail-9 roots use the table's internal lookup; mirror the
+                // hit/fallback split through the same entry-point primitives.
+                if (tree.single_symbol != null) {
+                    tracked.distance_prepared_hit_count =
+                        std.math.add(Counter, tracked.distance_prepared_hit_count, 1) catch return error.IntegerOverflow;
+                    break :blk try tree.decodeTailLookup9(reader);
+                }
+                const was_prepared = tree.prepared;
+                const decoded_tail = try tree.decodeTailLookup9(reader);
+                if (!was_prepared) {
+                    tracked.distance_prepared_build_count =
+                        std.math.add(Counter, tracked.distance_prepared_build_count, 1) catch return error.IntegerOverflow;
+                }
+                break :blk decoded_tail;
+            } else {
+                break :blk try decodePreparedDistanceTracked(tree, reader, tracked);
+            }
+        } else if (comptime tail_lookup)
             try tree.decodeTailLookup9(reader)
         else
             try tree.decodePrepared(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
-        break :blk decoded;
+        break :outer decoded;
     };
     const decoded: DecodedBrotliDistance = if (symbol < 16)
         .{

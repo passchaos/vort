@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "mozilla.65536.brotli.6.wire",
   "plain_path": "mozilla.65536.plain",
@@ -54,7 +54,10 @@
         356,
         530,
         2912
-      ]
+      ],
+      "distance_prepared_hits": 2614,
+      "distance_long_fallbacks": 15,
+      "distance_prepared_builds": 5
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       356,
       530,
       2912
-    ]
+    ],
+    "distance_prepared_hits": 2614,
+    "distance_long_fallbacks": 15,
+    "distance_prepared_builds": 5
   },
   "build": {
     "mode": "ReleaseFast",

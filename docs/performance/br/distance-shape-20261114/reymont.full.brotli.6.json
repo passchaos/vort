@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.brotli.6.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/reymont.full.plain",
@@ -54,7 +54,10 @@
         826,
         716,
         522356
-      ]
+      ],
+      "distance_prepared_hits": 516181,
+      "distance_long_fallbacks": 3115,
+      "distance_prepared_builds": 20
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       826,
       716,
       522356
-    ]
+    ],
+    "distance_prepared_hits": 516181,
+    "distance_long_fallbacks": 3115,
+    "distance_prepared_builds": 20
   },
   "build": {
     "mode": "ReleaseFast",

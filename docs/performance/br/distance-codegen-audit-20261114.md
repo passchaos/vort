@@ -51,7 +51,7 @@ bottleneck.
    slots, because the surrounding state (reader, ring, block switches) is
    unchanged.
 
-## Table-space measurement (schema v3)
+## Table-space measurement (schema v3/v4)
 
 A nine-bit internal tail lookup needs 512 bytes of free entry-array space
 (`canBuildTailLookup9`). The probe reports this separately from code width
@@ -81,6 +81,42 @@ inline tier, but it cannot cover the >9-bit symbols that dominate the
 cliff row. External `PackedLookup(9)` planes (the 2026-11-12 screen) add
 512 KiB for 256 trees and still cannot cover >9-bit codes, which is why
 they returned only ~1.05x.
+
+## Prepared-lookup hit-rate measurement (schema v4)
+
+A diagnostic-only mirror of `decodePrepared` now counts, on the summary
+replay path (production decoders still pass `stats = null`): nine-bit root
+hits, canonical long-code fallbacks and lazy prepared-lookup builds. It
+reuses the exact production primitives so replay bit positions are
+unchanged. Full-file results:
+
+| Fixture | Explicit distances | Builds | Memset traffic | Long fallback |
+| --- | ---: | ---: | ---: | ---: |
+| mozilla q11 (cliff) | 2,150,131 | 48,829 | 24.4 MiB | 4.50% |
+| mozilla q6 | 2,394,902 | 1,642 | 0.8 MiB | 0.84% |
+| nci q11 | 331,976 | 28 | 14 KiB | 20.20% |
+| ooffice q11 | 480,260 | 54 | 27 KiB | 28.16% |
+| mozilla 1 MiB q11 | 20,295 | 22 | 11 KiB | 7.56% |
+
+Two findings reshape the hot/cold split design:
+
+1. **The long-code fallback is rare on the cliff row (4.5%).** A hot path
+   covering the prepared-lookup hit captures 95.5% of explicit distances;
+   the canonical scan is a genuine cold root. The worst fallback rows
+   (ooffice 28%, nci 20%) are not the throughput cliff, so optimizing for
+   the cliff's common case does not sacrifice the matrix broadly.
+2. **Lazy builds dominate the memset cost only on the cliff row.** The
+   48,829 builds imply ~24.4 MiB of lookup-table zeroing versus kilobytes
+   on every other fixture; 32,789 of them concentrate in wide10 block 3,
+   where packed trees are repeatedly expanded into the single active
+   expansion slot. Builds are only 2.27% of explicit distance operations,
+   so moving them behind a noinline cold root isolates the whole memset
+   family from the hot loop without touching the steady state.
+
+This makes the hot/cold split concrete rather than speculative: the hot
+root handles block-switch-not-pending + prepared hit + short/regular
+staging; three cold roots take block switches, lazy lookup builds (with
+the packed expansion churn) and long-code fallbacks respectively.
 
 ## What this rules out and what remains
 

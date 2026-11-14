@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "reymont.65536.brotli.6.wire",
   "plain_path": "reymont.65536.plain",
@@ -54,7 +54,10 @@
         13,
         822,
         5709
-      ]
+      ],
+      "distance_prepared_hits": 6353,
+      "distance_long_fallbacks": 68,
+      "distance_prepared_builds": 4
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       13,
       822,
       5709
-    ]
+    ],
+    "distance_prepared_hits": 6353,
+    "distance_long_fallbacks": 68,
+    "distance_prepared_builds": 4
   },
   "build": {
     "mode": "ReleaseFast",

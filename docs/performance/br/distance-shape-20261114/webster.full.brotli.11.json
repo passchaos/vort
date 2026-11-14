@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/webster.full.plain",
@@ -54,7 +54,10 @@
         1408,
         11398,
         537298
-      ]
+      ],
+      "distance_prepared_hits": 534598,
+      "distance_long_fallbacks": 8744,
+      "distance_prepared_builds": 19
     },
     {
       "meta_block_index": 1,
@@ -102,7 +105,10 @@
         1128,
         9174,
         525112
-      ]
+      ],
+      "distance_prepared_hits": 520780,
+      "distance_long_fallbacks": 8122,
+      "distance_prepared_builds": 13
     },
     {
       "meta_block_index": 2,
@@ -150,7 +156,10 @@
         1176,
         9395,
         516368
-      ]
+      ],
+      "distance_prepared_hits": 514236,
+      "distance_long_fallbacks": 6365,
+      "distance_prepared_builds": 16
     },
     {
       "meta_block_index": 3,
@@ -198,7 +207,10 @@
         1248,
         8783,
         517600
-      ]
+      ],
+      "distance_prepared_hits": 513190,
+      "distance_long_fallbacks": 8291,
+      "distance_prepared_builds": 12
     },
     {
       "meta_block_index": 4,
@@ -246,7 +258,10 @@
         1228,
         9679,
         501902
-      ]
+      ],
+      "distance_prepared_hits": 498204,
+      "distance_long_fallbacks": 8889,
+      "distance_prepared_builds": 16
     }
   ],
   "aggregate": {
@@ -291,7 +306,10 @@
       6188,
       48429,
       2598280
-    ]
+    ],
+    "distance_prepared_hits": 2581008,
+    "distance_long_fallbacks": 40411,
+    "distance_prepared_builds": 76
   },
   "build": {
     "mode": "ReleaseFast",

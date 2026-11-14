@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "ooffice.65536.brotli.6.wire",
   "plain_path": "ooffice.65536.plain",
@@ -54,7 +54,10 @@
         410,
         2040,
         3766
-      ]
+      ],
+      "distance_prepared_hits": 4640,
+      "distance_long_fallbacks": 107,
+      "distance_prepared_builds": 3
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       410,
       2040,
       3766
-    ]
+    ],
+    "distance_prepared_hits": 4640,
+    "distance_long_fallbacks": 107,
+    "distance_prepared_builds": 3
   },
   "build": {
     "mode": "ReleaseFast",

@@ -92,13 +92,16 @@ fn run(init: std.process.Init) !void {
                 record.stats.distance_context_histogram[2],
                 record.stats.distance_context_histogram[3],
             },
+            .distance_prepared_hits = record.stats.distance_prepared_hit_count,
+            .distance_long_fallbacks = record.stats.distance_long_fallback_count,
+            .distance_prepared_builds = record.stats.distance_prepared_build_count,
         });
     }
     if (shape_index != report.distance_shapes.len) return error.ShapeRecordMismatch;
 
     const aggregate = aggregateShapes(report.distance_shapes, block_reports.items);
     const out_report = .{
-        .schema = "vort.brotli.distance-shape.v3",
+        .schema = "vort.brotli.distance-shape.v4",
         .diagnostic = true,
         .input_path = options.input,
         .plain_path = options.plain,
@@ -140,6 +143,9 @@ const Aggregate = struct {
     referenced_tail9_space_ineligible_trees: u64 = 0,
     tree_max_bits_histogram: [16]u64 = @splat(0),
     distance_context_histogram: [4]u64 = @splat(0),
+    distance_prepared_hits: u64 = 0,
+    distance_long_fallbacks: u64 = 0,
+    distance_prepared_builds: u64 = 0,
 };
 
 const BlockReport = struct {
@@ -161,6 +167,9 @@ const BlockReport = struct {
     packed_context3_rows: u32,
     tree_max_bits_histogram: [16]u32,
     distance_context_histogram: [4]u64,
+    distance_prepared_hits: u64,
+    distance_long_fallbacks: u64,
+    distance_prepared_builds: u64,
 };
 
 fn aggregateShapes(shapes: []const br.DecodeDistanceBlockShape, blocks: []const BlockReport) Aggregate {
@@ -188,6 +197,9 @@ fn aggregateShapes(shapes: []const br.DecodeDistanceBlockShape, blocks: []const 
         for (block.distance_context_histogram, 0..) |value, context| {
             total.distance_context_histogram[context] += value;
         }
+        total.distance_prepared_hits += block.distance_prepared_hits;
+        total.distance_long_fallbacks += block.distance_long_fallbacks;
+        total.distance_prepared_builds += block.distance_prepared_builds;
     }
     return total;
 }

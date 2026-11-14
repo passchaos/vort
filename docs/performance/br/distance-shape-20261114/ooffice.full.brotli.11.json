@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/ooffice.full.plain",
@@ -54,7 +54,10 @@
         89601,
         106572,
         452915
-      ]
+      ],
+      "distance_prepared_hits": 340782,
+      "distance_long_fallbacks": 135198,
+      "distance_prepared_builds": 46
     },
     {
       "meta_block_index": 1,
@@ -102,7 +105,10 @@
         193,
         1109,
         3033
-      ]
+      ],
+      "distance_prepared_hits": 4230,
+      "distance_long_fallbacks": 50,
+      "distance_prepared_builds": 8
     }
   ],
   "aggregate": {
@@ -147,7 +153,10 @@
       89794,
       107681,
       455948
-    ]
+    ],
+    "distance_prepared_hits": 345012,
+    "distance_long_fallbacks": 135248,
+    "distance_prepared_builds": 54
   },
   "build": {
     "mode": "ReleaseFast",

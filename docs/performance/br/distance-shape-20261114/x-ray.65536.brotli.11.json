@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "x-ray.65536.brotli.11.wire",
   "plain_path": "x-ray.65536.plain",
@@ -54,7 +54,10 @@
         3637,
         404,
         2012
-      ]
+      ],
+      "distance_prepared_hits": 5937,
+      "distance_long_fallbacks": 101,
+      "distance_prepared_builds": 3
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       3637,
       404,
       2012
-    ]
+    ],
+    "distance_prepared_hits": 5937,
+    "distance_long_fallbacks": 101,
+    "distance_prepared_builds": 3
   },
   "build": {
     "mode": "ReleaseFast",

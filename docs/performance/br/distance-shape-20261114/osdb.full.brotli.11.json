@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/osdb.full.plain",
@@ -54,7 +54,10 @@
         13872,
         2384,
         213551
-      ]
+      ],
+      "distance_prepared_hits": 199512,
+      "distance_long_fallbacks": 12297,
+      "distance_prepared_builds": 11
     },
     {
       "meta_block_index": 1,
@@ -102,7 +105,10 @@
         8821,
         1371,
         150052
-      ]
+      ],
+      "distance_prepared_hits": 139540,
+      "distance_long_fallbacks": 8908,
+      "distance_prepared_builds": 2
     }
   ],
   "aggregate": {
@@ -147,7 +153,10 @@
       22693,
       3755,
       363603
-    ]
+    ],
+    "distance_prepared_hits": 339052,
+    "distance_long_fallbacks": 21205,
+    "distance_prepared_builds": 13
   },
   "build": {
     "mode": "ReleaseFast",

@@ -35,6 +35,9 @@ pub fn apply(summary: *types.StreamSummary, stats: types.MetaBlockStats) Error!v
         total.* = std.math.add(Counter, total.*, count) catch return error.IntegerOverflow;
     for (&next.distance_context_histogram, stats.distance_context_histogram) |*total, count|
         total.* = std.math.add(Counter, total.*, count) catch return error.IntegerOverflow;
+    next.distance_prepared_hit_count = std.math.add(Counter, next.distance_prepared_hit_count, stats.distance_prepared_hit_count) catch return error.IntegerOverflow;
+    next.distance_long_fallback_count = std.math.add(Counter, next.distance_long_fallback_count, stats.distance_long_fallback_count) catch return error.IntegerOverflow;
+    next.distance_prepared_build_count = std.math.add(Counter, next.distance_prepared_build_count, stats.distance_prepared_build_count) catch return error.IntegerOverflow;
     next.lz77_copy_count = try core.stream_count.addLocal(next.lz77_copy_count, stats.lz77_copy_count);
     next.lz77_copy_bytes = try core.stream_count.addLocal(next.lz77_copy_bytes, stats.lz77_copy_bytes);
     next.max_lz77_distance = @max(next.max_lz77_distance, stats.max_lz77_distance);

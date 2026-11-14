@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "samba.65536.brotli.6.wire",
   "plain_path": "samba.65536.plain",
@@ -54,7 +54,10 @@
         24,
         1289,
         5622
-      ]
+      ],
+      "distance_prepared_hits": 6732,
+      "distance_long_fallbacks": 144,
+      "distance_prepared_builds": 4
     }
   ],
   "aggregate": {
@@ -99,7 +102,10 @@
       24,
       1289,
       5622
-    ]
+    ],
+    "distance_prepared_hits": 6732,
+    "distance_long_fallbacks": 144,
+    "distance_prepared_builds": 4
   },
   "build": {
     "mode": "ReleaseFast",

@@ -1,5 +1,5 @@
 {
-  "schema": "vort.brotli.distance-shape.v3",
+  "schema": "vort.brotli.distance-shape.v4",
   "diagnostic": true,
   "input_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.brotli.11.wire",
   "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/sao.full.plain",
@@ -54,7 +54,10 @@
         48531,
         35607,
         142791
-      ]
+      ],
+      "distance_prepared_hits": 256922,
+      "distance_long_fallbacks": 3118,
+      "distance_prepared_builds": 18
     },
     {
       "meta_block_index": 1,
@@ -102,7 +105,10 @@
         61182,
         25928,
         134088
-      ]
+      ],
+      "distance_prepared_hits": 248672,
+      "distance_long_fallbacks": 5268,
+      "distance_prepared_builds": 8
     },
     {
       "meta_block_index": 2,
@@ -150,7 +156,10 @@
         43608,
         18191,
         115135
-      ]
+      ],
+      "distance_prepared_hits": 198464,
+      "distance_long_fallbacks": 3168,
+      "distance_prepared_builds": 7
     }
   ],
   "aggregate": {
@@ -195,7 +204,10 @@
       153321,
       79726,
       392014
-    ]
+    ],
+    "distance_prepared_hits": 704058,
+    "distance_long_fallbacks": 11554,
+    "distance_prepared_builds": 33
   },
   "build": {
     "mode": "ReleaseFast",
