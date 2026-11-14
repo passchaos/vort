@@ -18486,6 +18486,52 @@ test "br payload rejects a literal Huffman symbol above the byte alphabet" {
     try std.testing.expectEqual(@as(usize, 0), written);
 }
 
+test "br external literal executor rejects a symbol above the byte alphabet" {
+    // Same isolation strategy as the prepared executor test, but drives the
+    // 10-bit external-lookup path. The single-symbol packed lookup encodes
+    // symbol 256; the executor's literal > 0xff check must reject it after a
+    // successful decode, proving the bound is enforced past the lookup layer.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var literal_lookups: [external_literal_lookup_tree_limit]ExternalLiteralLookup = undefined;
+    literal_lookups[0] = try ExternalLiteralLookup.initSingle(256);
+
+    var reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processExternalLiteralLookupCompressedPayload(
+            false,
+            false,
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+            &literal_lookups,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
