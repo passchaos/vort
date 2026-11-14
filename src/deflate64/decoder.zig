@@ -347,3 +347,89 @@ test "Deflate64 decoder enforces corruption and output limits" {
         decodeAllocLimited(std.testing.allocator, &encoded, 255),
     );
 }
+
+/// Build a final fixed-Huffman Deflate64 block carrying one match: length
+/// symbol 257 + 14 length-extra bits (length 3 + 16383 = 65536) and distance
+/// symbol 31 (the maximum 16-bit distance code). Used as the base for
+/// distance-boundary corruption cases below.
+fn fixedBlockMatchWire(max_distance: u16) ![]u8 {
+    var writer: bitstream.BitWriter = .{};
+    errdefer writer.deinit(std.testing.allocator);
+    // BFINAL=1, BTYPE=01 (fixed Huffman).
+    try writer.writeBits(std.testing.allocator, 0b011, 3);
+    try huffman.fixed_literal_encoder.writeSymbol(&writer, std.testing.allocator, 257);
+    try writer.writeBits(std.testing.allocator, max_distance, 14);
+    try huffman.fixed_distance_encoder.writeSymbol(&writer, std.testing.allocator, 31);
+    try huffman.fixed_literal_encoder.writeSymbol(&writer, std.testing.allocator, 256);
+    return writer.toOwnedSlice(std.testing.allocator);
+}
+
+test "Deflate64 decoder rejects a match beyond the 64 KiB distance window" {
+    // Distance symbol 31 decodes to 32769 + the 14-bit extra. The maximum
+    // legal value is 65536 (extra = 32767); one more crosses the window.
+    const wire = try fixedBlockMatchWire(32768);
+    defer std.testing.allocator.free(wire);
+    try std.testing.expectError(error.InvalidMatch, decodeAlloc(std.testing.allocator, wire));
+}
+
+test "Deflate64 decoder rejects a match with no history (distance on first byte)" {
+    // A length-3 match referencing distance one cannot run before any literal
+    // byte exists. Length symbol 257 needs no extra bits; distance symbol 0
+    // encodes distance 1 directly.
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 0b011, 3);
+    try huffman.fixed_literal_encoder.writeSymbol(&writer, std.testing.allocator, 257);
+    try huffman.fixed_distance_encoder.writeSymbol(&writer, std.testing.allocator, 0);
+    try huffman.fixed_literal_encoder.writeSymbol(&writer, std.testing.allocator, 256);
+    const wire = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(wire);
+    try std.testing.expectError(error.InvalidMatch, decodeAlloc(std.testing.allocator, wire));
+}
+
+test "Deflate64 decoder rejects a dynamic block with no end-of-block code" {
+    // A dynamic literal alphabet must assign a width to symbol 256 or the
+    // table cannot encode an end-of-block marker. Build the smallest such
+    // header: 257 literal codes, one distance code, four code-length codes,
+    // then expand every literal width to zero with repeat symbol 18.
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    // BFINAL=1, BTYPE=10 (dynamic Huffman).
+    try writer.writeBits(std.testing.allocator, 0b101, 3);
+    try writer.writeBits(std.testing.allocator, 0, 5); // HLIT -> 257 literals
+    try writer.writeBits(std.testing.allocator, 0, 5); // HDIST -> 1 distance
+    try writer.writeBits(std.testing.allocator, 0, 4); // HCLEN -> 4 CL codes
+    // CL order 16,17,18,0: only symbol 18 gets a 1-bit code.
+    try writer.writeBits(std.testing.allocator, 0, 3); // 16
+    try writer.writeBits(std.testing.allocator, 0, 3); // 17
+    try writer.writeBits(std.testing.allocator, 1, 3); // 18
+    try writer.writeBits(std.testing.allocator, 0, 3); // 0
+    // Symbol 18 carries 7-bit counts of 11..138 zeros.
+    var remaining: usize = 257;
+    while (remaining > 0) {
+        const run = @min(remaining, 138);
+        try writer.writeBits(std.testing.allocator, 0, 1); // the single 1-bit code
+        try writer.writeBits(std.testing.allocator, @as(u32, @intCast(run - 11)), 7);
+        remaining -= run;
+    }
+    // The single distance code also expands to zero.
+    try writer.writeBits(std.testing.allocator, 0, 1);
+    try writer.writeBits(std.testing.allocator, 0, 7); // run of 11 zeros, one used
+    const wire = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(wire);
+    try std.testing.expectError(error.InvalidDynamicBlockHeader, decodeAlloc(std.testing.allocator, wire));
+}
+
+test "Deflate64 decoder rejects a truncated fixed block" {
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 0b011, 3);
+    try huffman.fixed_literal_encoder.writeSymbol(&writer, std.testing.allocator, 'A');
+    const wire = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(wire);
+    // Drop every payload byte except the block header; the literal and the
+    // end-of-block marker are missing.
+    for (0..wire.len) |cut| {
+        try std.testing.expectError(error.TruncatedFrame, decodeAlloc(std.testing.allocator, wire[0..cut]));
+    }
+}
