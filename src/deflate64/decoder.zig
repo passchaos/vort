@@ -348,6 +348,32 @@ test "Deflate64 decoder enforces corruption and output limits" {
     );
 }
 
+test "Deflate64 allocating decoder rejects trailing bytes after the final block" {
+    // A final empty stored block: BFINAL=1/BTYPE=00, LEN=0, NLEN=0xffff.
+    const block = [_]u8{ 0x01, 0x00, 0x00, 0xff, 0xff };
+    // The exact block decodes cleanly through both entry points.
+    {
+        const decoded = try decodeAlloc(std.testing.allocator, &block);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqual(@as(usize, 0), decoded.len);
+        var output: [1]u8 = undefined;
+        const result = try decodeInto(&block, &output);
+        try std.testing.expectEqual(block.len, result.input_read);
+        try std.testing.expectEqual(@as(usize, 0), result.output_written);
+    }
+    // Any byte past the final block is TrailingData for the allocating
+    // one-shot API, which promises to consume the whole input.
+    var with_trailing: [block.len + 1]u8 = undefined;
+    @memcpy(with_trailing[0..block.len], &block);
+    with_trailing[block.len] = 0x5a;
+    try std.testing.expectError(error.TrailingData, decodeAlloc(std.testing.allocator, &with_trailing));
+    // The fixed-buffer entry point reports the consumed block length instead
+    // and leaves the trailing byte untouched, so no error is raised there.
+    var output: [1]u8 = undefined;
+    const result = try decodeInto(&with_trailing, &output);
+    try std.testing.expectEqual(block.len, result.input_read);
+}
+
 /// Build a final fixed-Huffman Deflate64 block carrying one match: length
 /// symbol 257 + 14 length-extra bits (length 3 + 16383 = 65536) and distance
 /// symbol 31 (the maximum 16-bit distance code). Used as the base for
