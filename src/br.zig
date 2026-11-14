@@ -18741,6 +18741,166 @@ test "br paired literal lookup rejects symbol 256 at preparation" {
     try lookups.prepareSingle(0, 255);
 }
 
+test "br large-window prepared executor rejects a literal symbol above the byte alphabet" {
+    // Large-window headers share the minimal header field layout with wider
+    // alphabets (257 literal / 705 command / 544 distance), so the same
+    // hand-built isolation applies. Command symbol 8 inserts one literal.
+    var header: LargeWindowCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var reader = bitstream.BitReader.init(&.{});
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processDecodedCompressedPayloadLargeWindow(
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
+test "br large-window tail executor rejects a literal symbol above the byte alphabet" {
+    // Same isolated header as the prepared large-window test, but drives the
+    // tail-lookup variant. With auxiliary_tail_lookups=false the command path
+    // is the generic prepared reader, so a single-symbol command tree needs no
+    // bit input; the literal tail decode surfaces symbol 256.
+    var header: LargeWindowCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var reader = bitstream.BitReader.init(&.{});
+    var output: [32]u8 = @splat(0xa5);
+    const output_slice: []u8 = &output;
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        processTailLookupCompressedPayloadLargeWindow(
+            false,
+            &reader,
+            output_slice,
+            &written,
+            1,
+            &last_distances,
+            default_window_bits,
+            &header,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), written);
+}
+
+test "br skip executor rejects a literal symbol above the byte alphabet" {
+    // The summary/skip path decodes into a LiteralHistory instead of an
+    // output buffer. With no stats and no dictionary it still enforces the
+    // literal byte bound before pushing the symbol.
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var reader = bitstream.BitReader.init(&.{});
+    var history: LiteralHistory = .{};
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        skipDecodedCompressedPayload(
+            false, // literal_tail_lookup
+            false, // auxiliary_tail_lookups
+            &reader,
+            0, // start_written
+            1, // meta_block_end: one insert byte
+            &last_distances,
+            &history,
+            null,
+            default_window_bits,
+            &header,
+            null,
+        ),
+    );
+}
+
+test "br large-window skip executor rejects a literal symbol above the byte alphabet" {
+    // Large-window summary/skip path with a LargeWindowCompressedHeader and
+    // no stats or dictionary. The single-symbol literal tree emits 256 and
+    // the executor must reject it before pushing into the LiteralHistory.
+    var header: LargeWindowCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.command_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.distance_block = .{ .block_type_count = 1, .remaining = max_uncompressed_meta_block_len };
+    header.literal_tree_count = 1;
+    header.distance_tree_count = 1;
+    header.npostfix = 0;
+    header.ndirect = 16;
+    header.literal_context_modes[0] = 0;
+    @memset(&header.literal_context_map, 0);
+    @memset(&header.distance_context_map, 0);
+    header.literal_trees[0] = .{ .single_symbol = 256 };
+    header.insert_copy_trees[0] = .{ .single_symbol = 8 };
+    header.distance_trees[0] = .{ .single_symbol = 0 };
+
+    var reader = bitstream.BitReader.init(&.{});
+    var history: LiteralHistory = .{};
+    var last_distances = initial_last_distances;
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        skipDecodedCompressedPayloadLargeWindow(
+            false, // literal_tail_lookup
+            false, // auxiliary_tail_lookups
+            &reader,
+            0,
+            1,
+            &last_distances,
+            &history,
+            null,
+            default_window_bits,
+            &header,
+            null,
+        ),
+    );
+}
+
 test "br meta-block diagnostic contracts" {
     _ = @import("br/diagnostics/distance_shape.zig");
     try @import("br/diagnostics/meta_blocks_tests.zig").contracts(@This());
