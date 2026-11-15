@@ -36,3 +36,24 @@ The dominant 43% sequence-executor cost remains the higher-leverage target, but
 it too is structural (executor fusion), matching the prior rejection of cursor
 promotion, branch-first, and wider wildcopy micro-edits. This package makes any
 future zstd candidate immediately A/B-testable against the saved baselines.
+
+## Frame-state memcpy candidate already resolved (2026-11-16)
+
+The 2026-11-10 note flagged a 1.71% `memcpyFast` from materializing a 13,440-byte
+`SequenceFrameState` after `initialSequenceFrameState`. Re-checking current
+source shows this no longer exists as an open issue:
+
+- `initialSequenceFrameState` returns `.{}` directly when there is no dictionary
+  (`dictionary orelse return .{}`, src/zstd.zig 12205), so the no-dictionary path
+  never copies the large state.
+- The reusable workspace entry point
+  `decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace` already declares
+  `var frame_state: SequenceFrameState = .{}` (12413) and is hard-wired to the
+  no-dictionary validation path.
+- Default `SequenceFrameState = .{}` initialization is now used at 67 sites.
+
+So the only previously-open local memcpy candidate is already resolved, and the
+remaining 1.32x weak-row gap stays gated on the structural executor/
+table-representation fusion, which is an architecture-level project (a table
+representation the executor consumes directly), not an isolated edit. No new
+micro-change with positive expected value remains on the current profile.
