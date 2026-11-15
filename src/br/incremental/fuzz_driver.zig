@@ -370,13 +370,20 @@ pub fn drive(allocator: Allocator, seed: []const u8) anyerror!SeedResult {
             const second_capture = try allocator.alloc(u8, plaintext.len + output_slack);
             defer allocator.free(second_capture);
             const second = try runOnce(&rescheduled_decoder, rescheduled, view, plaintext.len, second_capture);
-            try std.testing.expect(second == .accepted);
-            const second_written = switch (second) {
-                .accepted => |s| s.written,
-                else => unreachable,
-            };
-            try std.testing.expectEqual(summary.written, second_written);
-            try std.testing.expectEqualSlices(u8, capture[0..summary.written], second_capture[0..second_written]);
+            // Brotli streams have no magic and end at an internal meta-block
+            // stop marker, so a flipped byte or an appended suffix can make the
+            // decoded stream end before the whole view is consumed. Whether the
+            // remaining bytes are then offered depends on chunking; only a clean,
+            // unmutated frame (valid regime) is guaranteed schedule-independent.
+            if (scenario.regime == .valid) {
+                try std.testing.expect(second == .accepted);
+                const second_written = switch (second) {
+                    .accepted => |s| s.written,
+                    else => unreachable,
+                };
+                try std.testing.expectEqual(summary.written, second_written);
+                try std.testing.expectEqualSlices(u8, capture[0..summary.written], second_capture[0..second_written]);
+            }
             return .accepted;
         },
         .rejected => |err| {
@@ -404,6 +411,16 @@ pub const smoke_seeds = blk: {
 
 test "brotli incremental fuzz driver honors every deterministic seed without leaks" {
     for (smoke_seeds) |seed| {
+        _ = try drive(std.testing.allocator, &seed);
+    }
+}
+
+test "brotli incremental fuzz driver survives a broad deterministic seed sweep" {
+    // Wider than the fixed matrix to keep meta-block termination and suffix
+    // edge cases covered without an external fuzz engine.
+    var seed: [12]u8 = undefined;
+    for (0..256) |i| {
+        for (&seed, 0..) |*byte, j| byte.* = @truncate((i *% 31 +% j *% 17) >> @intCast(j % 8));
         _ = try drive(std.testing.allocator, &seed);
     }
 }

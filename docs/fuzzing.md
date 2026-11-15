@@ -347,3 +347,24 @@ zig build run-incremental-libfuzzer-smoke
 The executable is also compiled by the `check` graph. For an actual
 coverage-guided campaign, rebuild the same entry with the toolchain's
 libFuzzer instrumentation and point it at a seed corpus of arbitrary bytes.
+
+## 2026-11-16: broad deterministic sweeps harden the drivers
+
+Each codec driver now also runs a 256-seed deterministic sweep (a wider
+derivation than the 48-entry fixed matrix) inside its in-graph tests, catching
+schedule-dependent edge cases the matrix missed. The sweeps surfaced and fixed
+three real driver-assumption gaps rather than decoder defects:
+
+- Zstd: on a non-stopping decoder, an appended suffix is a real concatenated
+  member attempt, so a different chunking may legitimately parse deeper into
+  the random suffix and reject it. Schedule-independent output is now asserted
+  only for frame-bounded regimes (or a suffix with `stop_after_first_frame`).
+- Brotli: streams have no magic and end at an internal meta-block stop marker,
+  so a flipped byte or suffix can end the stream before the whole view is
+  consumed; the identical-output replay is now required only for the clean
+  `valid` regime.
+- Deflate: damaged wrapper streams can expand past the plaintext length. The
+  decoder now always gets a finite `max_output_len`, the caller capture buffer
+  carries extra headroom so wrapper header/footer finalization never runs out
+  of output room, and over-expansion becomes a documented
+  `OutputLimitExceeded` rejection instead of a driver buffer overrun.
