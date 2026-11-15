@@ -16,6 +16,7 @@ pub const Decoder = struct {
     staged_bits: u6 = 0,
     payload_remaining: usize = 0,
     metadata: bool = false,
+    final_meta_block: bool = false,
     total_input: Counter = 0,
     total_output: Counter = 0,
     stream_input: Counter = 0,
@@ -196,7 +197,7 @@ pub const Decoder = struct {
                 }
                 if (self.metadata) try self.recordMetadataBlock();
                 self.metadata = false;
-                self.phase = .header;
+                self.phase = if (self.final_meta_block) .done else .header;
             }
 
             if (self.phase == .done) {
@@ -235,12 +236,16 @@ pub const Decoder = struct {
                 switch (self.header_state) {
                     .is_last => {
                         const is_last = try self.readBits(input, &input_read, 1) orelse return result(input_read, output_written, .need_input);
-                        self.header_state = if (is_last != 0) .last_empty else .nibbles;
+                        self.final_meta_block = is_last != 0;
+                        self.header_state = if (self.final_meta_block) .last_empty else .nibbles;
                         continue;
                     },
                     .last_empty => {
                         const empty = try self.readBits(input, &input_read, 1) orelse return result(input_read, output_written, .need_input);
-                        if (empty == 0) return self.fail(.header, error.UnsupportedBrotliFeature);
+                        if (empty == 0) {
+                            self.header_state = .nibbles;
+                            continue;
+                        }
                         self.header_state = .padding;
                         self.metadata = false;
                         self.payload_remaining = 0;
@@ -251,6 +256,7 @@ pub const Decoder = struct {
                             self.metadata = true;
                             self.header_state = .metadata_reserved;
                         } else {
+                            if (self.final_meta_block) return self.fail(.header, error.UnsupportedBrotliFeature);
                             self.metadata = false;
                             self.length_width = @intCast((4 + code) * 4);
                             self.header_state = .block_len;
@@ -305,7 +311,7 @@ pub const Decoder = struct {
                         }
                         if (self.metadata and self.payload_remaining == 0) try self.recordMetadataBlock();
                         self.normalizeAlignedPayload(&input_read);
-                        self.phase = if (self.payload_remaining == 0) .header else .payload;
+                        self.phase = if (self.payload_remaining != 0) .payload else if (self.final_meta_block) .done else .header;
                         self.header_state = .is_last;
                         continue;
                     },

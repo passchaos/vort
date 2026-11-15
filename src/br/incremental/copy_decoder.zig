@@ -677,8 +677,7 @@ pub fn Decoder(comptime Codec: type) type {
                             };
                             if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
                             if (self.metadata and self.metadata_remaining == 0) {
-                                try self.recordMetadataBlock();
-                                self.phase = .trailer;
+                                try self.finishMetadataBlock();
                             } else self.phase = if (self.metadata) .metadata else .stored;
                             self.next_header_state = .is_last;
                             break;
@@ -710,8 +709,7 @@ pub fn Decoder(comptime Codec: type) type {
                     input_read += n;
                     self.metadata_remaining -= n;
                     if (self.metadata_remaining != 0) return result(input_read, output_written, .need_input);
-                    try self.recordMetadataBlock();
-                    self.phase = .trailer;
+                    try self.finishMetadataBlock();
                 },
                 .dictionary => {
                     if (self.dictionary_source == .compound) {
@@ -1058,6 +1056,11 @@ pub fn Decoder(comptime Codec: type) type {
         fn validateFinalOutputSize(self: *Self) Error!void {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(.trailer, error.SizeMismatch);
+        }
+        fn finishMetadataBlock(self: *Self) Error!void {
+            try self.recordMetadataBlock();
+            if (self.final_meta_block) try self.validateFinalOutputSize();
+            self.phase = if (self.final_meta_block) .padding else .trailer;
         }
         fn recordMetadataBlock(self: *Self) Error!void {
             const count = stream_count.add(self.metadata_block_count, 1) catch

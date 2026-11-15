@@ -106,9 +106,15 @@ pub fn inspect(comptime Codec: type, io: std.Io, allocator: std.mem.Allocator, s
         };
         switch (meta) {
             .end => unreachable,
-            .metadata => {
+            .metadata => |final| {
                 record.kind = .metadata;
                 try Codec.skipMetadata(&reader);
+                if (final) {
+                    record.payload_end = reader.bitPosition();
+                    records.appendAssumeCapacity(record);
+                    try Codec.finish(reader);
+                    return own(allocator, window_bits, history_bytes, &output, &records, &shapes);
+                }
             },
             .uncompressed => |len| {
                 record.kind = .stored;

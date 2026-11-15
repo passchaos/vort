@@ -318,6 +318,8 @@ pub fn Decoder(comptime Codec: type) type {
                     ) catch |err| return self.failWithProgress(self.phase, self.mapHistoryError(err), input_read, output_written);
                     self.window_prefix_offset += @intCast(inner.progress.input_read);
                     output_written += inner.progress.output_written;
+                    if (inner.status == .done and input_read != input.len and !self.options.allow_trailing_data)
+                        return self.failWithProgress(.done, error.TrailingData, input_read, output_written);
                     if (inner.status == .done or inner.status == .need_output)
                         return self.completeStep(input_read, output_written, inner.status);
                     if (self.window_prefix_offset < self.window_prefix_len) {
@@ -349,6 +351,8 @@ pub fn Decoder(comptime Codec: type) type {
                         return self.failWithProgress(.input, error.CorruptFrame, input_read, output_written);
                     continue;
                 }
+                if (inner.status == .done and input_read != input.len and !self.options.allow_trailing_data)
+                    return self.failWithProgress(.done, error.TrailingData, input_read, output_written);
                 return self.completeStep(input_read, output_written, inner.status);
             }
         }

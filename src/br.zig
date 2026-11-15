@@ -1413,7 +1413,13 @@ const DecodeBudgetCodec = struct {
         var reader = bitstream.BitReader.init(stream);
         _ = try readWindowInfo(&reader, options);
         while (true) switch (try readStreamMetaBlockHeader(&reader)) {
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    _ = try finishStreamPrefix(reader);
+                    return true;
+                }
+            },
             .end => {
                 _ = try finishStreamPrefix(reader);
                 return true;
@@ -2389,6 +2395,10 @@ pub const StaticDictionaryStreamEncoder = struct {
         return encoded.len;
     }
 };
+
+test "Brotli final metadata public decode contracts" {
+    try @import("br/incremental/final_metadata_tests.zig").contracts(@This());
+}
 
 test {
     _ = incremental_tests;
@@ -15173,7 +15183,14 @@ pub fn decodeStreamPrefixAllocLimited(allocator: std.mem.Allocator, stream: []co
                 const bytes = try out.toOwnedSlice(allocator);
                 return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    const input_read = try finishStreamPrefix(reader);
+                    const bytes = try out.toOwnedSlice(allocator);
+                    return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
+                }
+            },
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
@@ -15254,7 +15271,14 @@ fn decodeStreamPrefixAllocLimitedWithOptionsInternal(allocator: std.mem.Allocato
                 const bytes = try out.toOwnedSlice(allocator);
                 return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    const input_read = try finishStreamPrefix(reader);
+                    const bytes = try out.toOwnedSlice(allocator);
+                    return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
+                }
+            },
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
@@ -15470,7 +15494,7 @@ fn decodeStreamPrefixAppendExactSizeWithOptionsInternal(allocator: std.mem.Alloc
 
 const StreamMetaBlockHeader = union(enum) {
     end,
-    metadata,
+    metadata: bool,
     compressed: struct {
         decoded_len: usize,
         final: bool,
@@ -15489,7 +15513,7 @@ fn readStreamMetaBlockHeader(reader: *bitstream.BitReader) Error!StreamMetaBlock
         0b10 => 6,
         0b11 => 0,
     };
-    if (mnibbles == 0) return .metadata;
+    if (mnibbles == 0) return .{ .metadata = final };
 
     const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
     if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
@@ -15529,7 +15553,12 @@ pub fn decodeStreamPrefixInto(stream: []const u8, output: []u8) Error!DecodePref
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |header| {
                 try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
                 if (header.final) {
@@ -15582,7 +15611,12 @@ pub noinline fn decodeStreamPrefixIntoWithOptions(stream: []const u8, output: []
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |header| {
                 try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (header.final) {
@@ -15661,7 +15695,12 @@ noinline fn decodeLargeStreamPrefixInto(stream: []const u8, output: []u8) Error!
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |meta| {
                 try processLargeCompressedMetaBlock(&reader, output, &written, meta.decoded_len, &last_distances, window_bits);
                 if (meta.final) {
@@ -15688,7 +15727,12 @@ noinline fn decodeLargeStreamPrefixIntoWithOptions(stream: []const u8, output: [
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |meta| {
                 try processLargeCompressedMetaBlockWithOptions(&reader, output, &written, meta.decoded_len, &last_distances, window);
                 if (meta.final) {
@@ -16174,6 +16218,18 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.metadata_bytes = std.math.add(Counter, summary.metadata_bytes, metadata_len) catch return error.IntegerOverflow;
             summary.uses_metadata = true;
             summary.stored_only = false;
+            if (is_last) {
+                const input_read = finishStreamPrefix(reader) catch |err| {
+                    recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                    return err;
+                };
+                if (prefix_input_read) |published| published.* = input_read else if (input_read != stream.len) {
+                    recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                    return error.TrailingData;
+                }
+                summary.input_bytes = input_read;
+                return summary;
+            }
             continue;
         }
         const len_minus_one = reader.readBits(u32, @intCast(mnibbles * 4)) catch |err| {
@@ -17944,7 +18000,13 @@ fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u
                 try ensureZeroPaddingAndEnd(reader);
                 return starts.toOwnedSlice(allocator);
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return starts.toOwnedSlice(allocator);
+                }
+            },
             .compressed => |meta| {
                 try starts.append(allocator, reader.bitPosition());
                 const end = std.math.add(usize, written, meta.decoded_len) catch return error.IntegerOverflow;
