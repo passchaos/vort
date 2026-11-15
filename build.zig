@@ -2517,6 +2517,21 @@ pub fn build(b: *std.Build) void {
     const libfuzzer_smoke_step = b.step("run-libfuzzer-smoke", "Run exported LLVMFuzzerTestOneInput smoke");
     libfuzzer_smoke_step.dependOn(&run_libfuzzer_smoke.step);
 
+    const incremental_libfuzzer_smoke_exe = b.addExecutable(.{
+        .name = "vort-incremental-libfuzzer-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/incremental_fuzz_libfuzzer.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_incremental_libfuzzer_smoke = b.addRunArtifact(incremental_libfuzzer_smoke_exe);
+    const incremental_libfuzzer_smoke_step = b.step("run-incremental-libfuzzer-smoke", "Run incremental Zstd/Brotli/Deflate LLVMFuzzerTestOneInput smoke");
+    incremental_libfuzzer_smoke_step.dependOn(&run_incremental_libfuzzer_smoke.step);
+
     const afl_smoke_exe = b.addExecutable(.{
         .name = "vort-afl-smoke",
         .root_module = b.createModule(.{
@@ -8033,6 +8048,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(br_public_wasm_check);
     check_step.dependOn(br_large_wasm_check);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
+    check_step.dependOn(&incremental_libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&codec_differential_fuzz_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);

@@ -327,3 +327,23 @@ zig build run-deflate-incremental-fuzz-smoke
 The runner is compiled by the `check` graph and exits non-zero on any violated
 invariant. All three primary codecs (Zstd, Brotli, Deflate) now share the same
 bounded incremental schedule/canary fuzz shape.
+
+## 2026-11-15: coverage-guided entry for the incremental drivers
+
+`tools/incremental_fuzz_libfuzzer.zig` exports
+`LLVMFuzzerTestOneInput` over the three incremental `drive` functions. Because
+each driver derives its wire mutation and step schedule from an opaque seed,
+feeding arbitrary fuzzer bytes to this entry explores the full
+schedule/canary/resource/sticky-error state space beyond the fixed 48-seed
+matrices; the raw-byte `fuzz_target` harness still covers only one-shot
+decoding. Any violated driver invariant or real allocation failure returns
+non-zero so the engine preserves the crashing input. A debug `main` provides a
+no-runtime smoke:
+
+```sh
+zig build run-incremental-libfuzzer-smoke
+```
+
+The executable is also compiled by the `check` graph. For an actual
+coverage-guided campaign, rebuild the same entry with the toolchain's
+libFuzzer instrumentation and point it at a seed corpus of arbitrary bytes.
