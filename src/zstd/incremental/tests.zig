@@ -498,3 +498,71 @@ fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8
     }
     return try frame.toOwnedSlice(std.testing.allocator);
 }
+
+test "Zstd frame chunks decode matches the whole-frame decode" {
+    const a = std.testing.allocator;
+    const payload = "zstd chunked input boundary payload. " ** 256;
+    const frame = try zstd.encodeNativeFrameAlloc(a, payload);
+    defer a.free(frame);
+    const whole = try zstd.decodeFrameAlloc(a, frame);
+    defer a.free(whole);
+
+    // Split the compressed frame at several boundaries and decode the chunks.
+    const cuts = [_]usize{ 1, 7, frame.len / 3, frame.len / 2, frame.len - 1 };
+    const scratch = try a.alloc(u8, frame.len);
+    defer a.free(scratch);
+    for (cuts) |cut| {
+        const clamped = @min(cut, frame.len - 1);
+        const chunks = [_][]const u8{ frame[0..clamped], frame[clamped..] };
+
+        const via_alloc = try zstd.decodeFrameChunksAlloc(a, &chunks, scratch);
+        defer a.free(via_alloc);
+        try std.testing.expectEqualSlices(u8, whole, via_alloc);
+
+        var out: [payload.len]u8 = undefined;
+        const written = try zstd.decodeFrameChunksInto(&chunks, scratch, &out);
+        try std.testing.expectEqual(payload.len, written);
+        try std.testing.expectEqualSlices(u8, whole, &out);
+    }
+}
+
+test "Zstd frame chunks exact-size and limited contracts" {
+    const a = std.testing.allocator;
+    const payload = "zstd chunk exact and limited contract payload. " ** 128;
+    const frame = try zstd.encodeNativeFrameAlloc(a, payload);
+    defer a.free(frame);
+    const chunks = [_][]const u8{ frame[0..5], frame[5..] };
+    const scratch = try a.alloc(u8, frame.len);
+    defer a.free(scratch);
+
+    // Exact size accepts the matching length and rejects a wrong one.
+    const exact = try zstd.decodeFrameChunksAllocExactSize(a, &chunks, scratch, payload.len);
+    defer a.free(exact);
+    try std.testing.expectEqualSlices(u8, payload, exact);
+    try std.testing.expectError(
+        error.SizeMismatch,
+        zstd.decodeFrameChunksAllocExactSize(a, &chunks, scratch, payload.len + 1),
+    );
+
+    // The limit must be at least the decoded length; a smaller one is rejected.
+    const limited = try zstd.decodeFrameChunksAllocLimited(a, &chunks, scratch, payload.len);
+    defer a.free(limited);
+    try std.testing.expectEqualSlices(u8, payload, limited);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        zstd.decodeFrameChunksAllocLimited(a, &chunks, scratch, payload.len - 1),
+    );
+}
+
+test "Zstd frame chunks reject an undersized scratch buffer" {
+    const a = std.testing.allocator;
+    const payload = "zstd chunk scratch buffer contract payload. " ** 64;
+    const frame = try zstd.encodeNativeFrameAlloc(a, payload);
+    defer a.free(frame);
+    const chunks = [_][]const u8{ frame[0..4], frame[4..] };
+    var tiny: [3]u8 = undefined;
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        zstd.decodeFrameChunksAlloc(a, &chunks, &tiny),
+    );
+}
