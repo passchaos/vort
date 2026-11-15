@@ -41,3 +41,27 @@ test "Gzip chunks size preflight is split-insensitive" {
         try std.testing.expectEqual(payload.len, size);
     }
 }
+
+test "Zlib chunks size preflight is split-insensitive" {
+    const a = std.testing.allocator;
+    const payload = "zlib chunked size preflight payload. " ** 96;
+    const encoded = try deflate.encodeZlibFixedAlloc(a, payload);
+    defer a.free(encoded);
+
+    const decoded = try deflate.decodeZlibAlloc(a, encoded);
+    defer a.free(decoded);
+
+    const compressed_scratch = try a.alloc(u8, encoded.len);
+    defer a.free(compressed_scratch);
+    const output_scratch = try a.alloc(u8, payload.len + 64);
+    defer a.free(output_scratch);
+
+    const cuts = [_]usize{ 2, 11, encoded.len / 3, encoded.len - 1 };
+    for (cuts) |cut| {
+        const clamped = @min(cut, encoded.len - 1);
+        const chunks = [_][]const u8{ encoded[0..clamped], encoded[clamped..] };
+        const size = try deflate.decodedZlibChunksSize(&chunks, compressed_scratch, output_scratch);
+        try std.testing.expectEqual(payload.len, size);
+    }
+    try std.testing.expectEqual(decoded.len, payload.len);
+}
