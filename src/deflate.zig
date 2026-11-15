@@ -13402,6 +13402,38 @@ fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngIm
     };
 }
 
+test "png filter0 dynamic entry rejects non-dynamic deflate block types" {
+    // The dynamic-only PNG entry requires BTYPE=10 in every block. A stored
+    // zlib stream and a fixed-Huffman zlib stream both carry valid payloads
+    // for the general decoder but must be rejected here with
+    // UnsupportedDeflateFeature, matching the fixed-block case already covered
+    // in the neighboring test.
+    const row_len = 16;
+    const row_count = 2;
+    const info = try pngImageInfo(row_len, row_count, 8, .grayscale);
+    var filtered: [row_count * (row_len + 1)]u8 = undefined;
+    for (0..row_count) |row| {
+        const start = row * (row_len + 1);
+        filtered[start] = 0;
+        for (0..row_len) |column| filtered[start + 1 + column] = @truncate(row * 7 + column);
+    }
+    var output: [row_count * row_len]u8 = undefined;
+
+    const stored = try encodeZlibStoredAlloc(std.testing.allocator, &filtered);
+    defer std.testing.allocator.free(stored);
+    try std.testing.expectError(
+        error.UnsupportedDeflateFeature,
+        decodePngFilter0DynamicZlibImageWithOptions(stored, info, .{}, &output),
+    );
+
+    const fixed = try encodeZlibFixedWithOptionsAlloc(std.testing.allocator, &filtered, optionsForLevel(.default));
+    defer std.testing.allocator.free(fixed);
+    try std.testing.expectError(
+        error.UnsupportedDeflateFeature,
+        decodePngFilter0DynamicZlibImageWithOptions(fixed, info, .{}, &output),
+    );
+}
+
 test "png filter0 dynamic direct decode matches general reconstruction and rejects fallback shapes" {
     const row_len = 257;
     const row_count = 37;
