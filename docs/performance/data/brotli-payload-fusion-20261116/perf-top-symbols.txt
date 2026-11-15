@@ -1,0 +1,16 @@
+    23.09%  vort-br-referen  vort-br-reference-bench  [.] compiler_rt.memset
+    22.02%  vort-br-referen  vort-br-reference-bench  [.] br.processTailLookupCompressedPayload__anon_52497
+     8.44%  vort-br-referen  vort-br-reference-bench  [.] crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round
+     5.96%  vort-br-referen  vort-br-reference-bench  [.] compiler_rt.memcpy.memcpyFast
+     4.97%  vort-br-referen  vort-br-reference-bench  [.] br.readPrefixCodeRuntimeInto__anon_36963
+     2.82%  vort-br-referen  vort-br-reference-bench  [.] br.PrefixCode(256).decodePrepared__anon_37435
+     2.23%  vort-br-referen  vort-br-reference-bench  [.] reference_bench.main
+     2.13%  vort-br-referen  vort-br-reference-bench  [.] br.fast_bit_reader.Reader.peekBitsPadded__anon_37627
+     1.99%  vort-br-referen  vort-br-reference-bench  [.] br.readMinimalCompressedHeaderInto
+     1.83%  vort-br-referen  vort-br-reference-bench  [.] br.readPrefixCodeRuntimeInto__anon_36944
+     1.70%  vort-br-referen  vort-br-reference-bench  [.] br.processMinimalCompressedMetaBlock
+     1.28%  vort-br-referen  vort-br-reference-bench  [.] br.code_length_decoder.Decoder.init
+     1.14%  vort-br-referen  libbrotlienc.so.1.0.9    [.] 0x00000000000375d7
+     0.98%  vort-br-referen  vort-br-reference-bench  [.] br.readCodeLengthCodeLength
+     0.85%  vort-br-referen  vort-br-reference-bench  [.] br.PrefixCode(704).decodePrepared__anon_35821
+     0.71%  vort-br-referen  vort-br-reference-bench  [.] br.readContextMap

@@ -49,3 +49,26 @@ not use the all-row geometric mean as the payload-candidate metric.
 - The per-command phase dispatch is flat at ~1-5% per instruction; only a
   structural goto-style fusion can move it, which is why this needs the full
   A/B cycle rather than a local edit.
+
+## perf symbol profile (2026-11-16)
+
+`perf record -g` over `vort-br-reference-bench --iterations 200 --vort-only`
+(703 samples); top self-time symbols archived in `perf-top-symbols.txt`.
+The bench drives the one-shot `decodeStreamInto` path, which is the surface
+the ledger gap measures.
+
+| symbol | self share | note |
+| --- | ---: | --- |
+| `compiler_rt.memset` | 23.09% | aggregated across header/prefix-code table zeroing in `readMinimalCompressedHeaderInto` and several `readPrefixCodeRuntimeInto`; many small, correctness-required clears rather than one removable fill |
+| `processTailLookupCompressedPayload` | 22.02% | the payload command/literal loop; insert loop already keeps `previous`/`second_previous` in registers across the run |
+| `Sha2x32.round` | 8.44% | content checksum; mandatory for checksummed frames, a shared cross-codec crypto path rather than a brotli-local lever |
+| `memcpyFast` | 5.96% | match/copy spans |
+| `readPrefixCodeRuntimeInto` variants | ~8.8% combined | Huffman table build |
+
+Implication: there is no high-confidence local edit that clears the 3%
+adoption bar. The memset and SHA-256 shares are structural (table build and
+mandatory hashing); the payload loop itself is already register-tight. The
+candidate work therefore stays a structural payload fusion (or a separate
+table-build reuse / SHA acceleration project), each requiring its own paired
+A/B rather than an opportunistic tweak.
+
