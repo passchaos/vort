@@ -611,3 +611,40 @@ test "Zstd frame chunks decode with a raw-content dictionary" {
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, whole, &out);
 }
+
+test "Zstd encoded frame bound always covers the real encoded length" {
+    const a = std.testing.allocator;
+
+    // Incompressible random and compressible repeated inputs, both heap-owned
+    // to avoid any static-memory alias handling in the encoder.
+    const random_payload = try a.alloc(u8, 4096);
+    defer a.free(random_payload);
+    var rng: u32 = 0x9e37_79b9;
+    for (random_payload) |*byte| {
+        rng = rng *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(rng >> 16);
+    }
+    const text_payload = try a.alloc(u8, 256);
+    defer a.free(text_payload);
+    @memset(text_payload, 'z');
+
+    const inputs = [_][]const u8{ "", "a", random_payload, text_payload };
+    // Default options and an explicit checksum variant must both be bounded.
+    const option_sets = [_]zstd.NativeFrameOptions{
+        .{},
+        .{ .content_checksum = false },
+    };
+    for (inputs) |input| {
+        for (option_sets) |options| {
+            const bound = try zstd.encodedNativeFrameBoundWithOptions(input.len, options);
+            const encoded = try zstd.encodeNativeFrameWithOptionsAlloc(a, input, options);
+            defer a.free(encoded.frame);
+            try std.testing.expect(encoded.frame.len <= bound);
+        }
+    }
+
+    // The empty-input bound must still admit the one-block empty frame.
+    const empty_encoded = try zstd.encodeNativeFrameAlloc(a, "");
+    defer a.free(empty_encoded);
+    try std.testing.expect(empty_encoded.len <= try zstd.encodedNativeFrameBound(0));
+}
