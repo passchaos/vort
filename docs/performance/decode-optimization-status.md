@@ -666,3 +666,46 @@ with 49% more).
   `zig test src/deflate.zig` instead.
 - The repository `.zig-cache` reached 73 GB and corrupted compiler state once;
   clearing it restored builds (disk use dropped from 92% to 76%).
+
+## 2026-11-16 local-lever exhaustion and A/B methodology
+
+A dedicated pass tried to convert the measured hotspots into concrete changes
+and established that no isolated micro-edit clears the 3% geomean bar. Full
+evidence: `brotli-payload-fusion-20261116/` and `zstd-fse-explore-20261116/`.
+
+Brotli (one-shot `processTailLookupCompressedPayload`, two perf runs confirm
+the ranking):
+
+- `Sha2x32` 8.4% is benchmark-harness provenance, not a decoder symbol (no
+  `Sha2*` under `src/br`).
+- Cross-meta-block table reuse cannot fire: the 1 MiB benchmark frame has one
+  meta-block (limit 16 MiB); memset is mandatory one-time per-frame table
+  initialization, already minimized by three `HuffmanTable.Decoder.init` tiers.
+- Two implemented candidates failed paired A/B (two baselines each) and were
+  reverted: nine-bit peek specialization (+0.24%, noise) and block-switch guard
+  loop hoist (-0.81% geomean, control through 0.98).
+- match-copy, prepared-lookup caching, ring masking, and the previous-byte
+  slide are already optimal or correctness-mandated.
+- The earlier "goto payload fusion" idea does not apply to the one-shot path:
+  `perf annotate` shows it is already a single fused loop with flat dispersed
+  instructions (top 3.85%), i.e. intrinsic Huffman/copy work, not removable
+  dispatch. It only remains a separate question for the incremental
+  `copy_decoder`, which the reference bench does not profile.
+
+Zstd (Silesia 64K nci/xml L19 baselines added; Vort 1.42-1.47x slower):
+
+- The 2026-11-10 frame-state memcpy candidate is already resolved
+  (`initialSequenceFrameState` returns `.{}` with no dictionary; default
+  `SequenceFrameState = .{}` at 67 sites).
+- Lowering the FSE dense-run `probability >= 192` gate is high-risk and capped
+  by the build's 9.5% profile share, so it cannot alone clear 3%.
+- The 43% sequence-executor hotspot needs an architecture-level
+  executor/table-representation fusion (a table layout the executor consumes
+  directly), matching prior rejections of cursor promotion, branch-first, and
+  wider wildcopy.
+
+Net: further throughput progress on both codecs is structural/algorithmic
+(SIMD Huffman gather for Brotli; executor/table fusion for Zstd), not local.
+Any such project must keep wire output byte-identical, retain portable/WASM
+parity, and pass the paired two-baseline A/B with the 3% geomean / 95% CI /
+0.98x control floor.
