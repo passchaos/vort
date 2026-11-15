@@ -65,3 +65,27 @@ test "Zlib chunks size preflight is split-insensitive" {
     }
     try std.testing.expectEqual(decoded.len, payload.len);
 }
+
+test "Gzip concatenated size preflight sums all members" {
+    const a = std.testing.allocator;
+    const first_payload = "first gzip concatenated member. " ** 32;
+    const second_payload = "second gzip concatenated member. " ** 48;
+    const first = try deflate.encodeGzipFixedAlloc(a, first_payload);
+    defer a.free(first);
+    const second = try deflate.encodeGzipStoredAlloc(a, second_payload);
+    defer a.free(second);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(a);
+    try stream.appendSlice(a, first);
+    try stream.appendSlice(a, second);
+
+    const decoded = try deflate.decodeGzipConcatenatedAlloc(a, stream.items);
+    defer a.free(decoded);
+
+    const scratch = try a.alloc(u8, stream.items.len + first_payload.len + second_payload.len + 64);
+    defer a.free(scratch);
+    const size = try deflate.decodedGzipConcatenatedSize(stream.items, scratch);
+    try std.testing.expectEqual(first_payload.len + second_payload.len, size);
+    try std.testing.expectEqual(decoded.len, size);
+}
