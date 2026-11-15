@@ -192,3 +192,23 @@ Decision: rejected and reverted. LLVM already constant-folds the comptime
 remove. Recorded so the same idea is not retried without new evidence. The
 3% adoption bar still stands; payload control-flow fusion remains the open
 structural lever.
+
+## Additional ruled-out local levers (2026-11-16)
+
+Two more hot-path components were inspected and confirmed already optimal, so
+they are removed from the candidate list:
+
+- `match_copy.appendWideNonZero` (the `memcpyFast` 4.7-6% share): already uses
+  tiered fixed 16-byte moves for short copies, a doubling forward-copy
+  recurrence for overlapping spans, and has a non-x86 fallback plus exhaustive
+  scalar-replay differential tests. No local change is safe.
+- Prepared-lookup build (`PrefixCode.buildPreparedLookup`): the `prepared`
+  boolean makes each tree build its lookup lazily exactly once per frame and
+  `resetPreparedLookup` only fires on header rebuild, so there is no repeated
+  memset within a frame.
+
+Combined with the rejected nine-bit peek and the table-reuse/SHA exclusions,
+every local lever on the measured hotspots is now either proven optimal or
+measured below the noise floor. The only remaining work with headroom is the
+structural payload control-flow fusion, which must be designed and A/B'd as a
+dedicated task rather than approached incrementally.
