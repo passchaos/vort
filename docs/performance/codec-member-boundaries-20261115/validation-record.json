@@ -105,5 +105,12 @@
     "local_log": "docs/performance/codec-member-boundaries-20261115/compile-checks-releasefast.log",
     "counted_as_passed": false
   },
-  "scope": "Functional correctness and compatibility; industry leadership remains unproven"
+  "scope": "Functional correctness and compatibility; industry leadership remains unproven",
+  "post_rebase": {
+    "remote": "origin/main",
+    "source_hashes_unchanged": true,
+    "debug_boundary_check_check_wasm_exit_code": 0,
+    "cli_help_exit_code": 0,
+    "log": "post-rebase-debug.log"
+  }
 }

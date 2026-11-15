@@ -99,6 +99,7 @@ sentinels. Its focused Debug rerun passes.
 | [Debug library, CLI, probes, and WASM checks](compile-checks-debug.log) | 381/381 steps, 86/86 tests; exit 0 |
 | Independent empty-frame/final-metadata references | 12 Zstd and 18 Brotli fixtures passed |
 | [CLI help smoke](cli-help-debug.log) | Exit 0 |
+| [Post-rebase boundaries, check, and check-wasm](post-rebase-debug.log) | Exit 0; verified source hashes unchanged |
 
 The differential campaign uses seed `0x20261115`, `--deep --max-size=8192`,
 and raw Deflate, zlib, gzip, Zstd, and Brotli. Mutated wires may be accepted by
