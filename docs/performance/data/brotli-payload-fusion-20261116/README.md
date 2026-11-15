@@ -169,3 +169,26 @@ advance with branch hints; there is no removable per-symbol overhead. This
 reinforces that the only structural decoder lever independent of meta-block
 count remains the payload loop fusion, and it must clear the 3% A/B bar to be
 adopted rather than landing on intuition.
+
+## Rejected experiment: decodePrepared nine-bit peek specialization
+
+Change: in `PrefixCode.decodePrepared` (src/br.zig), select the dedicated
+`fast_bit_reader.Reader.peekBits9Padded` when `lookup_bits == 9` and the reader
+exposes it, falling back to the generic `peekBitsPadded` otherwise. Literal and
+command trees use nine-bit lookups, so this removes a generic width/mask on the
+hottest decode sites. Correctness held (227 incremental + 37 fuzz tests green,
+byte-identical).
+
+A/B (two baseline and two candidate 500-iteration runs, paired per-case means):
+
+- first single-baseline comparison looked like +1.7% geomean, but a second
+  baseline run showed that was run-to-run drift, not the change;
+- paired geomean speedup over the two baselines: **+0.24%**, inside the
+  +/-2% noise band; clustered_q8 +0.22%;
+- no control row below 0.98 (worst 0.9897), so it is safe but not effective.
+
+Decision: rejected and reverted. LLVM already constant-folds the comptime
+`lookup_bits` mask in the generic path, so the specialization has little to
+remove. Recorded so the same idea is not retried without new evidence. The
+3% adoption bar still stands; payload control-flow fusion remains the open
+structural lever.
