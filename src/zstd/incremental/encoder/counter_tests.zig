@@ -298,6 +298,31 @@ test "Zstd incremental encoder counters preserve final checksum transaction on r
     try std.testing.expectEqual(@as(Count, 1), encoder.frame_count);
 }
 
+test "Zstd incremental encoder rejects trailing input after a completed frame" {
+    // Drive one frame to completion, then offer more bytes without nextFrame.
+    // Both the post-done path and the finishing path must refuse the data as
+    // TrailingData rather than silently accepting it into a closed frame.
+    var encoder = try Encoder.init(allocator, .{});
+    defer encoder.deinit();
+    var output: [32]u8 = undefined;
+    _ = try encoder.step("ab", &output);
+    encoder.finish();
+    const done = try encoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+
+    // Any input after done is TrailingData and leaves the encoder parked.
+    try std.testing.expectError(error.TrailingData, encoder.step("x", &output));
+    const parked = try encoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, parked.status);
+
+    // A finishing encoder that still receives input hits the same guard.
+    var finishing = try Encoder.init(allocator, .{});
+    defer finishing.deinit();
+    _ = try finishing.step("ab", &output);
+    finishing.finish();
+    try std.testing.expectError(error.TrailingData, finishing.step("x", &output));
+}
+
 test "Zstd incremental encoder counters account for retained wide history index entries" {
     var encoder = try Encoder.init(allocator, .{});
     defer encoder.deinit();

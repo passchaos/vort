@@ -76,6 +76,31 @@ pub fn run(comptime Z: type) type {
             }
         }
 
+        test "Zstd parallel incremental rejects trailing input after a completed frame" {
+            var opts = h.options(Z);
+            opts.frame.selection = .raw_or_rle;
+            var encoder = try E.init(h.a, opts);
+            defer encoder.deinit();
+            const bytes = try h.drive(Z, &encoder, opts, "ab", 13, 1);
+            defer h.a.free(bytes);
+            const wire = try h.verify(Z, bytes, "ab", opts.frame, null);
+            try h.complete(encoder.snapshot(), opts, 2, wire.blocks);
+
+            // Bytes offered once the frame is done are refused, while empty
+            // polls keep the encoder parked at done instead of poisoning it.
+            var output: [32]u8 = undefined;
+            try std.testing.expectError(error.TrailingData, encoder.step("x", &output));
+            const parked = try h.checked(Z, &encoder, opts, "", &output);
+            try std.testing.expectEqual(core.StepResult.Status.done, parked.status);
+
+            // Input after finish but before the tail drains hits the same guard.
+            var finishing = try E.init(h.a, opts);
+            defer finishing.deinit();
+            _ = try h.checked(Z, &finishing, opts, "ab", &output);
+            finishing.finish();
+            try std.testing.expectError(error.TrailingData, finishing.step("x", &output));
+        }
+
         test "Zstd parallel incremental ten explicit strategies preserve unknown and exact size frames" {
             const input = h.fixture(513);
             const strategies = [_]Z.Strategy{ .fast, .double_fast, .greedy, .lazy, .optimal, .lazy2, .btlazy2, .btopt, .btultra, .btultra2 };
