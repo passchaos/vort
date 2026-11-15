@@ -280,3 +280,27 @@ gain is run-to-run drift, not the hoist; LLVM already keeps the invariant field
 load in a register. This is the second sub-noise micro-edit rejected via paired
 A/B (after the nine-bit peek), reinforcing that only the structural phase-chain
 fusion can clear the 3% bar. CSVs archived as candidate-hoist-run{1,2}.csv.
+
+## Phase-fusion applicability check on the one-shot hotspot (2026-11-16)
+
+The "payload state-machine fusion" idea originated from the incremental
+12-phase `copy_decoder`, but the perf hotspot is the one-shot
+`processTailLookupCompressedPayload`. Source and `perf annotate` review show
+the fusion premise does not transfer:
+
+- The one-shot function is already a single `while (output_cursor <
+  meta_block_end)` loop with command/literals/distance/copy executed inline in
+  one body and only one `continue` (the dictionary branch). There is no
+  top-level phase switch to collapse, so a goto fusion has nothing to remove.
+- The hottest annotated instructions are flat and dispersed (top is 3.85%):
+  `vmovups` SIMD match copies, `movzbl` literal loads, `shrq` bit extraction,
+  lookup-slot tests. These are the intrinsic decode work, not a removable
+  dispatch or redundant load.
+
+Conclusion: on the measured one-shot path, brotli decode is bound by real
+Huffman/copy work with no single bottleneck, consistent with the two rejected
+micro-edits. Phase fusion remains a possible, separate experiment only for the
+incremental `copy_decoder` state machine, which is not what the reference bench
+profiles. Any further one-shot gain would need algorithmic work (e.g. wider
+SIMD Huffman gather), not control-flow reshaping, and must still clear the 3%
+paired A/B bar.
