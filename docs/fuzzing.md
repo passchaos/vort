@@ -404,3 +404,26 @@ The negative "missing dictionary rejects dictionary references" contract is
 already covered by dedicated hard-coded-frame tests outside the fuzz drivers;
 the drivers focus on the positive attached-dictionary round-trip because a
 general encoder is free to emit literals instead of references.
+
+## Public API / error coverage audit (2026-11-16)
+
+A systematic gap scan accompanied the incremental fuzz work and closed several
+zero-test public surfaces: the Zstd `decodeFrameChunks*` family (alloc/into,
+exact/limited, scratch, size preflight, dictionary) and the Deflate gzip/zlib
+size-preflight entry points including concatenated streams. Brotli's
+chunks/prefix APIs were already covered under `src/br/decode/tests/`.
+
+Reusable audit method:
+
+- Low-reference scan: list `pub fn decode*`/`decoded*` symbols whose total
+  in-file reference count is ~1 (definition only), then cross-check the whole
+  `src/<codec>/` tree because tests often live in separate modules or behind
+  root re-exports (thin wrappers and method-style APIs produce false positives).
+- Error coverage: diff the errors actually `return`ed in the codec source
+  against the `error.X` names asserted in tests. Exclude cross-codec errors in
+  the shared `core.Error` set that the codec never produces, internal sentinels
+  remapped before they reach callers (e.g. Zstd `EndOfStream` ->
+  `TruncatedFrame`), and errors already asserted in the codec root test block.
+
+Result after the added tests: no remaining produced-but-untested error and no
+zero-test non-wrapper decode API was found across Zstd, Brotli, or Deflate.
