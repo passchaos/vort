@@ -8028,7 +8028,12 @@ test "root native incremental reset recovers after extra input size mismatch" {
     _ = try zstd_decoder.step(zstd_frame.frame, zstd_output[0..0]);
     const zstd_done = try zstd_decoder.step("", &zstd_output);
     try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
-    try std.testing.expectError(error.SizeMismatch, zstd_decoder.step(zstd_frame.frame[0..1], zstd_output[0..0]));
+    // Post-done bytes start a concatenated next member. A single buffered byte
+    // is only queued (need_input); a complete non-empty member exceeds the
+    // already-fulfilled cumulative pledge and is rejected at frame admission.
+    const zstd_buffered = try zstd_decoder.step(zstd_frame.frame[0..1], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_buffered.status);
+    try std.testing.expectError(error.SizeMismatch, zstd_decoder.step(zstd_frame.frame[1..], zstd_output[0..0]));
     try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
     zstd_decoder.reset();
