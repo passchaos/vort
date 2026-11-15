@@ -427,3 +427,21 @@ Reusable audit method:
 
 Result after the added tests: no remaining produced-but-untested error and no
 zero-test non-wrapper decode API was found across Zstd, Brotli, or Deflate.
+
+## Encoder-side coverage follow-up (2026-11-16)
+
+Applying the same low-reference scan to encode entry points found and closed
+two zero-test independent contracts:
+
+- `encodedNativeFrameBound` must upper-bound the real encoded length across
+  empty/tiny/random/repeated inputs and checksum options;
+- `encodeNativeFrameIntoSlice` must produce a byte-identical frame in a caller
+  buffer and reject an undersized buffer with `OutputTooSmall`.
+
+The other ref=1 encode names are not gaps on inspection: `encodeFrameAppend`
+is the same core as the tested IntoSlice/Alloc paths; literal-only encoding has
+deep block-mode/decode-interaction coverage in `limits_tests.zig` plus error
+paths in `controls_resource_tests.zig`; seek-table encoding is covered by the
+HQ/controls test modules; and the `With*` names are thin option wrappers over
+tested cores. No remaining untested non-wrapper encode or decode entry point was
+found across the three codecs.
