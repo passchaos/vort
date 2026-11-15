@@ -1,6 +1,6 @@
     23.09%  vort-br-referen  vort-br-reference-bench  [.] compiler_rt.memset
     22.02%  vort-br-referen  vort-br-reference-bench  [.] br.processTailLookupCompressedPayload__anon_52497
-     8.44%  vort-br-referen  vort-br-reference-bench  [.] crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round
+     8.44%  vort-br-referen  vort-br-reference-bench  [.] crypto.sha2.Sha2x32 ... (harness provenance, NOT decoder; see README)
      5.96%  vort-br-referen  vort-br-reference-bench  [.] compiler_rt.memcpy.memcpyFast
      4.97%  vort-br-referen  vort-br-reference-bench  [.] br.readPrefixCodeRuntimeInto__anon_36963
      2.82%  vort-br-referen  vort-br-reference-bench  [.] br.PrefixCode(256).decodePrepared__anon_37435

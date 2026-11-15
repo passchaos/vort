@@ -61,16 +61,16 @@ the ledger gap measures.
 | --- | ---: | --- |
 | `compiler_rt.memset` | 23.09% | aggregated across header/prefix-code table zeroing in `readMinimalCompressedHeaderInto` and several `readPrefixCodeRuntimeInto`; many small, correctness-required clears rather than one removable fill |
 | `processTailLookupCompressedPayload` | 22.02% | the payload command/literal loop; insert loop already keeps `previous`/`second_previous` in registers across the run |
-| `Sha2x32.round` | 8.44% | content checksum; mandatory for checksummed frames, a shared cross-codec crypto path rather than a brotli-local lever |
+| `Sha2x32.round` | 8.44% | **not a decoder cost**: the call chain is `Io.Writer.Hashing(...).drain` under `reference_bench.main`, i.e. benchmark provenance/CSV checksum inside the harness (`benchmark_provenance`), not the production brotli path. No `Sha2*` symbol exists under `src/br*` outside tests. Exclude it from decoder optimization targets. |
 | `memcpyFast` | 5.96% | match/copy spans |
 | `readPrefixCodeRuntimeInto` variants | ~8.8% combined | Huffman table build |
 
 Implication: there is no high-confidence local edit that clears the 3%
-adoption bar. The memset and SHA-256 shares are structural (table build and
-mandatory hashing); the payload loop itself is already register-tight. The
-candidate work therefore stays a structural payload fusion (or a separate
-table-build reuse / SHA acceleration project), each requiring its own paired
-A/B rather than an opportunistic tweak.
+adoption bar. After correcting the Sha2 attribution, the real decoder
+hotspots are only the structural memset (per-block table build) and the
+payload loop, which is already register-tight. The candidate work therefore
+stays a structural payload fusion or a table-build reuse project, each
+requiring its own paired A/B rather than an opportunistic tweak.
 
 
 ## memset root-cause follow-up (2026-11-16)
