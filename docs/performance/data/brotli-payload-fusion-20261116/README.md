@@ -94,3 +94,31 @@ cache (RFC 7932 lets repeated block types share identical trees), but it needs
 a correctness design for header identity, retention bounds, and reset
 semantics before any A/B. It is a separate project from payload fusion and
 must not be attempted as an opportunistic local edit.
+
+## Table-reuse design skeleton for the next session
+
+Target: the 23% memset / ~9% prefix-code build share from rebuilding every
+meta-block's Huffman tables. Concrete plan, smallest safe candidate first:
+
+1. Reuse key. RFC 7932 block-type indices reference trees declared once in
+   the meta-block header. A table is reusable across meta-blocks only when the
+   full serialized tree definition (code lengths / explicit symbols) is
+   identical, not merely when the block-type index matches. Start by hashing
+   the encoded prefix-code bit range (the exact reader checkpoint span) so
+   identity is proven on bytes, avoiding any semantic-equivalence assumptions.
+2. Storage. Add an opt-in, bounded cache on the decode workspace (not the
+   stack header), keyed by that hash, holding the built `PrefixCode` plus its
+   tail-lookup. Cap entry count and total bytes; on overflow fall back to a
+   fresh build so memory stays bounded exactly like today.
+3. Lifecycle. Scope the cache to one stream/frame; clear on `reset`/
+   `nextFrame` and whenever a dictionary or large-window option changes, so
+   existing transaction and reset tests stay valid.
+4. First candidate. Cache only the literal trees (largest, 256-symbol,
+   highest rebuild frequency); leave command/distance trees on the existing
+   path to bound blast radius.
+5. Verify. Output must stay byte-identical (differential wire validation),
+   all `test-br` suites green, then paired A/B on `baseline.csv` with the
+   3% geomean / 95% CI / 0.98x control floor. Reject and archive if not met.
+
+Do not start from a block-index-only key: identical indices in different
+meta-blocks can carry different trees, which would silently corrupt output.
