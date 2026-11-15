@@ -219,3 +219,41 @@ alphabet (the empty Huffman table fails only if a distance symbol is ever
 actually decoded), matching zlib semantics; oversubscribed and incomplete
 multi-symbol alphabets remain rejected. Focused raw and gzip streaming
 regression tests pin the previously failing sizes.
+
+## 2026-11-15: bounded incremental Zstd decoder fuzz driver
+
+`src/zstd/incremental/fuzz_driver.zig` adds a deterministic driver that
+mutates both the wire and the caller-driven step schedule, which the
+one-shot raw-byte target cannot reach. `zstd.incremental_fuzz.drive(allocator,
+seed)` derives, per seed: a generated frame (both frame formats, raw/RLE and
+literal-only selections, optional checksum and content size, six payload
+shapes including multi-block), a mutation regime (valid, one-sided truncation,
+single-byte flip, or appended suffix), both compressed-input policies, an
+optional exact/short output pledge, a finite working-memory and compressed
+buffer cap, and independent input/output slice schedules.
+
+Every step is checked for the same invariants the hand-written decoder tests
+rely on: local progress never exceeds the offered slices, the cumulative
+snapshot advances by exactly the reported progress, output beyond
+`output_written` keeps its canary fill, and live/peak working memory plus
+retained compressed capacity stay within budget. Rejections must be
+documented decode errors (never real `OutOfMemory`), are sticky across further
+calls, carry diagnostics, and reproduce after `reset`; accepted runs are
+replayed under a different schedule to prove schedule independence and, when
+the one-shot decoder also accepts the bytes, must match its output. Truncated
+wires and uncompleted suffix members terminate as an explicit `incomplete`
+result rather than a stall.
+
+The same entry backs the in-graph tests (`zig build test-zstd`, including the
+48-seed fixed matrix, determinism and suffix-retention cases, with testing
+allocator leak detection) and a standalone ReleaseFast runner:
+
+```sh
+zig build run-zstd-incremental-fuzz-smoke
+```
+
+The runner is also compiled by the `check` graph. Its seed mix currently
+reports roughly balanced accepted/rejected/incomplete outcomes; a violated
+invariant exits non-zero. The structure is codec-agnostic and is intended to
+be reused for Brotli and Deflate incremental decoders once their Zstd
+contracts are stable.

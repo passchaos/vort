@@ -10,6 +10,9 @@ const byte_source = @import("io/source.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const incremental_counts = @import("zstd/incremental/counts.zig");
+/// Deterministic bounded fuzz driver for the incremental decoder; shared by
+/// the in-graph tests and the standalone smoke executable.
+pub const incremental_fuzz = @import("zstd/incremental/fuzz_driver.zig");
 const StreamingXxHash64 = @import("checksum/xxh64_stream.zig").XxHash64;
 const total_budget = @import("zstd/encode/total_budget.zig");
 const allocation_test_oracle = if (builtin.is_test) @import("zstd/encode/allocation_test_oracle.zig") else struct {};
@@ -2509,6 +2512,7 @@ test {
     _ = incremental_decoder_tests;
     _ = @import("zstd/incremental/decoder_counter_tests.zig");
     _ = @import("zstd/incremental/empty_member_tests.zig");
+    _ = @import("zstd/incremental/fuzz_driver.zig");
     _ = incremental_limits_tests;
     _ = dictionary_resume_tests;
     _ = compressed_workspace_tests;
