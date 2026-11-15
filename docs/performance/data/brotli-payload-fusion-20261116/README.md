@@ -72,3 +72,25 @@ candidate work therefore stays a structural payload fusion (or a separate
 table-build reuse / SHA acceleration project), each requiring its own paired
 A/B rather than an opportunistic tweak.
 
+
+## memset root-cause follow-up (2026-11-16)
+
+Deeper source inspection of the 23% memset share shows it is structural
+table/state construction, not a removable repeated fill:
+
+- `huffman.HuffmanTable.init` (src/huffman.zig) already keeps a no-memset fast
+  path for fully covered tables and only memsets partial-coverage tables; the
+  historical double-fill cost was removed.
+- `buildTailLookup` memsets at most 256-1024 bytes once per table; uncovered
+  slots must be zeroed before selective fills, so it is unavoidable per build.
+- `readPrefixCodeRuntimeInto` simple (kind==1) paths only touch a 4-entry
+  length array; the cost concentrates in the complex/table-build paths.
+- The incremental owned decoder has no cross-meta-block header/tree cache
+  today: every meta-block re-parses its header and rebuilds Huffman tables.
+  That re-build is the source of the aggregated memset and prefix-code share.
+
+The corresponding structural opportunity is a block-type keyed table reuse
+cache (RFC 7932 lets repeated block types share identical trees), but it needs
+a correctness design for header identity, retention bounds, and reset
+semantics before any A/B. It is a separate project from payload fusion and
+must not be attempted as an opportunistic local edit.
