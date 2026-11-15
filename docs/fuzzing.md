@@ -368,3 +368,20 @@ three real driver-assumption gaps rather than decoder defects:
   carries extra headroom so wrapper header/footer finalization never runs out
   of output room, and over-expansion becomes a documented
   `OutputLimitExceeded` rejection instead of a driver buffer overrun.
+
+## 2026-11-16: valid multi-member concatenation coverage
+
+Each driver gains a dedicated deterministic test that round-trips two valid
+members under one-byte input scheduling, complementing the random suffix
+regime (which feeds random trailing bytes) with an all-valid concatenated
+stream. The three codecs model member transitions differently and the tests
+pin each contract:
+
+- Zstd: a non-stopping decoder walks from the first frame straight into the
+  next (`data_frame_count == 2`), with mixed literal-only and raw/RLE members.
+- Deflate: both zlib and gzip wrappers use `allow_concatenated = true`; the
+  test checks the cumulative output and the wrapper-specific member count
+  (`stream_count` for zlib, `member_count` for gzip).
+- Brotli: members are armed explicitly through `nextFrame`, which is only
+  valid once the prior member reaches `done`; the test verifies the
+  per-member output slices and `frame_count == 2`.

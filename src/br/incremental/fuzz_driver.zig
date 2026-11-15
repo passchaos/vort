@@ -467,3 +467,54 @@ test "brotli incremental fuzz driver pins trailing-data rejection and tolerance"
         try std.testing.expectEqualSlices(u8, plaintext, &capture);
     }
 }
+
+test "brotli incremental fuzz driver decodes a nextFrame two-member stream" {
+    const a = std.testing.allocator;
+    const first_plain = "first brotli concatenated member alpha";
+    const second_plain = "second brotli concatenated member beta";
+    const first = try br.encodePlannedStreamAlloc(a, first_plain);
+    defer a.free(first);
+    const second = try br.encodePlannedStreamAlloc(a, second_plain);
+    defer a.free(second);
+
+    var decoder = Decoder.initWithOptions(a, .{});
+    defer decoder.deinit();
+    const capture = try a.alloc(u8, first_plain.len + second_plain.len);
+    defer a.free(capture);
+    var out_pos: usize = 0;
+
+    // First member, fed one byte at a time until done.
+    var in_pos: usize = 0;
+    var rounds: usize = 0;
+    while (true) : (rounds += 1) {
+        try std.testing.expect(rounds < max_steps);
+        const result = try decoder.step(
+            first[in_pos..@min(first.len, in_pos + 1)],
+            capture[out_pos..][0..@min(3, capture.len - out_pos)],
+        );
+        in_pos += result.progress.input_read;
+        out_pos += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try std.testing.expectEqual(first.len, in_pos);
+    try std.testing.expectEqual(@as(usize, 1), @as(usize, @intCast(decoder.snapshot().frame_count)));
+
+    // Explicitly arm the next member, then drain it the same way.
+    try decoder.nextFrame(.{});
+    in_pos = 0;
+    while (true) : (rounds += 1) {
+        try std.testing.expect(rounds < max_steps);
+        const result = try decoder.step(
+            second[in_pos..@min(second.len, in_pos + 1)],
+            capture[out_pos..][0..@min(3, capture.len - out_pos)],
+        );
+        in_pos += result.progress.input_read;
+        out_pos += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try std.testing.expectEqual(second.len, in_pos);
+    try std.testing.expectEqual(first_plain.len + second_plain.len, out_pos);
+    try std.testing.expectEqual(@as(usize, 2), @as(usize, @intCast(decoder.snapshot().frame_count)));
+    try std.testing.expectEqualSlices(u8, first_plain, capture[0..first_plain.len]);
+    try std.testing.expectEqualSlices(u8, second_plain, capture[first_plain.len..]);
+}

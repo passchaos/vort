@@ -607,3 +607,61 @@ test "deflate incremental fuzz driver pins short-pledge size mismatch" {
     try std.testing.expectError(error.SizeMismatch, decoder.step(frame, &capture));
     try std.testing.expectEqualStrings("SizeMismatch", decoder.snapshot().last_error_name);
 }
+
+test "deflate incremental fuzz driver decodes two-member concatenations" {
+    const a = std.testing.allocator;
+    const first_plain = "first deflate concatenated member alpha";
+    const second_plain = "second deflate concatenated member beta";
+
+    inline for (.{ Wrapper.zlib, Wrapper.gzip }) |wrapper| {
+        const first = switch (wrapper) {
+            .zlib => try deflate.encodeZlibFixedAlloc(a, first_plain),
+            .gzip => try deflate.encodeGzipFixedAlloc(a, first_plain),
+        };
+        defer a.free(first);
+        const second = switch (wrapper) {
+            .zlib => try deflate.encodeZlibStoredAlloc(a, second_plain),
+            .gzip => try deflate.encodeGzipStoredAlloc(a, second_plain),
+        };
+        defer a.free(second);
+        const stream = try std.mem.concat(a, u8, &.{ first, second });
+        defer a.free(stream);
+        const expected = try std.mem.concat(a, u8, &.{ first_plain, second_plain });
+        defer a.free(expected);
+
+        var history: [history_len]u8 = undefined;
+        var decoder = switch (wrapper) {
+            .zlib => try deflate.ZlibIncrementalDecoder.init(.{
+                .allow_concatenated = true,
+                .expected_output_len = expected.len,
+            }, &history),
+            .gzip => try deflate.GzipIncrementalDecoder.init(.{
+                .allow_concatenated = true,
+                .expected_output_len = expected.len,
+            }, &history),
+        };
+        const capture = try a.alloc(u8, expected.len);
+        defer a.free(capture);
+        var in_pos: usize = 0;
+        var out_pos: usize = 0;
+        var rounds: usize = 0;
+        while (in_pos < stream.len or out_pos < expected.len) : (rounds += 1) {
+            try std.testing.expect(rounds < max_steps);
+            const result = try decoder.step(
+                stream[in_pos..@min(stream.len, in_pos + 1)],
+                capture[out_pos..@min(capture.len, out_pos + 3)],
+            );
+            in_pos += result.progress.input_read;
+            out_pos += result.progress.output_written;
+            if (result.status == .done) break;
+        }
+        try decoder.finish();
+        try std.testing.expectEqual(stream.len, in_pos);
+        try std.testing.expectEqualSlices(u8, expected, capture[0..out_pos]);
+        const member_count = switch (wrapper) {
+            .zlib => decoder.snapshot().stream_count,
+            .gzip => decoder.snapshot().member_count,
+        };
+        try std.testing.expectEqual(@as(Count, 2), member_count);
+    }
+}

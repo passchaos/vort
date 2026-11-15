@@ -504,3 +504,54 @@ test "incremental fuzz driver stopped prevalidated decoder retains its suffix" {
     try std.testing.expectEqualSlices(u8, suffix, decoder.trailingInput());
     try std.testing.expectEqualSlices(u8, plaintext, &capture);
 }
+
+test "incremental fuzz driver decodes a valid two-frame concatenation" {
+    const a = std.testing.allocator;
+    const first_plain = "first concatenated member alpha beta";
+    const second_plain = "second concatenated member gamma";
+    const first = try zstd.encodeNativeFrameWithOptionsAlloc(a, first_plain, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .include_content_size = true,
+    });
+    defer a.free(first.frame);
+    const second = try zstd.encodeNativeFrameWithOptionsAlloc(a, second_plain, .{
+        .selection = .raw_or_rle,
+        .content_checksum = true,
+        .include_content_size = false,
+    });
+    defer a.free(second.frame);
+    const stream = try std.mem.concat(a, u8, &.{ first.frame, second.frame });
+    defer a.free(stream);
+    const expected = try std.mem.concat(a, u8, &.{ first_plain, second_plain });
+    defer a.free(expected);
+
+    // A non-stopping decoder walks from the first frame straight into the next
+    // member; drive it one byte at a time to cover every phase transition.
+    var decoder = Decoder.initWithOptions(a, .{
+        .input_policy = .block_stream,
+        .stop_after_first_frame = false,
+        .expected_output_len = expected.len,
+    });
+    defer decoder.deinit();
+    const capture = try a.alloc(u8, expected.len);
+    defer a.free(capture);
+    var in_pos: usize = 0;
+    var out_pos: usize = 0;
+    var rounds: usize = 0;
+    while (in_pos < stream.len or out_pos < expected.len) : (rounds += 1) {
+        try std.testing.expect(rounds < max_steps);
+        const result = try decoder.step(
+            stream[in_pos..@min(stream.len, in_pos + 1)],
+            capture[out_pos..@min(capture.len, out_pos + 3)],
+        );
+        in_pos += result.progress.input_read;
+        out_pos += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(stream.len, in_pos);
+    try std.testing.expectEqual(expected.len, out_pos);
+    try std.testing.expectEqualSlices(u8, expected, capture[0..out_pos]);
+    try std.testing.expectEqual(@as(core.StreamCount, 2), decoder.snapshot().data_frame_count);
+}
