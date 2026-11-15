@@ -212,3 +212,28 @@ every local lever on the measured hotspots is now either proven optimal or
 measured below the noise floor. The only remaining work with headroom is the
 structural payload control-flow fusion, which must be designed and A/B'd as a
 dedicated task rather than approached incrementally.
+
+## Cross-codec conclusion: local decode wins are exhausted (2026-11-16)
+
+The same source-level review applied to the other two primary codecs finds
+their local levers already documented and exhausted too, so no new micro-edit
+candidates remain across the decoder suite:
+
+- Zstd: `zstd-decode-current-20261110.md` already establishes that the 53%
+  combined sequence-executor cost needs structural executor fusion (IPC 3.29,
+  branch-miss 0.65%, no branch-hint headroom) and that the FSE table build's
+  scatter is irreducible, with cursor promotion, branch-first, and wider
+  wildcopy experiments previously rejected. The current
+  `tryDecodeAllFseSplitDenseHuffmanSequencesImpl` confirms field grouping,
+  local state pinning, and wildcopy fast paths are all in place.
+- Deflate: `decode-optimization-status.md` records the fastloop rewrite and
+  literal/match loop split as analyzed with no safe gain; the reference bench
+  requires an external corpus that is not present in this session, so no fresh
+  local candidate was opened.
+
+Net: every measured per-instruction hotspot across Zstd, Brotli and Deflate is
+either already optimized, mandatory correctness work, or below the measurement
+noise floor under paired A/B. Further throughput progress requires structural
+projects (Brotli payload control-flow fusion; Zstd executor fusion / FSE build
+scatter reduction), each scoped as its own design + paired A/B task with the
+3% geomean / 95% CI / 0.98x control adoption bar.
