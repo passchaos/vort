@@ -47,6 +47,9 @@ const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig")
 const incremental_gzip_decoder = @import("deflate/incremental/decoder/gzip.zig");
 const incremental_auto_wrapper_decoder = @import("deflate/incremental/decoder/auto_wrapper.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
+/// Deterministic bounded fuzz driver for the zlib/gzip incremental decoders;
+/// shared by the in-graph tests and the standalone smoke executable.
+pub const incremental_fuzz = @import("deflate/incremental/fuzz_driver.zig");
 
 const incompressible_classifier_text_section = switch (builtin.object_format) {
     .elf => ".vort_deflate_incompressible",

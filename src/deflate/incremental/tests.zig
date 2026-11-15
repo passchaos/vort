@@ -35,6 +35,7 @@ test {
     _ = wrapper_continuation_tests;
     _ = zlib_dictionary_tests;
     _ = dictionary_borrow_tests;
+    _ = @import("fuzz_driver.zig");
     _ = @import("encoder/png_ultrafast/root.zig");
 }
 

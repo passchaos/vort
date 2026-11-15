@@ -255,7 +255,7 @@ zig build run-zstd-incremental-fuzz-smoke
 The runner is also compiled by the `check` graph. Its seed mix currently
 reports roughly balanced accepted/rejected/incomplete outcomes; a violated
 invariant exits non-zero. The structure is codec-agnostic and is reused for
-the Brotli incremental decoder below, with Deflate as the remaining target.
+the Brotli and Deflate incremental decoders below.
 
 ## 2026-11-15: bounded incremental Brotli decoder fuzz driver
 
@@ -289,3 +289,41 @@ zig build run-br-incremental-fuzz-smoke
 
 The runner is compiled by the `check` graph and exits non-zero on any violated
 invariant.
+
+## 2026-11-15: bounded incremental Deflate decoder fuzz driver
+
+`src/deflate/incremental/fuzz_driver.zig` completes the three-codec family by
+porting the `drive` contract to the zlib and gzip incremental decoders
+(`deflate.ZlibIncrementalDecoder` / `deflate.GzipIncrementalDecoder`). Deflate
+differs from the other two codecs in that its incremental decoders are built
+over a caller-owned 32 KiB history slice (the RFC 1951 maximum window) instead
+of an allocator, and their error set is the closed `deflate.Error` (core
+errors), so the hot path never allocates and every non-success result is a
+documented rejection.
+
+Each seed selects a wrapper (zlib/gzip), a wire kind (stored/fixed/best), a
+mutation regime (valid, truncation, single-byte flip, appended suffix), an
+optional exact/short output pledge, and independent input/output slice
+schedules. A type-erased `Handle` drives either generic through the shared
+schedule. Every step checks progress accounting against the snapshot, canary
+preservation, schedule independence (a second run under different chunks), and
+one-shot differential agreement against `decodeZlibAlloc`/`decodeGzipAlloc`;
+truncated wires end as an explicit incomplete result. The wrapper-specific
+trailing-data rule is modeled as in Brotli: the suffix regime always enables
+`allow_trailing_data` so completion timing cannot make `TrailingData`
+schedule-dependent, while dedicated tests pin both the sticky rejection path
+(including reset clearing `last_error_name`) and the tolerant path, plus the
+short-pledge `SizeMismatch` contract.
+
+The same entry backs in-graph tests (a 48-seed matrix, determinism,
+trailing-data and short-pledge cases; allocator-backed temporary storage
+still gets testing-allocator leak detection) and a standalone ReleaseFast
+runner:
+
+```sh
+zig build run-deflate-incremental-fuzz-smoke
+```
+
+The runner is compiled by the `check` graph and exits non-zero on any violated
+invariant. All three primary codecs (Zstd, Brotli, Deflate) now share the same
+bounded incremental schedule/canary fuzz shape.

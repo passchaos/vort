@@ -2396,6 +2396,27 @@ pub fn build(b: *std.Build) void {
     );
     br_incremental_fuzz_smoke_step.dependOn(&run_br_incremental_fuzz_smoke.step);
 
+    const deflate_incremental_fuzz_smoke_mod = b.createModule(.{
+        .root_source_file = b.path("src/deflate.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const deflate_incremental_fuzz_smoke_exe = b.addExecutable(.{
+        .name = "vort-deflate-incremental-fuzz-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/incremental_fuzz_smoke.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "deflate", .module = deflate_incremental_fuzz_smoke_mod }},
+        }),
+    });
+    const run_deflate_incremental_fuzz_smoke = b.addRunArtifact(deflate_incremental_fuzz_smoke_exe);
+    const deflate_incremental_fuzz_smoke_step = b.step(
+        "run-deflate-incremental-fuzz-smoke",
+        "Run the deterministic incremental Deflate zlib/gzip decoder schedule/canary fuzz driver",
+    );
+    deflate_incremental_fuzz_smoke_step.dependOn(&run_deflate_incremental_fuzz_smoke.step);
+
     const fuzz_corpus_exe = b.addExecutable(.{
         .name = "vort-fuzz-corpus",
         .root_module = b.createModule(.{
@@ -7966,6 +7987,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_magicless_probe.step);
     check_step.dependOn(&zstd_incremental_fuzz_smoke_exe.step);
     check_step.dependOn(&br_incremental_fuzz_smoke_exe.step);
+    check_step.dependOn(&deflate_incremental_fuzz_smoke_exe.step);
     check_step.dependOn(&br_large_history_tests.step);
     check_step.dependOn(&br_large_history_probe.step);
     check_step.dependOn(&br_metadata_tests.step);
