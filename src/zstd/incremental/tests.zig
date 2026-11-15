@@ -566,3 +566,48 @@ test "Zstd frame chunks reject an undersized scratch buffer" {
         zstd.decodeFrameChunksAlloc(a, &chunks, &tiny),
     );
 }
+
+test "Zstd frame chunks size preflight matches the decoded length" {
+    const a = std.testing.allocator;
+    const payload = "zstd chunk size preflight payload. " ** 96;
+    const frame = try zstd.encodeNativeFrameAlloc(a, payload);
+    defer a.free(frame);
+    const chunks = [_][]const u8{ frame[0..3], frame[3..] };
+    const scratch = try a.alloc(u8, frame.len);
+    defer a.free(scratch);
+
+    const count = try zstd.decodedFrameChunksSize(&chunks, scratch);
+    try std.testing.expectEqual(@as(core.StreamCount, payload.len), count);
+
+    // A limited size preflight rejects a cap below the decoded length.
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        zstd.decodedFrameChunksSizeLimited(&chunks, scratch, payload.len - 1),
+    );
+}
+
+test "Zstd frame chunks decode with a raw-content dictionary" {
+    const a = std.testing.allocator;
+    const dictionary = zstd.NativeDictionary.initRawContent("abcdefghijklmnop");
+    const payload = "zstd dictionary chunk round trip payload. " ** 128;
+    const encoded = try zstd.encodeNativeFrameWithDictionaryAlloc(a, payload, .{}, dictionary);
+    defer a.free(encoded.frame);
+    const frame = encoded.frame;
+
+    // Reference: whole-frame dictionary decode.
+    const whole = try zstd.decodeFrameAllocWithDictionary(a, frame, dictionary);
+    defer a.free(whole);
+
+    const chunks = [_][]const u8{ frame[0..11], frame[11..] };
+    const scratch = try a.alloc(u8, frame.len);
+    defer a.free(scratch);
+
+    const via_chunks = try zstd.decodeFrameChunksAllocWithDictionary(a, &chunks, scratch, dictionary);
+    defer a.free(via_chunks);
+    try std.testing.expectEqualSlices(u8, whole, via_chunks);
+
+    var out: [payload.len]u8 = undefined;
+    const written = try zstd.decodeFrameChunksIntoWithDictionary(&chunks, scratch, &out, dictionary);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, whole, &out);
+}
