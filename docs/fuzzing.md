@@ -385,3 +385,22 @@ pin each contract:
 - Brotli: members are armed explicitly through `nextFrame`, which is only
   valid once the prior member reaches `done`; the test verifies the
   per-member output slices and `frame_count == 2`.
+
+## 2026-11-16: dictionary round-trip coverage
+
+Each driver also gains a deterministic preset-dictionary round-trip under
+one-byte scheduling, pinning the codec-specific dictionary attachment path:
+
+- Zstd: a raw-content `NativeDictionary` passed to
+  `encodeNativeFrameWithDictionaryAlloc` and `initWithDictionary`.
+- Deflate: a zlib stream built with
+  `encodeZlibFixedWithDictionaryAlloc` and decoded through
+  `ZlibIncrementalDecoder.initWithDictionary` over caller-owned history.
+- Brotli: a multi-prefix `SharedDictionary` supplied via
+  `DecodeOptions.shared_dictionary` (encoding through
+  `encodePlannedStreamWithOptionsAlloc`).
+
+The negative "missing dictionary rejects dictionary references" contract is
+already covered by dedicated hard-coded-frame tests outside the fuzz drivers;
+the drivers focus on the positive attached-dictionary round-trip because a
+general encoder is free to emit literals instead of references.

@@ -665,3 +665,35 @@ test "deflate incremental fuzz driver decodes two-member concatenations" {
         try std.testing.expectEqual(@as(Count, 2), member_count);
     }
 }
+
+test "deflate incremental fuzz driver round-trips a dictionary zlib stream" {
+    const a = std.testing.allocator;
+    const dictionary = "dictionary phrase shared by zlib payload bytes";
+    const plaintext = "dictionary phrase shared by zlib payload bytes repeated\n" ** 8;
+    const frame = try deflate.encodeZlibFixedWithDictionaryAlloc(a, plaintext, dictionary, .{});
+    defer a.free(frame);
+
+    var history: [history_len]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.initWithDictionary(.{
+        .expected_output_len = plaintext.len,
+    }, &history, dictionary);
+    const capture = try a.alloc(u8, plaintext.len);
+    defer a.free(capture);
+    var in_pos: usize = 0;
+    var out_pos: usize = 0;
+    var rounds: usize = 0;
+    while (in_pos < frame.len or out_pos < plaintext.len) : (rounds += 1) {
+        try std.testing.expect(rounds < max_steps);
+        const result = try decoder.step(
+            frame[in_pos..@min(frame.len, in_pos + 1)],
+            capture[out_pos..@min(capture.len, out_pos + 3)],
+        );
+        in_pos += result.progress.input_read;
+        out_pos += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(frame.len, in_pos);
+    try std.testing.expectEqual(plaintext.len, out_pos);
+    try std.testing.expectEqualSlices(u8, plaintext, capture[0..out_pos]);
+}

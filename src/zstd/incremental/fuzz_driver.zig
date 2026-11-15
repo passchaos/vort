@@ -555,3 +555,39 @@ test "incremental fuzz driver decodes a valid two-frame concatenation" {
     try std.testing.expectEqualSlices(u8, expected, capture[0..out_pos]);
     try std.testing.expectEqual(@as(core.StreamCount, 2), decoder.snapshot().data_frame_count);
 }
+
+test "incremental fuzz driver round-trips a raw-content dictionary frame" {
+    const a = std.testing.allocator;
+    // Reuse a long phrase so the encoder can reference dictionary history.
+    const dictionary = zstd.NativeDictionary.initRawContent("the quick brown fox jumps over the lazy dog repeatedly");
+    const plaintext = "the quick brown fox jumps over the lazy dog repeatedly again";
+    const encoded = try zstd.encodeNativeFrameWithDictionaryAlloc(a, plaintext, .{
+        .selection = .raw_or_rle,
+        .content_checksum = true,
+        .include_content_size = true,
+    }, dictionary);
+    defer a.free(encoded.frame);
+
+    // With the dictionary attached, a one-byte-at-a-time schedule reproduces
+    // the plaintext exactly.
+    var decoder = Decoder.initWithDictionary(a, dictionary);
+    defer decoder.deinit();
+    const capture = try a.alloc(u8, plaintext.len);
+    defer a.free(capture);
+    var in_pos: usize = 0;
+    var out_pos: usize = 0;
+    var rounds: usize = 0;
+    while (in_pos < encoded.frame.len or out_pos < plaintext.len) : (rounds += 1) {
+        try std.testing.expect(rounds < max_steps);
+        const result = try decoder.step(
+            encoded.frame[in_pos..@min(encoded.frame.len, in_pos + 1)],
+            capture[out_pos..@min(capture.len, out_pos + 3)],
+        );
+        in_pos += result.progress.input_read;
+        out_pos += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(plaintext.len, out_pos);
+    try std.testing.expectEqualSlices(u8, plaintext, capture[0..out_pos]);
+}

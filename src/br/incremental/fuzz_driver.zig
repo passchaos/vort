@@ -518,3 +518,37 @@ test "brotli incremental fuzz driver decodes a nextFrame two-member stream" {
     try std.testing.expectEqualSlices(u8, first_plain, capture[0..first_plain.len]);
     try std.testing.expectEqualSlices(u8, second_plain, capture[first_plain.len..]);
 }
+
+test "brotli incremental fuzz driver round-trips a shared-dictionary stream" {
+    const a = std.testing.allocator;
+    const prefix = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    // Two raw prefixes exercise the multi-prefix SharedDictionary attachment.
+    const dictionary = br.SharedDictionary{ .raw_prefixes = &.{ prefix[0..21], prefix[21..] } };
+    const wire = try br.encodePlannedStreamWithOptionsAlloc(a, prefix, .{ .shared_dictionary = dictionary });
+    defer a.free(wire);
+
+    var decoder = Decoder.initWithOptions(a, .{
+        .expected_output_len = prefix.len,
+        .decode = .{ .shared_dictionary = dictionary },
+    });
+    defer decoder.deinit();
+    const capture = try a.alloc(u8, prefix.len);
+    defer a.free(capture);
+    var in_pos: usize = 0;
+    var out_pos: usize = 0;
+    var rounds: usize = 0;
+    while (in_pos < wire.len or out_pos < prefix.len) : (rounds += 1) {
+        try std.testing.expect(rounds < max_steps);
+        const result = try decoder.step(
+            wire[in_pos..@min(wire.len, in_pos + 1)],
+            capture[out_pos..@min(capture.len, out_pos + 3)],
+        );
+        in_pos += result.progress.input_read;
+        out_pos += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(wire.len, in_pos);
+    try std.testing.expectEqual(prefix.len, out_pos);
+    try std.testing.expectEqualSlices(u8, prefix, capture[0..out_pos]);
+}
