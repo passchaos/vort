@@ -254,6 +254,38 @@ zig build run-zstd-incremental-fuzz-smoke
 
 The runner is also compiled by the `check` graph. Its seed mix currently
 reports roughly balanced accepted/rejected/incomplete outcomes; a violated
-invariant exits non-zero. The structure is codec-agnostic and is intended to
-be reused for Brotli and Deflate incremental decoders once their Zstd
-contracts are stable.
+invariant exits non-zero. The structure is codec-agnostic and is reused for
+the Brotli incremental decoder below, with Deflate as the remaining target.
+
+## 2026-11-15: bounded incremental Brotli decoder fuzz driver
+
+`src/br/incremental/fuzz_driver.zig` ports the Zstd `drive` contract to the
+owned incremental Brotli decoder (`br.IncrementalStreamDecoder`) behind the
+same seed-driven, codec-agnostic shape. Each seed selects a generated wire
+(either `encodePlannedStreamAlloc` for inputs of at least five bytes, or an
+RFC stored stream that also covers empty and tiny payloads), a mutation regime
+(valid, truncation, single-byte flip, appended suffix), an optional
+exact/short output pledge, finite working-memory and compressed-input caps,
+and independent input/output slice schedules.
+
+Brotli-specific contract differences are modeled explicitly: there is no
+frame-format or compressed-input-policy dimension, and a completed stream
+rejects further bytes with `TrailingData` unless `allow_trailing_data` is
+set. The suffix regime therefore always enables trailing tolerance so frame
+completion timing cannot make the result depend on the chunk schedule; a
+dedicated test pins both the sticky `TrailingData` rejection and the tolerant
+path. As with Zstd, every step checks progress accounting, canary
+preservation, resource caps, sticky documented errors that clear on `reset`,
+schedule independence, and one-shot (`decodeStreamAlloc`) differential
+agreement, while truncated wires end as an explicit incomplete result.
+
+The same entry backs in-graph tests (`zig build test-br`, including the
+48-seed matrix, determinism and trailing-data cases, with leak detection) and
+a standalone ReleaseFast runner:
+
+```sh
+zig build run-br-incremental-fuzz-smoke
+```
+
+The runner is compiled by the `check` graph and exits non-zero on any violated
+invariant.

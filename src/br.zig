@@ -87,6 +87,9 @@ extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) cal
 extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
 extern fn vortBrRefineRecordDistances(input: [*]const u8, input_len: usize, tokens: [*]record_optimal_abi.Token, token_count: usize) callconv(.c) u8;
 const header_profile = @import("br/header_profile.zig");
+/// Deterministic bounded fuzz driver for the owned incremental decoder;
+/// shared by the in-graph tests and the standalone smoke executable.
+pub const incremental_fuzz = @import("br/incremental/fuzz_driver.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_literal = @import("br/incremental/literal_decoder.zig");
 const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
@@ -2403,6 +2406,7 @@ test "Brotli final metadata public decode contracts" {
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
+    _ = @import("br/incremental/fuzz_driver.zig");
     _ = incremental_copy_tests;
     _ = incremental_contracts_tests;
     _ = incremental_rle_tests;

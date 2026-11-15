@@ -2380,6 +2380,22 @@ pub fn build(b: *std.Build) void {
     );
     zstd_incremental_fuzz_smoke_step.dependOn(&run_zstd_incremental_fuzz_smoke.step);
 
+    const br_incremental_fuzz_smoke_exe = b.addExecutable(.{
+        .name = "vort-br-incremental-fuzz-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/incremental_fuzz_smoke.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "br", .module = br_encode_bench_mod }},
+        }),
+    });
+    const run_br_incremental_fuzz_smoke = b.addRunArtifact(br_incremental_fuzz_smoke_exe);
+    const br_incremental_fuzz_smoke_step = b.step(
+        "run-br-incremental-fuzz-smoke",
+        "Run the deterministic incremental Brotli decoder schedule/canary fuzz driver",
+    );
+    br_incremental_fuzz_smoke_step.dependOn(&run_br_incremental_fuzz_smoke.step);
+
     const fuzz_corpus_exe = b.addExecutable(.{
         .name = "vort-fuzz-corpus",
         .root_module = b.createModule(.{
@@ -7949,6 +7965,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_magicless_root_tests.step);
     check_step.dependOn(&zstd_magicless_probe.step);
     check_step.dependOn(&zstd_incremental_fuzz_smoke_exe.step);
+    check_step.dependOn(&br_incremental_fuzz_smoke_exe.step);
     check_step.dependOn(&br_large_history_tests.step);
     check_step.dependOn(&br_large_history_probe.step);
     check_step.dependOn(&br_metadata_tests.step);
