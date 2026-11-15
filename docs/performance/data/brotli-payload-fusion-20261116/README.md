@@ -258,3 +258,25 @@ rather than assumed:
   one loop body instead of re-entering the top-level `while`; that is the
   goto-style fusion and carries real correctness risk, so it needs its own
   design and byte-identical validation.
+
+## Rejected experiment: block-switch guard loop hoist
+
+A direct probe first confirmed the benchmark frames have
+`max_*_block_types == 1` for literal/command/distance, so the per-sequence
+`block_type_count > 1` guards are always false. The change hoisted both
+`block_type_count > 1` booleans out of the `processTailLookupCompressedPayload`
+loop (block_type_count is frame-invariant; only `remaining` mutates).
+Correctness held (227 incremental + 37 fuzz tests green, byte-identical).
+
+Paired A/B (two baseline, two candidate 500-iteration runs):
+
+- payload-dominated clustered_q8 looked like +1.86% on paired means, but the
+  two individual runs were +2.92% and +0.81%;
+- small-frame rows crossed sign between runs (e.g. text +2.06% then -4.53%);
+- paired geomean -0.81%, worst control 0.9691 (just through the 0.98 floor).
+
+Decision: rejected and reverted. The dispersion shows the apparent clustered
+gain is run-to-run drift, not the hoist; LLVM already keeps the invariant field
+load in a register. This is the second sub-noise micro-edit rejected via paired
+A/B (after the nine-bit peek), reinforcing that only the structural phase-chain
+fusion can clear the 3% bar. CSVs archived as candidate-hoist-run{1,2}.csv.
