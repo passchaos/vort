@@ -648,3 +648,25 @@ test "Zstd encoded frame bound always covers the real encoded length" {
     defer a.free(empty_encoded);
     try std.testing.expect(empty_encoded.len <= try zstd.encodedNativeFrameBound(0));
 }
+
+test "Zstd encode into caller slice matches alloc encoding and bounds the buffer" {
+    const a = std.testing.allocator;
+    const payload = "zstd into-slice encoding contract payload. " ** 128;
+    const reference = try zstd.encodeNativeFrameAlloc(a, payload);
+    defer a.free(reference);
+
+    // A sufficiently large caller buffer receives the identical frame.
+    const big = try a.alloc(u8, reference.len + 32);
+    defer a.free(big);
+    const into = try zstd.encodeNativeFrameIntoSlice(a, payload, .{}, big);
+    try std.testing.expectEqual(reference.len, into.written);
+    try std.testing.expectEqualSlices(u8, reference, big[0..into.written]);
+
+    // A one-byte-short buffer is rejected without writing past its end.
+    const small = try a.alloc(u8, reference.len - 1);
+    defer a.free(small);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        zstd.encodeNativeFrameIntoSlice(a, payload, .{}, small),
+    );
+}
