@@ -1,0 +1,78 @@
+{
+  "library": "libzstd.so.1",
+  "version": "1.4.8",
+  "rows": [
+    {
+      "name": "raw known_fcs=False checksum=False",
+      "wire_hex": "28b52ffd0000010000",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "raw known_fcs=False checksum=True",
+      "wire_hex": "28b52ffd040001000099e9d851",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "raw known_fcs=True checksum=False",
+      "wire_hex": "28b52ffd2000010000",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "raw known_fcs=True checksum=True",
+      "wire_hex": "28b52ffd240001000099e9d851",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "rle known_fcs=False checksum=False",
+      "wire_hex": "28b52ffd00000300007a",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "rle known_fcs=False checksum=True",
+      "wire_hex": "28b52ffd04000300007a99e9d851",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "rle known_fcs=True checksum=False",
+      "wire_hex": "28b52ffd20000300007a",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "rle known_fcs=True checksum=True",
+      "wire_hex": "28b52ffd24000300007a99e9d851",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "compressed known_fcs=False checksum=False",
+      "wire_hex": "28b52ffd00001d0000040000",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "compressed known_fcs=False checksum=True",
+      "wire_hex": "28b52ffd04001d000004000099e9d851",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "compressed known_fcs=True checksum=False",
+      "wire_hex": "28b52ffd8000000000001d0000040000",
+      "is_error": false,
+      "result": 0
+    },
+    {
+      "name": "compressed known_fcs=True checksum=True",
+      "wire_hex": "28b52ffd8400000000001d000004000099e9d851",
+      "is_error": false,
+      "result": 0
+    }
+  ]
+}

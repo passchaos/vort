@@ -1,0 +1,40 @@
+{
+  "utc": "2026-11-15T05:30:13.851455+00:00",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "machine": "x86_64",
+  "zig": "0.16.0",
+  "libraries": [
+    {
+      "requested": "libz.so.1",
+      "version": "1.2.11",
+      "mapped_files": [
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libz.so.1.2.11",
+          "sha256": "64c206f0146cc58bbddc4f22054436f4ff278f5a554aa3ce6921ddf7e9133370"
+        }
+      ]
+    },
+    {
+      "requested": "libzstd.so.1",
+      "version": "1.4.8",
+      "mapped_files": [
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.4.8",
+          "sha256": "5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667"
+        }
+      ]
+    },
+    {
+      "requested": "libbrotlidec.so.1",
+      "version": "1.0.9",
+      "mapped_files": [
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+          "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+        }
+      ]
+    }
+  ],
+  "evidence_scope": "Functional correctness and compatibility; no performance ranking"
+}

@@ -1,0 +1,21 @@
+Build Summary: 14/14 steps succeeded; 369/369 tests passed
+test-br-decode success
++- run test vort-br-decode-tests 223 pass (223 total) 8s MaxRSS:35M
+   +- compile test vort-br-decode-tests ReleaseFast native success 2m MaxRSS:2G
+      +- WriteFile cached
+      +- compile obj vort-br-decode-memory-object-x86_64 ReleaseFast native success 171ms MaxRSS:112M
+      +- compile obj vort-br-decode-memory-object-x86_64 ReleaseFast native (reused)
+test-br-metadata success
++- run test vort-br-metadata-tests 37 pass (37 total) 1s MaxRSS:53M
+|  +- compile test vort-br-metadata-tests ReleaseFast native success 1m MaxRSS:1G
+|     +- WriteFile cached
+|     +- compile obj vort-br-record-optimal ReleaseFast native success 188ms MaxRSS:111M
+|     +- compile obj vort-br-record-optimal ReleaseFast native (reused)
++- run test vort-br-metadata-root-tests 109 pass (109 total) 2ms MaxRSS:10M
+   +- compile test vort-br-metadata-root-tests ReleaseFast native success 27s MaxRSS:757M
+      +- WriteFile (reused)
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 7ms MaxRSS:39M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)

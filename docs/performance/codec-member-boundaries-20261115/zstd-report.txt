@@ -1,0 +1,24 @@
+Zstd prevalidated incremental decode audit (old source)
+Revision: 775ed212ebd46489051bd86fce72aa81a2246930
+Observed: 2026-11-15 05:16:04 UTC. Zig 0.16.0, ReleaseSafe.
+Repository files were not changed; pre-existing encoder/counter_tests.zig was not touched.
+
+Root cause: src/zstd.zig:8042 fulfilledPledgeStartsDataMember uses first data-magic byte to reject a new frame once expected_output_len is fulfilled. This misclassifies zero-output frames and reads items[0] without an empty-buffer guard.
+
+1. Empty input poll: prevalidated_frame + expected_output_len=0 + step(empty,empty) aborts at zstd.zig:8047 (index 0, len 0), called at :7328/:7231.
+2. Valid empty frame 28b52ffd2000010000: whole input succeeds (done/read9); first-byte input fails (SizeMismatch/read1). block_stream succeeds both ways. libzstd 1.4.8 decodes zero bytes.
+3. Nonempty FCS=1 frame 28b52ffd200109000061 at pledge0/output capacity0: prevalidated_frame returns need_output/read10 and finish OutputTooSmall. block_stream correctly returns SizeMismatch at admitted header/read6.
+4. Truncated empty checksum frame 28b52ffd240001000099e9d8: old prevalidated_frame reports SizeMismatch/read12; block_stream reports need_input then finish TruncatedFrame.
+5. Full empty frame with invalid checksum: both policies report ChecksumMismatch.
+
+Fix boundary: remove the magic-only heuristic. A complete admitted header may reject FCS > remaining pledge, after dictionary admission and with existing output-limit precedence. Unknown FCS must wait for block/frame preflight, because compressed blocks can regenerate zero bytes. Complete zero-byte frames still validate checksum and exact footer length.
+
+Validated compressed empty oracles (all decode0 on system libzstd1.4.8):
+unknown FCS/no checksum: 28b52ffd00001d0000040000
+unknown FCS/checksum:    28b52ffd04001d000004000099e9d851
+known FCS/no checksum:   28b52ffd8000000000001d0000040000
+known FCS/checksum:      28b52ffd8400000000001d000004000099e9d851
+Known FCS compressed frames must be non-single, with an independent nonzero window; single-segment FCS0 has Block_Maximum_Size0. These fixtures use a two-byte Raw literals header 04 00 and seqcount00. Empty XXH64 footer is 99 e9 d8 51.
+
+Artifacts: pledge_probe.zig/.txt, edge_probe.zig/.txt, oracle.py, libzstd-oracle.txt, report.json.
+The edge probe also logs Vort acceptance of an older two-byte compressed empty fixture; that case is not used as a compatibility oracle.

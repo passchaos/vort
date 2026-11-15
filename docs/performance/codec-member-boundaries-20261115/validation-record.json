@@ -1,0 +1,109 @@
+{
+  "schema": "vort-codec-member-boundary-validation-v1",
+  "utc": "2026-11-15T05:56:35.953969+00:00",
+  "base_revision": "775ed212ebd46489051bd86fce72aa81a2246930",
+  "codec_revision": "9126988937f0db2c446d94585a813f59661cbf1d",
+  "source_files": [
+    {
+      "path": "build.zig",
+      "sha256": "7d0cf435e9ddc3da48cd93c8b9dbba0659ffe2af39c1fa3bcdb142af57c43c60"
+    },
+    {
+      "path": "build/codec_member_boundaries.zig",
+      "sha256": "b85ed383779ca23fe5e319547108346750df6d2ff5a87d947ad8e25cdff4d275"
+    },
+    {
+      "path": "tools/wasi_test_gate.js",
+      "sha256": "3c17f2a13a31613197a4a727b0f9663ac2d6b51ee2a38da94d06f44c5339f778"
+    },
+    {
+      "path": "tools/br/metadata_diff.py",
+      "sha256": "7feeeb1643f49ac9eb92e39e48ddd4592198e67b079cc8790652dbf7fcbff0f7"
+    },
+    {
+      "path": "src/zstd.zig",
+      "sha256": "37de5ce294c1c47cdfae5da941e39a65f81551b3edd225b28bd8863bfc0d9b90"
+    },
+    {
+      "path": "src/zstd/incremental/decoder_tests.zig",
+      "sha256": "41e72bd6cc5e0b3b49b5befcd1aded0995e5d56f26f20d2fc6ca626d562898a5"
+    },
+    {
+      "path": "src/zstd/incremental/empty_member_tests.zig",
+      "sha256": "815ea4efd16cd22f5c33cc335f7c08be506e20c9f4d56bbc2bab3a044dea49b8"
+    },
+    {
+      "path": "src/br.zig",
+      "sha256": "e11f006a297f5c649a6fbb9d5c0fdf6654f5e19ffbe2584f3eba56ccb7852bfc"
+    },
+    {
+      "path": "src/br/incremental/final_metadata_tests.zig",
+      "sha256": "d198864b9dd0cc343c4b707969c6889fc916c205b7c94488f15b1c983c741a7a"
+    },
+    {
+      "path": "src/br/incremental/copy_decoder.zig",
+      "sha256": "29aac133ac496ebc18bd62f86d3190ba5264bb8bb7b64036c1a4934131082cda"
+    },
+    {
+      "path": "src/br/incremental/owned_copy_decoder.zig",
+      "sha256": "67d19575e4309e620d7376378d587b44817f7f43b5e690c66a25cf4c308eb1ee"
+    },
+    {
+      "path": "src/br/incremental/literal_decoder.zig",
+      "sha256": "092acf5bb992ebe5de1cc8b0988f411304399833ac24f876f1edc45cc33ff646"
+    },
+    {
+      "path": "src/br/incremental/stored/decoder.zig",
+      "sha256": "e05787fd299ee3877bd691a46e717554a6a25c5f302cd7beb175c42ce28008e8"
+    },
+    {
+      "path": "src/br/diagnostics/meta_blocks.zig",
+      "sha256": "dd2296ca76aec587d8d5b43269e8506eb942e6dfe23f5c4eb88d7e88ba34e5b8"
+    },
+    {
+      "path": "src/br/encoder/hq_codec/legacy.zig",
+      "sha256": "c6e4d355639ef38eeb1aa9a261eb1c4fa44c01f43ba8e229d4d247f0f21ce455"
+    }
+  ],
+  "checks": {
+    "zstd_full_releasefast": {
+      "exit_code": 0,
+      "passed": 1415
+    },
+    "brotli_decode_metadata_releasefast": {
+      "exit_code": 0,
+      "passed": 369
+    },
+    "member_boundaries_debug_native_x86": {
+      "exit_code": 0,
+      "passed": 106
+    },
+    "member_boundaries_wasi": {
+      "exit_code": 0,
+      "brotli_passed": 23,
+      "zstd_passed": 30
+    },
+    "debug_check_check_wasm": {
+      "exit_code": 0,
+      "steps": 381,
+      "tests": 86,
+      "root_test_filter": "root brotli stream helpers expose exact and chunked decode variants"
+    },
+    "differential": {
+      "exit_code": 0,
+      "seed": "0x20261115",
+      "valid_wires": 12495,
+      "truncation_cuts": 336399,
+      "mutations": 447004,
+      "one_sided_mutation_acceptance": 10588
+    }
+  },
+  "extra_releasefast_compile": {
+    "status": "running",
+    "session_id": 20578,
+    "worktree": "/home/passchaos/project-z/vort-codec-functional-20261115",
+    "local_log": "docs/performance/codec-member-boundaries-20261115/compile-checks-releasefast.log",
+    "counted_as_passed": false
+  },
+  "scope": "Functional correctness and compatibility; industry leadership remains unproven"
+}

@@ -47,6 +47,13 @@ while preserving footer consumption, structure, sizes, dictionaries and memory
 limits. Native, x86 and WASI contracts and independent reference tooling cover
 these options before the next performance increment.
 
+The [member-boundary regressions](performance/codec-member-boundaries-20261115/README.md)
+close Zstd empty-member fragmentation and empty-input polling defects, and
+preserve Brotli's final-metadata termination across decoder and inspection
+routes. `test-codec-member-boundaries`, its `-x86` variant, and its `-wasm`
+variant exercise these zero-output boundaries alongside exact-length,
+checksum, truncation, and trailing-input controls.
+
 The [codec state and dictionary controls](formats/codec-state-controls.md)
 add independent Deflate stream copies with caller-owned decoder storage,
 Brotli's explicit literal context policy and Zstd's optional frame dictionary

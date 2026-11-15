@@ -805,6 +805,7 @@ pub fn build(b: *std.Build) void {
         .filters = if (zstd_test_filter) |filter| &.{filter} else &.{},
     });
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
+    @import("build/codec_member_boundaries.zig").register(b, target, optimize, br_tests_mod, zstd_tests_mod);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
     const zstd_decode_memory_tests = b.addTest(.{

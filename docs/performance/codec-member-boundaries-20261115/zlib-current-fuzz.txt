@@ -1,0 +1,9 @@
+Baseline: 775ed212ebd46489051bd86fce72aa81a2246930
+Command: zig build -j2 -Doptimize=ReleaseFast run-codec-differential-fuzz -- --deep --max-size=8192 --seed=0x20261115 --only=zlib
+Exit code: 0
+codec differential fuzz: seed=539365653 deep=true only=zlib
+  valid wires=1320 (variants=528) vort_roundtrip=1320 exact_size=1320 reference_interop=1320
+  truncation cuts=33984 (both_rejected=33984 agreed_accept=0)
+  mutations xor=19800 bitflip=6600 overwrite=10116 double-overwrite=3372 insert=3372 delete=3372 (rejected=46025 one_sided_divergence=1124)
+
+One-sided mutation acceptance is permitted by this harness; accepted output must match when both decoders accept. These results prove the declared generated-wire matrix, not full zlib parity.

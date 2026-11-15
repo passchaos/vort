@@ -1,0 +1,207 @@
+{
+  "schema": "vort-br-final-metadata-audit-v1",
+  "reference_decoder_version": 16777225,
+  "reference_paths": {
+    "common": "libbrotlicommon.so.1",
+    "enc": "libbrotlienc.so.1",
+    "dec": "libbrotlidec.so.1"
+  },
+  "cases": [
+    {
+      "name": "metadata-0-nonfinal",
+      "metadata_len": 0,
+      "final": false,
+      "path": "brotli-fixtures/metadata-0-nonfinal.br",
+      "compressed_len": 2,
+      "sha256": "3ff9292ba5f21031dff50cc27295e71f7a647fe704b2f8afe678b77174b85e47",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-0-final",
+      "metadata_len": 0,
+      "final": true,
+      "path": "brotli-fixtures/metadata-0-final.br",
+      "compressed_len": 1,
+      "sha256": "58f7b0780592032e4d8602a3e8690fb2c701b2e1dd546e703445aabd6469734d",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-1-nonfinal",
+      "metadata_len": 1,
+      "final": false,
+      "path": "brotli-fixtures/metadata-1-nonfinal.br",
+      "compressed_len": 4,
+      "sha256": "8aca3ced8f7ae481b8a0d0e57380ab661ec22d427e8709b0b99338d46a3d496a",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-1-final",
+      "metadata_len": 1,
+      "final": true,
+      "path": "brotli-fixtures/metadata-1-final.br",
+      "compressed_len": 3,
+      "sha256": "820e2bde49129f407cc5feb37160047d99038d3ae1100f92e035232fab594a60",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-255-nonfinal",
+      "metadata_len": 255,
+      "final": false,
+      "path": "brotli-fixtures/metadata-255-nonfinal.br",
+      "compressed_len": 258,
+      "sha256": "a8f1642c272c1f5919c9ef4718b2338dd3f6c63ea01ce5e2c1d7c2683373dbb2",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-255-final",
+      "metadata_len": 255,
+      "final": true,
+      "path": "brotli-fixtures/metadata-255-final.br",
+      "compressed_len": 257,
+      "sha256": "80ea0f7b9762eaa3f49f551010fafe0c81127abd7768638668699d35dcf5eb37",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-256-nonfinal",
+      "metadata_len": 256,
+      "final": false,
+      "path": "brotli-fixtures/metadata-256-nonfinal.br",
+      "compressed_len": 259,
+      "sha256": "36217075b0481adbc79859bb7431711e070380041a16e2b3bb4117766b6c708b",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-256-final",
+      "metadata_len": 256,
+      "final": true,
+      "path": "brotli-fixtures/metadata-256-final.br",
+      "compressed_len": 258,
+      "sha256": "63bd4e1b17198fd8db24e448ed70208e8887977387754879253d88577cdf4ce0",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-257-nonfinal",
+      "metadata_len": 257,
+      "final": false,
+      "path": "brotli-fixtures/metadata-257-nonfinal.br",
+      "compressed_len": 261,
+      "sha256": "06fd73d4d6e8b911f5a26b00df3dc20f96c4c34d6a5dfacd95c5992b10dddba2",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-257-final",
+      "metadata_len": 257,
+      "final": true,
+      "path": "brotli-fixtures/metadata-257-final.br",
+      "compressed_len": 260,
+      "sha256": "ea7a2acc3280115d18b1f1d3e29e1bf8f57c5f2b8e0c4fc94db9ee82f7673b2c",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-65535-nonfinal",
+      "metadata_len": 65535,
+      "final": false,
+      "path": "brotli-fixtures/metadata-65535-nonfinal.br",
+      "compressed_len": 65539,
+      "sha256": "d9a19ee6052abcfdfd267068dabbe48563f987cfeb9f998d1fd058e8f635d818",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-65535-final",
+      "metadata_len": 65535,
+      "final": true,
+      "path": "brotli-fixtures/metadata-65535-final.br",
+      "compressed_len": 65538,
+      "sha256": "1b6627caa694edb09b8c50c736d70ae6508ee9ff5eabba84f9ad10f89fdde715",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-65536-nonfinal",
+      "metadata_len": 65536,
+      "final": false,
+      "path": "brotli-fixtures/metadata-65536-nonfinal.br",
+      "compressed_len": 65540,
+      "sha256": "daaf15b5370dcfbcfbd464c02c1cc67f063d2e2f9569cf35021db5f45d8db230",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-65536-final",
+      "metadata_len": 65536,
+      "final": true,
+      "path": "brotli-fixtures/metadata-65536-final.br",
+      "compressed_len": 65539,
+      "sha256": "ceebc7e9ed4445dd06b70ce2bccda9e917da7f2645b34f29be0fdaaef92d8083",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-65537-nonfinal",
+      "metadata_len": 65537,
+      "final": false,
+      "path": "brotli-fixtures/metadata-65537-nonfinal.br",
+      "compressed_len": 65542,
+      "sha256": "579fb951024588c9f2461222eb1b8eaec5bf35ff4c6a672e2d361d442577e8e0",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "metadata-65537-final",
+      "metadata_len": 65537,
+      "final": true,
+      "path": "brotli-fixtures/metadata-65537-final.br",
+      "compressed_len": 65541,
+      "sha256": "e8c0b15101564911e606dba2dc4a4b4b84a33aa37a6d416373afc6321b4fa12b",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "empty.compressed.15",
+      "path": "brotli-fixtures/empty.compressed.15",
+      "compressed_len": 1,
+      "sha256": "58f7b0780592032e4d8602a3e8690fb2c701b2e1dd546e703445aabd6469734d",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    },
+    {
+      "name": "empty.compressed.16",
+      "path": "brotli-fixtures/empty.compressed.16",
+      "compressed_len": 4,
+      "sha256": "592b1bea772c8f6478bbf8ee7965c9697887d68fbbe07224c5d1680056cbe6de",
+      "reference_status": 1,
+      "reference_unused": 0,
+      "output_len": 0
+    }
+  ],
+  "reference_decoder_version_string": "1.0.9",
+  "base_revision": "775ed212ebd46489051bd86fce72aa81a2246930"
+}
