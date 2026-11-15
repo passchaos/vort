@@ -122,3 +122,31 @@ meta-block's Huffman tables. Concrete plan, smallest safe candidate first:
 
 Do not start from a block-index-only key: identical indices in different
 meta-blocks can carry different trees, which would silently corrupt output.
+
+## Meta-block count measurement (2026-11-16): table reuse does not apply
+
+A direct probe (`br.summarizeStream` on the benchmark's 1 MiB q8 clustered
+frame) reports exactly one compressed meta-block:
+
+```
+METABLOCKS compressed=1 uncompressed=0 total=1 wire=1049002
+```
+
+`max_uncompressed_meta_block_len` is 2^24 (16 MiB), so all current benchmark
+frames (max 1 MiB) are single-meta-block. addr2line maps the memset samples to
+`readCompressedHeaderCommandTrees` -> the per-frame Huffman table builds in
+`readPrefixCodeInto`/`readPrefixCodeRuntimeInto` (src/br.zig 17341-17419).
+
+Consequence: the cross-meta-block table-reuse cache from the earlier design
+skeleton cannot fire on these workloads and would not reduce the 23% memset
+share. The memset is the one-time, mandatory initialization of each frame's
+Huffman lookup tables: `HuffmanTable.Decoder.init` already has three tiers
+(no-memset for full coverage, long-prefix-only clear, full memset for partial
+coverage), and the partial-coverage memset is required so uncovered lookup
+slots hold a known-invalid value. There is no safe local reduction.
+
+Revised direction: do not build the table-reuse cache for this benchmark.
+The realistic decoder levers are (a) the payload state-machine fusion on the
+22% `processTailLookupCompressedPayload`, which is independent of meta-block
+count, or (b) measuring larger-than-16 MiB inputs first if table reuse is ever
+revisited, since only they produce multiple meta-blocks.
