@@ -237,3 +237,24 @@ noise floor under paired A/B. Further throughput progress requires structural
 projects (Brotli payload control-flow fusion; Zstd executor fusion / FSE build
 scatter reduction), each scoped as its own design + paired A/B task with the
 3% geomean / 95% CI / 0.98x control adoption bar.
+
+## Concrete starting cut for payload fusion (2026-11-16)
+
+Source read of `processTailLookupCompressedPayload` (src/br.zig 19642)
+identifies the first concrete cut for a dedicated fusion task, to be validated
+rather than assumed:
+
+- The per-iteration block-switch guards
+  (`header.command_block.block_type_count > 1 and .remaining == 0` at 19644,
+  and the distance equivalent at 19697) evaluate on every sequence even though
+  the common single-block-type case keeps the first condition false. Hoisting
+  the runtime `block_type_count > 1` booleans out of the loop is the smallest
+  candidate, but it must be A/B tested: LLVM may already keep the field load in
+  a register, in which case it lands in the noise floor exactly like the
+  rejected nine-bit peek. Do not implement without measuring block_type_count
+  on the benchmark frames first.
+- The larger structural win remains collapsing the
+  command -> literals -> distance -> copy phase chain so a sequence stays in
+  one loop body instead of re-entering the top-level `while`; that is the
+  goto-style fusion and carries real correctness risk, so it needs its own
+  design and byte-identical validation.
