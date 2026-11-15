@@ -150,3 +150,22 @@ The realistic decoder levers are (a) the payload state-machine fusion on the
 22% `processTailLookupCompressedPayload`, which is independent of meta-block
 count, or (b) measuring larger-than-16 MiB inputs first if table reuse is ever
 revisited, since only they produce multiple meta-blocks.
+
+## Hotspot stability re-check (2026-11-16)
+
+A second `perf record -F 999` run (421 samples) reproduces the same ranking as
+the first (703 samples), so the conclusion is not sampling noise:
+
+| symbol | run 1 | run 2 |
+| --- | ---: | ---: |
+| `compiler_rt.memset` (one-time per-frame table build) | 23.09% | 29.62% |
+| `processTailLookupCompressedPayload` | 22.02% | 26.70% |
+| `memcpyFast` (match copies) | 5.96% | 4.71% |
+| `PrefixCode(256).decodePrepared` | 2.82% | 4.21% |
+
+The literal fast path `HuffmanTable.Decoder.decodeValueFast` (and its fixed
+9/10-bit variants) is already a tight inline peek + zero-slot check + staged
+advance with branch hints; there is no removable per-symbol overhead. This
+reinforces that the only structural decoder lever independent of meta-block
+count remains the payload loop fusion, and it must clear the 3% A/B bar to be
+adopted rather than landing on intuition.
