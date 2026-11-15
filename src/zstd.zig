@@ -2508,6 +2508,7 @@ test {
     _ = incremental_tests;
     _ = incremental_decoder_tests;
     _ = @import("zstd/incremental/decoder_counter_tests.zig");
+    _ = @import("zstd/incremental/empty_member_tests.zig");
     _ = incremental_limits_tests;
     _ = dictionary_resume_tests;
     _ = compressed_workspace_tests;
@@ -7261,9 +7262,9 @@ pub const NativeIncrementalFrameDecoder = struct {
             // Fresh bytes after a completed frame are interpreted as the next
             // member of the same caller-driven concatenated stream. A fulfilled
             // output pledge still permits metadata (skippable frames, fed one
-            // byte at a time) and complete zero-byte data members; a new data
-            // member that cannot be empty is rejected as SizeMismatch, including
-            // its first byte. Keep cumulative counters intact; `reset()` starts
+            // byte at a time) and zero-byte data members under any input split.
+            // Frame preflight and block emission reject surplus decoded bytes.
+            // Keep cumulative counters intact; `reset()` starts
             // a new logical stream.
             self.phase = .frame;
             self.decoded_scratch.clearRetainingCapacity();
@@ -7295,7 +7296,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                         self.phase = .skippable_stream;
                         continue;
                     }
-                    try self.checkFrameDictionaryIfHeaderAvailable();
+                    try self.checkFrameHeaderIfAvailable();
                     if (self.options.input_policy == .block_stream) {
                         const block_stream_started = self.beginBlockStreamIfSupported() catch |err| {
                             self.recordError(.frame, err);
@@ -7320,14 +7321,6 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 .progress = .{ .input_read = input_read, .output_written = output_written_step },
                                 .status = .done,
                             };
-                        }
-                        // A fulfilled output pledge allows further metadata
-                        // (skippable frames, possibly split byte by byte) and
-                        // complete zero-byte data members, but the first byte
-                        // of a new non-empty data member exceeds the pledge.
-                        if (self.fulfilledPledgeStartsDataMember()) {
-                            self.recordError(.frame, error.SizeMismatch);
-                            return error.SizeMismatch;
                         }
                         if (self.frame_scratch.items.len >= self.options.max_compressed_buffer_len) {
                             const block_stream_supported = self.beginBlockStreamIfSupported() catch |err| {
@@ -7465,6 +7458,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                     // A compressed block may legitimately regenerate zero
                     // bytes while still carrying entropy payload that must be
                     // parsed and validated. It needs no caller output space.
+                    try self.ensureDirectOutputFitsExpected();
                     if (output_written_step == output.len and
                         (!self.direct_block_compressed or self.direct_block_decoded_len != 0))
                     {
@@ -7473,7 +7467,6 @@ pub const NativeIncrementalFrameDecoder = struct {
                             .status = .need_output,
                         };
                     }
-                    try self.ensureDirectOutputFitsExpected();
                     if (self.direct_block_compressed) {
                         // Whole-frame preflight remains available, but symbol
                         // cursors expose exact partial writes on malformed
@@ -7550,6 +7543,9 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 continue;
                             }
                             if (output_written_step == output.len) {
+                                // The pending block proves at least one more
+                                // byte is required, even without caller output.
+                                try self.ensureBlockStreamOutputFits(1);
                                 return .{
                                     .progress = .{ .input_read = input_read, .output_written = output_written_step },
                                     .status = .need_output,
@@ -7594,6 +7590,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 continue;
                             }
                             if (output_written_step == output.len) {
+                                try self.ensureBlockStreamOutputFits(1);
                                 return .{
                                     .progress = .{ .input_read = input_read, .output_written = output_written_step },
                                     .status = .need_output,
@@ -8030,24 +8027,6 @@ pub const NativeIncrementalFrameDecoder = struct {
         return self.output_written < expected;
     }
 
-    /// Whether buffered bytes start a new non-empty data member while the
-    /// caller's exact output pledge is already fulfilled. Skippable metadata
-    /// (magic bytes 0x50-0x5f in standard framing) remains permitted, even when
-    /// fed one byte at a time; the standard data magic's first byte is
-    /// classified immediately under whole-frame prevalidation, where a
-    /// fulfilled pledge means no further data member can be valid. Bounded
-    /// block streaming keeps deferring instead: zero-output compressed blocks
-    /// can only be proven empty as they arrive, and non-zero members fail the
-    /// existing output pledge check during block emission.
-    fn fulfilledPledgeStartsDataMember(self: *const NativeIncrementalFrameDecoder) bool {
-        if (self.options.format != .standard) return false;
-        if (self.options.input_policy != .prevalidated_frame) return false;
-        const expected = self.options.expected_output_len orelse return false;
-        if (self.output_written != expected) return false;
-        const first = self.frame_scratch.items[0];
-        return first == frame_magic[0];
-    }
-
     fn stopAfterDataFrame(self: *NativeIncrementalFrameDecoder) Error!bool {
         self.stable_binding.clearFramePrefix();
         prefix_decode_stream.complete(self);
@@ -8193,12 +8172,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
         const frame_expected_len: ?Count = if (header.content_size) |size| @intCast(size) else null;
         if (frame_expected_len) |expected| {
-            if (expected > self.options.max_decoded_buffer_len) return error.OutputLimitExceeded;
-            try self.ensureCumulativeOutputFits(expected);
-            if (self.options.expected_output_len) |stream_expected| {
-                if (self.output_written > stream_expected or expected > stream_expected - self.output_written)
-                    return error.SizeMismatch;
-            }
+            try self.validateIncrementalContentSize(header);
             if (self.stable_binding.buffer != null) _ = try self.stable_binding.destination(try stream_count.toLocal(expected));
         }
 
@@ -8469,7 +8443,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 },
                 else => return err,
             };
-            try self.checkFrameDictionaryIfHeaderAvailable();
+            try self.checkFrameHeaderIfAvailable();
             break;
         }
         if (self.options.input_policy == .prevalidated_frame)
@@ -8600,15 +8574,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         const dictionary_history = try self.resolveDirectDictionaryHistory(header);
         const dictionary = self.resolveDirectDictionary(header);
         const initial_sequence_state = initialSequenceFrameState(dictionary) catch return false;
-        const frame_expected_len: ?Count = if (header.content_size) |size| blk: {
-            const len: Count = @intCast(size);
-            if (len > self.options.max_decoded_buffer_len) {
-                self.recordError(.frame, error.OutputLimitExceeded);
-                return error.OutputLimitExceeded;
-            }
-            try self.ensureCumulativeOutputFits(len);
-            break :blk len;
-        } else null;
+        try self.validateIncrementalContentSize(header);
+        const frame_expected_len: ?Count = if (header.content_size) |size| @intCast(size) else null;
         const pledged_limit = if (frame_expected_len) |len|
             len
         else if (self.options.expected_output_len) |expected| blk: {
@@ -8765,7 +8732,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         return null;
     }
 
-    fn checkFrameDictionaryIfHeaderAvailable(self: *NativeIncrementalFrameDecoder) Error!void {
+    fn checkFrameHeaderIfAvailable(self: *NativeIncrementalFrameDecoder) Error!void {
         if (!frame_format.hasDataPrefix(self.frame_scratch.items, self.options.format)) return;
         const header = inspectNativeFrameHeaderWithFormat(self.frame_scratch.items, self.options.format) catch |err| switch (err) {
             error.TruncatedFrame => return,
@@ -8782,6 +8749,21 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
         _ = try stream_count.add(self.data_frame_count, 1);
         _ = try self.resolveDirectDictionaryHistory(header);
+        // A data magic alone cannot distinguish an empty member from surplus
+        // output. Only a complete header with a declared content size can
+        // reject it here; unknown sizes remain subject to block preflight.
+        try self.validateIncrementalContentSize(header);
+    }
+
+    fn validateIncrementalContentSize(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error!void {
+        const size = header.content_size orelse return;
+        const expected: Count = @intCast(size);
+        if (expected > self.options.max_decoded_buffer_len) return error.OutputLimitExceeded;
+        try self.ensureCumulativeOutputFits(expected);
+        if (self.options.expected_output_len) |stream_expected| {
+            if (self.output_written > stream_expected or expected > stream_expected - self.output_written)
+                return error.SizeMismatch;
+        }
     }
 
     fn validateIncrementalWindow(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error!void {
