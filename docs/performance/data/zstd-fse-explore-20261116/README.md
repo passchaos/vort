@@ -57,3 +57,28 @@ remaining 1.32x weak-row gap stays gated on the structural executor/
 table-representation fusion, which is an architecture-level project (a table
 representation the executor consumes directly), not an isolated edit. No new
 micro-change with positive expected value remains on the current profile.
+
+## Medium executor hotspot annotated (2026-11-16)
+
+A fresh perf run on nci 64K L19 attributes 45.97% to
+`tryDecodeMediumSplitHuffmanSequencesNative` (this frame takes the medium, not
+dense, path). Annotation shows the cost is flat and dispersed like Brotli: top
+instruction 4.63%, dominated by `vmovups` literal/match SIMD copies plus
+condition branches, with no single bottleneck.
+
+Two candidate ideas were checked against source and found already implemented:
+
+- the medium executor already has the same wildcopy fast path as dense
+  (the `match_offset >= 16` + capacity-guarded `appendUpTo16Wildcopy16` /
+  `appendForwardWildcopy` block at src/zstd.zig 15986+), so there is no missing
+  short-match vectorization to port;
+- the FSE `SequenceSymbol` table is already an executor-shaped 8-byte word read
+  once per state via `symbolWordUnchecked` with inline bit unpacking, i.e. the
+  table representation is already fused to the consumer.
+
+This confirms at instruction granularity that the executor is bound by
+intrinsic per-sequence work (three FSE state transitions, field reads, two
+copies), not a removable local inefficiency. A real gain requires reducing the
+operation count per sequence (wider/batched state transitions), which is the
+architecture-level fusion and cannot be introduced as an isolated edit without
+a new representation and full portable/WASM parity.
