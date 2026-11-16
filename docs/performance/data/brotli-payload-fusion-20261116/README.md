@@ -321,3 +321,24 @@ Combined with the one-shot finding (already a single fused loop), there is no
 phase-fusion opportunity on either brotli decode path. The brotli performance
 gap is therefore attributable to intrinsic per-symbol Huffman/copy work and
 would only move via algorithmic/SIMD changes, not control-flow reshaping.
+
+## Why SIMD Huffman "gather" cannot parallelize symbol decode (2026-11-16)
+
+A feasibility check of the remaining "algorithmic/SIMD" idea finds that
+variable-length Huffman symbols carry an inherent serial dependency, so a
+gather-based parallel decode is not realizable:
+
+- `decodeValueFast` peeks a fixed-width window, then advances the bit reader by
+  `bits` read from that same symbol (`advanceBitsStagedAssumeAvailable(bits)`).
+  The next symbol's start position is therefore a function of the current
+  symbol's length; there are no independent lookups to issue in parallel.
+- This is an information-theoretic property of prefix codes, not an
+  implementation choice, so SIMD gather cannot decode multiple symbols at once.
+- libbrotli's actual SIMD wins are wide literal/match copies and table
+  initialization, both already present here (wildcopy paths and the three-tier
+  `HuffmanTable.Decoder.init`).
+
+Implication: the residual brotli gap is not addressable by a speculative SIMD
+gather project. Any future work must target the real remaining costs (fewer
+long-code fallbacks via table-width tuning, or per-symbol scalar work), each
+measured with the paired A/B bar rather than assumed.
