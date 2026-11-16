@@ -112,11 +112,19 @@ forbid for per-call work. The ladder buys about 21% smaller output than the
 fast selection at roughly 10x the time; Vort's fast selection is still 13%
 larger than libzstd level 1 and about 4x slower.
 
-This is a product-semantics decision, not a local edit:
+The user chose to align levels 1-2 with the industry speed-first preset
+semantics. A prototype selected `.fast_compressed` for levels 1-2 in both the
+one-shot and reusable level encoders; on the 128 KiB prefix level 1 moved to
+**77.11 MiB/s at 63,414 bytes** and level 2 to **76.02 MiB/s at 63,414 bytes**
+(13-18% larger than libzstd, about 4.1x slower). Evidence:
+[data/zstd-level12-fast-20261116](../data/zstd-level12-fast-20261116/README.md).
 
-- keep the quality-first default but make the ladder serial or caller-scheduled
-  (remove the per-call thread creation), or
-- align level 1 with the industry speed-first meaning and move the adaptive
-  ladder to a higher quality level / explicit API.
+The prototype is **not merged**: ten `test-zstd` cases pin the old level-1/2
+ladder or legacy level wires, and the reusable level encoder derives a
+different window from the one-shot encoder under the fast selection. The next
+increment must migrate those tests and unify the window policy before the
+semantic change can land.
 
-Do not change the default level semantics without an explicit decision.
+The level-3+ ladder is still ratio-first and very slow (3.65 MiB/s on the same
+prefix), and its per-call `std.Thread.spawn` remains an architecture-rule
+violation to fix in a separate increment.
