@@ -1294,3 +1294,13 @@ command plan 19.7%. The dominant cost is full-wire materialization for
 entropy-split candidates, matching the roadmap's q8+ candidate-graph P0
 item. The next experiment is a count-only candidate writer that emits the
 winner exactly once.
+
+The counting infrastructure already exists: `counting_writer.Writer`,
+`prepareCommandPlanWithOptionsRecorded` (counts a command plan without
+writing bytes), and `context_candidate_group.encodePreparedPrimary`. The
+remaining full-wire materialization is in the alternate literal-context/
+plain-literal loops of
+`encodeEntropySplitWireCandidateInternalAllocRecorded` and the
+`adaptive_contexts` loop of `encodePreferredCommandPlanAllocRecorded`. The
+next change should measure those candidates with the counting writer and emit
+only the winner.
