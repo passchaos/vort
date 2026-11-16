@@ -82,3 +82,18 @@ copies), not a removable local inefficiency. A real gain requires reducing the
 operation count per sequence (wider/batched state transitions), which is the
 architecture-level fusion and cannot be introduced as an isolated edit without
 a new representation and full portable/WASM parity.
+
+## FSE build internal annotation confirms no local lever (2026-11-16)
+
+`perf annotate` of `buildNoLowProbabilityAssumeValid` (6.74% of the weak-row
+profile) shows its cost is also flat and dispersed internally (top instruction
+2.31%): per-entry table stores and the bitset complement/scatter, i.e. the
+inherent work of materializing a 256-state table, with no single bottleneck.
+
+Combined with the executor annotation (top 4.63%, dispersed across SIMD copies,
+literal loads, bit extracts), zstd matches the Brotli/Deflate pattern: every
+hotspot is intrinsic distributed work, not a removable local inefficiency. The
+dense-run threshold idea is bounded even tighter because only the sub-192
+fraction of a 6.74% function could change, putting any realistic gain around
+1-2%, below the 3% bar. No code change; the executor-fusion structural project
+remains the only candidate with headroom, requiring its own dedicated session.
