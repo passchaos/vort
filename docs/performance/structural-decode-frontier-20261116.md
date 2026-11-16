@@ -45,9 +45,15 @@ localization), `e80fc15c` (single-sequence literal decode once), and
    fast region could drop the per-sequence literal-end and output-capacity
    checks for most of a block while keeping the tail on the checked path; a
    two-phase token/plan representation could separate the FSE chain from the
-   copy chain. Either needs a prepared-block prototype before touching
-   production. Expected 5-10% if the per-sequence check/branch cost is
-   material; risk: correctness of the bounds guards.
+   copy chain.
+
+   Instruction annotation of the wide executor after state localization
+   attributes 9.9% `cmp`, 2.8% `test` and 0.7% `jcc` inside the function; the
+   two bounds checks are only a subset of that, while a plan adds a write and
+   a read per sequence. The expected value of the plan variant is therefore
+   **negative**, and the reserved-margin variant is bounded by the same
+   compare share. Do not start either prototype without a cheaper plan
+   encoding or a new measured profile.
 2. **Deflate token two-phase decode.** The semantic loop is over half of the
    decode time and already fuses four-literal batches, packed entries and
    secondary lookups. A chunked token buffer (decode N tokens, then apply)
@@ -70,3 +76,22 @@ localization), `e80fc15c` (single-sequence literal decode once), and
 - Full `test-zstd`/`test-br`/`test-deflate` families plus `check-wasm` before
   adoption; malformed-stream and truncation contracts must stay byte-exact.
 - Record the raw samples and the prototype commit in `docs/performance/data/`.
+
+## Reference availability
+
+- Deflate: libdeflate 1.10 and zlib 1.2.11 are installed. zlib-ng is absent and
+  no local checkout exists, so the modern streaming matrix remains blocked on
+  a reference build.
+- zstd: locally built libzstd 1.6.0 (SHA-pinned) is the decode reference.
+- Brotli: locally built tuned libbrotli 1.2.0 (`-O3 -march=native -flto`) is
+  the decode reference; the reference side is noisy on this host, so
+  single-variant A/B must use Vort's absolute throughput and rerun the
+  baseline.
+
+## Disposition
+
+The measured decode gaps are now dominated by intrinsic per-symbol/per-sequence
+work rather than removable local structure. The next credible levers are
+target-specific assembly kernels (a portability boundary that needs explicit
+authorization and a scalar fallback) or encoder quality/speed (frozen by
+policy). Neither should be started without the corresponding authorization.
