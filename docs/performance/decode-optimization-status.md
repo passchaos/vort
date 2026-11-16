@@ -1268,3 +1268,9 @@ nci/xml/mr neutral or better). Together with the lazy result, the production
 parser's short table is the ratio backbone and its removal is the main speed
 lever. A product-level "fastest" variant could use it, but level 1 stays at
 the current balance.
+
+The parser-redesign screen is consolidated in
+[data/zstd-fast-parser-redesign-20261117](data/zstd-fast-parser-redesign-20261117/README.md):
+drop-short 1.52x/+4.35%, single-table 1.86x/+7.6%, single-table+rep0
+1.57x/+6.2%, drop-lazy 0.964x/+0.31%. Level 1 keeps its current balance; a
+product-level fastest variant remains a policy decision.
