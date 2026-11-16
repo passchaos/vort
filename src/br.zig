@@ -11879,7 +11879,11 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
     const baseline_stats = stats.*;
     errdefer stats.* = baseline_stats;
     var candidate_stats = baseline_stats;
-    const candidate: ?[]u8 = if (has_legacy_split)
+    // The combined adaptive candidate covers both symbol split dimensions and
+    // beat the legacy split wire in every measured planned-q9 call, so the
+    // legacy candidate is not materialized when the combined one exists.
+    const has_adaptive_combined = symbol_splits.adaptive_command != null and symbol_splits.adaptive_distance != null;
+    const candidate: ?[]u8 = if (has_legacy_split and !has_adaptive_combined)
         try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split)
     else if (adaptive_literal) |*split|
         try encodeCountedAdaptiveLiteralCandidateRecorded(
@@ -12069,7 +12073,12 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
         const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
         selection.consider(trace_enabled, trace, allocator, dynamic_distance_candidate, dynamic_distance_stats, freeQualityRecorded);
     }
-    if (has_legacy_split or adaptive_literal != null) if (symbol_splits.adaptive_command) |*adaptive_command| {
+    // This later standalone adaptive command wire is subsumed by the combined
+    // command+distance candidate whenever both plans exist, so skip its
+    // full-wire materialization when an adaptive distance plan is available.
+    // The initial candidate slot still falls back to the adaptive command
+    // wire when no counted adaptive literal plan exists.
+    if ((has_legacy_split or adaptive_literal != null) and symbol_splits.adaptive_distance == null) if (symbol_splits.adaptive_command) |*adaptive_command| {
         var adaptive_stats = baseline_stats;
         const adaptive_candidate = try encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(
             trace_enabled,

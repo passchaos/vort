@@ -1354,3 +1354,18 @@ mr 1.130x, sao 1.000x, webster 1.242x) with identical wire SHA-256. Wire
 identity also held on 12/12 Silesia 128 KiB prefixes, 6/6 1 MiB prefixes,
 and 4/4 synthetic far-copy inputs (400 KiB, 1 MiB, 664 KiB mixed, 2 MiB).
 Evidence: [data/br-far-candidate-gate-20261117](data/br-far-candidate-gate-20261117/README.md).
+
+The next q9 candidate-reduction step removes two full-wire entropy candidates
+that never won. Per-candidate tracing on the 12 Silesia 128 KiB prefixes shows
+the legacy split wire and the standalone adaptive command wire never win:
+combined adaptive wins on dickens/mr/samba/mozilla/x-ray, adaptive distance
+wins on the other rows, and the standalone adaptive command candidate is
+subsumed by the combined command+distance candidate. `src/br.zig` now skips
+the legacy split wire when both adaptive symbol plans exist, and skips the
+standalone adaptive command wire when an adaptive distance plan exists.
+Repeated medians over the six 128 KiB files improved **1.259x** geometric
+mean (dickens 1.600x, xml 1.207x, mozilla 1.177x, mr 1.218x, sao 1.211x,
+webster 1.186x) with identical wire SHA-256 on 12/12 128 KiB, 6/6 1 MiB,
+3/3 4 MiB, and 4/4 synthetic far-copy inputs. Combined with the far-candidate
+gate, planned q9 is 1.47x geometric mean faster than the 2026-11-17 baseline.
+Evidence: [data/br-entropy-split-skip-20261117](data/br-entropy-split-skip-20261117/README.md).
