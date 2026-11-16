@@ -1198,3 +1198,14 @@ Reloading `reader.input` instead of keeping a local slice across the loop
 changed nothing (786.6 versus 784.1 MiB/s, +0.3%, within noise). The spilled
 base is not the input slice; source-level register-pressure work is closed for
 this loop.
+
+## Zstd level-1 fast encode profile (2026-11-17)
+
+A standalone encode probe removes the benchmark's SHA-256 provenance noise.
+Level-1 encode on the 128 KiB `dickens` prefix is **33.7%** in
+`emitFastSequenceRecordCandidate` (double-fast parser plus token
+materialization), 7.9% block emission, 5.7% offset-code choice, 5.0% bit
+writer, 4.3% memcpy, 4.2% sequence plan, 3.9% `sequenceCodeForValue`, 3.8%
+literal section, 3.7% transition fill and 3.7% long Huffman stream. The fast
+parser is the next parser-level target; block/entropy emission is already
+spread thin.
