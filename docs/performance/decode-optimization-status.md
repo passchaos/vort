@@ -1223,3 +1223,7 @@ at a 1.3% single-run speed gain, but repeated samba/x-ray medians fell 2.2%/
 larger size wins (osdb -21.7%, dickens -5.6%) but 0.945-0.98x on several
 rows. The 11-bit table stays under the speed-first level-1 policy; the
 size/speed tradeoff is recorded for a future level-specific policy.
+
+A 10-bit short hash likewise cut about 20 KB over the twelve files but cost
+8.6% geometric-mean speed (dickens 0.785x, sao 0.854x); the 8-bit short table
+stays. The 8-bit short/11-bit long pair is the measured speed-first point.
