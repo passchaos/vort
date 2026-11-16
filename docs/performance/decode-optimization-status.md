@@ -1318,3 +1318,12 @@ Implemented counted adaptive-context selection with the existing counting
 writer: the wire stayed identical (48,833 bytes) but speed moved only
 0.49 -> 0.50 MiB/s (about 2%, within noise). The writer cost is entropy
 planning, not byte storage, so counting alone does not help. Reverted.
+
+The planned-q9 profile is distributed: match finder 8.9%, context group
+8.9%, default-window far candidate 8.0%, context core 6.1%, distance encode
+6.1%, wide-distance writer 5.0%, literal-context proposals 4.9%, distance
+parameter search 4.8%, length code 4.4%, command distance 4.4%. Disabling
+`distance-parameter-search` or `adaptive-distance-split` through the bench
+flags did not change the dickens q9 wire or speed, so those candidates are
+not the active cost on this input. A product-level candidate-reduction
+policy is needed before further Brotli q9 speed work.
