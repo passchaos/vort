@@ -1336,3 +1336,19 @@ window` guard does not trigger: the ratio stream's default window is 16 bits
 while the far window is 17 bits for these inputs. A safe skip needs a cheap
 far-match pre-screen (the candidate exists for beyond-window copies), so the
 guard was reverted.
+
+The far-candidate skip is now a shipped policy gate rather than a full skip.
+Instrumentation showed the near-plan proposal finds no far copy in the small
+literal runs of the 128 KiB rows (literal bytes 3.0-7.9 KB), while the
+all-literal alternate drops every near match and expands the wire window from
+16 to 17 bits. Re-encoding the near plan with the 17-bit window alone costs
+5.7-39.4 KB on these rows, so the alternate was 5.7-39.4 KB above the
+incumbent before far copies recovered anything. The default-window selector
+now runs the all-literal alternate only when literals are at least half the
+input, which is the same `large_literal_share` policy already used for
+>1 MiB blocks. Repeated medians over the six 128 KiB files improved
+**1.167x** geometric mean (dickens 1.100x, xml 1.309x, mozilla 1.248x,
+mr 1.130x, sao 1.000x, webster 1.242x) with identical wire SHA-256. Wire
+identity also held on 12/12 Silesia 128 KiB prefixes, 6/6 1 MiB prefixes,
+and 4/4 synthetic far-copy inputs (400 KiB, 1 MiB, 664 KiB mixed, 2 MiB).
+Evidence: [data/br-far-candidate-gate-20261117](data/br-far-candidate-gate-20261117/README.md).

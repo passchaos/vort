@@ -5581,7 +5581,14 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         } else {
             // Text-like large blocks search only their literal runs; the
             // all-literal alternate would rescan the complete input.
-            const proposal_count: usize = if (auto_long_window and input.len > 1024 * 1024 and !large_literal_share)
+            //
+            // The all-literal alternate also drops every near match, so it can
+            // only pay when literals dominate. When the near plan already
+            // matches most bytes, the alternate's wider-window distance codes
+            // cost far more than its far copies recover: on the 128 KiB
+            // Silesia planned-q9 rows the candidate landed 5.7-39.4 KB above
+            // the incumbent. Keep it only for literal-heavy blocks.
+            const proposal_count: usize = if (auto_long_window and !large_literal_share)
                 1
             else if (has_copies)
                 2
