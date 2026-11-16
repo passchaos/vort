@@ -304,3 +304,20 @@ incremental `copy_decoder` state machine, which is not what the reference bench
 profiles. Any further one-shot gain would need algorithmic work (e.g. wider
 SIMD Huffman gather), not control-flow reshaping, and must still clear the 3%
 paired A/B bar.
+
+## Incremental copy_decoder phase fusion also ruled out (2026-11-16)
+
+The earlier fusion idea named the incremental `copy_decoder`, but direct
+inspection shows its explicit 12-phase machine is mandatory, not removable
+dispatch:
+
+- it has a single top-level `switch (self.phase)` but 26 need_input/need_output
+  early returns and 22 `self.phase = ...` resume assignments;
+- each phase must survive a partial-buffer return so the next `step` re-enters
+  at the correct point. A goto-style collapse into one loop body would destroy
+  this resumability and corrupt decode across fragmented calls.
+
+Combined with the one-shot finding (already a single fused loop), there is no
+phase-fusion opportunity on either brotli decode path. The brotli performance
+gap is therefore attributable to intrinsic per-symbol Huffman/copy work and
+would only move via algorithmic/SIMD changes, not control-flow reshaping.
