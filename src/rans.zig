@@ -12,6 +12,7 @@ pub const encoder = @import("rans/encoder.zig");
 pub const decoder = @import("rans/decoder.zig");
 pub const interleaved = @import("rans/interleaved.zig");
 pub const block = @import("rans/block.zig");
+pub const fuzz = @import("rans/fuzz.zig");
 
 pub const Table = table.Table;
 pub const normalize = table.normalize;
@@ -35,6 +36,7 @@ test {
     _ = decoder;
     _ = interleaved;
     _ = block;
+    _ = fuzz;
 }
 
 // Hand-derived rANS golden vector.

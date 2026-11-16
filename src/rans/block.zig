@@ -19,7 +19,9 @@
 //!   alphabet_size u16   active model span
 //!   symbol_count u32    declared decoded symbol count
 //!   model_crc u32       CRC-32 over the frequency table
-//!   payload_crc u32     CRC-32 over states + offsets + renorm bytes
+//!   payload_crc u32     CRC-32 over the semantic header (log2_scale through
+//!                       symbol_count) plus states + offsets + renorm bytes, so
+//!                       a tampered declared count cannot slip past the checks
 //! frequency table       alphabet_size * u32 normalized frequencies (sum = L)
 //! lane states           lane_count * u32
 //! lane offsets          (lane_count + 1) * u32 prefix byte offsets
@@ -41,7 +43,30 @@ const max_lanes = interleaved.max_lanes;
 pub const magic = [_]u8{ 'V', 'R', 'B', '1' };
 pub const block_version: u8 = 1;
 
-const header_len: usize = 22;
+pub const header_len: usize = 22;
+
+/// Byte range of the semantic header fields that influence decoding
+/// (`log2_scale`, `lane_count`, reserved, `alphabet_size`, `symbol_count`).
+/// Magic/version are validated explicitly and the two CRC fields cannot cover
+/// themselves, so this span is folded into the payload CRC instead.
+const semantic_header_start: usize = 5;
+const semantic_header_end: usize = 14;
+
+/// CRC over the semantic header and the states/offsets/renorm payload. Covering
+/// the header is what makes a corrupted `symbol_count` fail closed: without it,
+/// a single-symbol block (zero renorm bytes, state pinned at the lower bound)
+/// has no other signal that the declared count is wrong.
+fn computePayloadCrc(semantic_header: []const u8, payload: []const u8) u32 {
+    var crc = checksum.Crc32.init();
+    crc.update(semantic_header);
+    crc.update(payload);
+    return crc.digest();
+}
+
+/// Default bound on decoded symbols when a caller does not supply one. It keeps
+/// a corrupted header's `symbol_count` from driving an unbounded allocation;
+/// callers with a known output budget should use `decodeBounded`.
+pub const max_default_symbol_count: u32 = 64 * 1024 * 1024;
 
 pub const Error = error{
     InvalidMagic,
@@ -51,6 +76,7 @@ pub const Error = error{
     SizeMismatch,
     ChecksumMismatch,
     InvalidLaneCount,
+    OutputLimitExceeded,
     OutOfMemory,
 };
 
@@ -150,16 +176,19 @@ pub fn encodeOwned(
     }
     @memcpy(out[cursor .. cursor + stream.bytes.len], stream.bytes);
     const payload_end = cursor + stream.bytes.len;
-    const payload_crc = checksum.Crc32.hash(out[payload_start..payload_end]);
 
-    // Fixed header last so the CRC fields are already known.
-    @memcpy(out[0..4], &magic);
-    out[4] = block_version;
+    // Write the semantic header fields first so the payload CRC covers their
+    // actual on-wire values; the two CRC fields themselves are filled in after.
     out[5] = log2_scale;
     out[6] = lane_count;
     out[7] = 0; // reserved
     writeU16(out[8..10], alphabet_size);
     writeU32(out[10..14], @intCast(symbols.len));
+    const payload_crc = computePayloadCrc(out[semantic_header_start..semantic_header_end], out[payload_start..payload_end]);
+
+    // Fixed header and CRC fields.
+    @memcpy(out[0..4], &magic);
+    out[4] = block_version;
     writeU32(out[14..18], model_crc);
     writeU32(out[18..22], payload_crc);
 
@@ -188,10 +217,28 @@ fn parseHeader(input: []const u8) Error!Header {
     };
 }
 
-/// Decode an experimental block into forward-order symbols. All structural and
-/// checksum validation happens before any decoded symbol is returned.
+/// Decode an experimental block using the default symbol bound. See
+/// `decodeBounded` for the validation contract.
 pub fn decodeOwned(allocator: std.mem.Allocator, input: []const u8) Error![]u16 {
+    return decodeBounded(allocator, input, max_default_symbol_count);
+}
+
+/// Decode an experimental block into forward-order symbols, rejecting any
+/// block whose declared symbol count exceeds `max_symbol_count` before the
+/// output buffer is allocated. All structural and checksum validation happens
+/// before any decoded symbol is returned.
+pub fn decodeBounded(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    max_symbol_count: u32,
+) Error![]u16 {
     const header = try parseHeader(input);
+
+    // Enforce the caller's output budget before the declared count can drive an
+    // allocation. The payload CRC also covers this header field, but checking
+    // the bound here fails fast and keeps a hostile but CRC-consistent block
+    // from requesting an oversized buffer.
+    if (header.symbol_count > max_symbol_count) return error.OutputLimitExceeded;
 
     const freq_start = header_len;
     const freq_bytes_len: usize = @as(usize, header.alphabet_size) * 4;
@@ -240,7 +287,7 @@ pub fn decodeOwned(allocator: std.mem.Allocator, input: []const u8) Error![]u16 
     if (input.len != cursor + renorm_len) return error.SizeMismatch;
     const renorm = input[cursor .. cursor + renorm_len];
 
-    if (checksum.Crc32.hash(input[payload_start .. cursor + renorm_len]) != header.payload_crc)
+    if (computePayloadCrc(input[semantic_header_start..semantic_header_end], input[payload_start .. cursor + renorm_len]) != header.payload_crc)
         return error.ChecksumMismatch;
 
     // Rebuild a borrowed Stream view; no renorm bytes are copied.
@@ -346,7 +393,7 @@ fn parseHex(hex: []const u8, out: []u8) error{CorruptFrame}![]u8 {
 test "frozen golden block decodes and re-encodes byte-identically" {
     const allocator = std.testing.allocator;
     const golden_hex =
-        "56524231010a040004000c0000009155013bcafcfd2fff010000330100009a00000034000000" ++
+        "56524231010a040004000c0000009155013b2dc85fa0ff010000330100009a00000034000000" ++
         "b3f2cf41fabd250b54d0590deb3383000000000000000000000000000000000001000000c4";
     const expected_symbols = [_]u16{ 0, 1, 2, 0, 3, 1, 0, 2, 1, 0, 0, 3 };
     const counts = [_]u32{ 50, 30, 15, 5 };

@@ -232,11 +232,23 @@ until the adoption gates in section 8 run.
   reference for the native format, so the invariant is Vort-scalar vs
   Vort-optimized (and later SIMD) decoders must agree on every input, and any
   mutation must either be rejected or decode to identical bytes; no successful
-  decode may diverge across the decoder variants.
+  decode may diverge across the decoder variants. **First campaign landed
+  (2026-11-16) in `src/rans/fuzz.zig`:** a fixed-seed, WASM-bounded matrix of
+  truncation cuts and single-byte flips over header/model/states/offsets/
+  renorm, with `DivergentOutput` as a distinct non-swallowable error so a
+  successful-but-wrong decode fails the run. It found a real integrity gap: a
+  tampered header `symbol_count` on a single-symbol block (zero renorm bytes,
+  state pinned at the lower bound) decoded successfully with the wrong count.
+  Fixed by folding the semantic header (`log2_scale`..`symbol_count`) into the
+  payload CRC, plus a `decodeBounded` pre-allocation output cap; a regression
+  test pins both.
 - **Bounded-resource fuzzing.** Mutate `regenerated_size`, per-lane lengths,
   and the frequency table to assert `OutputLimitExceeded`, `CorruptFrame`, and
   table-CRC failures fire before large allocation, mirroring the native memory
-  test suite.
+  test suite. The campaign's `symbol_count` cap test covers the declared-size
+  arm; per-lane offset and frequency-table mutation are exercised by the
+  byte-flip matrix and reject via the offset monotonicity, size, model and
+  payload checks.
 - **WASM execution.** The scalar decoder must pass an actual WASI behavioral
   run, not only compile, matching the current `test-*-wasm` discipline.
 
