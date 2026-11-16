@@ -898,3 +898,23 @@ x-ray to 0.3282 and was rejected. Evidence:
 [data/zstd-single-sequence-huffman-20261116](data/zstd-single-sequence-huffman-20261116/README.md).
 Filtered `predefined` (49/49), `stream counters` (42/42) and `literal`
 (162/162) tests pass; focused and WASM gates are recorded with this increment.
+
+## Zstd compressed-literal split threshold (2026-11-16)
+
+After the single-sequence fix, `mr` remained the weakest level-1 row at 0.6210.
+Its blocks are all-compressed with about 700-1000 sequences and 17-19 KiB of
+literals, which failed `preferSplit` (`sequence_count >= 1024` or
+`literal_bytes >= 32 KiB`) and fell to `tryDecodeGenericSplitHuffmanSequences`,
+whose `readModeSequence` switches on the mode for every symbol. Lowering
+`split_literal_min` to 16 KiB routes those blocks to the specialized wide split
+executor; decoupling `raw_all_fse_literal_min` at 32 KiB keeps raw-literal
+routing unchanged. `mr` moves to **0.7560** (+21.7% in the increment, 25.5%
+cumulatively), and the twelve-file geometric ratio moves from 0.7835 to
+**0.8102** (geomean speedup **1.0176**, lowest control row 0.9929). Sequence
+threshold variants (256/128) also fixed `mr` but emptied the
+`preferHuffmanMatchWildcopy` range and failed the policy consistency test; the
+literal-threshold change keeps every policy invariant. Evidence:
+[data/zstd-split-literal-threshold-20261116](data/zstd-split-literal-threshold-20261116/README.md).
+Focused `predefined` (49/49), `literal` (162/162), `stream counters` (42/42) and
+decode-memory/source-reverse/compressed-workspace (228/228) tests pass; full
+`test-zstd` and `check-wasm` results are recorded with this increment.
