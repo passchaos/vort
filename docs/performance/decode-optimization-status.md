@@ -1094,3 +1094,10 @@ byte-identical level-9 frames (SHA-256) and gain about **2.3x**
 geometric-mean throughput, with 3.3-16.4x on the four slow rows and no
 control below 0.999x. The locked encode gate is unchanged. Evidence:
 [data/zstd-multi-cap-20261117](data/zstd-multi-cap-20261117/README.md).
+
+A follow-up stage screen on the same 128 KiB `dickens` block measured
+double_fast 63,405 / greedy 52,591 / lazy 50,808 / optimal **50,316** /
+repeated 75,532 bytes. The optimal DP supplies the winning block (50,316 plus
+the 9-byte frame header equals the 50,325-byte frame), so its 16 ms is
+required; the next level-9 work is DP-internal cost rather than another
+candidate skip.
