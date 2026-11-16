@@ -1122,3 +1122,15 @@ Skipping greedy left 11/12 unchanged but `mr` grew **+3.3%** (32,676 ->
 33,766). Both candidates are genuine winners on the retained corpus, so the
 level-9 candidate set stays. The next level-9 lever is cheaper candidate
 evaluation/emission, not candidate removal.
+
+## Zstd length-only second multi-duplicate match (2026-11-17)
+
+The production two-match multi-duplicate bound still priced every candidate
+with a full Huffman literal plan. The second match never feeds emission, so a
+length-only indexed finder now ranks it by length/offset only; the first match
+keeps exact pricing for the single-duplicate candidate. Twelve 128 KiB
+Silesia files keep identical level-9 sizes, and repeated medians measure
+dickens 1.15x and samba 1.56x with the other rows neutral (about 6.4%
+geometric mean, no control below 0.998x). The locked encode gate is unchanged.
+Evidence:
+[data/zstd-length-only-bound-20261117](data/zstd-length-only-bound-20261117/README.md).

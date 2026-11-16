@@ -136,5 +136,7 @@ drops to about 0.25 s. The multi-duplicate planner is capped at two
 matches for the same reason: byte-identical level-9 frames on twelve Silesia
 files with about 2.8x geometric-mean throughput. The optimal candidate budget
 drops from eight to seven, enabling the four-byte optimal route and adding
-13.4% level-9 throughput for about +0.02% aggregate size. The explicit
-parallel seekable encoder remains the only thread-spawning boundary.
+13.4% level-9 throughput for about +0.02% aggregate size. The second
+multi-duplicate bound match is now length-only, adding about 6% for identical
+wires. The explicit parallel seekable encoder remains the only
+thread-spawning boundary.

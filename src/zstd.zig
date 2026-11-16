@@ -26395,7 +26395,10 @@ fn emitMultiDuplicateMatchCompressedBlockWithAnchors(comptime cache_costs: bool,
     while (count < max_matches and literal_start < block.len) {
         if (profile_work) profile.?.finder_calls +|= 1;
         const match = if (duplicate_index) |index|
-            try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
+            if (count != 0 and max_matches <= multi_duplicate_production_max_matches and block.len > duplicate_exact_hash_input_max)
+                try findBestDuplicateMatchIndexedLengthOnly(block, literal_start, index) orelse break
+            else
+                try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
         else if (cost_cache) |*cache|
             try findBestDuplicateMatchHashedWithAnchors(true, reuse_anchors, block, literal_start, cache, anchors) orelse break
         else
@@ -33134,6 +33137,35 @@ fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize,
             best = scored;
             best_payload_len = candidate_payload_len;
         }
+    }
+    return best;
+}
+
+/// Length-only companion used for the second match of the production
+/// two-match bound plan. It walks the same indexed candidate rows but skips the
+/// per-candidate Huffman payload pricing, so the bound costs a chain walk
+/// instead of a literal-plan build.
+fn findBestDuplicateMatchIndexedLengthOnly(block: []const u8, start_min: usize, index: *DuplicateMatchIndex) Error!?DuplicateMatch {
+    if (block.len < 24 or start_min + 16 > block.len) return null;
+    var best: ?DuplicateMatch = null;
+    var candidate_position_index = duplicateCandidateStart(index, start_min);
+    while (candidate_position_index < index.candidate_position_count) : (candidate_position_index += 1) {
+        const row = candidate_position_index;
+        const second: usize = index.candidate_positions[row];
+        if (best) |current| if (block.len - second < current.len) break;
+        const first: usize = index.predecessors[row];
+        if (first < start_min) continue;
+        if (best) |current| if (block.len - second <= current.len) continue;
+        const cached_len = index.match_lengths[row];
+        const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+            const computed = duplicateMatchLength(block, first, second);
+            index.match_lengths[row] = @intCast(computed);
+            break :blk computed;
+        } else cached_len;
+        if (len < 8) continue;
+        const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+        if (duplicateMatchCannotBeat(candidate, best)) continue;
+        best = candidate;
     }
     return best;
 }
