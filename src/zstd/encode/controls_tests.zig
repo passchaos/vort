@@ -5,13 +5,13 @@ const fixtures = @import("controls_test_helpers.zig");
 const allocator = fixtures.allocator;
 const strategies = [_]controls.Strategy{ .fast, .double_fast, .greedy, .lazy, .optimal };
 
-test "Zstd encode controls positive auto null and profile only preserve every legacy level wire" {
+test "Zstd encode controls positive auto null and profile only preserve every level wire" {
     const input = fixtures.legacyInput();
     for (0..23) |raw_level| {
         const level: c_int = @intCast(raw_level);
         const plain = try zstd.encodeFrameWithLevelAlloc(allocator, &input, level);
         defer allocator.free(plain);
-        try fixtures.expectLegacy(level, plain);
+        try fixtures.expectLevelWire(level, plain);
         var profile: controls.Profile = .{};
         const profiled = try zstd.encodeFrameWithLevelAndOptionsAlloc(allocator, &input, level, .{ .strategy = .auto, .fast_acceleration = null, .control_profile = &profile });
         defer allocator.free(profiled);

@@ -12,18 +12,20 @@ The user chose to align levels 1-2 with the industry speed-first preset
 semantics: one fast-compressed primary frame, no adaptive ladder and no
 per-call threads. The quality ladder remains at level 3 and above.
 
-## Prototype change (not merged)
+## Adopted change
 
-A prototype set `selection = .fast_compressed` for levels 1-2 in
-`encodeFrameWithLevelAndOptionsAllocUnbudgeted` and
-`LevelFrameEncoder.encodeScratchUnbudgeted` and encoded one primary frame.
-The measurements below are from that prototype. It is **not merged**: the
-full `test-zstd` run reports ten failures that pin the old level-1/2 adaptive
-ladder or legacy level wires, and the reusable level encoder produced a
-different fast frame from the one-shot encoder (window derivation differs,
-357 versus 314 bytes). The semantic change needs a dedicated migration
-increment that updates those tests and makes the reusable and one-shot window
-policy identical.
+The policy is now merged as `applySpeedFirstLevelPolicy`: levels 1-2 resolve
+to one `fast_compressed` primary frame and skip the adaptive split ladder in
+every public level entry point (alloc, append, into-slice, bounds, dictionary,
+dictionary-set, reusable scratch, and the FastCover scoring codec). Explicit
+strategies, accelerations, HQ requests, and encode controls still take
+precedence. The earlier "357 versus 314 bytes" reusable mismatch came from a
+stale test binary; the migrated suite verifies byte-identical one-shot and
+reusable frames for both levels.
+
+The golden level wires and the default-level FastCover scoring expectations
+were migrated with the policy, the level-3-only overlap helper replaced the
+levels 1-3 coordinator overlap, and `test-zstd` is green after the migration.
 
 ## Result (128 KiB dickens prefix, `run-zstd-encode-bench`)
 

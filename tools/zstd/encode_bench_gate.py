@@ -70,10 +70,11 @@ def main() -> int:
     assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
     # Levels 1 and 3 use bounded speed-oriented single-state repeat-beam
-    # policies. Their audited three-byte JSON tradeoffs remain substantially
-    # smaller than the corresponding libzstd frames; levels 9+ retain the
-    # two-state 640-byte result.
-    assert int(json_rows[1]["vort_bytes"]) <= 643, json_rows
+    # policies. Level 1 is now speed-first (`fast_compressed` primary, no
+    # adaptive ladder), so its ceiling records the deliberate ratio tradeoff
+    # while remaining far below the corresponding libzstd frame; levels 9+
+    # retain the two-state 640-byte result.
+    assert int(json_rows[1]["vort_bytes"]) <= 694, json_rows
     assert int(json_rows[1]["vort_bytes"]) < int(json_rows[1]["reference_bytes"]), json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 643, json_rows
     # The level-9 repeat-aware beam closes the structured JSON gap to one byte
@@ -83,11 +84,11 @@ def main() -> int:
     assert int(json_rows[22]["vort_bytes"]) <= 640, json_rows
     # A one-block result below 1/32 of this low-alphabet corpus is decisive at
     # levels 3 and 9. Keep both early returns visible rather than allowing them
-    # to regress to the former full adaptive split search. Level 1 is the
-    # stable low-latency reference; a 4x ceiling leaves scheduler headroom while
-    # still rejecting the previous roughly 4.4x level-3 cliff.
-    assert int(json_rows[3]["vort_ns"]) < int(json_rows[1]["vort_ns"]) * 4, json_rows
-    assert int(json_rows[9]["vort_ns"]) < int(json_rows[1]["vort_ns"]) * 4, json_rows
+    # to regress to the former full adaptive split search. Level 1 is now
+    # intentionally much faster than the ratio ladder, so guard levels 3 and 9
+    # with absolute ceilings instead of a ratio to the speed-first level.
+    assert int(json_rows[3]["vort_ns"]) <= 8_000_000_000, json_rows
+    assert int(json_rows[9]["vort_ns"]) <= 8_000_000_000, json_rows
     text_rows = {int(row["level"]): row for row in rows if row["case"] == "text"}
     # Selecting compressed Huffman weights for low-byte alphabets closes all
     # but one byte of the repetitive-text gap to the locked libzstd row.
@@ -126,8 +127,10 @@ def main() -> int:
     assert int(tradeoff_rows[3]["vort_ns"]) * 3 < int(tradeoff_rows[9]["vort_ns"]), tradeoff_rows
     multiblock_rows = {int(row["level"]): row for row in rows if row["case"] == "multiblock"}
     # Cross-block sequence-table reuse removes repeated FSE descriptions while
-    # preserving exact candidate arbitration at every level.
-    assert int(multiblock_rows[1]["vort_bytes"]) == 27_363, multiblock_rows
+    # preserving exact candidate arbitration. Level 1 is speed-first and does
+    # not run the adaptive split ladder, so its frame is intentionally larger
+    # than the level-3+ arbitration result on this cross-block corpus.
+    assert int(multiblock_rows[1]["vort_bytes"]) == 34_228, multiblock_rows
     assert int(multiblock_rows[3]["vort_bytes"]) == 27_517, multiblock_rows
     assert int(multiblock_rows[9]["vort_bytes"]) == 27_363, multiblock_rows
     assert int(multiblock_rows[22]["vort_bytes"]) == 26_679, multiblock_rows

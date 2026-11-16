@@ -113,17 +113,19 @@ fast selection at roughly 10x the time; Vort's fast selection is still 13%
 larger than libzstd level 1 and about 4x slower.
 
 The user chose to align levels 1-2 with the industry speed-first preset
-semantics. A prototype selected `.fast_compressed` for levels 1-2 in both the
-one-shot and reusable level encoders; on the 128 KiB prefix level 1 moved to
+semantics. Levels 1-2 now resolve to one `.fast_compressed` primary frame in
+every public level entry point; on the 128 KiB prefix level 1 moved to
 **77.11 MiB/s at 63,414 bytes** and level 2 to **76.02 MiB/s at 63,414 bytes**
 (13-18% larger than libzstd, about 4.1x slower). Evidence:
 [data/zstd-level12-fast-20261116](../data/zstd-level12-fast-20261116/README.md).
 
-The prototype is **not merged**: ten `test-zstd` cases pin the old level-1/2
-ladder or legacy level wires, and the reusable level encoder derives a
-different window from the one-shot encoder under the fast selection. The next
-increment must migrate those tests and unify the window policy before the
-semantic change can land.
+The migration also removed the levels 1-2 coordinator overlap, unified alloc,
+append, into-slice, bound, dictionary, dictionary-set, and reusable surfaces,
+and aligned the FastCover scoring codec with the public policy. Golden level
+wires and the default-level FastCover score expectations were re-frozen; the
+earlier reusable/one-shot "357 versus 314 bytes" mismatch was a stale test
+binary, not a window-policy difference. `test-zstd` is green with the policy
+active.
 
 The level-3+ ladder is still ratio-first and very slow (3.65 MiB/s on the same
 prefix), and its per-call `std.Thread.spawn` remains an architecture-rule

@@ -1011,3 +1011,26 @@ per-symbol scan to the same canonical direct-index algorithm already used by
 unchanged (359.47 versus 359.21 MiB/s), so the linear scan was not the measured
 bottleneck on this path; the paired-ratio move was reference-side drift again.
 Reverted. The brotli `mr` long-code fallback is not a portable-scan lever.
+
+## Zstd levels 1-2 speed-first policy landed (2026-11-16)
+
+The public level policy now resolves levels 1-2 to one `fast_compressed`
+primary frame with no adaptive split ladder and no per-call
+`std.Thread.spawn` in the one-shot, reusable, append, into-slice, bound,
+dictionary, dictionary-set, diagnostics, and FastCover scoring paths. Explicit
+strategies, accelerations, HQ requests, and encode controls still take
+precedence; the quality ladder remains at level 3 and above.
+
+On the 128 KiB `dickens` prefix level 1 moved from 7.56 MiB/s at 50,404 bytes
+to 77.11 MiB/s at 63,414 bytes and level 2 from 1.58 MiB/s at 50,325 bytes to
+76.02 MiB/s at 63,414 bytes (13-18% larger than libzstd 1.6.0, about 4.1x
+slower). Evidence:
+[data/zstd-level12-fast-20261116](data/zstd-level12-fast-20261116/README.md).
+
+The migration re-froze the level-1/2 golden wire, updated the default-level
+FastCover auto wires and score expectations, narrowed the coordinator overlap
+to level 3, and added a cross-surface test asserting alloc/append/into-slice/
+bound/reusable/dictionary level-1/2 wires are byte-identical. `test-zstd`
+passes 1431/1431; `run-zstd-encode-bench-gate` records the new level-1 JSON
+694-byte and multiblock 34,228-byte ceilings. The level-3+ ladder still spawns
+per-call threads, which remains a separate architecture-rule violation.

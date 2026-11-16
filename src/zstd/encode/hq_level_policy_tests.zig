@@ -94,7 +94,7 @@ test "Zstd HQ level policy matches explicit HQ wires across seven input families
         const policy = try zstd.encodeFrameWithLevelAndOptionsAlloc(allocator, &input, level, .{ .hq_auto = true });
         defer allocator.free(policy);
         try std.testing.expectEqualSlices(u8, legacy, policy);
-        try fixtures.expectLegacy(level, policy);
+        try fixtures.expectLevelWire(level, policy);
     }
 }
 
