@@ -1157,3 +1157,10 @@ A match-source prefetch before the literal copy improved dickens by about
 geometric mean is about 0.7%, below the 3% bar, so it was reverted. The
 remaining gap is the copy chain's dependency/cache latency, not entropy or
 FSE setup.
+
+A match-first copy reorder in the dense executor was attempted to remove the
+short-match load's dependency on the literal store. The literal wildcopy
+writes up to 16 bytes past the logical run, so the following match copy must
+overwrite that tail; reordering clobbered the match (`SizeMismatch`), and an
+exact literal-copy variant faulted. Reverted. The copy-chain work needs a
+dedicated exact-copy path with its own tests before it can be measured.
