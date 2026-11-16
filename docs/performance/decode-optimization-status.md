@@ -1181,3 +1181,9 @@ and an **8.2% stack spill** of a loop-carried value. The spill points at
 register pressure rather than a missing token phase; a two-phase token buffer
 would add a write and a read per sequence and is not the next lever. Reducing
 the live set or splitting the loop is the concrete next experiment.
+
+The 8.2% spill maps to the literal lookup entry: a hot loop value is stored to
+`-0x50(%rbp)` on every literal, and the literal path reloads a table base from
+`-0x70(%rbp)` immediately after. The next experiment is therefore to reduce
+the live table-base/bit-reservoir set in the semantic loop; adding a token
+phase would not address this spill.
