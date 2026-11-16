@@ -958,3 +958,8 @@ union on the twelve-file level-1 sweep measured geometric **1.0002** (xml
 generic loop is competitive for that shape. Separately, skipping the 16-byte
 literal wildcopy for zero-length runs measured neutral on nci (0.7864 versus
 0.7875) and was reverted. Both are closed local levers.
+
+The dense pair fast path was also offered to the wide executor by changing its
+gate from `!use_wide_copies` to `(use_wide_copies or use_long_match_wildcopy)`.
+On `dickens` it regressed the level-1 ratio from 0.8067 to **0.7386** (-8.4%),
+so the pair path is correctly dense-specific; the gate stays.
