@@ -132,7 +132,7 @@ prefix), but its per-call `std.Thread.spawn` fan-out is removed: candidates now
 run serially with identical wires and no measurable throughput loss. The
 recursive mixed search is now structured-block-only and serial; on wide blocks
 it measured no size benefit while taking 25.6 s per 128 KiB encode, so level 9
-drops to about 0.25 s. The unindexed multi-duplicate planner is capped at two
+drops to about 0.25 s. The multi-duplicate planner is capped at two
 matches for the same reason: byte-identical level-9 frames on twelve Silesia
-files with about 2.3x geometric-mean throughput. The explicit parallel
+files with about 2.8x geometric-mean throughput. The explicit parallel
 seekable encoder remains the only thread-spawning boundary.

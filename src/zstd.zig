@@ -1575,10 +1575,12 @@ const multi_duplicate_unindexed_required_search_budget = mixed_match_min_search_
 // the retained generated corpus. Preserve it as a diagnostic stage and for
 // larger blocks, where the shared predecessor index makes suffix queries cheap.
 const multi_duplicate_min_input_len = duplicate_exact_hash_input_max + 1;
-// Bound the unindexed suffix-rescanning variant: the first few matches carry
-// the useful upper bound for later DP pruning, while a full 128-match scan is
-// O(n^2) on large blocks (194 ms on the 128 KiB dickens prefix).
-const unindexed_multi_duplicate_max_matches = 2;
+// Production uses only the first two matches as a cheap DP upper bound. The
+// full 128-match plan measured no size win on any retained corpus while its
+// suffix rescans dominated level 4-22 encode time (194 ms on the 128 KiB
+// dickens prefix, 31% of level-9 time across adaptive candidates). Diagnostic
+// and benchmark entry points still request the full budget.
+const multi_duplicate_production_max_matches = 2;
 // Once the repeat-aware winner beats both primitive families by this factor,
 // their recursive combination has not been competitive across the retained
 // generated corpus. This conservative margin permits deterministic worker
@@ -22071,7 +22073,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             try findBestDuplicateMatch(block);
     }
     const multi_duplicate_ok = if (shouldSearchMultiDuplicate(block.len, match_search_budget, beam_is_decisive, duplicate_index_ptr != null))
-        try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, candidate, block, last, duplicate_index_ptr, &first_duplicate, if (duplicate_index_ptr != null) max_bootstrap_sequence_count else unindexed_multi_duplicate_max_matches)
+        try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, candidate, block, last, duplicate_index_ptr, &first_duplicate, multi_duplicate_production_max_matches)
     else
         false;
     try retainShortestCandidate(allocator, multi_duplicate_ok, candidate.items, best);
