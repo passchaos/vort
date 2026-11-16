@@ -987,3 +987,12 @@ three-run A/B, with the full rows unchanged within host variance. Evidence:
 [data/deflate-incremental-crc-20261116](data/deflate-incremental-crc-20261116/README.md).
 The checksum oracle passes 19/19; focused deflate/zip test steps and
 `check-wasm` are recorded with the increment.
+
+An admission-result cache for the step-invariant semantic alias pairs was
+tried next: cache the workspace/scratch versus decoder-state/history checks in
+a per-attachment optional field and check only the caller's input/output per
+step. It regressed the fragmented rows (http-4k 0.816x, json-32k 0.757x
+against the CRC-only binary), likely from the added optional field and the
+resulting decoder layout change on the hot step path. Reverted. The admission
+checks are not a simple next lever; the fixed-block bulk decode or the zstd
+asm kernels are the remaining candidates.
