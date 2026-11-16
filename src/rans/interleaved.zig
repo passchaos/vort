@@ -193,6 +193,39 @@ pub const InterleavedDecoder = struct {
         }
     }
 
+    /// Lockstep structure-of-arrays decode, the SIMD-precursor schedule.
+    ///
+    /// Each round advances every still-active lane by exactly one symbol, so
+    /// the per-lane dependency chains (independent state, independent renorm
+    /// span) are adjacent across lanes rather than nested one lane at a time.
+    /// That is the access pattern a vectorized backend maps onto N lanes in one
+    /// step; this portable version calls the scalar per-lane `next` and must stay
+    /// byte-identical to `decodeReversed` and `decodeLaneInto`. It writes
+    /// forward-order symbols directly into `out`, which must hold exactly
+    /// `symbol_count` entries.
+    pub fn decodeLockstepInto(self: *InterleavedDecoder, model: Table, out: []u16) Error!void {
+        if (out.len != self.symbol_count) return error.OutputTooSmall;
+        const n: usize = self.lane_count;
+
+        var round: usize = 0;
+        while (true) {
+            var any_active = false;
+            var lane: usize = 0;
+            while (lane < n) : (lane += 1) {
+                const count = laneSymbolCount(self.symbol_count, n, lane);
+                if (round < count) {
+                    any_active = true;
+                    // Lane's reverse-order symbol #round maps to this forward
+                    // position; together the rounds touch every position once.
+                    const position = lane + (count - 1 - round) * n;
+                    out[position] = try self.lanes[lane].next(model);
+                }
+            }
+            if (!any_active) break;
+            round += 1;
+        }
+    }
+
     /// True when every lane has consumed its full renorm span.
     pub fn allBytesConsumed(self: InterleavedDecoder) bool {
         var lane: usize = 0;

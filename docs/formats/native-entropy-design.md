@@ -196,7 +196,13 @@ policy:
    output for every N in 1..=8 and alignments including empty, M < N and
    boundary-crossing messages, with every span fully consumed and every state
    returned to the lower bound. Passes Debug/ReleaseSafe/ReleaseFast and node
-   WASI.
+   WASI. A third, lockstep structure-of-arrays schedule
+   (`decodeLockstepInto`) now also exists: each round advances every active
+   lane by one symbol using the scalar step, giving the exact access pattern a
+   vectorized backend maps onto N lanes. The three strategies are asserted
+   byte-identical across the same matrix; this makes the parallel execution
+   model a tested contract, but no throughput/ILP claim is made until an actual
+   SIMD executor and paired A/B exist.
 4. **Native v1 frame wiring** behind the experimental version/flag: block
    header parse with fail-closed unknown-tag handling, bounded-output
    admission, checksum and table-CRC validation, one-shot then incremental.

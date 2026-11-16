@@ -271,8 +271,19 @@ test "interleaved round trip agrees across every lane count and alignment" {
             try std.testing.expect(parallel.allBytesConsumed());
             try std.testing.expect(parallel.allStatesAtLowerBound());
 
-            // The two strategies must reconstruct identical positions.
+            // Strategy C: lockstep structure-of-arrays rounds (the SIMD-precursor
+            // schedule), writing forward-order positions directly.
+            var lockstep = InterleavedDecoder.init(stream);
+            const lockstep_out = try allocator.alloc(u16, message_len);
+            defer allocator.free(lockstep_out);
+            try lockstep.decodeLockstepInto(model, lockstep_out);
+            try std.testing.expectEqualSlices(u16, symbols, lockstep_out);
+            try std.testing.expect(lockstep.allBytesConsumed());
+            try std.testing.expect(lockstep.allStatesAtLowerBound());
+
+            // All three strategies must reconstruct identical positions.
             try std.testing.expectEqualSlices(u16, sequential_out, parallel_out);
+            try std.testing.expectEqualSlices(u16, sequential_out, lockstep_out);
         }
     }
 }
@@ -328,4 +339,27 @@ test "independent lane decode rejects a mismatched output buffer" {
     // Lane 0 owns 3 of 10 symbols, so a 2-slot buffer must be rejected.
     try std.testing.expectError(error.OutputTooSmall, dec.decodeLaneInto(model, 0, &wrong));
     try std.testing.expectError(error.InvalidLaneCount, dec.decodeLaneInto(model, 4, &wrong));
+}
+
+test "lockstep decode rejects a buffer that does not match the symbol count" {
+    const allocator = std.testing.allocator;
+    var enc = try InterleavedEncoder.init(allocator, 8, 4);
+    defer enc.deinit();
+    const counts = [_]u32{ 5, 5 };
+    var model = try normalize(allocator, &counts, 8);
+    defer model.deinit();
+    var i: usize = 0;
+    while (i < 10) : (i += 1) try enc.encodeSymbol(model, @intCast(i % 2));
+    var stream = try enc.finishOwned();
+    defer stream.deinit();
+
+    var dec = InterleavedDecoder.init(stream);
+    var undersized = [_]u16{0} ** 9;
+    try std.testing.expectError(error.OutputTooSmall, dec.decodeLockstepInto(model, &undersized));
+
+    // A correctly sized buffer decodes and restores every state and byte.
+    var exact: [10]u16 = undefined;
+    try dec.decodeLockstepInto(model, &exact);
+    try std.testing.expect(dec.allBytesConsumed());
+    try std.testing.expect(dec.allStatesAtLowerBound());
 }
