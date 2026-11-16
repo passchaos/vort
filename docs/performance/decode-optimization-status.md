@@ -1340,10 +1340,12 @@ guard was reverted.
 The far-candidate skip is now a shipped policy gate rather than a full skip.
 Instrumentation showed the near-plan proposal finds no far copy in the small
 literal runs of the 128 KiB rows (literal bytes 3.0-7.9 KB), while the
-all-literal alternate drops every near match and expands the wire window from
-16 to 17 bits. Re-encoding the near plan with the 17-bit window alone costs
-5.7-39.4 KB on these rows, so the alternate was 5.7-39.4 KB above the
-incumbent before far copies recovered anything. The default-window selector
+all-literal alternate drops every near match. That alternate starts 5.7-39.4
+KB behind the incumbent and its far copies recover only 0.2-13.3 KB, so it
+cannot win. The 16-to-17-bit window change is not the cause: the same
+all-literal plan is 59,441 bytes at window 16 and 59,442 at window 17
+(dickens), and the full near-plan stream is 48,833/48,830 under explicit
+`--window-bits 16/17`. The default-window selector
 now runs the all-literal alternate only when literals are at least half the
 input, which is the same `large_literal_share` policy already used for
 >1 MiB blocks. Repeated medians over the six 128 KiB files improved

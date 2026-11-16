@@ -24,23 +24,22 @@ all-literal far 提案，只保留 near-plan far 提案。六文件重复中位�
 对 `considerDefaultWindowFarCandidate` 的临时 instrumentation（未提交）显示，
 128 KiB 输入上 near plan 的 literal 只剩 3,050-7,909 字节（sao 为 66,198），
 far matcher 在 near-plan 提案的 literal run 中没有找到可用的 far copy，于是
-`augmentAllocWithOptions` 返回 `null`；真正被完整编码的是 all-literal 提案：
+`augmentAllocWithOptions` 返回 `null`；真正被完整编码的是 all-literal 提案，
+而它丢弃了 near plan 的全部近距匹配：
 
-- 它丢弃 near plan 的全部近距匹配；
-- 为容纳 far distance，wire window 从 16 bit 扩到 17 bit；
-- 17-bit distance code 的代价远大于 far copy 的收益。
+| case | literal bytes | all-literal 提案 | far 候选 | best | all-literal 落后 | far 回收 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| dickens | 7,675 | 59,442 | 59,246 | 48,834 | +10,608 | 196 |
+| xml | 3,050 | 48,574 | 35,288 | 9,167 | +39,407 | 13,286 |
+| mozilla | 7,546 | 43,920 | 37,945 | 18,919 | +25,001 | 5,975 |
+| mr | 7,276 | 36,503 | 34,847 | 30,820 | +5,683 | 1,656 |
+| webster | 7,909 | 61,726 | 58,284 | 40,541 | +21,185 | 3,442 |
 
-| case | literal bytes | near plan 17-bit 重编码 | best | 差 |
-| --- | ---: | ---: | ---: | ---: |
-| dickens | 7,675 | 59,442 | 48,834 | +10,608 |
-| xml | 3,050 | 48,574 | 9,167 | +39,407 |
-| mozilla | 7,546 | 43,920 | 18,919 | +25,001 |
-| mr | 7,276 | 36,503 | 30,820 | +5,683 |
-| webster | 7,909 | 61,726 | 40,541 | +21,185 |
-
-也就是说，near plan 的 17-bit 窗口扩展本身已经把候选推到必败位置；far
-copy 只能回收其中很小一部分。sao 的 literal share 为 50.5%，仍走原路径，
-因此保持中性。
+all-literal 提案一开始就落后 5.7-39.4 KB，far copy 只回收 0.2-13.3 KB，
+无法翻盘。窗口扩展不是原因：同一 all-literal plan 在 16-bit 窗口下为
+59,441 字节（dickens），17-bit 下为 59,442 字节，只差 1 字节；near plan
+的完整 planned 流在显式 `--window-bits 16/17` 下分别为 48,833/48,830。
+sao 的 literal share 为 50.5%，仍走原路径，因此保持中性。
 
 ## 改动
 
