@@ -1238,3 +1238,13 @@ Functional-surface check: Deflate zlib preset dictionaries (FDICT/DICTID),
 Zstd dictionaries/prefixes and Brotli format controls are already exposed
 across one-shot, reusable and streaming APIs. No cheap functional gap remains;
 the next work is performance.
+
+## Zstd single-table parser prototype (2026-11-17)
+
+An isolated single-table double-fast prototype (8-byte hash only, no short
+table, rep probes or lazy lookahead) parsed the twelve 128 KiB Silesia files
+**1.86x** faster in geometric mean, but emitted **7.6%** more bytes in total:
+dickens +4.9%, mozilla +24.2%, nci +19.0%, reymont +16.4%; only mr improved
+(-0.7%). Not adopted as-is. It sets the speed ceiling for a level-1 parser
+redesign; the next variant should keep repcode probes (cheap offset wins)
+while dropping the short table/lazy path.
