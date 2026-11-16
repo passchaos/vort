@@ -1215,3 +1215,11 @@ The only repeated rep probe occurs when the previous match consumed
 `max_match`, so it is not the common path; the remaining loop is already the
 two-table double-fast design with lazy and repcode checks. Further level-1
 gains need a parser redesign, not a local edit.
+
+A 12-bit long hash (4,096 entries) in the level-1 double-fast parser reduced
+total Silesia size by **2.9%** (osdb -14.6%, webster -3.0%, dickens -2.5%)
+at a 1.3% single-run speed gain, but repeated samba/x-ray medians fell 2.2%/
+1.8% and the worst row sat at the 0.98 control floor. A 13-bit table gave
+larger size wins (osdb -21.7%, dickens -5.6%) but 0.945-0.98x on several
+rows. The 11-bit table stays under the speed-first level-1 policy; the
+size/speed tradeoff is recorded for a future level-specific policy.
