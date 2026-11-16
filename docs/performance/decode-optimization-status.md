@@ -1142,3 +1142,18 @@ large-sequence table cost 4.0%, multi-duplicate 3.5% and long Huffman stream
 3.3%. Candidate-removal work is exhausted; the next encode lever is
 parser-level, otherwise the decode gaps (zstd about 20%, Deflate about 6%)
 are the remaining structural frontier.
+
+## Zstd decode baseline and prefetch screen (2026-11-17)
+
+Fresh matched measurement on libzstd 1.6.0 level-9 wires (one-shot, 20
+iterations, ReleaseFast): Vort/libzstd throughput is dickens 0.719, x-ray
+0.805, mozilla 0.732, xml 0.711, sao 0.816 and mr 0.741. The decode profile
+is **61%** in `tryDecodeAllFseSplitDenseHuffmanSequencesNative`; the hottest
+instruction is the 16-byte short-match copy load (22.5%), followed by its
+store (2.1%).
+
+A match-source prefetch before the literal copy improved dickens by about
+2.3% (917 -> 939 MiB/s) but left xml, mr and sao at 0-0.9%; the twelve-file
+geometric mean is about 0.7%, below the 3% bar, so it was reverted. The
+remaining gap is the copy chain's dependency/cache latency, not entropy or
+FSE setup.
