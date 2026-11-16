@@ -1285,3 +1285,12 @@ bytes (2.3x faster than libbrotli q9, 10.6% larger). The planned profile is
 command-plan emission (26%), match finding (8.7%), distance/length coding
 (~18%); no duplicate-wire waste is visible at this level. The quality
 ladder's speed is the next Brotli target.
+
+The planned-q9 call tree makes the waste concrete: `encodeLazyCommandPlan`
+77.8%, final command candidate group 77.7%, command-plan allocation 59.9%,
+entropy-split candidate 58.0%, entropy-split wire candidate 51.3%,
+command-plan writers 32.7% (standard 27.0%, adaptive 26.9%), preferred
+command plan 19.7%. The dominant cost is full-wire materialization for
+entropy-split candidates, matching the roadmap's q8+ candidate-graph P0
+item. The next experiment is a count-only candidate writer that emits the
+winner exactly once.
