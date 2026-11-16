@@ -79,9 +79,11 @@ localization), `e80fc15c` (single-sequence literal decode once), and
 
 ## Reference availability
 
-- Deflate: libdeflate 1.10 and zlib 1.2.11 are installed. zlib-ng is absent and
-  no local checkout exists, so the modern streaming matrix remains blocked on
-  a reference build.
+- Deflate: libdeflate 1.10 and zlib 1.2.11 are installed. zlib-ng 2.3.90
+  (`~/Work/zlib-ng/build`, static compat) and libdeflate 1.26
+  (`~/Work/libdeflate/build-vort`) are now built locally; the first modern
+  streaming matrix is recorded in
+  [data/deflate-incremental-crc-20261116](../data/deflate-incremental-crc-20261116/README.md).
 - zstd: locally built libzstd 1.6.0 (SHA-pinned) is the decode reference.
 - Brotli: locally built tuned libbrotli 1.2.0 (`-O3 -march=native -flto`) is
   the decode reference; the reference side is noisy on this host, so
