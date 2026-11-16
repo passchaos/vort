@@ -10,12 +10,18 @@ const std = @import("std");
 pub const table = @import("rans/table.zig");
 pub const encoder = @import("rans/encoder.zig");
 pub const decoder = @import("rans/decoder.zig");
+pub const interleaved = @import("rans/interleaved.zig");
 
 pub const Table = table.Table;
 pub const normalize = table.normalize;
 pub const Encoder = encoder.Encoder;
 pub const Decoder = decoder.Decoder;
 pub const initialState = encoder.initialState;
+pub const InterleavedEncoder = interleaved.InterleavedEncoder;
+pub const InterleavedDecoder = interleaved.InterleavedDecoder;
+pub const InterleavedStream = interleaved.Stream;
+pub const laneSymbolCount = interleaved.laneSymbolCount;
+pub const max_lanes = interleaved.max_lanes;
 
 pub const Error = table.Error || encoder.Error || decoder.Error;
 
@@ -218,4 +224,131 @@ test "truncated renormalization stream is rejected, not silently decoded" {
         };
     }
     try std.testing.expect(hit_truncation);
+}
+
+test "interleaved round trip agrees across every lane count and alignment" {
+    var prng = std.Random.DefaultPrng.init(0x1357_2468);
+    const random = prng.random();
+    const allocator = std.testing.allocator;
+
+    // Message lengths deliberately sweep the N boundary so some lanes get one
+    // more symbol than others and the M < N case (empty trailing lanes) occurs.
+    const message_lengths = [_]usize{ 0, 1, 2, 3, 5, 7, 8, 9, 17, 31, 64, 100, 257 };
+
+    for (message_lengths) |message_len| {
+        const log2_scale: u8 = 10;
+        const alphabet_size: usize = 13;
+        var counts: [13]u32 = undefined;
+        for (&counts) |*c| c.* = random.intRangeAtMost(u32, 1, 4000);
+        var model = try normalize(allocator, &counts, log2_scale);
+        defer model.deinit();
+
+        const symbols = try allocator.alloc(u16, message_len);
+        defer allocator.free(symbols);
+        for (symbols) |*s| s.* = @intCast(random.intRangeAtMost(usize, 0, alphabet_size - 1));
+
+        var lane_count: u8 = 1;
+        while (lane_count <= max_lanes) : (lane_count += 1) {
+            var enc = try InterleavedEncoder.init(allocator, log2_scale, lane_count);
+            defer enc.deinit();
+            for (symbols) |s| try enc.encodeSymbol(model, s);
+            var stream = try enc.finishOwned();
+            defer stream.deinit();
+
+            // The packed offsets must partition the byte buffer once.
+            try std.testing.expectEqual(@as(usize, 0), stream.offsets[0]);
+            try std.testing.expectEqual(stream.bytes.len, stream.offsets[lane_count]);
+
+            // Strategy A: sequential interleaved walk, then undo rANS reverse.
+            var sequential = InterleavedDecoder.init(stream);
+            const reversed = try sequential.decodeReversed(model, allocator);
+            defer allocator.free(reversed);
+            const sequential_out = try allocator.alloc(u16, message_len);
+            defer allocator.free(sequential_out);
+            for (reversed, 0..) |symbol, reverse_index| {
+                sequential_out[message_len - 1 - reverse_index] = symbol;
+            }
+            try std.testing.expectEqualSlices(u16, symbols, sequential_out);
+            try std.testing.expect(sequential.allBytesConsumed());
+            try std.testing.expect(sequential.allStatesAtLowerBound());
+
+            // Strategy B: decode each lane independently, then place symbols at
+            // positions lane, lane+N, lane+2N, ... (the parallel-friendly form).
+            var parallel = InterleavedDecoder.init(stream);
+            const parallel_out = try allocator.alloc(u16, message_len);
+            defer allocator.free(parallel_out);
+            const lane_total: usize = lane_count;
+            var lane: usize = 0;
+            while (lane < lane_count) : (lane += 1) {
+                const count = laneSymbolCount(message_len, lane_total, lane);
+                const lane_symbols = try allocator.alloc(u16, count);
+                defer allocator.free(lane_symbols);
+                try parallel.decodeLaneInto(model, lane, lane_symbols);
+                // Lane symbols decode in reverse position order.
+                for (lane_symbols, 0..) |symbol, k| {
+                    const position = lane + (count - 1 - k) * lane_total;
+                    parallel_out[position] = symbol;
+                }
+            }
+            try std.testing.expectEqualSlices(u16, symbols, parallel_out);
+            try std.testing.expect(parallel.allBytesConsumed());
+            try std.testing.expect(parallel.allStatesAtLowerBound());
+
+            // The two strategies must reconstruct identical positions.
+            try std.testing.expectEqualSlices(u16, sequential_out, parallel_out);
+        }
+    }
+}
+
+test "interleaved single lane is equivalent to the scalar stream" {
+    const allocator = std.testing.allocator;
+    const counts = [_]u32{ 90, 7, 3 };
+    var model = try normalize(allocator, &counts, 11);
+    defer model.deinit();
+
+    const symbols = [_]u16{ 0, 1, 0, 2, 0, 0, 1, 2, 0, 1, 0, 0 };
+
+    var scalar_enc = Encoder.init(allocator, 11);
+    defer scalar_enc.deinit();
+    for (symbols) |s| try scalar_enc.encodeSymbol(model, s);
+    const scalar_finished = try scalar_enc.finishOwned();
+    defer allocator.free(scalar_finished.bytes);
+
+    var inter_enc = try InterleavedEncoder.init(allocator, 11, 1);
+    defer inter_enc.deinit();
+    for (symbols) |s| try inter_enc.encodeSymbol(model, s);
+    var stream = try inter_enc.finishOwned();
+    defer stream.deinit();
+
+    // One lane must reproduce the scalar state and byte stream byte-for-byte.
+    try std.testing.expectEqual(scalar_finished.state, stream.laneState(0));
+    try std.testing.expectEqualSlices(u8, scalar_finished.bytes, stream.laneBytes(0));
+
+    var dec = InterleavedDecoder.init(stream);
+    const reversed = try dec.decodeReversed(model, allocator);
+    defer allocator.free(reversed);
+    var index: usize = symbols.len;
+    for (reversed) |symbol| {
+        index -= 1;
+        try std.testing.expectEqual(symbols[index], symbol);
+    }
+}
+
+test "independent lane decode rejects a mismatched output buffer" {
+    const allocator = std.testing.allocator;
+    var enc = try InterleavedEncoder.init(allocator, 8, 4);
+    defer enc.deinit();
+    const counts = [_]u32{ 5, 5 };
+    var model = try normalize(allocator, &counts, 8);
+    defer model.deinit();
+    var i: usize = 0;
+    while (i < 10) : (i += 1) try enc.encodeSymbol(model, @intCast(i % 2));
+    var stream = try enc.finishOwned();
+    defer stream.deinit();
+
+    var dec = InterleavedDecoder.init(stream);
+    var wrong = [_]u16{0} ** 2;
+    // Lane 0 owns 3 of 10 symbols, so a 2-slot buffer must be rejected.
+    try std.testing.expectError(error.OutputTooSmall, dec.decodeLaneInto(model, 0, &wrong));
+    try std.testing.expectError(error.InvalidLaneCount, dec.decodeLaneInto(model, 4, &wrong));
 }

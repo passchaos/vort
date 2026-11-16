@@ -187,7 +187,16 @@ policy:
    truncation rejection. Empty/max-alphabet are covered via the table tests.
 3. **N-way interleaved encode/decode** with independent renorm spans and
    property tests that scalar interleaved decode equals a trivial sequential
-   reference for every lane count and alignment.
+   reference for every lane count and alignment. **Done (2026-11-16):**
+   `src/rans/interleaved.zig` composes the scalar codecs into up to 8
+   independent lanes (`max_lanes`); each lane keeps its own state and a
+   separately indexable renorm span packed into one buffer with prefix
+   offsets. A dual-oracle test proves the sequential interleaved walk and the
+   independent per-lane (parallel-form) decode reconstruct byte-identical
+   output for every N in 1..=8 and alignments including empty, M < N and
+   boundary-crossing messages, with every span fully consumed and every state
+   returned to the lower bound. Passes Debug/ReleaseSafe/ReleaseFast and node
+   WASI.
 4. **Native v1 frame wiring** behind the experimental version/flag: block
    header parse with fail-closed unknown-tag handling, bounded-output
    admission, checksum and table-CRC validation, one-shot then incremental.
