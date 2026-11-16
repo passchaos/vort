@@ -1274,3 +1274,14 @@ The parser-redesign screen is consolidated in
 drop-short 1.52x/+4.35%, single-table 1.86x/+7.6%, single-table+rep0
 1.57x/+6.2%, drop-lazy 0.964x/+0.31%. Level 1 keeps its current balance; a
 product-level fastest variant remains a policy decision.
+
+## Brotli planned encode baseline (2026-11-17)
+
+On the 128 KiB `dickens` prefix: planned q9 emits 48,833 bytes at
+**0.49 MiB/s** versus libbrotli 47,947 at 9.48 (1.85% larger, **19x
+slower**); planned q11 emits 43,956 at **0.07 MiB/s** versus 42,949 at 0.89
+(2.34% larger, 13x slower). The legacy fast path is 21.8 MiB/s at 53,052
+bytes (2.3x faster than libbrotli q9, 10.6% larger). The planned profile is
+command-plan emission (26%), match finding (8.7%), distance/length coding
+(~18%); no duplicate-wire waste is visible at this level. The quality
+ladder's speed is the next Brotli target.
