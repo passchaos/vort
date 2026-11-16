@@ -798,6 +798,16 @@ measurement; keep this paragraph as the historical small-sample record only.
 
 ## Full-Silesia sweep and the x-ray Huffman-gate weak row (2026-11-16)
 
+A perf hotspot location for the flat ~6% deflate common-path deficit is in
+[deflate-common-path-hotspot-20261116](deflate-common-path-hotspot-20261116.md):
+on `mozilla`, 45.9% of self-time sits in the serial
+`deflate.semantic.linear_entry.aligned` loop (table build only ~1%), and the
+remaining unnamed inlined samples resolve to the same region. The prior
+exhaustive A/B screen already rejected every local lever on this path (table
+shape, speculation, cursors, checks, storage, layout), so the gap is the
+irreducible per-symbol critical path and needs structural work, not another
+local edit.
+
 The twelve-file sweep
 ([data/wire-full-silesia-20261116](data/wire-full-silesia-20261116/README.md))
 corrects the small-sample read: Deflate is slower on 9/12 files vs libdeflate
