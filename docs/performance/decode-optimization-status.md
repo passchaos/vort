@@ -1169,3 +1169,15 @@ The match-first reorder was retried with an exact 0-16-byte literal copy (no
 wildcopy tail). It is correct but slower: `dickens` fell from 917 to 858 MiB/s
 (-6.4%) because the literal copy's work was overlapping the match-source
 fetch. Reverted; the literal-first order stays.
+
+## Deflate decode profile (2026-11-17)
+
+On the `dickens` level-6 wire, Vort decodes at 783.58 MiB/s versus libdeflate
+1.10 at 833.70 (0.940). The profile is **38.6%** in
+`decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline` plus 2.4% in
+`linear_entry.aligned`. The hottest instructions are Huffman table loads
+(5.8/3.7/3.3/3.2/3.1%), the 16-byte match copy (6.5% load plus 3.4% store),
+and an **8.2% stack spill** of a loop-carried value. The spill points at
+register pressure rather than a missing token phase; a two-phase token buffer
+would add a write and a read per sequence and is not the next lever. Reducing
+the live set or splitting the loop is the concrete next experiment.
