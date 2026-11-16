@@ -1078,3 +1078,19 @@ binary 8,607 B, level3_tradeoff 2,037 B). Evidence:
 
 The explicit parallel seekable encoder remains the only thread-spawning
 boundary in the zstd encode path.
+
+## Zstd unindexed multi-duplicate cap (2026-11-17)
+
+The unindexed multi-duplicate planner rescanned each suffix for up to 128
+global-best matches. On the 128 KiB `dickens` prefix it took **194 ms**,
+scanned **47.8 MB** of literal histograms, and produced a 75,000-byte
+candidate that lost to the 50,325-byte beam. Removing it entirely regressed
+`sao` by about 10% because its early matches tighten the DP upper bound.
+
+The planner now stops after **two** matches when no precomputed index is
+available; indexed blocks keep the full 128-match budget, and diagnostic
+entry points still request it. Twelve 128 KiB Silesia files keep
+byte-identical level-9 frames (SHA-256) and gain about **2.3x**
+geometric-mean throughput, with 3.3-16.4x on the four slow rows and no
+control below 0.999x. The locked encode gate is unchanged. Evidence:
+[data/zstd-multi-cap-20261117](data/zstd-multi-cap-20261117/README.md).

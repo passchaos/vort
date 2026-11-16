@@ -1575,6 +1575,10 @@ const multi_duplicate_unindexed_required_search_budget = mixed_match_min_search_
 // the retained generated corpus. Preserve it as a diagnostic stage and for
 // larger blocks, where the shared predecessor index makes suffix queries cheap.
 const multi_duplicate_min_input_len = duplicate_exact_hash_input_max + 1;
+// Bound the unindexed suffix-rescanning variant: the first few matches carry
+// the useful upper bound for later DP pruning, while a full 128-match scan is
+// O(n^2) on large blocks (194 ms on the 128 KiB dickens prefix).
+const unindexed_multi_duplicate_max_matches = 2;
 // Once the repeat-aware winner beats both primitive families by this factor,
 // their recursive combination has not been competitive across the retained
 // generated corpus. This conservative margin permits deterministic worker
@@ -22067,7 +22071,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             try findBestDuplicateMatch(block);
     }
     const multi_duplicate_ok = if (shouldSearchMultiDuplicate(block.len, match_search_budget, beam_is_decisive, duplicate_index_ptr != null))
-        try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, candidate, block, last, duplicate_index_ptr, &first_duplicate)
+        try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, candidate, block, last, duplicate_index_ptr, &first_duplicate, if (duplicate_index_ptr != null) max_bootstrap_sequence_count else unindexed_multi_duplicate_max_matches)
     else
         false;
     try retainShortestCandidate(allocator, multi_duplicate_ok, candidate.items, best);
@@ -22351,8 +22355,8 @@ pub fn benchmarkNativeMultiDuplicateProfileMode(
     profile.* = .{};
     var first: ?DuplicateMatch = null;
     return switch (mode) {
-        .shadow => emitMultiDuplicateMatchCompressedBlockProfiledMode(true, true, .shadow, allocator, out, block, true, null, &first, profile),
-        .prune => emitMultiDuplicateMatchCompressedBlockProfiledMode(true, true, .prune, allocator, out, block, true, null, &first, profile),
+        .shadow => emitMultiDuplicateMatchCompressedBlockProfiledMode(true, true, .shadow, allocator, out, block, true, null, &first, profile, max_bootstrap_sequence_count),
+        .prune => emitMultiDuplicateMatchCompressedBlockProfiledMode(true, true, .prune, allocator, out, block, true, null, &first, profile, max_bootstrap_sequence_count),
     };
 }
 
@@ -22380,8 +22384,8 @@ pub fn benchmarkNativeMultiDuplicateAnchorProfile(
     }
     var first: ?DuplicateMatch = null;
     return switch (mode) {
-        .shadow => emitMultiDuplicateMatchCompressedBlockWithAnchors(true, true, .shadow, true, allocator, out, block, true, null, &first, profile, &anchors),
-        .prune => emitMultiDuplicateMatchCompressedBlockWithAnchors(true, true, .prune, true, allocator, out, block, true, null, &first, profile, &anchors),
+        .shadow => emitMultiDuplicateMatchCompressedBlockWithAnchors(true, true, .shadow, true, allocator, out, block, true, null, &first, profile, &anchors, max_bootstrap_sequence_count),
+        .prune => emitMultiDuplicateMatchCompressedBlockWithAnchors(true, true, .prune, true, allocator, out, block, true, null, &first, profile, &anchors, max_bootstrap_sequence_count),
     };
 }
 
@@ -24273,7 +24277,7 @@ test "zstd decisive rep beam reuses multi first duplicate match wire" {
     var multi: std.ArrayList(u8) = .empty;
     defer multi.deinit(std.testing.allocator);
     var first: ?DuplicateMatch = null;
-    try std.testing.expect(try emitMultiDuplicateMatchCompressedBlockWithFirst(std.testing.allocator, &multi, payload.items, true, &index, &first));
+    try std.testing.expect(try emitMultiDuplicateMatchCompressedBlockWithFirst(std.testing.allocator, &multi, payload.items, true, &index, &first, max_bootstrap_sequence_count));
     try std.testing.expectEqual(decisive_first, first orelse return error.CorruptFrame);
 
     var expected: std.ArrayList(u8) = .empty;
@@ -26333,26 +26337,26 @@ fn emitSingleMatchCompressedBlockFromMatch(allocator: std.mem.Allocator, out: *s
 
 fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex) Error!bool {
     var first_match: ?DuplicateMatch = null;
-    return try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, out, block, last, duplicate_index, &first_match);
+    return try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, out, block, last, duplicate_index, &first_match, max_bootstrap_sequence_count);
 }
 
-fn emitMultiDuplicateMatchCompressedBlockWithFirst(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch) Error!bool {
-    return emitMultiDuplicateMatchCompressedBlockWithFirstImpl(true, allocator, out, block, last, duplicate_index, first_match);
+fn emitMultiDuplicateMatchCompressedBlockWithFirst(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, max_matches: usize) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockWithFirstImpl(true, allocator, out, block, last, duplicate_index, first_match, max_matches);
 }
 
-fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch) Error!bool {
-    return emitMultiDuplicateMatchCompressedBlockProfiled(cache_costs, false, allocator, out, block, last, duplicate_index, first_match, null);
+fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, max_matches: usize) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockProfiled(cache_costs, false, allocator, out, block, last, duplicate_index, first_match, null, max_matches);
 }
 
-fn emitMultiDuplicateMatchCompressedBlockProfiled(comptime cache_costs: bool, comptime profile_work: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile) Error!bool {
-    return emitMultiDuplicateMatchCompressedBlockProfiledMode(cache_costs, profile_work, .prune, allocator, out, block, last, duplicate_index, first_match, profile);
+fn emitMultiDuplicateMatchCompressedBlockProfiled(comptime cache_costs: bool, comptime profile_work: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile, max_matches: usize) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockProfiledMode(cache_costs, profile_work, .prune, allocator, out, block, last, duplicate_index, first_match, profile, max_matches);
 }
 
-fn emitMultiDuplicateMatchCompressedBlockProfiledMode(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile) Error!bool {
-    return emitMultiDuplicateMatchCompressedBlockWithAnchors(cache_costs, profile_work, mode, false, allocator, out, block, last, duplicate_index, first_match, profile, null);
+fn emitMultiDuplicateMatchCompressedBlockProfiledMode(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile, max_matches: usize) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockWithAnchors(cache_costs, profile_work, mode, false, allocator, out, block, last, duplicate_index, first_match, profile, null, max_matches);
 }
 
-fn emitMultiDuplicateMatchCompressedBlockWithAnchors(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, comptime reuse_anchors: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile, anchors: ?*paired_anchor_cache.Cache) Error!bool {
+fn emitMultiDuplicateMatchCompressedBlockWithAnchors(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, comptime reuse_anchors: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile, anchors: ?*paired_anchor_cache.Cache, max_matches: usize) Error!bool {
     first_match.* = null;
     if (rleByte(block) != null or block.len < 32) return false;
     const ActiveCostCache = winner_literal_cost.CacheWithAccounting(SingleLiteralCostCodec, mode, profile_work);
@@ -26374,7 +26378,8 @@ fn emitMultiDuplicateMatchCompressedBlockWithAnchors(comptime cache_costs: bool,
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
     var literal_start: usize = 0;
-    while (count < matches.len and literal_start < block.len) {
+    std.debug.assert(max_matches <= matches.len);
+    while (count < max_matches and literal_start < block.len) {
         if (profile_work) profile.?.finder_calls +|= 1;
         const match = if (duplicate_index) |index|
             try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
@@ -34431,7 +34436,7 @@ const SingleLiteralCostTestCodec = struct {
     }
     pub fn multi(comptime cached: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8) Error!bool {
         var first: ?DuplicateMatch = null;
-        return emitMultiDuplicateMatchCompressedBlockWithFirstImpl(cached, allocator, out, block, true, null, &first);
+        return emitMultiDuplicateMatchCompressedBlockWithFirstImpl(cached, allocator, out, block, true, null, &first, max_bootstrap_sequence_count);
     }
 };
 
