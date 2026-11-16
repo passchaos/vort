@@ -809,3 +809,11 @@ a compressible control improved slightly, proving X2 engages but is slower for
 long-coded near-incompressible symbols. The gate is correctly tuned and the
 widening lever is falsified, not open. Full mechanism and the experiment are in
 [zstd-xray-huffman-gate-20261116](zstd-xray-huffman-gate-20261116.md).
+
+The Brotli sweep was completed to all twelve files in the same package and
+corrected a second small-sample error: it is not a steady ~0.93x but a
+file-dependent 0.747-1.466 (median 0.957), with Vort faster on 5/12 and slower
+on 7/12. Vort leads strongly on near-incompressible literal-heavy files (`sao`
+1.466, `x-ray` 1.324) — the opposite of zstd on the same inputs — and trails
+most on `mr` (0.747). These leads are provisional pending a current libbrotli
+measurement, since the installed 1.0.9 is from 2016.
