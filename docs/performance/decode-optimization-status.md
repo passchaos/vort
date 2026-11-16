@@ -1187,3 +1187,9 @@ The 8.2% spill maps to the literal lookup entry: a hot loop value is stored to
 `-0x70(%rbp)` immediately after. The next experiment is therefore to reduce
 the live table-base/bit-reservoir set in the semantic loop; adding a token
 phase would not address this spill.
+
+The literal path is a four-entry unrolled chain; the spilled value is a
+loop-invariant base pointer freed for the chain and then reloaded as the
+literal table base. The next experiment is to shrink that chain's register
+demand or reload the invariant pointers from `reader` instead of keeping them
+live. Compiler spill elimination is otherwise not source-controllable.
