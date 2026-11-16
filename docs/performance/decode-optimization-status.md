@@ -1115,3 +1115,10 @@ per-file regression webster +84 bytes (+0.20%). Repeated dickens/xml/reymont
 medians confirm 1.17x/1.36x/1.26x. The locked encode gate is unchanged.
 Evidence:
 [data/zstd-optimal-cand7-20261117](data/zstd-optimal-cand7-20261117/README.md).
+
+A reversible level-9 screen skipped the lazy candidate at high budgets:
+10/12 Silesia sizes were unchanged but `xml` grew **+6.0%** (9,712 -> 10,299).
+Skipping greedy left 11/12 unchanged but `mr` grew **+3.3%** (32,676 ->
+33,766). Both candidates are genuine winners on the retained corpus, so the
+level-9 candidate set stays. The next level-9 lever is cheaper candidate
+evaluation/emission, not candidate removal.
