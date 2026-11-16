@@ -817,3 +817,15 @@ on 7/12. Vort leads strongly on near-incompressible literal-heavy files (`sao`
 1.466, `x-ray` 1.324) — the opposite of zstd on the same inputs — and trails
 most on `mr` (0.747). These leads are provisional pending a current libbrotli
 measurement, since the installed 1.0.9 is from 2016.
+
+## zstd measured against current libzstd 1.6.0 (2026-11-16)
+
+The old-reference caveat is now resolved for zstd using the locally built,
+SHA-pinned libzstd 1.6.0 (the same identity the differential gate pins). Full
+twelve-file data is in
+[data/wire-zstd-1.6.0-current-20261116](data/wire-zstd-1.6.0-current-20261116/README.md).
+The median Vort/reference ratio drops from 0.799 vs 1.4.8 to **0.760 vs 1.6.0**
+(12/12 behind); `x-ray` collapses from 0.550 to **0.326** as upstream improved
+its near-incompressible Huffman path, and `mr` falls to 0.603. The 1.4.8 numbers
+were indeed only a lower bound; the structural conclusion (FSE serial wall and
+Huffman X2 gating, both requiring non-local work) is unchanged and reinforced.
