@@ -1103,3 +1103,15 @@ repeated 75,532 bytes. The optimal DP supplies the winning block (50,316 plus
 the 9-byte frame header equals the 50,325-byte frame), so its 16 ms is
 required; the next level-9 work is DP-internal cost rather than another
 candidate skip.
+
+## Zstd optimal candidate budget 7 (2026-11-17)
+
+The optimal DP used eight useful-chain candidates per position. Dropping to
+**seven** enables the existing four-byte optimal route for 64-128 KiB blocks
+and removes one candidate from every other optimal search. Twelve 128 KiB
+Silesia files at level 9 gain **13.4% geometric-mean throughput**; aggregate
+size is **+101 bytes** (net), with mozilla and osdb improving and the largest
+per-file regression webster +84 bytes (+0.20%). Repeated dickens/xml/reymont
+medians confirm 1.17x/1.36x/1.26x. The locked encode gate is unchanged.
+Evidence:
+[data/zstd-optimal-cand7-20261117](data/zstd-optimal-cand7-20261117/README.md).

@@ -1,0 +1,12 @@
+zstd_encode_bench_gate=ok rows=20 reference_version=1.4.8
+Build Summary: 6/6 steps succeeded
+run-zstd-encode-bench-gate success
++- run python3 success 47ms
+   +- compile exe vort-zstd-encode-bench ReleaseFast native cached 16ms MaxRSS:42M
+   |  +- WriteFile cached
+   |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 5ms MaxRSS:41M
+   |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+   +- run exe vort-zstd-encode-bench success 953ms
+      +- compile exe vort-zstd-encode-bench ReleaseFast native (+3 more reused dependencies)
+
+gate=0
