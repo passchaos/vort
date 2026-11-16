@@ -445,3 +445,21 @@ paths in `controls_resource_tests.zig`; seek-table encoding is covered by the
 HQ/controls test modules; and the `With*` names are thin option wrappers over
 tested cores. No remaining untested non-wrapper encode or decode entry point was
 found across the three codecs.
+
+## Other container formats coverage check (2026-11-16)
+
+Beyond the three primary codecs, the coverage-guided entry point
+(`tools/fuzz_target.zig`) already routes 46 encode/decode entry points spanning
+the container and secondary formats (lz4, lz4-legacy, cab, chd, cso, dax,
+decmpfs, the Windows LZ* family, android OTA, and more).
+
+lz4 was checked specifically as a high-exposure format: it has no separate
+incremental fuzz driver, but its one-shot path is in the coverage fuzzer and its
+incremental state machine already has 75 dedicated tests across
+`decoder_tests`, `dictionary_resume_tests`, `limits_tests`, and `tests`,
+covering step scheduling, resume, and resource limits. A parallel driver would
+therefore duplicate existing coverage rather than close a gap. The same pattern
+holds for the other wired formats: no zero-test non-wrapper entry point was
+found that would justify a new driver. New drivers should only be added where a
+format has an uncovered incremental scheduling state machine, not merely because
+it is absent from this driver's file list.
