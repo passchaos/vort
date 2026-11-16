@@ -723,3 +723,28 @@ path was re-verified healthy on this branch:
 So the portable/WASM parity requirement that gates native SIMD changes is
 currently satisfiable; a structural optimization can land only if it keeps
 these WASM gates green alongside the native paired A/B adoption bar.
+
+## Final disposition of the structural options (2026-11-16)
+
+The four "Remaining structural options" above were all revisited and closed
+with evidence this session:
+
+1. Deflate fastloop rewrite: left unimplemented; the measured equivalence of
+   extraction counts still gives no positive expected value, and the deflate
+   gap is the smallest of the three (~1.08x on nci 64K).
+2. Deflate literal/match loop split: confirmed "do not implement" as analyzed;
+   the split re-creates the outer availability/headroom checks.
+3. Brotli goto phase fusion: ruled out on both paths. The one-shot
+   `processTailLookupCompressedPayload` is already a single fused loop (perf
+   annotate: flat, top 3.85%), and the incremental copy_decoder needs its
+   explicit phase machine for 26 partial-buffer resume points.
+4. Zstd field-decode consolidation: the executor already consumes single-word
+   field groups (`readBranchless` is an alias of `read`); only a full
+   pipeline/representation redesign could change the 46% executor, which is a
+   research-scale project, not a local edit.
+
+Additionally, two implemented micro-candidates (nine-bit peek, block-switch
+hoist) failed paired A/B and were reverted; SIMD Huffman gather is impossible
+under the serial prefix-code dependency; and table-width/dense-run tweaks have
+measured ceilings below the 3% bar. No open local or structural decode
+optimization with positive expected value remains in the current architecture.
