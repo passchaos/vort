@@ -1233,3 +1233,8 @@ single-run matrix, but repeated medians were 0.975-0.987x on dickens, mozilla,
 mr and webster. The actual match counts are 9,185 (dickens) and 14,712 (mr),
 so the list does grow, but the eager 65 KiB reserve costs more than the copies
 it avoids. The smaller lazy reserve stays.
+
+Functional-surface check: Deflate zlib preset dictionaries (FDICT/DICTID),
+Zstd dictionaries/prefixes and Brotli format controls are already exposed
+across one-shot, reusable and streaming APIs. No cheap functional gap remains;
+the next work is performance.
