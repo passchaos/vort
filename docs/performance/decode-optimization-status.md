@@ -1034,3 +1034,26 @@ bound/reusable/dictionary level-1/2 wires are byte-identical. `test-zstd`
 passes 1431/1431; `run-zstd-encode-bench-gate` records the new level-1 JSON
 694-byte and multiblock 34,228-byte ceilings. The level-3+ ladder still spawns
 per-call threads, which remains a separate architecture-rule violation.
+
+## Zstd level ladder goes serial (2026-11-17)
+
+The level 3+ adaptive ladder spawned up to three `std.Thread` workers per
+encode call to evaluate full-frame block-size candidates. That is the per-call
+thread creation the architecture rules classify as a P0 problem. The
+candidates are now evaluated serially in the same deterministic order with the
+same candidate set and arbitration; the `LockedAllocator` wrapper and the
+level-3 coordinator overlap are gone, and single-threaded targets use the same
+richer arbitration instead of the legacy simple fallback.
+
+A/B on twelve 128 KiB Silesia files at level 3 produced byte-identical
+`vort_bytes` on every file. Repeated 3-iteration/7-round runs on xml, dickens
+and samba measured serial/parallel medians of 6.645/6.659, 3.771/3.817 and
+5.832/5.814 MiB/s (0.998x, 0.988x, 1.003x), so removing the workers cost no
+measurable throughput. `test-zstd` passes 1430/1430,
+`run-zstd-encode-bench-gate` passes, and `check-wasm` completes 64/64 steps.
+The mixed-candidate block search at level 9+ and the parallel seekable encoder
+still spawn per call; the mixed search is the next thread-rule target.
+
+Level 9 on the same 128 KiB `dickens` prefix measures **0.0049 MiB/s**
+(25.7 s per encode), which is a separate quality-ladder cliff rather than a
+threading problem.

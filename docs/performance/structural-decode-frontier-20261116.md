@@ -128,5 +128,7 @@ binary, not a window-policy difference. `test-zstd` is green with the policy
 active.
 
 The level-3+ ladder is still ratio-first and very slow (3.65 MiB/s on the same
-prefix), and its per-call `std.Thread.spawn` remains an architecture-rule
-violation to fix in a separate increment.
+prefix; level 9 measures 0.0049 MiB/s). Its per-call `std.Thread.spawn` fan-out
+is removed: candidates now run serially with identical wires and no measurable
+throughput loss. The mixed-candidate block search at level 9+ and the parallel
+seekable encoder still spawn per call.
