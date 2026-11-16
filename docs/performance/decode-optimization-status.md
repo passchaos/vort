@@ -945,3 +945,16 @@ single-tree tests passed 35/35, but Vort's absolute throughput stayed at
 the larger table and build cost. It was reverted as well. The apparent paired
 ratio moves in all three experiments were reference-side drift; the `mr` scan
 is not a removable local lever with these table designs.
+
+## Zstd compact executor routing check (2026-11-16)
+
+`preferSmallCopies` (literal bytes <= 4 KiB and sequence count < 1024) is
+checked inside the `preferSplit` branch (sequence count >= 1024 or literal
+bytes >= 16 KiB), so the two conditions are disjoint and
+`tryDecodeAllFseSplitHuffmanSequences` is unreachable in the production
+one-shot dispatch; only the profile helper calls it directly. Enabling the
+union on the twelve-file level-1 sweep measured geometric **1.0002** (xml
+-1.0%, x-ray +1.2%, nci +0.8%, webster +0.7%), no adoption; reverted. The
+generic loop is competitive for that shape. Separately, skipping the 16-byte
+literal wildcopy for zero-length runs measured neutral on nci (0.7864 versus
+0.7875) and was reverted. Both are closed local levers.
