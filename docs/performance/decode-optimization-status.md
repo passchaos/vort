@@ -936,7 +936,12 @@ so an 11-bit root cannot remove it. A 12-bit root was then tested on the same
 `mr` row: Vort's absolute throughput stayed at 357.7 MiB/s versus 359.2 MiB/s
 baseline, so the wider table did not speed up the decode either; the paired
 ratio moved only because the reference side drifted (282 versus 454 MiB/s in
-the two runs). Both root-widening attempts were reverted. The remaining option
-is a two-level literal table, and the earlier command two-level prototype was
-neutral to slightly negative. This remains a research-scale Brotli change, not
-a local lever.
+the two runs). Both root-widening attempts were reverted. A two-level literal table (10-bit
+root plus direct secondary blocks for 11-15 bit codes) was then implemented for
+the single-tree path and validated against the canonical decoder, including a
+bit-order bug that the full stream test missed and the benchmark caught. The
+single-tree tests passed 35/35, but Vort's absolute throughput stayed at
+357.1 MiB/s versus 359.2 MiB/s baseline, so the scan removal did not pay for
+the larger table and build cost. It was reverted as well. The apparent paired
+ratio moves in all three experiments were reference-side drift; the `mr` scan
+is not a removable local lever with these table designs.
