@@ -96,7 +96,12 @@ simple parser states that can be fuzzed aggressively.
   metadata, window constraints, and compatibility hints.
 - Multi-mode compression: store, fixed-Huffman deflate-compatible, dynamic
   Huffman, future ANS/FSE-style entropy, long-distance matching, and specialized
-  small-payload modes can coexist behind explicit block type tags.
+  small-payload modes can coexist behind explicit block type tags. The
+  not-yet-implemented entropy stage now has a decision-oriented proposal —
+  interleaved rANS to break the wire-format serial entropy wall — in
+  [native-entropy-design](formats/native-entropy-design.md); it is design-only,
+  with no frozen bytes, and requires golden vectors and versioning before any
+  experimental encoder.
 - Deterministic parallelism: encoders may use threads, but deterministic mode
   must produce stable bytes for the same input/config/dictionaries.
 - Safety limits: decoders must be able to reject frames by declared memory,
