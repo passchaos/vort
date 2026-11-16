@@ -772,3 +772,23 @@ dictionary-patch/LDM, and "future ANS/FSE-style entropy" remains an unbuilt
 goal (`docs/native-format.md:8-10,97-99`). That is a separate feature
 milestone requiring golden vectors, format versioning, fuzzing, WASM parity,
 and the paired two-baseline 3% / 95% CI / 0.98x A/B — not a local edit.
+
+## Current three-codec decode baseline vs installed libraries (2026-11-16)
+
+The provenance-tagged reference benches were run on Silesia `xml`/`nci`/
+`mozilla`; full CSVs and a normalized summary are in
+[data/wire-reference-baseline-20261116](data/wire-reference-baseline-20261116/README.md).
+One-shot, single-thread, ReleaseFast on an i7-10700K; `>1` means Vort faster:
+
+| codec | reference | xml | nci | mozilla |
+| --- | --- | ---: | ---: | ---: |
+| Deflate | libdeflate 1.10 | 1.017 | 1.150 | 0.936 |
+| zstd | libzstd 1.4.8 | 0.783 | 0.840 | 0.821 |
+| Brotli | libbrotli 1.0.9 | 0.926 | 0.930 | 0.927 |
+
+zstd is the consistent 16-22% gap and Brotli a steady ~7%; Deflate is near
+parity and file-dependent. The zstd/Brotli references are old (2020/2016), so
+these are lower bounds on the competitive distance, not parity evidence, and
+the run is a single-host diagnostic rather than an adoption gate. It
+re-confirms the FSE serial wall above as the structural zstd decode ceiling;
+no production code changed.
