@@ -791,7 +791,10 @@ parity and file-dependent. The zstd/Brotli references are old (2020/2016), so
 these are lower bounds on the competitive distance, not parity evidence, and
 the run is a single-host diagnostic rather than an adoption gate. It
 re-confirms the FSE serial wall above as the structural zstd decode ceiling;
-no production code changed.
+no production code changed. **This three-file read is superseded by the
+twelve-file sections below**, which correct both the Deflate and Brotli
+characterizations and replace the old-libzstd zstd number with a current 1.6.0
+measurement; keep this paragraph as the historical small-sample record only.
 
 ## Full-Silesia sweep and the x-ray Huffman-gate weak row (2026-11-16)
 
