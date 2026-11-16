@@ -21,6 +21,8 @@ pub const Error = error{
     PrecisionTooSmall,
     /// A requested scale was outside `[1, max_log2_scale]`.
     InvalidScale,
+    /// A normalized frequency set did not sum exactly to `L`.
+    InvalidModel,
     OutOfMemory,
 };
 
@@ -189,6 +191,73 @@ pub fn normalize(
         .active_count = active_count,
         .active_span = active_span,
     };
+}
+
+/// Rebuild a table from already-normalized frequencies read off a wire.
+/// Validates the scale range, that every active frequency is positive, and
+/// that the frequencies sum exactly to `L` before constructing cumulative and
+/// slot-lookup storage. This is the decode-side entry point; `normalize` is the
+/// encode-side entry point from raw counts.
+pub fn fromNormalized(
+    allocator: std.mem.Allocator,
+    freqs: []const u32,
+    log2_scale: u8,
+) Error!Table {
+    if (log2_scale == 0 or log2_scale > max_log2_scale) return error.InvalidScale;
+    const l: usize = @as(usize, 1) << @intCast(log2_scale);
+
+    var sum: usize = 0;
+    var active_count: usize = 0;
+    var active_span: usize = 0;
+    for (freqs, 0..) |f, index| {
+        if (f == 0) continue;
+        active_count += 1;
+        active_span = index + 1;
+        sum += f;
+    }
+    if (active_count == 0) return error.EmptyAlphabet;
+    if (active_count > l) return error.PrecisionTooSmall;
+    if (sum != l) return error.InvalidModel;
+
+    const freq = try allocator.alloc(u32, freqs.len);
+    errdefer allocator.free(freq);
+    @memcpy(freq, freqs);
+
+    const cum = try allocator.alloc(u32, freqs.len);
+    errdefer allocator.free(cum);
+    const lookup = try allocator.alloc(u16, l);
+    errdefer allocator.free(lookup);
+
+    var running: u32 = 0;
+    for (freq, 0..) |f, index| {
+        cum[index] = running;
+        if (f != 0) @memset(lookup[running .. running + f], @intCast(index));
+        running += f;
+    }
+    std.debug.assert(running == l);
+
+    return .{
+        .allocator = allocator,
+        .log2_scale = log2_scale,
+        .freq = freq,
+        .cum = cum,
+        .lookup = lookup,
+        .active_count = active_count,
+        .active_span = active_span,
+    };
+}
+
+test "fromNormalized accepts a valid model and rejects a wrong sum" {
+    const good = [_]u32{ 1, 0, 3 };
+    var table = try fromNormalized(std.testing.allocator, &good, 2);
+    defer table.deinit();
+    try std.testing.expectEqual(@as(usize, 4), table.scale());
+    try std.testing.expectEqual(@as(u32, 1), table.cum[2]);
+
+    const bad_sum = [_]u32{ 1, 0, 2 };
+    try std.testing.expectError(error.InvalidModel, fromNormalized(std.testing.allocator, &bad_sum, 2));
+    const empty = [_]u32{ 0, 0 };
+    try std.testing.expectError(error.EmptyAlphabet, fromNormalized(std.testing.allocator, &empty, 2));
 }
 
 test "normalization sums exactly to the scale and keeps active frequencies positive" {

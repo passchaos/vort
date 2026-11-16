@@ -49,7 +49,7 @@ pub const Stream = struct {
     symbol_count: usize,
     states: [max_lanes]u32,
     offsets: [max_lanes + 1]usize,
-    bytes: []u8,
+    bytes: []const u8,
 
     pub fn deinit(self: *Stream) void {
         self.allocator.free(self.bytes);

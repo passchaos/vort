@@ -200,6 +200,16 @@ policy:
 4. **Native v1 frame wiring** behind the experimental version/flag: block
    header parse with fail-closed unknown-tag handling, bounded-output
    admission, checksum and table-CRC validation, one-shot then incremental.
+   *Prerequisite done (2026-11-16), production wiring intentionally not
+   started:* `src/rans/block.zig` is a self-contained experimental entropy
+   block (`VRB1`, version 1) with a fixed header, serialized normalized model,
+   per-lane states/offsets and renorm spans, plus a model CRC-32 and a payload
+   CRC-32. It validates magic/version/reserved fields, monotonic offsets, exact
+   size, both CRCs and full renorm/state restoration before returning symbols,
+   and exposes a decode-side `Table.fromNormalized`. It is NOT imported by
+   `src/store.zig` or any public decoder, so its bytes cannot become a
+   compatibility promise. Embedding it behind an experimental native frame
+   version is the remaining outward-facing decision.
 5. **Corpus round trips and fuzzing** (section 7), then and only then
    performance work and the SIMD twin.
 
@@ -211,7 +221,11 @@ until the adoption gates in section 8 run.
 - **Golden vectors.** Check in small, hand-derived frames (fixed N=4, L=4096)
   with exact expected bytes and decoded output, generated first from the scalar
   reference and then frozen. The experimental encoder is rejected if it ever
-  drifts from a frozen vector.
+  drifts from a frozen vector. **First anchor frozen (2026-11-16):** the
+  `block.zig` test suite pins an exact 75-byte `VRB1` block (N=4, L=1024,
+  twelve symbols over a four-symbol alphabet) and asserts it both decodes to
+  the fixed symbol sequence and re-encodes byte-identically, so any encoder or
+  serialization drift fails deterministically.
 - **Structure-aware fuzzing.** Extend the existing
   `tools/codec_differential_fuzz.zig` generator family to emit v1 rANS blocks
   and run the same truncation/byte-mutation matrix. There is no external

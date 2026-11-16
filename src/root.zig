@@ -4215,6 +4215,7 @@ test {
     _ = deflate;
     _ = bitstream;
     _ = huffman;
+    _ = rans;
     _ = lz77;
     _ = dictionary;
     _ = long_distance;

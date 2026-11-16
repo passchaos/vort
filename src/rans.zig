@@ -11,9 +11,11 @@ pub const table = @import("rans/table.zig");
 pub const encoder = @import("rans/encoder.zig");
 pub const decoder = @import("rans/decoder.zig");
 pub const interleaved = @import("rans/interleaved.zig");
+pub const block = @import("rans/block.zig");
 
 pub const Table = table.Table;
 pub const normalize = table.normalize;
+pub const tableFromNormalized = table.fromNormalized;
 pub const Encoder = encoder.Encoder;
 pub const Decoder = decoder.Decoder;
 pub const initialState = encoder.initialState;
@@ -25,41 +27,14 @@ pub const max_lanes = interleaved.max_lanes;
 
 pub const Error = table.Error || encoder.Error || decoder.Error;
 
-/// Build an explicit model from already-normalized frequencies. Test fixtures
-/// and golden vectors use this to pin exact arithmetic without depending on
-/// the normalization routine.
-fn modelFromFreqs(allocator: std.mem.Allocator, freqs: []const u32, log2_scale: u8) !Table {
-    const l: usize = @as(usize, 1) << @intCast(log2_scale);
-    const freq = try allocator.alloc(u32, freqs.len);
-    errdefer allocator.free(freq);
-    @memcpy(freq, freqs);
-    const cum = try allocator.alloc(u32, freqs.len);
-    errdefer allocator.free(cum);
-    const lookup = try allocator.alloc(u16, l);
-    errdefer allocator.free(lookup);
-
-    var running: u32 = 0;
-    var active_count: usize = 0;
-    var active_span: usize = 0;
-    for (freqs, 0..) |f, index| {
-        cum[index] = running;
-        if (f != 0) {
-            active_count += 1;
-            active_span = index + 1;
-            @memset(lookup[running .. running + f], @intCast(index));
-        }
-        running += f;
-    }
-    std.debug.assert(running == l);
-    return .{
-        .allocator = allocator,
-        .log2_scale = log2_scale,
-        .freq = freq,
-        .cum = cum,
-        .lookup = lookup,
-        .active_count = active_count,
-        .active_span = active_span,
-    };
+// Reference every submodule so the test runner includes their inline tests,
+// including declarations that are otherwise lazily unreferenced.
+test {
+    _ = table;
+    _ = encoder;
+    _ = decoder;
+    _ = interleaved;
+    _ = block;
 }
 
 // Hand-derived rANS golden vector.
@@ -76,7 +51,7 @@ fn modelFromFreqs(allocator: std.mem.Allocator, freqs: []const u32, log2_scale: 
 test "hand-computed rANS golden vector without renormalization" {
     const log2_scale: u8 = 2;
     const b = encoder.lower_bound;
-    var model = try modelFromFreqs(std.testing.allocator, &.{ 1, 3 }, log2_scale);
+    var model = try tableFromNormalized(std.testing.allocator, &.{ 1, 3 }, log2_scale);
     defer model.deinit();
     try std.testing.expectEqualSlices(u16, &.{ 0, 1, 1, 1 }, model.lookup);
 
