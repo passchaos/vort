@@ -1209,3 +1209,9 @@ writer, 4.3% memcpy, 4.2% sequence plan, 3.9% `sequenceCodeForValue`, 3.8%
 literal section, 3.7% transition fill and 3.7% long Huffman stream. The fast
 parser is the next parser-level target; block/entropy emission is already
 spread thin.
+
+The level-1 double-fast parser was inspected for removable duplicate work.
+The only repeated rep probe occurs when the previous match consumed
+`max_match`, so it is not the common path; the remaining loop is already the
+two-table double-fast design with lazy and repcode checks. Further level-1
+gains need a parser redesign, not a local edit.
