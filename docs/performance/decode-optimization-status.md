@@ -1327,3 +1327,12 @@ parameter search 4.8%, length code 4.4%, command distance 4.4%. Disabling
 flags did not change the dickens q9 wire or speed, so those candidates are
 not the active cost on this input. A product-level candidate-reduction
 policy is needed before further Brotli q9 speed work.
+
+Skipping `considerDefaultWindowFarCandidate` on the 128 KiB Silesia files
+kept every wire identical while raising planned q9 speed 1.12-1.31x
+(dickens 0.49 -> 0.55, xml 2.61 -> 3.42, mozilla 1.13 -> 1.41, webster
+0.96 -> 1.18; sao neutral). A simple `max_backward_distance <= default
+window` guard does not trigger: the ratio stream's default window is 16 bits
+while the far window is 17 bits for these inputs. A safe skip needs a cheap
+far-match pre-screen (the candidate exists for beyond-window copies), so the
+guard was reverted.
