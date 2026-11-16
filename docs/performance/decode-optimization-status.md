@@ -1313,3 +1313,8 @@ that shared model once, prepare/measure each alternate with
 `prepareCommandPlanWithOptionsRecorded`, and emit only the winner with
 `emitPreparedCommandPlanWithOptionsRecorded` (which checks the emitted size
 against `state.wire_len`).
+
+Implemented counted adaptive-context selection with the existing counting
+writer: the wire stayed identical (48,833 bytes) but speed moved only
+0.49 -> 0.50 MiB/s (about 2%, within noise). The writer cost is entropy
+planning, not byte storage, so counting alone does not help. Reverted.
