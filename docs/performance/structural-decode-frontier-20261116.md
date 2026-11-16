@@ -97,3 +97,26 @@ work rather than removable local structure. The next credible levers are
 target-specific assembly kernels (a portability boundary that needs explicit
 authorization and a scalar fallback) or encoder quality/speed (frozen by
 policy). Neither should be started without the corresponding authorization.
+
+## Zstd public level-1 policy finding (2026-11-16)
+
+`encodeFrameWithLevelAlloc(..., 1)` on the 128 KiB `dickens` prefix measured
+**7.56 MiB/s at 50,404 bytes**, while libzstd 1.6.0 level 1 measured
+**316.8 MiB/s at 56,148 bytes**. The forced fast selection
+(`--native-selection fast_compressed`) measured **76.2 MiB/s at 63,414 bytes**.
+
+The default level policy runs a multi-candidate adaptive split ladder and calls
+`std.Thread.spawn` up to three times **per encode call**
+(`encodeFrameWithLevelAndOptionsAllocImpl`), which the architecture rules
+forbid for per-call work. The ladder buys about 21% smaller output than the
+fast selection at roughly 10x the time; Vort's fast selection is still 13%
+larger than libzstd level 1 and about 4x slower.
+
+This is a product-semantics decision, not a local edit:
+
+- keep the quality-first default but make the ladder serial or caller-scheduled
+  (remove the per-call thread creation), or
+- align level 1 with the industry speed-first meaning and move the adaptive
+  ladder to a higher quality level / explicit API.
+
+Do not change the default level semantics without an explicit decision.
