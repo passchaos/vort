@@ -709,3 +709,17 @@ Net: further throughput progress on both codecs is structural/algorithmic
 Any such project must keep wire output byte-identical, retain portable/WASM
 parity, and pass the paired two-baseline A/B with the 3% geomean / 95% CI /
 0.98x control floor.
+
+## WASM/portable prerequisite verified (2026-11-16)
+
+Before any future architecture-level SIMD/executor work, the portable build
+path was re-verified healthy on this branch:
+
+- `zig build check-wasm`: 64/64 steps succeeded (all wasm32-wasi targets
+  compile, including the brotli portable twin and zstd huffman object).
+- `zig build test-deflate-wide-decode-wasm`: 3/3 steps succeeded (32-bit WASI
+  behavioral test runs, not just compiles).
+
+So the portable/WASM parity requirement that gates native SIMD changes is
+currently satisfiable; a structural optimization can land only if it keeps
+these WASM gates green alongside the native paired A/B adoption bar.
