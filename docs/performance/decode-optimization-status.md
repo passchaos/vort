@@ -1057,3 +1057,24 @@ still spawn per call; the mixed search is the next thread-rule target.
 Level 9 on the same 128 KiB `dickens` prefix measures **0.0049 MiB/s**
 (25.7 s per encode), which is a separate quality-ladder cliff rather than a
 threading problem.
+
+## Zstd wide-block mixed search removed (2026-11-17)
+
+Profiling level 9 on the 128 KiB `dickens` prefix attributed **84.8%** of
+cycles to the recursive mixed duplicate/repeated lookahead
+(`searchMixedCandidateLookaheadPlans` -> `candidatesAt` ->
+`findBestDuplicateMatchIn` -> `singleBestSequencePayloadLen`). It took
+**25.6 s** per encode and returned the same **50,325-byte** frame as level 3.
+
+The per-call mixed worker is removed. The mixed search now runs only for
+low-alphabet structured blocks (`preferSerialMixedSearch`), serially, through
+the existing decisive-beam/dominance arbitration; wide-alphabet blocks skip it
+and use the checked non-mixed selector. Level 9 drops to **0.508 MiB/s**
+(246 ms) with the same frame, levels 4-22 drop from about 25.6 s to about
+0.25 s, and twelve 128 KiB Silesia prefixes keep their level-3 sizes. The
+locked encode gate is unchanged (JSON level 9 640 B, multiblock 27,363 B,
+binary 8,607 B, level3_tradeoff 2,037 B). Evidence:
+[data/zstd-mixed-search-20261117](data/zstd-mixed-search-20261117/README.md).
+
+The explicit parallel seekable encoder remains the only thread-spawning
+boundary in the zstd encode path.

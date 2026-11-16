@@ -127,8 +127,10 @@ earlier reusable/one-shot "357 versus 314 bytes" mismatch was a stale test
 binary, not a window-policy difference. `test-zstd` is green with the policy
 active.
 
-The level-3+ ladder is still ratio-first and very slow (3.65 MiB/s on the same
-prefix; level 9 measures 0.0049 MiB/s). Its per-call `std.Thread.spawn` fan-out
-is removed: candidates now run serially with identical wires and no measurable
-throughput loss. The mixed-candidate block search at level 9+ and the parallel
-seekable encoder still spawn per call.
+The level-3+ ladder is still ratio-first and slow (3.65 MiB/s on the same
+prefix), but its per-call `std.Thread.spawn` fan-out is removed: candidates now
+run serially with identical wires and no measurable throughput loss. The
+recursive mixed search is now structured-block-only and serial; on wide blocks
+it measured no size benefit while taking 25.6 s per 128 KiB encode, so level 9
+drops to about 0.25 s. The explicit parallel seekable encoder remains the only
+thread-spawning boundary.

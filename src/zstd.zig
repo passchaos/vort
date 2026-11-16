@@ -10151,44 +10151,6 @@ const LevelFrameCandidate = struct {
     }
 };
 
-// Ratio-oriented mixed lookahead is independent from the remaining match
-// families. Run it beside those families with a thread-safe temporary allocator
-// and copy only its completed block back after join, so callers may continue to
-// provide single-threaded allocators such as `std.testing.allocator`.
-const MixedBlockCandidate = struct {
-    allocator: std.mem.Allocator,
-    block: []const u8,
-    last: bool,
-    match_search_budget: usize,
-    cancelled: *const std.atomic.Value(bool),
-    frame: ?[]u8 = null,
-    err: ?Error = null,
-
-    fn run(self: *MixedBlockCandidate) void {
-        var candidate: std.ArrayList(u8) = .empty;
-        defer candidate.deinit(self.allocator);
-        const ok = emitMixedDuplicateRepeatedMatchCompressedBlock(
-            self.allocator,
-            &candidate,
-            self.block,
-            self.last,
-            self.match_search_budget,
-            null,
-            self.cancelled,
-        ) catch |err| {
-            self.err = err;
-            return;
-        };
-        // Cancellation means the caller has accepted a deterministic decisive
-        // non-mixed winner. Never publish a timing-dependent partial search.
-        if (!ok or self.cancelled.load(.acquire)) return;
-        self.frame = candidate.toOwnedSlice(self.allocator) catch |err| {
-            self.err = err;
-            return;
-        };
-    }
-};
-
 pub fn encodeFrameWithLevelAndOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -21292,84 +21254,44 @@ fn emitNativeMatchCompressedBlockImpl(
         if (scratch.force_serial_mixed)
             return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
     }
-    if (match_search_budget >= mixed_match_min_search_budget) {
-        if (rep_beam_search and block.len >= serial_mixed_input_min and preferSerialMixedSearch(block)) {
-            // Low-alphabet structured blocks make the repeat beam decisive in
-            // the retained corpus. Evaluate the cheap bounded families first
-            // so that proof can skip recursive mixed search without creating
-            // and then joining a worker. Non-decisive blocks still run and
-            // arbitrate the exact same mixed candidate below.
-            const non_mixed_budget = mixed_match_min_search_budget - 1;
-            var mixed_dominated = false;
-            if (!has_precomputed_rep_beam) {
-                if (try emitAbsoluteDecisiveBeamFirst(
-                    allocator,
-                    out,
-                    block,
-                    last,
-                    non_mixed_budget,
-                    rep_beam_scratch,
-                    &mixed_dominated,
-                    large_sequence_scratch,
-                )) |fast_ok| return fast_ok;
-            }
-            const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
-            if (mixed_dominated) return non_mixed_ok;
-
-            var mixed: std.ArrayList(u8) = .empty;
-            defer mixed.deinit(allocator);
-            const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(allocator, &mixed, block, last, match_search_budget, null, null, block_scratch);
-            // Mixed historically ran first, so retain its equal-length tie.
-            if (mixed_ok and (!non_mixed_ok or mixed.items.len <= out.items.len)) {
-                out.clearRetainingCapacity();
-                try out.appendSlice(allocator, mixed.items);
-            }
-            return out.items.len != 0;
+    if (match_search_budget >= mixed_match_min_search_budget and
+        rep_beam_search and block.len >= serial_mixed_input_min and preferSerialMixedSearch(block))
+    {
+        // Low-alphabet structured blocks make the repeat beam decisive in the
+        // retained corpus. Evaluate the cheap bounded families first so the
+        // proof can skip recursive mixed search. Non-decisive blocks still
+        // arbitrate the exact same mixed candidate, now without a per-call
+        // worker.
+        const non_mixed_budget = mixed_match_min_search_budget - 1;
+        var mixed_dominated = false;
+        if (!has_precomputed_rep_beam) {
+            if (try emitAbsoluteDecisiveBeamFirst(
+                allocator,
+                out,
+                block,
+                last,
+                non_mixed_budget,
+                rep_beam_scratch,
+                &mixed_dominated,
+                large_sequence_scratch,
+            )) |fast_ok| return fast_ok;
         }
+        const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
+        if (mixed_dominated) return non_mixed_ok;
 
-        if (comptime builtin.single_threaded)
-            return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
-
-        var cancel_mixed: std.atomic.Value(bool) = .init(false);
-        var mixed_allocator = LockedAllocator{ .child = allocator };
-        const shared_allocator = mixed_allocator.allocator();
-        var mixed_candidate: MixedBlockCandidate = .{
-            .allocator = shared_allocator,
-            .block = block,
-            .last = last,
-            .match_search_budget = match_search_budget,
-            .cancelled = &cancel_mixed,
-        };
-        // Wide-alphabet data is less likely to prove the mixed candidate
-        // dominated. Preserve parallel arbitration there so the classifier
-        // cannot serialize two expensive searches.
-        if (std.Thread.spawn(.{ .allocator = shared_allocator }, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
-            const non_mixed_budget = mixed_match_min_search_budget - 1;
-            var mixed_dominated = false;
-            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, shared_allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch) catch |err| {
-                cancel_mixed.store(true, .release);
-                thread.join();
-                if (mixed_candidate.frame) |frame| shared_allocator.free(frame);
-                return err;
-            };
-            if (mixed_dominated) cancel_mixed.store(true, .release);
-            thread.join();
-            const mixed_cancelled = cancel_mixed.load(.acquire);
-            if (mixed_candidate.err) |err| return err;
-            if (mixed_candidate.frame) |mixed| {
-                defer shared_allocator.free(mixed);
-                if (!mixed_cancelled and (!non_mixed_ok or mixed.len <= out.items.len)) {
-                    out.clearRetainingCapacity();
-                    try out.appendSlice(shared_allocator, mixed);
-                }
-            }
-            return out.items.len != 0;
-        } else |err| {
-            if (err == error.OutOfMemory) return mapScopedAllocationError(shared_allocator, error.OutOfMemory);
+        var mixed: std.ArrayList(u8) = .empty;
+        defer mixed.deinit(allocator);
+        const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(allocator, &mixed, block, last, match_search_budget, null, null, block_scratch);
+        // Mixed historically ran first, so retain its equal-length tie.
+        if (mixed_ok and (!non_mixed_ok or mixed.items.len <= out.items.len)) {
+            out.clearRetainingCapacity();
+            try out.appendSlice(allocator, mixed.items);
         }
-        // Thread creation is an optimization only. If the platform refuses a
-        // worker, fall through to the byte-identical serial selector below.
+        return out.items.len != 0;
     }
+    // Wide-alphabet blocks skip the recursive mixed search: it measured no
+    // size benefit on any Silesia file while dominating level 4-22 encode time
+    // (25.6 s -> 0.25 s on the 128 KiB dickens prefix).
     return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
 }
 
@@ -21935,7 +21857,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
                 return try emitSingleMatchCompressedBlockFromMatch(allocator, out, block, last, match);
         }
     }
-    const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
+    const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget and preferSerialMixedSearch(block))
         try emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(allocator, candidate, block, last, match_search_budget, duplicate_index_ptr, null, block_scratch)
     else
         false;
