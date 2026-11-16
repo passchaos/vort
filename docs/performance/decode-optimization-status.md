@@ -803,6 +803,9 @@ corrects the small-sample read: Deflate is slower on 9/12 files vs libdeflate
 wall: it is 99.85% literals with ~28 sequences/block, all 65 Huffman sections
 are four-stream, but zero blocks pass any X2 entry gate (sparse needs 1536-2048
 sequences; the ratio is ~80% vs a 66% main gate), so every block uses the
-scalar four-stream fallback. Full mechanism, the fail-safe fallback reasoning,
-and the gate-widening hypothesis (held back pending the paired A/B) are in
+scalar four-stream fallback. A reversible local experiment then relaxed the
+66% ratio gate: x-ray deterministically regressed ~4.6% (0.550 -> 0.525) while
+a compressible control improved slightly, proving X2 engages but is slower for
+long-coded near-incompressible symbols. The gate is correctly tuned and the
+widening lever is falsified, not open. Full mechanism and the experiment are in
 [zstd-xray-huffman-gate-20261116](zstd-xray-huffman-gate-20261116.md).

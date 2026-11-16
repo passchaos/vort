@@ -55,26 +55,38 @@ recurrence, is the mechanism behind the 0.550 row.
   were tuned for either highly compressible blocks or a narrow high-sequence
   band, neither of which matches x-ray's shape.
 
-## Candidate lever and why it is not implemented here
+## Gate-widening hypothesis: tested and falsified (2026-11-16)
 
-Widening an X2 entry condition (for example a ratio-bounded path for
-large-regenerated, sequence-sparse four-stream sections) is fail-safe at the
-byte level because `unsupported` already falls back to the scalar decoder. But
-two things make it an uncommitted hypothesis rather than a change:
+Widening an X2 entry condition is fail-safe at the byte level because
+`unsupported` already falls back to the scalar decoder, so a temporary local
+experiment could test it without any output risk. The main gate's ratio term
+was relaxed from `compressed*1000 <= regenerated*660` to `*1000` (allow up to
+a 100% ratio), rebuilt, run through `run-zstd-reference-bench`, then reverted
+with `git checkout` (no production change retained):
 
-1. It is a hot-path heuristic; an over-wide gate can make many blocks attempt
-   X2, fail `unsupported`, and pay twice. The repo's adoption rule is a paired
-   two-baseline A/B with 3% geometric mean, 95% CI excluding parity and no
-   control row below 0.98x. No such A/B has been run.
-2. A failed X2 attempt's exact cost and the conditions under which X2 actually
-   returns `unsupported` for this input are not yet measured, so the expected
-   sign is unknown.
+| run | x-ray V/R | xml V/R (compressible control) |
+| --- | ---: | ---: |
+| current gate | 0.5503 | ~0.789 |
+| relaxed gate | 0.5249 (two runs, identical) | 0.7813 |
+
+Interpretation:
+
+- On x-ray the relaxed gate is deterministically **~4.6% slower**, not faster,
+  while output stays correct (the bench verifies equality). X2 engages (the
+  compressible control improves slightly, proving the path works), but its
+  11-bit two-symbol table costs more than the scalar four-stream reservoir path
+  for long-coded, near-incompressible symbols.
+- Therefore the existing 66% ratio gate is **correctly tuned**, not a coverage
+  bug: it keeps exactly this data shape out of a path that loses on it.
+- The gate-widening lever for x-ray is closed by measurement, not left open.
+  No intermediate threshold helps because X2 itself is slower for this symbol
+  distribution, independent of where the entry bar sits.
 
 ## Scope limits
 
 - Single host, level-1 CLI-generated frame for the stream-type inspection;
   throughput numbers inherit the old libzstd 1.4.8 caveat (the gap is a lower
   bound).
-- No production code changed; the probe was temporary and removed. This is a
-  root-cause record and an A/B-ready hypothesis, not a performance claim or a
-  fix.
+- No production code changed; the inspection probe and the gate edit were both
+  temporary and removed/reverted. This is a root-cause record plus a falsified
+  optimization hypothesis, not a fix.
