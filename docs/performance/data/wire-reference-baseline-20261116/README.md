@@ -72,6 +72,11 @@ cross-comparable across formats.
   cold/warm split.
 - No production code changed; this is measurement only.
 
+Run-to-run variance is characterized separately in
+[stability-README.md](stability-README.md): five independent rounds per codec
+show CV under 0.7%, with every zstd/Brotli round below parity and every Deflate
+round above it, so the directional gaps are well outside measurement noise.
+
 ## What this directs
 
 The data re-confirms zstd sequence decode as the highest-value decode target,

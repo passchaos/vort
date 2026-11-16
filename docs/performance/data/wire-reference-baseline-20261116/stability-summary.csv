@@ -1,0 +1,4 @@
+codec,min,median,max,range_span,cv_percent,all_rounds_below_1,all_rounds_above_1
+deflate,1.0104,1.0151,1.0173,0.0069,0.287,false,true
+zstd,0.7790,0.7837,0.7927,0.0137,0.700,true,false
+brotli,0.9242,0.9272,0.9336,0.0094,0.398,true,false

@@ -1,0 +1,16 @@
+codec,round,vort_over_reference_throughput
+deflate,1,1.0151
+deflate,2,1.0163
+deflate,3,1.0121
+deflate,4,1.0104
+deflate,5,1.0173
+zstd,1,0.7927
+zstd,2,0.7837
+zstd,3,0.7884
+zstd,4,0.7790
+zstd,5,0.7816
+brotli,1,0.9251
+brotli,2,0.9272
+brotli,3,0.9284
+brotli,4,0.9336
+brotli,5,0.9242
