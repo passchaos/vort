@@ -1004,3 +1004,10 @@ measured a **1.017** geometric mean over the eight bench rows (binary full
 below the 3% adoption bar and overlapping host noise. Reverted. The streaming
 gap needs the fixed-block bulk path or a broader state-machine change, not
 per-literal check hoisting.
+
+The `PackedLookup` long-code fallback was then switched from the linear
+per-symbol scan to the same canonical direct-index algorithm already used by
+`HuffmanTable.decodeValueLongAfterLookup`. Vort's absolute `mr` throughput was
+unchanged (359.47 versus 359.21 MiB/s), so the linear scan was not the measured
+bottleneck on this path; the paired-ratio move was reference-side drift again.
+Reverted. The brotli `mr` long-code fallback is not a portable-scan lever.
