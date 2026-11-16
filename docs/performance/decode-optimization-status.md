@@ -1261,3 +1261,10 @@ to **0.964x** geometric mean (x-ray 0.940, webster 0.945, xml 0.946): the
 lookahead advances past short matches and saves loop iterations, so it is
 both a ratio and a speed win. Keep it. The single-table size gap is therefore
 dominated by the 4-byte short table, not lazy.
+
+Dropping only the short-table probe gave **1.52x** geometric-mean speed for
+**+4.35%** total size (ooffice +8.4%, reymont +12.3%, mozilla +10.3%;
+nci/xml/mr neutral or better). Together with the lazy result, the production
+parser's short table is the ratio backbone and its removal is the main speed
+lever. A product-level "fastest" variant could use it, but level 1 stays at
+the current balance.
