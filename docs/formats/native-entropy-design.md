@@ -163,6 +163,16 @@ policy:
   and are the correctness oracle. Any SIMD acceleration is a later,
   dispatch-gated twin that must emit identical bytes; the WASM build uses the
   scalar path. `zig build check-wasm` and the WASI decode gates must stay green.
+  **Toolchain constraint found (2026-11-16):** Zig 0.16 has no dynamic-index
+  vector gather — `table[@Vector(...)]` does not compile and there is no
+  `@gather` builtin; only elementwise vector ops and `@select` work (verified
+  with minimal spikes). rANS decode's per-lane `lookup[slot]` is exactly a
+  gather, so a portable table-driven SIMD decoder is not expressible without
+  target-specific inline assembly (which would break the scalar/WASM-first
+  rule). The near-term vectorization levers are therefore the scalar lockstep
+  schedule (superscalar ILP) and gather-free formulations; a true SIMD gather
+  path waits for either toolchain support or an explicit, dispatch-gated,
+  byte-identical native backend.
 - **Resumability.** The block decoder exposes the same phase/suspend contract
   as `compressed_block/execute.zig` so incremental and one-shot paths share
   semantics; interleaving is internal state, not a new streaming model.
@@ -283,8 +293,12 @@ policy, size, throughput, memory scope):
 - `N = 4` versus `8`: header overhead and ILP saturation on both x86-64 and
   AArch64. *Ratio side measured (2026-11-16):* interleaving leaves renorm size
   essentially flat and costs only a constant frame section (36 bytes at N=4,
-  68 at N=8); the throughput/ILP half stays open until a parallel executor
-  exists. See [parameter study](../performance/data/rans-parameter-study-20261116/README.md).
+  68 at N=8). *Scalar-ILP side measured (2026-11-16, single-host diagnostic):*
+  lockstep scheduling does not beat nested drain scalarly — it is 4-21% slower
+  from round-loop/register overhead, and nested throughput is flat across N —
+  so the parallelism benefit stays future-latent pending a real vectorized
+  (gather-capable) backend. See the [parameter study](../performance/data/rans-parameter-study-20261116/README.md)
+  and [decode-schedule diagnostic](../performance/data/rans-decode-schedule-20261116/README.md).
 - Precision `L = 4096` versus `65536`: ratio gain against table-build and cache
   cost. *Measured (2026-11-16) on a 32-symbol alphabet:* ratio improves from
   L=256 to L=4096 then plateaus, with zero gain at 16384/65536, supporting

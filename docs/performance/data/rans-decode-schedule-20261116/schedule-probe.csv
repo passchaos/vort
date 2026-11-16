@@ -1,0 +1,9 @@
+lanes,schedule,median_ns,ns_per_symbol_milli,speedup_vs_nested_milli
+1,nested,5032336,4799,
+1,lockstep,6346239,6052,792
+2,nested,4906956,4679,
+2,lockstep,5109950,4873,960
+4,nested,4765709,4544,
+4,lockstep,5536165,5279,860
+8,nested,4863280,4637,
+8,lockstep,5976493,5699,813

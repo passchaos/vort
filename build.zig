@@ -2439,6 +2439,23 @@ pub fn build(b: *std.Build) void {
     );
     rans_parameter_study_step.dependOn(&run_rans_parameter_study.step);
 
+    const rans_schedule_probe_exe = b.addExecutable(.{
+        .name = "vort-rans-decode-schedule-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/rans/decode_schedule_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "rans", .module = rans_study_mod }},
+        }),
+    });
+    const run_rans_schedule_probe = b.addRunArtifact(rans_schedule_probe_exe);
+    if (b.args) |args| run_rans_schedule_probe.addArgs(args);
+    const rans_schedule_probe_step = b.step(
+        "run-rans-decode-schedule-probe",
+        "Run the single-host rANS nested-vs-lockstep ILP diagnostic",
+    );
+    rans_schedule_probe_step.dependOn(&run_rans_schedule_probe.step);
+
     const fuzz_corpus_exe = b.addExecutable(.{
         .name = "vort-fuzz-corpus",
         .root_module = b.createModule(.{
