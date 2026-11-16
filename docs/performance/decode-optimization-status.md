@@ -855,3 +855,24 @@ gave a slightly optimistic 1.040; both are recorded with library SHAs in
 Vort's absolute speed is unchanged across runs, so the defensible statement is
 rough parity with current libbrotli on decode plus a structural edge on
 high-ratio literal-heavy inputs — not an adoption-gate-grade lead.
+
+## Zstd level-1 wide-executor state localization (2026-11-16)
+
+The full-Silesia reference sweep decodes level-1 frames, not the level-19
+prefixes used by the serial-entropy-wall profile. A fresh instruction sample on
+level-1 `dickens` puts the dominant path in
+`tryDecodeAllFseSplitWideHuffmanSequences`, where Vort executed about 159
+instructions per sequence versus about 117 for libzstd 1.6.0 on the **same
+libzstd-produced wire**: an instruction-throughput gap, not a stall on the FSE
+recurrence. The wide executor was the only split executor still reading the
+output cursor and LL/ML/OF states through the caller-owned
+`SequenceDecodeState` on every sequence. Keeping the cursor in a local
+(`defer` commit) and the three states in locals, matching the compact and
+medium executors, moves the twelve-file level-1 geometric ratio from 0.6957 to
+**0.7286** (geomean speedup **1.0472**, 12/12 wins; median 0.7606 -> 0.7983).
+Repeated-offset localization was tested and rejected: alone it regressed
+`dickens` from 0.7272 to 0.5685, so it is not part of the change. Evidence:
+[data/zstd-wide-state-localization-20261116](data/zstd-wide-state-localization-20261116/README.md).
+Native `test-zstd`, `test-zstd-huffman-x2` and 44/44 decode-memory contracts
+pass; the `test-zstd-decode-memory-wasm` node gate exits 201 on the unmodified
+baseline too, so it is a pre-existing environment condition.

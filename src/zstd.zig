@@ -16372,9 +16372,14 @@ inline fn decodeAllFseSplitHuffmanSequences(
 ) Error!bool {
     std.debug.assert(section.regenerated_size <= literal_capacity);
     if (section.huffman_streams != .four) return false;
+    var output_cursor = written.*;
+    defer written.* = output_cursor;
+    var ll_state = state.ll_state;
+    var ml_state = state.ml_state;
+    var of_state = state.of_state;
     // Successful sequence copies only advance `written`, so prove this once
     // instead of repeating it in every hot-path match-copy predicate.
-    if (frame_output_start > written.*) return error.CorruptFrame;
+    if (frame_output_start > output_cursor) return error.CorruptFrame;
     const spec = state.spec;
     var literals: [literal_capacity + 16]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
@@ -16408,11 +16413,11 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     @branchHint(.unlikely);
                     break :pair;
                 }
-                const first_ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
-                const first_of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
+                const first_ll_word = spec.literal_fse.symbolWordUnchecked(ll_state);
+                const first_of_word = spec.offset_fse.symbolWordUnchecked(of_state);
                 if (first_ll_word & literal_one_no_extra_mask != 1 or
                     first_of_word & additional_bits_mask != 0) break :pair;
-                const first_ml_word = spec.match_fse.symbolWordUnchecked(state.ml_state);
+                const first_ml_word = spec.match_fse.symbolWordUnchecked(ml_state);
                 var fields = if (comptime builtin.cpu.arch == .x86_64)
                     sequence_field_group.ShiftingGroup.initProven(&wide_reader)
                 else
@@ -16445,9 +16450,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 if (pair_total_bits > 56) break :pair;
                 const second_match_len = sequenceSymbolBase(second_ml_word) + fields.read(second_ml_additional_bits);
                 if (!pair_is_terminal) {
-                    state.ll_state = sequenceSymbolNextState(second_ll_word) + fields.readBranchless(second_ll_state_bits);
-                    state.ml_state = sequenceSymbolNextState(second_ml_word) + fields.readBranchless(second_ml_state_bits);
-                    state.of_state = sequenceSymbolNextState(second_of_word) + fields.readBranchless(second_of_state_bits);
+                    ll_state = sequenceSymbolNextState(second_ll_word) + fields.readBranchless(second_ll_state_bits);
+                    ml_state = sequenceSymbolNextState(second_ml_word) + fields.readBranchless(second_ml_state_bits);
+                    of_state = sequenceSymbolNextState(second_of_word) + fields.readBranchless(second_of_state_bits);
                 }
                 wide_reader.remaining_bits -= pair_total_bits;
                 remaining -= 2;
@@ -16461,37 +16466,37 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 if (comptime allow_wildcopy) {
                     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < 2) return error.CorruptFrame;
                     const pair_output_len = 2 + first_match_len + second_match_len;
-                    if (output.len - written.* < pair_output_len) return error.OutputTooSmall;
-                    const available_history = written.* - frame_output_start + 1;
+                    if (output.len - output_cursor < pair_output_len) return error.OutputTooSmall;
+                    const available_history = output_cursor - frame_output_start + 1;
                     if (match_offset -% 1 >= available_history) return error.InvalidMatch;
                 }
                 inline for (pair_match_lengths, 0..) |match_len, pair_index| {
                     if (!allow_wildcopy and literal_offset >= section.regenerated_size) return error.CorruptFrame;
-                    if (!allow_wildcopy and output.len - written.* < 1) return error.OutputTooSmall;
-                    output[written.*] = literals[literal_offset];
-                    written.* += 1;
+                    if (!allow_wildcopy and output.len - output_cursor < 1) return error.OutputTooSmall;
+                    output[output_cursor] = literals[literal_offset];
+                    output_cursor += 1;
                     literal_offset += 1;
-                    if (!allow_wildcopy and match_offset > written.* - frame_output_start) return error.InvalidMatch;
-                    if (!allow_wildcopy and output.len - written.* < match_len) return error.OutputTooSmall;
+                    if (!allow_wildcopy and match_offset > output_cursor - frame_output_start) return error.InvalidMatch;
+                    if (!allow_wildcopy and output.len - output_cursor < match_len) return error.OutputTooSmall;
                     if (match_len == 71 and match_offset >= 71) {
                         if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_common_sequence_hits, 1);
-                        sequence_match_copy.appendNonOverlapping71OverlapTail(output, written, written.* - match_offset);
+                        sequence_match_copy.appendNonOverlapping71OverlapTail(output, &output_cursor, output_cursor - match_offset);
                     } else if (match_len == 70 and match_offset >= 70) {
                         if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         if (comptime builtin.cpu.arch == .x86_64 and allow_wildcopy and pair_index == 0)
-                            sequence_match_copy.appendNonOverlapping70PairHead(output, written, written.* - match_offset)
+                            sequence_match_copy.appendNonOverlapping70PairHead(output, &output_cursor, output_cursor - match_offset)
                         else
-                            sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, 70);
+                            sequence_match_copy.appendNonOverlapping68To70(output, &output_cursor, output_cursor - match_offset, 70);
                     } else if (match_len >= 68 and match_len <= 69 and match_offset >= match_len) {
                         if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         sequence_match_copy.appendNonOverlapping68To70(
                             output,
-                            written,
-                            written.* - match_offset,
+                            &output_cursor,
+                            output_cursor - match_offset,
                             match_len,
                         );
                     } else {
-                        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+                        try copyMatchFromHistory(output, &output_cursor, frame_output_start, &.{}, match_offset, match_len);
                     }
                 }
                 if (builtin.is_test) {
@@ -16505,12 +16510,12 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 continue;
             }
         }
-        const ll_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.literal_fse.symbolUnchecked(state.ll_state);
-        const of_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.offset_fse.symbolUnchecked(state.of_state);
-        const ml_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.match_fse.symbolUnchecked(state.ml_state);
-        const ll_word: u64 = if (use_grouped_fields) spec.literal_fse.symbolWordUnchecked(state.ll_state) else undefined;
-        const of_word: u64 = if (use_grouped_fields) spec.offset_fse.symbolWordUnchecked(state.of_state) else undefined;
-        const ml_word: u64 = if (use_grouped_fields) spec.match_fse.symbolWordUnchecked(state.ml_state) else undefined;
+        const ll_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.literal_fse.symbolUnchecked(ll_state);
+        const of_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.offset_fse.symbolUnchecked(of_state);
+        const ml_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.match_fse.symbolUnchecked(ml_state);
+        const ll_word: u64 = if (use_grouped_fields) spec.literal_fse.symbolWordUnchecked(ll_state) else undefined;
+        const of_word: u64 = if (use_grouped_fields) spec.offset_fse.symbolWordUnchecked(of_state) else undefined;
+        const ml_word: u64 = if (use_grouped_fields) spec.match_fse.symbolWordUnchecked(ml_state) else undefined;
         if (comptime use_grouped_fields and !use_wide_copies and use_long_match_wildcopy) {
             const additional_bits_mask = @as(u64, 0xff) << 48;
             const literal_len: usize = @as(u32, @truncate(ll_word));
@@ -16533,22 +16538,22 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     const match_offset = try large_offset.positiveLiteralRep0(&state.repeated_offsets);
                     remaining -= 1;
                     if (remaining != 0) {
-                        state.ll_state = sequenceSymbolNextState(ll_word) + fields.read(ll_state_bits);
-                        state.ml_state = sequenceSymbolNextState(ml_word) + fields.read(ml_state_bits);
-                        state.of_state = sequenceSymbolNextState(of_word) + fields.read(of_state_bits);
+                        ll_state = sequenceSymbolNextState(ll_word) + fields.read(ll_state_bits);
+                        ml_state = sequenceSymbolNextState(ml_word) + fields.read(ml_state_bits);
+                        of_state = sequenceSymbolNextState(of_word) + fields.read(of_state_bits);
                     } else try wide_reader.expectEnd();
 
                     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
-                    if (output.len - written.* < literal_len) return error.OutputTooSmall;
+                    if (output.len - output_cursor < literal_len) return error.OutputTooSmall;
                     if (literal_len == 1) {
-                        output[written.*] = literals[literal_offset];
-                        written.* += 1;
+                        output[output_cursor] = literals[literal_offset];
+                        output_cursor += 1;
                         literal_offset += 1;
                     } else {
-                        literal_copy.append2To15(output, written, &literals, &literal_offset, literal_len);
+                        literal_copy.append2To15(output, &output_cursor, &literals, &literal_offset, literal_len);
                     }
-                    if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
-                    if (output.len - written.* < match_len) return error.OutputTooSmall;
+                    if (match_offset > output_cursor - frame_output_start) return error.InvalidMatch;
+                    if (output.len - output_cursor < match_len) return error.OutputTooSmall;
                     if (builtin.is_test) {
                         test_atomic_counter.add(&test_split_huffman_compact_literal_rep0_hits, 1);
                         test_atomic_counter.add(&test_split_huffman_positive_rep0_hits, 1);
@@ -16559,17 +16564,17 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     }
                     if (match_len == 71 and match_offset >= 71) {
                         if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_common_sequence_hits, 1);
-                        sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+                        sequence_match_copy.appendNonOverlapping71(output, &output_cursor, output_cursor - match_offset);
                     } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len) {
                         if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         sequence_match_copy.appendNonOverlapping68To70(
                             output,
-                            written,
-                            written.* - match_offset,
+                            &output_cursor,
+                            output_cursor - match_offset,
                             match_len,
                         );
                     } else {
-                        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+                        try copyMatchFromHistory(output, &output_cursor, frame_output_start, &.{}, match_offset, match_len);
                     }
                     continue;
                 }
@@ -16599,18 +16604,18 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     state.repeated_offsets = .{ match_offset, previous_0, previous_1 };
                     remaining -= 1;
                     if (remaining != 0) {
-                        state.ll_state = sequenceSymbolNextState(ll_word) + fields.read(ll_state_bits);
-                        state.ml_state = sequenceSymbolNextState(ml_word) + fields.read(ml_state_bits);
-                        state.of_state = sequenceSymbolNextState(of_word) + fields.read(of_state_bits);
+                        ll_state = sequenceSymbolNextState(ll_word) + fields.read(ll_state_bits);
+                        ml_state = sequenceSymbolNextState(ml_word) + fields.read(ml_state_bits);
+                        of_state = sequenceSymbolNextState(of_word) + fields.read(of_state_bits);
                     } else try wide_reader.expectEnd();
 
                     if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
-                    if (output.len - written.* < 1) return error.OutputTooSmall;
-                    output[written.*] = literals[literal_offset];
-                    written.* += 1;
+                    if (output.len - output_cursor < 1) return error.OutputTooSmall;
+                    output[output_cursor] = literals[literal_offset];
+                    output_cursor += 1;
                     literal_offset += 1;
-                    if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
-                    if (output.len - written.* < match_len) return error.OutputTooSmall;
+                    if (match_offset > output_cursor - frame_output_start) return error.InvalidMatch;
+                    if (output.len - output_cursor < match_len) return error.OutputTooSmall;
                     if (builtin.is_test) {
                         test_atomic_counter.add(&test_split_huffman_direct_offset_hits, 1);
                         test_atomic_counter.add(&test_split_huffman_direct_offset_single_literal_hits, 1);
@@ -16620,17 +16625,17 @@ inline fn decodeAllFseSplitHuffmanSequences(
                         test_atomic_counter.add(&test_split_huffman_single_literal_hits, 1);
                     }
                     if (match_len == 71 and match_offset >= 71) {
-                        sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+                        sequence_match_copy.appendNonOverlapping71(output, &output_cursor, output_cursor - match_offset);
                     } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len) {
                         if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         sequence_match_copy.appendNonOverlapping68To70(
                             output,
-                            written,
-                            written.* - match_offset,
+                            &output_cursor,
+                            output_cursor - match_offset,
                             match_len,
                         );
                     } else {
-                        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+                        try copyMatchFromHistory(output, &output_cursor, frame_output_start, &.{}, match_offset, match_len);
                     }
                     continue;
                 }
@@ -16673,9 +16678,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
             literal_extra = if (compact_literal_rep0) 0 else group.read(ll_additional_bits);
             if (!is_last_sequence) {
                 const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
-                state.ll_state = ll_next_state + transitions[0];
-                state.ml_state = ml_next_state + transitions[1];
-                state.of_state = of_next_state + transitions[2];
+                ll_state = ll_next_state + transitions[0];
+                ml_state = ml_next_state + transitions[1];
+                of_state = of_next_state + transitions[2];
             }
         } else if (use_grouped_fields) {
             const ungrouped = try readUngroupedSequenceFields(
@@ -16691,17 +16696,17 @@ inline fn decodeAllFseSplitHuffmanSequences(
             offset_extra = ungrouped.offset_extra;
             match_extra = ungrouped.match_extra;
             literal_extra = ungrouped.literal_extra;
-            state.ll_state = ll_next_state + ungrouped.ll_state_delta;
-            state.ml_state = ml_next_state + ungrouped.ml_state_delta;
-            state.of_state = of_next_state + ungrouped.of_state_delta;
+            ll_state = ll_next_state + ungrouped.ll_state_delta;
+            ml_state = ml_next_state + ungrouped.ml_state_delta;
+            of_state = of_next_state + ungrouped.of_state_delta;
         } else {
             offset_extra = if (compact_literal_rep0) 0 else try state.reader.readSequenceField(of_additional_bits);
             match_extra = try state.reader.readSequenceField(ml_additional_bits);
             literal_extra = if (compact_literal_rep0) 0 else try state.reader.readSequenceField(ll_additional_bits);
             if (!is_last_sequence) {
-                state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
-                state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
-                state.of_state = try nextSequenceState(&state.reader, of_symbol);
+                ll_state = try nextSequenceState(&state.reader, ll_symbol);
+                ml_state = try nextSequenceState(&state.reader, ml_symbol);
+                of_state = try nextSequenceState(&state.reader, of_symbol);
             }
         }
         if (is_last_sequence) {
@@ -16738,15 +16743,15 @@ inline fn decodeAllFseSplitHuffmanSequences(
 
         if (compact_literal_rep0 and match_len == 71 and match_offset >= 71) {
             if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
-            if (output.len - written.* < 1) return error.OutputTooSmall;
-            output[written.*] = literals[literal_offset];
-            written.* += 1;
+            if (output.len - output_cursor < 1) return error.OutputTooSmall;
+            output[output_cursor] = literals[literal_offset];
+            output_cursor += 1;
             literal_offset += 1;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_single_literal_hits, 1);
-            if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
-            if (output.len - written.* < 71) return error.OutputTooSmall;
+            if (match_offset > output_cursor - frame_output_start) return error.InvalidMatch;
+            if (output.len - output_cursor < 71) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_common_sequence_hits, 1);
-            sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+            sequence_match_copy.appendNonOverlapping71(output, &output_cursor, output_cursor - match_offset);
             continue;
         }
 
@@ -16759,12 +16764,12 @@ inline fn decodeAllFseSplitHuffmanSequences(
             literal_len <= 16 and
             literal_end <= section.regenerated_size and
             match_offset >= 16 and
-            match_offset <= written.* - frame_output_start + literal_len and
-            output.len - written.* >= literal_len + rounded_match_len)
+            match_offset <= output_cursor - frame_output_start + literal_len and
+            output.len - output_cursor >= literal_len + rounded_match_len)
         {
             literal_copy.appendUpTo16Wildcopy16(
                 output,
-                written,
+                &output_cursor,
                 &literals,
                 &literal_offset,
                 literal_len,
@@ -16772,15 +16777,15 @@ inline fn decodeAllFseSplitHuffmanSequences(
             if (match_len <= 16)
                 sequence_match_copy.appendForwardWildcopy16Once(
                     output,
-                    written,
-                    written.* - match_offset,
+                    &output_cursor,
+                    output_cursor - match_offset,
                     match_len,
                 )
             else
                 _ = sequence_match_copy.appendForwardWildcopy(
                     output,
-                    written,
-                    written.* - match_offset,
+                    &output_cursor,
+                    output_cursor - match_offset,
                     match_len,
                 );
             continue;
@@ -16790,12 +16795,12 @@ inline fn decodeAllFseSplitHuffmanSequences(
             literal_len > 15 and
             literal_offset + literal_len <= section.regenerated_size and
             match_offset >= 16 and
-            match_offset <= written.* - frame_output_start + literal_len and
-            output.len - written.* >= literal_len + rounded_match_len)
+            match_offset <= output_cursor - frame_output_start + literal_len and
+            output.len - output_cursor >= literal_len + rounded_match_len)
         {
             literal_copy.appendBulkWildcopy16(
                 output,
-                written,
+                &output_cursor,
                 &literals,
                 &literal_offset,
                 literal_len,
@@ -16803,15 +16808,15 @@ inline fn decodeAllFseSplitHuffmanSequences(
             if (match_len <= 16)
                 sequence_match_copy.appendForwardWildcopy16Once(
                     output,
-                    written,
-                    written.* - match_offset,
+                    &output_cursor,
+                    output_cursor - match_offset,
                     match_len,
                 )
             else
                 _ = sequence_match_copy.appendForwardWildcopy(
                     output,
-                    written,
-                    written.* - match_offset,
+                    &output_cursor,
+                    output_cursor - match_offset,
                     match_len,
                 );
             continue;
@@ -16822,7 +16827,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 &literals,
                 section.regenerated_size,
                 output,
-                written,
+                &output_cursor,
                 frame_output_start,
                 &literal_offset,
                 literal_len,
@@ -16833,112 +16838,115 @@ inline fn decodeAllFseSplitHuffmanSequences(
         }
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
-        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        if (output.len - output_cursor < literal_len) return error.OutputTooSmall;
         if (literal_len == 1) {
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_single_literal_hits, 1);
-            output[written.*] = literals[literal_offset];
-            written.* += 1;
+            output[output_cursor] = literals[literal_offset];
+            output_cursor += 1;
             literal_offset += 1;
         } else if (use_wide_copies and literal_len >= 2 and literal_len <= 15) {
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_short_literal_hits, 1);
-            literal_copy.append2To15(output, written, &literals, &literal_offset, literal_len);
+            literal_copy.append2To15(output, &output_cursor, &literals, &literal_offset, literal_len);
         } else if (literal_len != 0) {
-            @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
-            written.* += literal_len;
+            @memcpy(output[output_cursor..][0..literal_len], literals[literal_offset..][0..literal_len]);
+            output_cursor += literal_len;
             literal_offset += literal_len;
         }
-        if (!use_wide_copies and match_len == 71 and match_offset >= 71 and match_offset <= written.* - frame_output_start) {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
-            sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+        if (!use_wide_copies and match_len == 71 and match_offset >= 71 and match_offset <= output_cursor - frame_output_start) {
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
+            sequence_match_copy.appendNonOverlapping71(output, &output_cursor, output_cursor - match_offset);
         } else if (use_wide_copies and
             match_len >= 4 and
             match_len <= 7 and
             match_offset >= match_len and
-            match_offset <= written.* - frame_output_start)
+            match_offset <= output_cursor - frame_output_start)
         {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping4To7(
                 output,
-                written,
-                written.* - match_offset,
+                &output_cursor,
+                output_cursor - match_offset,
                 match_len,
                 allow_wildcopy,
             );
         } else if (!use_wide_copies and
             (match_len == 6 or match_len == 7) and
             match_offset >= match_len and
-            match_offset <= written.* - frame_output_start)
+            match_offset <= output_cursor - frame_output_start)
         {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping6Or7(
                 output,
-                written,
-                written.* - match_offset,
+                &output_cursor,
+                output_cursor - match_offset,
                 match_len,
             );
         } else if (match_len >= 8 and
             match_len <= 15 and
             match_offset >= match_len and
-            match_offset <= written.* - frame_output_start)
+            match_offset <= output_cursor - frame_output_start)
         {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping8To15(
                 output,
-                written,
-                written.* - match_offset,
+                &output_cursor,
+                output_cursor - match_offset,
                 match_len,
                 allow_wildcopy,
             );
         } else if (match_len >= 16 and
             match_len <= 31 and
             match_offset >= match_len and
-            match_offset <= written.* - frame_output_start)
+            match_offset <= output_cursor - frame_output_start)
         {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping16To31(
                 output,
-                written,
-                written.* - match_offset,
+                &output_cursor,
+                output_cursor - match_offset,
                 match_len,
             );
         } else if (match_len >= 32 and
             match_len <= 63 and
             match_offset >= match_len and
-            match_offset <= written.* - frame_output_start)
+            match_offset <= output_cursor - frame_output_start)
         {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping32To63(
                 output,
-                written,
-                written.* - match_offset,
+                &output_cursor,
+                output_cursor - match_offset,
                 match_len,
             );
-        } else if (!use_wide_copies and match_len >= 68 and match_len <= 70 and match_offset >= match_len and match_offset <= written.* - frame_output_start) {
-            if (output.len - written.* < match_len) return error.OutputTooSmall;
+        } else if (!use_wide_copies and match_len >= 68 and match_len <= 70 and match_offset >= match_len and match_offset <= output_cursor - frame_output_start) {
+            if (output.len - output_cursor < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
-            sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, match_len);
+            sequence_match_copy.appendNonOverlapping68To70(output, &output_cursor, output_cursor - match_offset, match_len);
         } else {
-            try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+            try copyMatchFromHistory(output, &output_cursor, frame_output_start, &.{}, match_offset, match_len);
         }
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
-    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    if (output.len - output_cursor < last_literals) return error.OutputTooSmall;
     @memcpy(
-        output[written.*..][0..last_literals],
+        output[output_cursor..][0..last_literals],
         literals[literal_offset..][0..last_literals],
     );
-    written.* += last_literals;
+    output_cursor += last_literals;
     state.remaining = remaining;
     if (use_grouped_fields) state.reader = wide_reader;
     if (continuation.retainsState()) {
         frame_state.repeated_offsets = state.repeated_offsets;
     }
+    state.ll_state = ll_state;
+    state.ml_state = ml_state;
+    state.of_state = of_state;
     return true;
 }
 

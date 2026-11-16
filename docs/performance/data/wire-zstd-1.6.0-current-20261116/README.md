@@ -55,3 +55,9 @@ The widening is not uniform; two files stand out:
 - This package supersedes the 1.4.8-based lower bound for zstd; the 1.4.8 CSVs
   are retained for provenance and before/after comparison.
 - Measurement only; no production code changed.
+
+## Follow-up
+
+These ratios are the level-1 baseline for the wide-executor state localization
+in [../zstd-wide-state-localization-20261116](../zstd-wide-state-localization-20261116/README.md),
+which improves the twelve-file geometric ratio from 0.6957 to 0.7286.

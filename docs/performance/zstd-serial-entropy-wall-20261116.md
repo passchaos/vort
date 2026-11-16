@@ -164,3 +164,18 @@ Brotli/Deflate), decode throughput is bounded by the format's entropy
 recurrence and the remaining measured gap is dispersed, intrinsic work. The
 next genuine decode-performance lever is a deliberately decode-parallel
 entropy stage in the native `vort` format, scoped as its own milestone.
+
+## Postscript: the level-1 wide executor was instruction-bound (2026-11-16)
+
+This note's profile and conclusions came from level-19 64 KiB prefixes and the
+medium executor. The full-Silesia reference sweep decodes level-1 frames, where
+the dominant path is the wide executor. Instruction sampling there showed Vort
+executing about 159 instructions per sequence versus about 117 for libzstd
+1.6.0 on the same wire: an instruction-throughput gap, not a stall on the FSE
+recurrence. Localizing the output cursor and the three FSE states (matching the
+compact and medium executors) improved the twelve-file level-1 ratio by 4.72%
+geometrically with 12/12 wins
+([evidence](../data/zstd-wide-state-localization-20261116/README.md)). The
+non-goals below remain valid for table repacking, SIMD gather and phase
+flattening, but "no local lever remains" applies to the level-19 medium path,
+not to per-sequence state traffic in the wide path.
