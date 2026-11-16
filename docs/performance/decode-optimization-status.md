@@ -1255,3 +1255,9 @@ still emitted **6.2%** more bytes (mozilla +15.3%, reymont +14.4%, nci
 cost for a 15% speed loss; the gap is dominated by the missing short table/
 lazy path, not repcodes. The next variant should keep the short table and
 drop only the lazy lookahead, or find a cheaper lazy.
+
+Dropping only the lazy lookahead raised size by 0.31% but slowed the parser
+to **0.964x** geometric mean (x-ray 0.940, webster 0.945, xml 0.946): the
+lookahead advances past short matches and saves loop iterations, so it is
+both a ratio and a speed win. Keep it. The single-table size gap is therefore
+dominated by the 4-byte short table, not lazy.
