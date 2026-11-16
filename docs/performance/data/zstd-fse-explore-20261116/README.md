@@ -97,3 +97,21 @@ dense-run threshold idea is bounded even tighter because only the sub-192
 fraction of a 6.74% function could change, putting any realistic gain around
 1-2%, below the 3% bar. No code change; the executor-fusion structural project
 remains the only candidate with headroom, requiring its own dedicated session.
+
+## Executor inner layers already optimized (2026-11-16)
+
+A drill into the 46% executor checked whether a sub-step fusion exists short of
+rewriting the whole function:
+
+- field extraction already uses a `sequence_field_group.Group` that loads one
+  8-byte word and reads fields by shift/mask; `readBranchless` is literally an
+  alias of `read` (no branch to remove), and both are inline;
+- `Group`/`ShiftingGroup` and `readBranchless` are live (used by the wide
+  executor and tests), so there is no dead code to remove;
+- the grouped-vs-ungrouped split already replaced an earlier per-field branch
+  chain (documented inline).
+
+No isolated sub-step fusion is available. The executor's cost is the inherent
+serial sequence pipeline (three FSE transitions, field reads, two copies per
+sequence), so any real change is a full representation/pipeline redesign, not a
+local edit. This bounds the remaining structural project precisely.
