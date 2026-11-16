@@ -1,0 +1,9 @@
+case,chunking,base_vort_ns,candidate_vort_ns,zlib_ng_ns,base_vort_over_zlib_ng,candidate_vort_over_zlib_ng,crc_speedup
+binary-64k,fragmented-7x31,719505,688025,240366,2.9934,2.8624,0.9562
+binary-64k,full,4054,3969,3380,1.1994,1.1743,0.9790
+http-4k,fragmented-7x31,22004,17617,6775,3.2478,2.6003,0.8006
+http-4k,full,5367,5339,1544,3.4760,3.4579,0.9948
+json-32k,fragmented-7x31,138273,102261,45345,3.0494,2.2552,0.7396
+json-32k,full,14747,14660,6214,2.3732,2.3592,0.9941
+text-64k,fragmented-7x31,1092256,1080602,491734,2.2212,2.1975,0.9893
+text-64k,full,183926,122991,133141,1.3814,0.9238,0.6687

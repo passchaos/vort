@@ -972,3 +972,18 @@ gaps need structural work. The consolidated state, closed-lever list and the
 three structural candidates (zstd executor representation v2, Deflate token
 two-phase, Brotli single-tree literal reservoir) are in
 [structural-decode-frontier-20261116](structural-decode-frontier-20261116.md).
+
+## Deflate incremental decode vs zlib-ng and CRC short-update slices (2026-11-16)
+
+With zlib-ng 2.3.90 built locally as a zlib-compatible static library, the
+reusable incremental gzip decode bench fills the audit's missing modern
+streaming matrix. Vort is behind zlib-ng on the small and fragmented rows
+(http-4k full 0.29x, fragmented 0.31-0.37x; json-32k full 0.42x) and close on
+text-64k (0.91x). A profile attributes 8.5% of cycles to
+`crc32Slice32Update`; 31-byte streaming chunks fell through the 32-byte slice
+loop to the serial byte loop. Adding 8- and 4-byte slice loops improves the
+fragmented rows **1.25x** (http-4k) and **1.32x** (json-32k) in an alternating
+three-run A/B, with the full rows unchanged within host variance. Evidence:
+[data/deflate-incremental-crc-20261116](data/deflate-incremental-crc-20261116/README.md).
+The checksum oracle passes 19/19; focused deflate/zip test steps and
+`check-wasm` are recorded with the increment.

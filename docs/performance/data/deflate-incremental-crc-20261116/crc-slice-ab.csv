@@ -1,0 +1,9 @@
+case,chunking,base_ns,candidate_ns,speedup
+binary-64k,fragmented-7x31,718962,705836,1.0186
+binary-64k,full,4023,4151,0.9692
+http-4k,fragmented-7x31,21740,17358,1.2524
+http-4k,full,5331,5391,0.9889
+json-32k,fragmented-7x31,134891,102120,1.3209
+json-32k,full,14646,14594,1.0036
+text-64k,fragmented-7x31,1081685,1080199,1.0014
+text-64k,full,121499,121065,1.0036
