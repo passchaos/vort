@@ -1248,3 +1248,10 @@ dickens +4.9%, mozilla +24.2%, nci +19.0%, reymont +16.4%; only mr improved
 (-0.7%). Not adopted as-is. It sets the speed ceiling for a level-1 parser
 redesign; the next variant should keep repcode probes (cheap offset wins)
 while dropping the short table/lazy path.
+
+A hybrid single-table parser with a rep0 probe parsed **1.57x** faster but
+still emitted **6.2%** more bytes (mozilla +15.3%, reymont +14.4%, nci
++12.2%). The rep probe recovered only 1.4% of the pure prototype's 7.6% size
+cost for a 15% speed loss; the gap is dominated by the missing short table/
+lazy path, not repcodes. The next variant should keep the short table and
+drop only the lazy lookahead, or find a cheaper lazy.
