@@ -932,7 +932,11 @@ absolute decode throughput: 359 MiB/s baseline versus 357 MiB/s with the wider
 table. The apparent paired-ratio move from 0.790 to 0.841 was reference-side
 drift; a baseline re-run immediately after measured 0.790 again with Vort at
 359 MiB/s. The change was reverted. The scan covers codes of 12 bits and wider,
-so an 11-bit root cannot remove it; a 12-bit root or a two-level literal table
-would be required, and the earlier command two-level prototype was neutral to
-slightly negative. This remains a research-scale Brotli change, not a local
-lever.
+so an 11-bit root cannot remove it. A 12-bit root was then tested on the same
+`mr` row: Vort's absolute throughput stayed at 357.7 MiB/s versus 359.2 MiB/s
+baseline, so the wider table did not speed up the decode either; the paired
+ratio moved only because the reference side drifted (282 versus 454 MiB/s in
+the two runs). Both root-widening attempts were reverted. The remaining option
+is a two-level literal table, and the earlier command two-level prototype was
+neutral to slightly negative. This remains a research-scale Brotli change, not
+a local lever.
