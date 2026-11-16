@@ -23,36 +23,43 @@ built locally from `~/Work/brotli` (source version confirmed in
   and a different (better-tuned) 1.2.0 build could shift the ratios. Treat the
   cross-version direction as more reliable than the exact magnitude.
 
-## Result
+## Result (two 1.2.0 builds; the tuned one is the honest reference)
 
-| reference | min | median | max | Vort faster | Vort slower |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| libbrotli 1.0.9 (distro, tuned) | 0.747 | 0.957 | 1.466 | 5 | 7 |
-| **libbrotli 1.2.0 (local cmake)** | 0.801 | **1.040** | 1.516 | **7** | 5 |
+Two local 1.2.0 builds were measured so the build-policy effect is visible:
 
-Per-file 1.0.9-vs-1.2.0 comparison is in `brotli-1.2.0-comparison.csv`.
+| reference | build | median | min | max | Vort faster |
+| --- | --- | ---: | ---: | ---: | ---: |
+| libbrotli 1.0.9 | distro (LTO/native tuned) | 0.957 | 0.747 | 1.466 | 5/12 |
+| libbrotli 1.2.0 | generic `Release` cmake | 1.040 | 0.801 | 1.516 | 7/12 |
+| **libbrotli 1.2.0** | **`-O3 -march=native -flto`** | **1.017** | 0.790 | 1.462 | **7/12** |
 
-## Why the ratio moved the "right" way — and why it is not a Vort speedup
+Per-file tables: `brotli-1.2.0-comparison.csv` (generic) and
+`brotli-1.2.0-tuned-comparison.csv` (tuned, preferred).
 
-Vort's own absolute decode speed is unchanged (~890 MiB/s on `xml` in both
-runs). The median ratio crossing parity (0.957 -> 1.040) is driven by the
-reference base: the generic-cmake 1.2.0 build measures ~5-10% **slower**
-absolute MiB/s than the distro-tuned 1.0.9 on every file (0.90-0.97x). So:
+The tuned build is the fair comparison because it applies the same class of
+optimization the distro uses. Against it, Vort sits just above parity on the
+median (1.017) and is faster on 7/12 files — a smaller edge than the 1.040 the
+generic build suggested. The earlier generic-only number was therefore mildly
+optimistic and is retained only to show the build-policy sensitivity.
 
-- This does **not** show Vort gained performance; nothing in Vort changed.
-- It shows the two references are not like-for-like builds. A rigorous
-  "current upstream" claim needs 1.2.0 built with the same optimization policy
-  as the distro 1.0.9 (or both built identically), which is out of scope here.
-- The most defensible statement: against the version-1.2.0 source built with
-  standard Release flags, Vort is at or above parity on 7/12 files and its
-  near-incompressible leads persist (`sao` 1.516, `x-ray` 1.376).
+## What the data supports
 
-## Cross-codec contrast on near-incompressible data (unchanged)
+- Vort's own absolute decode speed is unchanged across all runs (~890 MiB/s on
+  `xml`); only the reference base moves with its build flags.
+- Against a fairly-tuned current libbrotli 1.2.0, Vort is **roughly at parity**
+  overall, with a structural advantage on near-incompressible literal-heavy
+  files (`sao` 1.462, `x-ray` 1.323) and a persistent weak spot on `mr`
+  (0.790). The 7/12 split is stable across both 1.2.0 builds.
+- The cross-codec contrast holds: these same high-ratio files are zstd's worst
+  rows, while they are brotli's best for Vort.
 
-The shape of the result is stable across brotli versions: Vort's brotli
-decoder leads on long literal-heavy, high-ratio files (`sao`, `x-ray`), the
-inverse of zstd where those are its worst rows. That structural contrast holds
-regardless of the reference build tuning.
+## Why no hard "faster than current upstream" claim
+
+The tuned build still may not match the exact distro policy (linker, specific
+- march, PGO), and the run is a single-host diagnostic without CPU pinning or
+paired interleaving. "Roughly at parity with current libbrotli on decode,
+stronger on near-incompressible inputs" is the defensible statement; it is not
+the section-8 adoption-gate evidence.
 
 ## Scope limits
 

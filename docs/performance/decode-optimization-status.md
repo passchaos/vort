@@ -837,11 +837,11 @@ Huffman X2 gating, both requiring non-local work) is unchanged and reinforced.
 
 Using a locally cmake-built libbrotli 1.2.0 via the new runtime library
 override, the median Vort/reference ratio moves from 0.957 vs the distro 1.0.9
-to **1.040 vs 1.2.0** (Vort faster on 7/12), with the near-incompressible leads
-persisting (`sao` 1.516, `x-ray` 1.376). Full data and library SHAs are in
+to **1.017 vs a fairly-tuned 1.2.0 build** (`-O3 -march=native -flto`; Vort
+faster on 7/12), with near-incompressible leads persisting (`sao` 1.462,
+`x-ray` 1.323) and a weak spot at `mr` (0.790). A generic-Release 1.2.0 build
+gave a slightly optimistic 1.040; both are recorded with library SHAs in
 [data/wire-brotli-1.2.0-current-20261116](data/wire-brotli-1.2.0-current-20261116/README.md).
-Important caveat: Vort's absolute speed is unchanged; the ratio moved because
-the generic-Release 1.2.0 build decodes ~5-10% slower than the LTO/native-tuned
-distro 1.0.9, so the two references are not like-for-like and the cross-version
-direction is more reliable than its magnitude. A parity-grade claim needs 1.2.0
-built with the distro optimization policy.
+Vort's absolute speed is unchanged across runs, so the defensible statement is
+rough parity with current libbrotli on decode plus a structural edge on
+high-ratio literal-heavy inputs — not an adoption-gate-grade lead.
