@@ -996,3 +996,11 @@ against the CRC-only binary), likely from the added optional field and the
 resulting decoder layout change on the hot step path. Reverted. The admission
 checks are not a simple next lever; the fixed-block bulk decode or the zstd
 asm kernels are the remaining candidates.
+
+A literal-run output budget in `decodeSymbolRun` hoisted the per-literal
+max/expected checks into one budget per run. The alternating three-run A/B
+measured a **1.017** geometric mean over the eight bench rows (binary full
+1.042x, text fragmented 1.035x, http fragmented 1.031x, json full 0.985x),
+below the 3% adoption bar and overlapping host noise. Reverted. The streaming
+gap needs the fixed-block bulk path or a broader state-machine change, not
+per-literal check hoisting.
