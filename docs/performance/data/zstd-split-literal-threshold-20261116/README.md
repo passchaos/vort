@@ -67,7 +67,7 @@ Baseline: the committed single-sequence package. `speedup` is `after / before`;
 20% weak-row repair bar. The twelve-file geometric mean improves **1.0176**;
 the lowest control row is 0.9929 (above the 0.98 floor). Cumulatively, the three
 2026-11-16 zstd decode increments improve the twelve-file geometric ratio from
-0.6957 to **0.8102** (**1.1460**).
+0.6957 to **0.7973** (**1.1460**).
 
 ## Validation
 

@@ -910,7 +910,7 @@ whose `readModeSequence` switches on the mode for every symbol. Lowering
 executor; decoupling `raw_all_fse_literal_min` at 32 KiB keeps raw-literal
 routing unchanged. `mr` moves to **0.7560** (+21.7% in the increment, 25.5%
 cumulatively), and the twelve-file geometric ratio moves from 0.7835 to
-**0.8102** (geomean speedup **1.0176**, lowest control row 0.9929). Sequence
+**0.7973** (geomean speedup **1.0176**, lowest control row 0.9929). Sequence
 threshold variants (256/128) also fixed `mr` but emptied the
 `preferHuffmanMatchWildcopy` range and failed the policy consistency test; the
 literal-threshold change keeps every policy invariant. Evidence:
