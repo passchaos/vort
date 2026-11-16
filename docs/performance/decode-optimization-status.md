@@ -748,3 +748,27 @@ hoist) failed paired A/B and were reverted; SIMD Huffman gather is impossible
 under the serial prefix-code dependency; and table-width/dense-run tweaks have
 measured ceilings below the 3% bar. No open local or structural decode
 optimization with positive expected value remains in the current architecture.
+
+## Why the wall is the wire format, and where the next lever lives (2026-11-16)
+
+A source-grounded follow-up proves the zstd executor ceiling is the FSE
+load-use recurrence itself, not a removable inefficiency. In
+`sequence/raw_mixed.zig` `read()`, the next `ll/ml/of_state` is
+`entry.next_state + readField(..., entry.state_bits)`: the next table index
+needs the current dependent table load plus a data-width bit read, so
+iterations cannot be gathered or pipelined. The entry is already one packed
+8-byte word (`fse_table.zig:26-30`), the three ~2 KiB tables are L1-resident,
+and a sequence's bits already load in one 8-byte group with shift extraction
+(`field_group.zig:26-47`, where `readBranchless` is a `read` alias). Repacking,
+widening, SIMD gather, and phase-machine flattening therefore have no positive
+expected value; the incremental phase machine is mandated by partial-buffer
+resume.
+
+Full mechanism, the ILP argument, and the gated remit are in
+[zstd-serial-entropy-wall-20261116](zstd-serial-entropy-wall-20261116.md). The
+only legal wall-breaker is a deliberately decode-parallel entropy stage in the
+native `vort` format: native v0 still compresses via store/deflate/RLE/
+dictionary-patch/LDM, and "future ANS/FSE-style entropy" remains an unbuilt
+goal (`docs/native-format.md:8-10,97-99`). That is a separate feature
+milestone requiring golden vectors, format versioning, fuzzing, WASM parity,
+and the paired two-baseline 3% / 95% CI / 0.98x A/B — not a local edit.
