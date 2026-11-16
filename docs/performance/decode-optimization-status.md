@@ -832,3 +832,16 @@ The median Vort/reference ratio drops from 0.799 vs 1.4.8 to **0.760 vs 1.6.0**
 its near-incompressible Huffman path, and `mr` falls to 0.603. The 1.4.8 numbers
 were indeed only a lower bound; the structural conclusion (FSE serial wall and
 Huffman X2 gating, both requiring non-local work) is unchanged and reinforced.
+
+## Brotli measured against current libbrotli 1.2.0 (2026-11-16)
+
+Using a locally cmake-built libbrotli 1.2.0 via the new runtime library
+override, the median Vort/reference ratio moves from 0.957 vs the distro 1.0.9
+to **1.040 vs 1.2.0** (Vort faster on 7/12), with the near-incompressible leads
+persisting (`sao` 1.516, `x-ray` 1.376). Full data and library SHAs are in
+[data/wire-brotli-1.2.0-current-20261116](data/wire-brotli-1.2.0-current-20261116/README.md).
+Important caveat: Vort's absolute speed is unchanged; the ratio moved because
+the generic-Release 1.2.0 build decodes ~5-10% slower than the LTO/native-tuned
+distro 1.0.9, so the two references are not like-for-like and the cross-version
+direction is more reliable than its magnitude. A parity-grade claim needs 1.2.0
+built with the distro optimization policy.
