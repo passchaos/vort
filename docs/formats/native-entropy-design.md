@@ -172,10 +172,19 @@ policy:
 1. **Standalone `src/rans/` module** (new, keeps `src/store.zig` from growing
    past its current size): `table.zig` (frequency normalization + cumulative
    lookup), `encoder.zig`, `decoder.zig`, each with scalar reference logic and
-   unit tests. Pure codec, no frame I/O.
+   unit tests. Pure codec, no frame I/O. **Done (2026-11-16):** `src/rans.zig`
+   plus `src/rans/{table,encoder,decoder}.zig`, exported from `src/root.zig`.
+   Uses a fixed state lower bound `B = 1 << 23` separate from the model
+   constant `L` (precision capped at 16), with a flush loop that is the exact
+   inverse of the decoder refill. 13 scalar tests pass in Debug/ReleaseSafe/
+   ReleaseFast and under real node WASI (32-bit).
 2. **Differential oracle tests** for the codec alone: round-trip across empty,
    single-symbol, full-alphabet, skewed, and maximum-alphabet distributions;
    hand-computed rANS state vectors as golden anchors; renorm boundary cases.
+   **Done (2026-11-16):** a frozen hand-derived golden vector, randomized
+   round trips over scales 4/8/12 with an independent linear-cumulative
+   reference decoder, single-symbol identity, renorm flush/refill, and
+   truncation rejection. Empty/max-alphabet are covered via the table tests.
 3. **N-way interleaved encode/decode** with independent renorm spans and
    property tests that scalar interleaved decode equals a trivial sequential
    reference for every lane count and alignment.
