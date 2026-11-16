@@ -275,15 +275,23 @@ policy, size, throughput, memory scope):
 ## 9. Open questions to settle by measurement, not assumption
 
 - `N = 4` versus `8`: header overhead and ILP saturation on both x86-64 and
-  AArch64.
+  AArch64. *Ratio side measured (2026-11-16):* interleaving leaves renorm size
+  essentially flat and costs only a constant frame section (36 bytes at N=4,
+  68 at N=8); the throughput/ILP half stays open until a parallel executor
+  exists. See [parameter study](../performance/data/rans-parameter-study-20261116/README.md).
 - Precision `L = 4096` versus `65536`: ratio gain against table-build and cache
-  cost.
+  cost. *Measured (2026-11-16) on a 32-symbol alphabet:* ratio improves from
+  L=256 to L=4096 then plateaus, with zero gain at 16384/65536, supporting
+  L=4096 as the working knee; larger alphabets are not yet measured.
 - Whether literals also move to rANS or keep Huffman once the sequence path is
   proven; decided with a separate A/B, not bundled in.
 - Byte-granular versus wider renormalization base and its effect on the
   per-lane span lengths and truncation behavior.
 - Whether a stateless prefix fallback wins for specific high-frequency symbol
   classes after real distributions are observed.
+- Small-block framing: the study shows 16-symbol blocks are framing-bound
+  (header + model table dwarf the renorm payload), motivating a specialized
+  small-payload mode and cross-block model reuse before framing is frozen.
 
 These are intentionally left open so the first implementation stays a clean,
 testable scalar oracle; each is resolved with the same paired-evidence bar

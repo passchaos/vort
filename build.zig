@@ -2417,6 +2417,28 @@ pub fn build(b: *std.Build) void {
     );
     deflate_incremental_fuzz_smoke_step.dependOn(&run_deflate_incremental_fuzz_smoke.step);
 
+    const rans_study_mod = b.createModule(.{
+        .root_source_file = b.path("src/rans.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const rans_parameter_study_exe = b.addExecutable(.{
+        .name = "vort-rans-parameter-study",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/rans/parameter_study.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "rans", .module = rans_study_mod }},
+        }),
+    });
+    const run_rans_parameter_study = b.addRunArtifact(rans_parameter_study_exe);
+    if (b.args) |args| run_rans_parameter_study.addArgs(args);
+    const rans_parameter_study_step = b.step(
+        "run-rans-parameter-study",
+        "Run the deterministic rANS N/L ratio and overhead parameter study",
+    );
+    rans_parameter_study_step.dependOn(&run_rans_parameter_study.step);
+
     const fuzz_corpus_exe = b.addExecutable(.{
         .name = "vort-fuzz-corpus",
         .root_module = b.createModule(.{
