@@ -918,3 +918,21 @@ literal-threshold change keeps every policy invariant. Evidence:
 Focused `predefined` (49/49), `literal` (162/162), `stream counters` (42/42) and
 decode-memory/source-reverse/compressed-workspace (228/228) tests pass; full
 `test-zstd` and `check-wasm` results are recorded with this increment.
+
+## Brotli mr long-code scan: 11-bit lookup rejected (2026-11-16)
+
+A level-1 `mr` profile against the tuned libbrotli 1.2.0 build places the decode
+hot path in `processSingleTreeExternalLookupCompressedPayload` (35%) and the
+256-symbol Huffman decode (22.6%). Annotating the processor shows about 21% of
+profile samples in the canonical long-code scan loop (16-bit compare at a
+6-byte stride) after the 10-bit packed lookup misses.
+
+Widening `ExternalLiteralLookup` from 10 to 11 bits did **not** improve Vort's
+absolute decode throughput: 359 MiB/s baseline versus 357 MiB/s with the wider
+table. The apparent paired-ratio move from 0.790 to 0.841 was reference-side
+drift; a baseline re-run immediately after measured 0.790 again with Vort at
+359 MiB/s. The change was reverted. The scan covers codes of 12 bits and wider,
+so an 11-bit root cannot remove it; a 12-bit root or a two-level literal table
+would be required, and the earlier command two-level prototype was neutral to
+slightly negative. This remains a research-scale Brotli change, not a local
+lever.
