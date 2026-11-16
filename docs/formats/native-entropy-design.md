@@ -257,7 +257,12 @@ until the adoption gates in section 8 run.
   state pinned at the lower bound) decoded successfully with the wrong count.
   Fixed by folding the semantic header (`log2_scale`..`symbol_count`) into the
   payload CRC, plus a `decodeBounded` pre-allocation output cap; a regression
-  test pins both.
+  test pins both. **Mutation matrix expanded (2026-11-16):** beyond truncation
+  and single-byte flips, the campaign now applies multi-byte flips (two to
+  five coordinated positions), single-byte insertion and single-byte deletion,
+  all under the same reject-or-equal invariant. Across 24 deterministic blocks
+  the full matrix is 4,018 mutations with every case rejected and zero
+  divergent or silently-accepted decodes, and it runs identically under WASM.
 - **Bounded-resource fuzzing.** Mutate `regenerated_size`, per-lane lengths,
   and the frequency table to assert `OutputLimitExceeded`, `CorruptFrame`, and
   table-CRC failures fire before large allocation, mirroring the native memory

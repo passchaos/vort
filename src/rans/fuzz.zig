@@ -113,6 +113,51 @@ fn fuzzOneBlock(
         flipped[position] ^= mask;
         _ = try checkMutation(allocator, flipped, baseline, fuzz_max, stats);
     }
+
+    // Multi-byte flips: corrupt several independently chosen positions at once,
+    // which single-byte flips cannot reach (e.g. CRC collisions that need two
+    // coordinated changes). The reject-or-equal invariant still must hold.
+    const multi_flip_rounds: usize = 8;
+    var round: usize = 0;
+    while (round < multi_flip_rounds) : (round += 1) {
+        const corrupt_count: usize = random.intRangeAtMost(usize, 2, 5);
+        var multi = allocator.alloc(u8, canonical.len) catch return error.OutOfMemory;
+        defer allocator.free(multi);
+        @memcpy(multi, canonical);
+        var applied: usize = 0;
+        while (applied < corrupt_count) : (applied += 1) {
+            const at = random.intRangeAtMost(usize, 0, canonical.len - 1);
+            const mask = flip_masks[random.intRangeAtMost(usize, 0, flip_masks.len - 1)];
+            multi[at] ^= mask;
+        }
+        _ = try checkMutation(allocator, multi, baseline, fuzz_max, stats);
+    }
+
+    // Byte insertion: splice one random byte at a random position, shifting the
+    // rest. Length, offset and CRC checks must reject it; an accepted block must
+    // still reproduce the baseline exactly.
+    if (canonical.len >= block_mod.header_len) {
+        const insert_at = random.intRangeAtMost(usize, 0, canonical.len);
+        var inserted = allocator.alloc(u8, canonical.len + 1) catch return error.OutOfMemory;
+        defer allocator.free(inserted);
+        const filler: u8 = random.int(u8);
+        @memcpy(inserted[0..insert_at], canonical[0..insert_at]);
+        inserted[insert_at] = filler;
+        @memcpy(inserted[insert_at + 1 ..], canonical[insert_at..]);
+        _ = try checkMutation(allocator, inserted, baseline, fuzz_max, stats);
+    }
+
+    // Byte deletion: remove one byte, shifting the rest. This specifically
+    // stresses truncation-vs-CRC-vs-offset discrimination because the framing
+    // lengths no longer line up.
+    if (canonical.len > block_mod.header_len) {
+        const delete_at = random.intRangeAtMost(usize, 0, canonical.len - 1);
+        var shortened = allocator.alloc(u8, canonical.len - 1) catch return error.OutOfMemory;
+        defer allocator.free(shortened);
+        @memcpy(shortened[0..delete_at], canonical[0..delete_at]);
+        @memcpy(shortened[delete_at..], canonical[delete_at + 1 ..]);
+        _ = try checkMutation(allocator, shortened, baseline, fuzz_max, stats);
+    }
 }
 
 /// Run a fixed-seed campaign. Returns aggregate counts; the reject-or-equal
