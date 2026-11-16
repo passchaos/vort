@@ -1164,3 +1164,8 @@ writes up to 16 bytes past the logical run, so the following match copy must
 overwrite that tail; reordering clobbered the match (`SizeMismatch`), and an
 exact literal-copy variant faulted. Reverted. The copy-chain work needs a
 dedicated exact-copy path with its own tests before it can be measured.
+
+The match-first reorder was retried with an exact 0-16-byte literal copy (no
+wildcopy tail). It is correct but slower: `dickens` fell from 917 to 858 MiB/s
+(-6.4%) because the literal copy's work was overlapping the match-source
+fetch. Reverted; the literal-first order stays.
