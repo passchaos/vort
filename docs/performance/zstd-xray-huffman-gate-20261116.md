@@ -90,3 +90,20 @@ Interpretation:
 - No production code changed; the inspection probe and the gate edit were both
   temporary and removed/reverted. This is a root-cause record plus a falsified
   optimization hypothesis, not a fix.
+
+## Postscript: the single-sequence path bypassed the gate (2026-11-16)
+
+The x-ray hot chain resolves further up than the gate: an LBR call graph shows
+`decodeLiteralOnlyCompressedBlockIntoBuffer -> decodeSinglePredefinedSequence
+-> copyHuffmanLiteralsFromSection -> HuffmanLiteralCursor.readSymbol`. That
+executor decoded a single-sequence block's Huffman literal section twice from
+the start, once per literal run, through the checked per-symbol loop. Decoding
+a four-stream section once with the reservoir directly into the output, then
+sliding the tail right for the match, moves x-ray from 0.3364 to **0.7811**
+(2.32x in the increment, 2.39x versus the original 1.6.0 baseline; evidence:
+[data/zstd-single-sequence-huffman-20261116](../data/zstd-single-sequence-huffman-20261116/README.md)).
+
+The gate analysis above remains correct: widening the X2 entry gate is still
+slower for this symbol distribution. The win came from the single-sequence
+executor not using the reservoir path at all, not from changing the gate.
+

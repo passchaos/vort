@@ -17602,7 +17602,68 @@ fn decodeSinglePredefinedSequence(
         &repeated_offsets,
     );
 
-    try copyLiteralsFromSection(
+    // A single-sequence block used to decode the same Huffman literal section
+    // twice: once for the sequence run and again from the start for the tail.
+    // Four-stream sections can instead decode the whole run once with the
+    // reservoir loop directly into the output, then slide the tail right to
+    // make room for the match. This is the dominant path for
+    // near-incompressible level-1 blocks.
+    const available = output.len - written.*;
+    if ((section.kind == .compressed or section.kind == .treeless) and
+        section.huffman_streams == .four and
+        section.regenerated_size >= split_x2_huffman_literal_min and
+        sequence.literal_len <= section.regenerated_size and
+        available >= section.regenerated_size and
+        available - section.regenerated_size >= sequence.match_len)
+    {
+        const base = written.*;
+        if (try decodeLargeFourStreamHuffman(section, output[base..][0..section.regenerated_size])) {
+            const literal_len = sequence.literal_len;
+            const last_literals = section.regenerated_size - literal_len;
+            const tail_start = base + literal_len;
+            const tail_dest = tail_start + sequence.match_len;
+            std.mem.copyBackwards(
+                u8,
+                output[tail_dest..][0..last_literals],
+                output[tail_start..][0..last_literals],
+            );
+            written.* = tail_start;
+            try copySinglePredefinedMatch(
+                output,
+                written,
+                frame_output_start,
+                dictionary_history,
+                match_offset,
+                sequence.match_len,
+            );
+            written.* = base + section.regenerated_size + sequence.match_len;
+            if (continuation.retainsState()) {
+                frame_state.previous_tables = .{
+                    .ll_mode = .predefined,
+                    .of_mode = .predefined,
+                    .ml_mode = .predefined,
+                    .literal_rle = null,
+                    .offset_rle = null,
+                    .match_rle = null,
+                };
+                frame_state.repeated_offsets = repeated_offsets;
+            }
+            return;
+        }
+    }
+    // Otherwise keep one cursor so every literal is decoded exactly once.
+    var huffman_storage: HuffmanLiteralDecodeState = undefined;
+    const huffman_literals = try initHuffmanLiteralDecodeStateInto(&huffman_storage, block, section);
+    if (huffman_literals) |huffman_state| {
+        if (output.len - written.* < sequence.literal_len) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanStateFast(
+            huffman_state,
+            &section,
+            0,
+            output[written.*..][0..sequence.literal_len],
+        );
+        written.* += sequence.literal_len;
+    } else try copyLiteralsFromSection(
         block,
         section,
         0,
@@ -17621,7 +17682,17 @@ fn decodeSinglePredefinedSequence(
     if (section.regenerated_size < sequence.literal_len) {
         return error.CorruptFrame;
     }
-    try copyLiteralsFromSection(
+    if (huffman_literals) |huffman_state| {
+        const last_literals = section.regenerated_size - sequence.literal_len;
+        if (output.len - written.* < last_literals) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanStateFast(
+            huffman_state,
+            &section,
+            sequence.literal_len,
+            output[written.*..][0..last_literals],
+        );
+        written.* += last_literals;
+    } else try copyLiteralsFromSection(
         block,
         section,
         sequence.literal_len,

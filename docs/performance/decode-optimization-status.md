@@ -876,3 +876,25 @@ Repeated-offset localization was tested and rejected: alone it regressed
 Native `test-zstd`, `test-zstd-huffman-x2` and 44/44 decode-memory contracts
 pass; the `test-zstd-decode-memory-wasm` node gate exits 201 on the unmodified
 baseline too, so it is a pre-existing environment condition.
+
+## Zstd single-sequence Huffman literal decode (2026-11-16)
+
+After the wide-executor localization, `x-ray` remained the worst level-1 row at
+0.3364. An LBR call graph resolves the hot chain to
+`decodeLiteralOnlyCompressedBlockIntoBuffer -> decodeSinglePredefinedSequence
+-> copyHuffmanLiteralsFromSection -> HuffmanLiteralCursor.readSymbol`: a
+single-sequence block decoded its Huffman literal section **twice from the
+start**, once per literal run, through the checked per-symbol loop.
+`decodeSinglePredefinedSequence` now decodes a four-stream section once with
+the reservoir loop directly into the output, slides the trailing literals
+right by the match length, and emits the match into the gap; smaller and
+single-stream shapes keep one stateful cursor as a fallback. `x-ray` moves from
+0.3364 to **0.7811** (2.32x in this increment, 2.39x versus the original 1.6.0
+baseline). The twelve-file geometric ratio improves from 0.7286 to **0.7835**
+(geomean speedup **1.0754**, 9/12 wins, lowest control row 0.9927). The
+stateful-only intermediate measured 0.3889 and is retained only as fallback;
+lowering the literal-only fast-path threshold from 16 KiB to 4 KiB regressed
+x-ray to 0.3282 and was rejected. Evidence:
+[data/zstd-single-sequence-huffman-20261116](data/zstd-single-sequence-huffman-20261116/README.md).
+Filtered `predefined` (49/49), `stream counters` (42/42) and `literal`
+(162/162) tests pass; focused and WASM gates are recorded with this increment.
