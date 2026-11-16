@@ -1193,3 +1193,8 @@ loop-invariant base pointer freed for the chain and then reloaded as the
 literal table base. The next experiment is to shrink that chain's register
 demand or reload the invariant pointers from `reader` instead of keeping them
 live. Compiler spill elimination is otherwise not source-controllable.
+
+Reloading `reader.input` instead of keeping a local slice across the loop
+changed nothing (786.6 versus 784.1 MiB/s, +0.3%, within noise). The spilled
+base is not the input slice; source-level register-pressure work is closed for
+this loop.
