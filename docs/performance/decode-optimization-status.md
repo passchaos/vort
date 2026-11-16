@@ -963,3 +963,12 @@ The dense pair fast path was also offered to the wide executor by changing its
 gate from `!use_wide_copies` to `(use_wide_copies or use_long_match_wildcopy)`.
 On `dickens` it regressed the level-1 ratio from 0.8067 to **0.7386** (-8.4%),
 so the pair path is correctly dense-specific; the gate stays.
+
+## Structural decode frontier (2026-11-16)
+
+The local, policy and table-shape levers for the three codecs are now measured
+and closed. The remaining zstd (~20% median), Deflate (~6%) and Brotli `mr`
+gaps need structural work. The consolidated state, closed-lever list and the
+three structural candidates (zstd executor representation v2, Deflate token
+two-phase, Brotli single-tree literal reservoir) are in
+[structural-decode-frontier-20261116](structural-decode-frontier-20261116.md).
