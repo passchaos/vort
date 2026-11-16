@@ -1134,3 +1134,11 @@ dickens 1.15x and samba 1.56x with the other rows neutral (about 6.4%
 geometric mean, no control below 0.998x). The locked encode gate is unchanged.
 Evidence:
 [data/zstd-length-only-bound-20261117](data/zstd-length-only-bound-20261117/README.md).
+
+After the length-only change, the level-9 profile on the 128 KiB `dickens`
+prefix is dominated by the parser families: `findBestHashMatchWithLayout`
+12.5%, four-byte optimal 11.9%, generic optimal 4.2%; then memset 5.1%,
+large-sequence table cost 4.0%, multi-duplicate 3.5% and long Huffman stream
+3.3%. Candidate-removal work is exhausted; the next encode lever is
+parser-level, otherwise the decode gaps (zstd about 20%, Deflate about 6%)
+are the remaining structural frontier.
