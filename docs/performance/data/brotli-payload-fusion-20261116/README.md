@@ -342,3 +342,18 @@ Implication: the residual brotli gap is not addressable by a speculative SIMD
 gather project. Any future work must target the real remaining costs (fewer
 long-code fallbacks via table-width tuning, or per-symbol scalar work), each
 measured with the paired A/B bar rather than assumed.
+
+## Table-width tuning quantified below the bar without an experiment (2026-11-16)
+
+The last named candidate was widening the literal PrefixCode lookup (9->10
+bits) to reduce long-code fallbacks. A pre-experiment perf check settles it:
+
+- `HuffmanTable(256).decodeValueLongAfterLookup` (the only code a wider table
+  could remove) is 0.42% of total samples;
+- the fast `PrefixCode(256).decodePrepared` path it would feed is 2.82%.
+
+Even a hypothetical complete elimination of the 0.42% fallback cannot reach the
+3% adoption bar, while a 10-bit table doubles the lookup footprint (512->1024
+slots) and adds cache pressure plus a packed-representation correctness review.
+No code change was made; the candidate is rejected on its measured ceiling.
+This closes every concrete brotli decode lever with quantitative evidence.
