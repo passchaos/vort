@@ -1227,3 +1227,9 @@ size/speed tradeoff is recorded for a future level-specific policy.
 A 10-bit short hash likewise cut about 20 KB over the twelve files but cost
 8.6% geometric-mean speed (dickens 0.785x, sao 0.854x); the 8-bit short table
 stays. The 8-bit short/11-bit long pair is the measured speed-first point.
+
+Reserving `input.len / 16` records instead of `/64` looked 1.9% faster in the
+single-run matrix, but repeated medians were 0.975-0.987x on dickens, mozilla,
+mr and webster. The actual match counts are 9,185 (dickens) and 14,712 (mr),
+so the list does grow, but the eager 65 KiB reserve costs more than the copies
+it avoids. The smaller lazy reserve stays.
