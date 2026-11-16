@@ -33,8 +33,14 @@ Per-file ratios are in `full-silesia.csv`.
 
 - **Deflate is not net-competitive against libdeflate 1.10.** The 3-file view
   looked near parity, but across twelve files Vort is slower on 9/12 (median
-  0.940). Wins cluster on highly compressible inputs; typical 25-74%-ratio
-  files run 6-11% behind.
+  0.940). The shape is a two-regime split, not a smooth compressibility
+  crossover: the two most compressible files under a 15% encoded ratio (`nci`
+  1.151, `xml` 1.017) are wins, while the other ten — spanning 25-74% encoded
+  size — form a tight ratio-independent band (median 0.937, stdev 0.029,
+  roughly a flat 6% deficit). Pearson correlation of encoded-pct with V/R over
+  the whole set is only -0.49 and is driven by the two low-ratio outliers;
+  within the typical ten there is no ratio trend. Any fix therefore has to move
+  the common-path kernel, not target a compressibility corner.
 - **zstd is behind on every file (12/12)**, median 0.799, worst `x-ray` 0.550.
 - **Brotli is strongly file-dependent, not a steady ~0.93x.** It spans
   0.747 (`mr`) to 1.466 (`sao`); Vort is faster on 5/12 and slower on 7/12.
@@ -76,6 +82,8 @@ data's compressibility and with the codec.
 ## Direction
 
 The corrected picture: zstd is uniformly behind and structurally bounded by
-the FSE serial wall; Deflate has a compressibility-dependent crossover; Brotli
-is bimodal, with a real Vort advantage on near-incompressible literal-heavy
-data that should be re-checked against a current libbrotli before any claim.
+the FSE serial wall; Deflate is a two-regime split (two high-compressibility
+wins plus a flat ~6% common-path deficit on the other ten, not a ratio-driven
+crossover); Brotli is bimodal, with a real Vort advantage on near-incompressible
+literal-heavy data that should be re-checked against a current libbrotli before
+any claim.
