@@ -21,6 +21,12 @@ const Options = struct {
     quality_override: ?c_int = null,
     print_encoded_hex: bool = false,
     vort_only: bool = false,
+    // Optional explicit reference-library paths. When all three are supplied
+    // the benchmark dlopens them verbatim instead of the system search path,
+    // mirroring the zstd reference bench's `--libzstd` override.
+    libbrotli_enc: ?[]const u8 = null,
+    libbrotli_dec: ?[]const u8 = null,
+    libbrotli_common: ?[]const u8 = null,
 };
 const max_file_input_size = 256 * 1024 * 1024;
 
@@ -36,7 +42,14 @@ pub fn main(init: std.process.Init) !void {
         "single",
     );
     defer provenance.deinit(init.gpa);
-    var runtime = try libbrotli.Runtime.open();
+    var runtime = if (options.libbrotli_dec) |dec|
+        try libbrotli.Runtime.openPaths(.{
+            .encoder = options.libbrotli_enc.?,
+            .decoder = dec,
+            .common = options.libbrotli_common.?,
+        })
+    else
+        try libbrotli.Runtime.open();
     defer runtime.deinit();
     const dictionary_cases = if (options.vort_only) 0 else try checkDictionaryTransforms(runtime);
     var random: [4096]u8 = undefined;
@@ -285,9 +298,20 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.print_encoded_hex = true;
         } else if (std.mem.eql(u8, arg, "--vort-only")) {
             options.vort_only = true;
+        } else if (std.mem.eql(u8, arg, "--libbrotli-enc")) {
+            options.libbrotli_enc = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--libbrotli-dec")) {
+            options.libbrotli_dec = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--libbrotli-common")) {
+            options.libbrotli_common = args.next() orelse return error.MissingCorpusPath;
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0) return error.InvalidBlockPlan;
+    // The override is all-or-nothing so the three libraries stay consistent.
+    const override_count: u8 = @as(u8, @intFromBool(options.libbrotli_enc != null)) +
+        @as(u8, @intFromBool(options.libbrotli_dec != null)) +
+        @as(u8, @intFromBool(options.libbrotli_common != null));
+    if (override_count != 0 and override_count != 3) return error.IncompleteBrotliLibraryPaths;
     return options;
 }
 
