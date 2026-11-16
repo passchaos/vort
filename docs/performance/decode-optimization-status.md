@@ -1304,3 +1304,12 @@ plain-literal loops of
 `adaptive_contexts` loop of `encodePreferredCommandPlanAllocRecorded`. The
 next change should measure those candidates with the counting writer and emit
 only the winner.
+
+The prepared/count path requires `options.prepared_common`, which the
+entropy-split alternate-context loop does not currently build. The literal
+context only changes the literal tree, so one command/distance common model
+can be shared across the alternate contexts. The implementation must build
+that shared model once, prepare/measure each alternate with
+`prepareCommandPlanWithOptionsRecorded`, and emit only the winner with
+`emitPreparedCommandPlanWithOptionsRecorded` (which checks the emitted size
+against `state.wire_len`).
