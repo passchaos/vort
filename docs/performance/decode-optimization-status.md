@@ -792,3 +792,17 @@ these are lower bounds on the competitive distance, not parity evidence, and
 the run is a single-host diagnostic rather than an adoption gate. It
 re-confirms the FSE serial wall above as the structural zstd decode ceiling;
 no production code changed.
+
+## Full-Silesia sweep and the x-ray Huffman-gate weak row (2026-11-16)
+
+The twelve-file sweep
+([data/wire-full-silesia-20261116](data/wire-full-silesia-20261116/README.md))
+corrects the small-sample read: Deflate is slower on 9/12 files vs libdeflate
+1.10 (median 0.940), and zstd is behind on 12/12 vs libzstd 1.4.8 (median
+0.799). The worst row, `x-ray` at 0.550, is a distinct mechanism from the FSE
+wall: it is 99.85% literals with ~28 sequences/block, all 65 Huffman sections
+are four-stream, but zero blocks pass any X2 entry gate (sparse needs 1536-2048
+sequences; the ratio is ~80% vs a 66% main gate), so every block uses the
+scalar four-stream fallback. Full mechanism, the fail-safe fallback reasoning,
+and the gate-widening hypothesis (held back pending the paired A/B) are in
+[zstd-xray-huffman-gate-20261116](zstd-xray-huffman-gate-20261116.md).
