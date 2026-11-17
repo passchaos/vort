@@ -12643,7 +12643,14 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
     var selected_stats = initial_stats;
     var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &selected_stats, primary_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, selected);
-    if (literal_split == null and adaptive_literal_split == null) {
+    // The combined command+distance candidate keeps the winning context and
+    // re-encodes only the split structure. Re-running every losing alternate
+    // literal context there never won on the measured planned-q9 corpus
+    // (0/1096), so skip those alternates for the combined candidate only.
+    // The standalone adaptive distance candidate keeps its counted path,
+    // which must evaluate the same alternates as the materialized oracle.
+    const skip_alternate_contexts = adaptive_command_split != null and adaptive_distance_split != null;
+    if (!skip_alternate_contexts and literal_split == null and adaptive_literal_split == null) {
         for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |alternate_context| {
             var alternate_stats = initial_stats;
             const alternate = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &alternate_stats, .{

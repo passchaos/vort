@@ -1369,3 +1369,21 @@ webster 1.186x) with identical wire SHA-256 on 12/12 128 KiB, 6/6 1 MiB,
 3/3 4 MiB, and 4/4 synthetic far-copy inputs. Combined with the far-candidate
 gate, planned q9 is 1.47x geometric mean faster than the 2026-11-17 baseline.
 Evidence: [data/br-entropy-split-skip-20261117](data/br-entropy-split-skip-20261117/README.md).
+
+A third q9 candidate-reduction step removes the alternate literal-context
+re-encodes inside the combined command+distance split writer. That writer
+re-encoded the command plan once per losing baseline context; on the 12
+Silesia 128 KiB prefixes those alternates won **0/1096** times (and the
+plain-literal variant never appeared). `src/br.zig` now skips the alternate
+loop only for the combined candidate (`adaptive_command_split != null and
+adaptive_distance_split != null`). The standalone adaptive distance candidate
+keeps its alternates because the counted oracle must evaluate the same set;
+the first, broader condition failed the
+`br counted adaptive distance context contracts` fixture, where an alternate
+context wins by 19.7 KB. Repeated medians over the six 128 KiB files improved
+**1.164x** geometric mean (dickens 1.273x, xml 1.162x, mozilla 1.133x,
+mr 1.142x, sao 1.174x, webster 1.107x) with identical wire SHA-256 on 12/12
+128 KiB, 6/6 1 MiB, 3/3 4 MiB, 4/4 synthetic far-copy, and 9/9 built-in bench
+cases. Planned q9 is now about 1.70x geometric mean faster than the
+2026-11-17 baseline.
+Evidence: [data/br-alternate-context-skip-20261117](data/br-alternate-context-skip-20261117/README.md).
