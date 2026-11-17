@@ -1508,3 +1508,13 @@ commands was tested and rejected: 48,747 -> 48,662 bytes (only -85 B,
 0.17%) for 1.28 -> 0.93 MiB/s (27% slower). The dictionary must be
 integrated into the parse (or a bounded optimal parse enabled above
 64 KiB), not mixed into the finished lazy plan.
+
+The bounded q10 large-block optimal parse was measured before deciding on
+a policy change. With the q10 schedule budget (192/128) dickens moves from
+48,747 to 44,852 bytes (-8.0%, now 1.9% behind libbrotli) but slows from
+1.28 to 0.37 MiB/s. Reducing the budget to 96/32/192 gives 45,089 bytes at
+0.38 MiB/s: the chain/candidate budget is not the cost, the optimal DP
+itself is. Across the twelve 128 KiB files the optimal q10 runs at
+0.26-1.18 MiB/s and lands 2.4-17.1% above its reference. The ratio win is
+real but the 3.5-6x slowdown is not a free product change; the next lever
+is optimal-parser speed, not a q10 tier policy switch. Reverted.
