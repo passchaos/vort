@@ -1715,3 +1715,14 @@ q11 by 37 bytes (8,401 -> 8,364) but grows samba by 131 bytes (40,937 ->
 global bonus cannot represent the path-dependent ring-buffer saving, so the
 next ratio step is a parse that carries the four recent distances (or a
 bounded beam over them) instead of another static price tweak.
+
+The position-aware last-distance pricing was screened as a stronger form of
+the repcode prior: the seed plan records its last distance per segment, and
+the backward DP prices a match at that distance with the recent-distance
+symbol cost. Replacing the static repcode bonus with this pricing worsened
+xml q11 by 158 bytes (8,401 -> 8,559) and samba by 131 bytes (40,937 ->
+41,068), leaving mozilla (18,676) and dickens (43,953) unchanged; reverted.
+The seed path's last distance is too stale for the new parse, and pricing it
+at the distance-symbol cost ignores the command-symbol change, so the parser
+over-prefers it. A correct recent-distance gain needs the ring state inside
+the parse (or a bounded beam over it), not another seed-derived price.
