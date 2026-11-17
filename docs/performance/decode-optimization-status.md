@@ -1738,3 +1738,12 @@ bytes larger, so the gap is dominated by base command/literal entropy
 modeling (1 command/distance type, 4 literal trees) rather than by a missing
 split proposal. Next entropy work should target the base context/tree
 selection, not a larger split search.
+
+Current-source Zstd level 3 on five 128 KiB Silesia prefixes measures
+0.9589x the libzstd 1.4.8 bytes (141,027 versus 147,068) at 2.2-9.1 MiB/s
+versus 170-872 MiB/s (0.003x-0.031x). Mozilla is the weak row: 7.4% larger
+and 78x slower. This refreshes the stale 2026-10-25 level-3 baseline; the
+default level remains 1 (speed-first) and levels 1-2 were already aligned by
+user choice. Changing level 3 to a speed-first policy is a product decision,
+not an internal optimization, because it trades away the measured ratio gain.
+Evidence: [data/zstd-level3-current-20261118](data/zstd-level3-current-20261118/README.md).
