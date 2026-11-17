@@ -1671,3 +1671,16 @@ q10/q11 rows move 1.0025x-1.0362x, **1.0169x** geometric mean over six
 below the default 3% merge bar, retained as an exact work reduction with no
 regression; samba weak rows gain 3.3-3.6%.
 Evidence: [data/br-joint-incremental-aggregate-20261117](data/br-joint-incremental-aggregate-20261117/README.md).
+
+Current-source q11 encode position (128 KiB Silesia prefixes, libbrotli 1.0.9)
+is now recorded across all twelve files. Default-reference totals are
+501,109 versus 474,794 bytes (**1.0554x**) with 0.160x-0.516x reference/Vort
+speed; matched `lgwin 16` generic rows are 1.020x (dickens), 1.054x (samba),
+1.130x (xml) and 1.147x (mozilla) with the same 3-6x speed gap. Weak ratio
+rows are binary/structured inputs, not text. A probe of
+`considerStaticDictionaryCandidate` shows it winning inside its own group by
+1-145 bytes on dickens/samba and losing on xml, while the global winner on
+those corpora is a different candidate; the split graph and the
+static-dictionary re-encode remain the largest q11 costs. This is a position
+baseline, not a leadership claim.
+Evidence: [data/br-q11-full-matrix-20261118](data/br-q11-full-matrix-20261118/README.md).
