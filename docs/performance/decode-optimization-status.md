@@ -1726,3 +1726,15 @@ The seed path's last distance is too stale for the new parse, and pricing it
 at the distance-symbol cost ignores the command-symbol change, so the parser
 over-prefers it. A correct recent-distance gain needs the ring state inside
 the parse (or a bounded beam over it), not another seed-derived price.
+
+Split-candidate probes on the binary rows show the primary split wire saving
+only 154 bytes on a 19,422-byte mozilla group (19,268) and 53 bytes on xml
+(9,260 -> 9,207), while the final q11 winners are 18,676 and 8,401 and come
+from groups whose split phase does not improve on the baseline. The
+distance-context candidate similarly wins 20-30 bytes inside losing groups and
+nothing in the winning group. Vort's mozilla wire also carries fewer literal
+bytes than the reference (7,567 vs 9,151) and more copy bytes, yet is 2,444
+bytes larger, so the gap is dominated by base command/literal entropy
+modeling (1 command/distance type, 4 literal trees) rather than by a missing
+split proposal. Next entropy work should target the base context/tree
+selection, not a larger split search.
