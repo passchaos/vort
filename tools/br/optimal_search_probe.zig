@@ -48,4 +48,8 @@ pub fn main(init: std.process.Init) !void {
         "positions={d} chain_nodes={d} prefix_rejections={d} bound_rejections={d} match_length_calls={d} valid_matches={d} length_choices={d} budget_stops={d}\n",
         .{ profile.positions, profile.chain_nodes, profile.prefix_rejections, profile.bound_rejections, profile.match_length_calls, profile.valid_match_candidates, profile.length_choices_built, profile.candidate_budget_stops },
     );
+    std.debug.print(
+        "prefix_mismatch=[{d},{d},{d},{d}] bound_length=[{d},{d},{d},{d},{d},{d}]\n",
+        .{ profile.prefix_mismatch_histogram[0], profile.prefix_mismatch_histogram[1], profile.prefix_mismatch_histogram[2], profile.prefix_mismatch_histogram[3], profile.bound_length_histogram[0], profile.bound_length_histogram[1], profile.bound_length_histogram[2], profile.bound_length_histogram[3], profile.bound_length_histogram[4], profile.bound_length_histogram[5] },
+    );
 }

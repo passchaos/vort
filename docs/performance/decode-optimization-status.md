@@ -1541,3 +1541,24 @@ median moved from 43,956 B @ 0.110 MiB/s to 43,953 B @ 0.120 MiB/s
 optimal path was already four-byte. `zig build test` passes 5666/5668
 (2 skipped) and `zig build test-br` passes 1619/1620 (1 skipped).
 Evidence: [data/br-optimal-index-anchor-20261117](data/br-optimal-index-anchor-20261117/README.md).
+
+The >64 KiB optimal parser's compact index was still a three-byte hash;
+the loop's four-byte prefix check then rejected 5.07M true three-byte
+candidates, 63% of all chain nodes. Building the compact index with
+`.four` when `minMatch(options) >= 4` drops one parse from 44.6 to
+**19.3 ms** (chain nodes 8.06M -> 3.05M, prefix rejections 5.13M ->
+114k, same matchLength work). q11 end-to-end moves **1.0195x** with -2
+bytes; the parse-level 2.3x is the cost lever for a future q10
+large-block optimal policy. The <=64 KiB eligible path already used the
+four-chain and is unchanged.
+Evidence: [data/br-optimal-compact-anchor-20261117](data/br-optimal-compact-anchor-20261117/README.md).
+
+A four-byte compact index for >64 KiB optimal parses looked strong in the
+probe (one parse 44.6 -> 19.3 ms, chain nodes 8.06M -> 3.05M, prefix
+rejections 5.13M -> 114k) and improved the q11 wire by 2 bytes, but it
+broke `lz77.test.ordinal optimal index preserves original plan and
+ownership`: the ordinal four-chain is defined as a filtered view of the
+original three-byte chain, so changing the compact hash changes the
+reference plan. The change is reverted; the contract is explicit. The
+probe histogram (5.07M of 5.13M prefix rejections were true three-byte
+matches) stays in the tool for future parser work.
