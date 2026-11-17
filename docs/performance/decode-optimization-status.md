@@ -1487,3 +1487,13 @@ the modeled wire wins on the other ten files. The third parse wins by only
 of q11. The next q11 decision is whether to gate the third parse on a model
 estimate or a documented small ratio budget; skipping the first parse's wire
 unconditionally is not safe.
+
+The q11 refinement trace closes the pruning question. The third parse
+improves the incumbent on 8/12 files by 7-103 bytes; the repcode-bonus
+fourth parse wins on xml (+163 B), nci (+117 B), and samba (+136 B) but
+loses on the other nine. Neither refinement has a cheap win predictor:
+the bonus wins on files where the third parse also improved and on files
+where it did not. Dropping the third parse would cost up to 103 B and
+dropping the bonus up to 163 B (1.9% on xml), while q11 users select the
+level for ratio. The refinements stay; the remaining q11 lever is the
+optimal parser itself, not candidate pruning.
