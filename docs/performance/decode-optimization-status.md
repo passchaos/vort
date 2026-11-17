@@ -1562,3 +1562,13 @@ original three-byte chain, so changing the compact hash changes the
 reference plan. The change is reverted; the contract is explicit. The
 probe histogram (5.07M of 5.13M prefix rejections were true three-byte
 matches) stays in the tool for future parser work.
+
+Trace scopes around the entropy-modeled optimal parses close the previous
+q11 `other` blind spot. On the 128 KiB dickens prefix the four parses cost
+**674.7 ms** (the first fixed parse 42 ms, the three modeled parses about
+211 ms each), while `other` drops from 612.8 to 22.8 ms. The modeled parse
+is roughly 5x the fixed parse because the prefix bound is disabled for
+non-monotonic model costs. Enabling the bound plus the compact four-chain
+for the modeled path was slower (q11 ns +8%, wire +3 B) and reverted: the
+full per-candidate cost comparison outweighs the bound savings on the
+four-byte chain.
