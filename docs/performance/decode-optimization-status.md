@@ -1756,3 +1756,12 @@ slower, all three candidate runs above all three baseline runs). The prepare
 cost is dominated by the first full build and the row writes rather than
 repeated cost-model computation, so the dirty tracking does not pay for
 itself. Reverted.
+
+Lowering the split proposal thresholds does not recover binary ratio. The
+command-split savings gates were reduced fourfold (2048 -> 512 bits, with the
+entropy gate at 3/4) and the distance-split gates from 2200/2250 to
+512/600 bits; q11 wires on mozilla (18,676), xml (8,401), dickens (43,953)
+and samba (40,937) stayed byte-identical. The proposals either remain below
+even the lower entropy bar or lose the complete-wire arbitration, confirming
+that the binary gap is split-proposal quality and base entropy modeling, not
+a conservative threshold.
