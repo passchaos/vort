@@ -1608,3 +1608,9 @@ dictionary precompute itself is now the ~140 ms `other` block. The
 remaining q11 time is split 188.3 ms, wire 116.2 ms, and evaluate
 36.7 ms. The next levers are the static-dictionary `findLongest` pass and
 the per-plan split/wire candidate graph.
+
+Extending the static-dictionary suffix pre-check from the whole-word
+transforms to the omit/skip transforms was wire-identical but neutral:
+q11 measured 670,343,918 ns versus the 651,687,479 ns median (within
+noise, slightly slower). The extra per-transform `kept`/suffix work
+offsets the pruned base-word comparisons. Reverted.
