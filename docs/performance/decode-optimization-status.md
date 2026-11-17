@@ -1660,3 +1660,14 @@ from 1,010,341,333 to 890,502,371 ns (**1.1346x**); webster 1.0698x, samba
 corpus/quality wires byte-identical. q9/q10 are unchanged. The general
 `transformedWordMatches` path remains as the complete-index oracle.
 Evidence: [data/br-dictionary-omit-flat-20261117](data/br-dictionary-omit-flat-20261117/README.md).
+
+The joint literal-context clustering loop re-aggregated every populated
+context on every assignment iteration. Recording `(context, from, to)` moves
+and applying only subtract/add for the contexts that changed tree keeps the
+counts exact (disjoint sums in the u32-bounded path) and reproduces a full
+re-aggregation bit-for-bit; larger populations keep the checked full merge.
+q10/q11 rows move 1.0025x-1.0362x, **1.0169x** geometric mean over six
+128 KiB corpus/quality rows, with all twelve wires byte-identical. This is
+below the default 3% merge bar, retained as an exact work reduction with no
+regression; samba weak rows gain 3.3-3.6%.
+Evidence: [data/br-joint-incremental-aggregate-20261117](data/br-joint-incremental-aggregate-20261117/README.md).

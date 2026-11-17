@@ -39,6 +39,26 @@ pub fn aggregateTrees(contexts: []const Histogram, assignment: []const u8, tree_
     };
 }
 
+pub const TreeMove = struct { context: u32, from: u16, to: u16 };
+
+/// Apply one assignment pass to trees that already aggregate `contexts`.
+/// Only valid for the u32-bounded population path: counts are exact sums of
+/// disjoint contexts, so subtracting the moved context from its old tree and
+/// adding it to the new tree reproduces a full re-aggregation exactly.
+pub fn moveContexts(contexts: []const Histogram, trees: []Histogram, moves: []const TreeMove) void {
+    for (moves) |move| {
+        const context = &contexts[move.context];
+        if (context.total == 0) continue;
+        std.debug.assert(move.from != move.to);
+        const from = &trees[move.from];
+        for (&from.counts, &context.counts) |*count, value| count.* -= value;
+        from.total -= context.total;
+        const to = &trees[move.to];
+        for (&to.counts, &context.counts) |*count, value| count.* += value;
+        to.total += context.total;
+    }
+}
+
 test {
     _ = @import("kernels_tests.zig");
 }
