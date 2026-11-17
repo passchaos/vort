@@ -1601,3 +1601,10 @@ from 2,166,505,689 ns to 1,303,374,958 ns (**1.662x**) with an identical
 `input.len * @sizeOf(?lz77.DictionaryMatch)`, about 1.5 MB for 128 KiB,
 allocated once per q10/q11 optimal candidate.
 Evidence: [data/br-precomputed-dictionary-probe-20261117](data/br-precomputed-dictionary-probe-20261117/README.md).
+
+After the precomputed dictionary probe, q11's optimal parse drops from
+674.7 to **103.6 ms** (first 39.1 ms, modeled 21.4/21.7/21.4 ms). The
+dictionary precompute itself is now the ~140 ms `other` block. The
+remaining q11 time is split 188.3 ms, wire 116.2 ms, and evaluate
+36.7 ms. The next levers are the static-dictionary `findLongest` pass and
+the per-plan split/wire candidate graph.
