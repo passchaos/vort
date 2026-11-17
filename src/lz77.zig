@@ -1506,6 +1506,25 @@ pub fn optimalPlanAllocFrom(
 /// literal, match-length, and match-distance choices with a caller model. This
 /// is a proposal API: format encoders should still arbitrate the resulting
 /// plan using their complete wire cost.
+pub fn optimalPlanAllocWithCostModelProfiled(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    model: OptimalCostModel,
+    io: std.Io,
+    profile: *OptimalSearchProfile,
+) !GreedyPlan {
+    try model.validate(options.window_len, input.len);
+    profile.* = .{ .input_bytes = input.len };
+    const total_start = std.Io.Clock.awake.now(io);
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, 0, options, false, true, true, true, false, io, profile, model);
+    const tokens = try allocator.dupe(Token, scratch.tokens.items);
+    profile.total_ns = elapsedNs(total_start, io);
+    return .{ .tokens = tokens, .stats = stats };
+}
+
 pub fn optimalPlanAllocWithCostModel(
     allocator: std.mem.Allocator,
     input: []const u8,

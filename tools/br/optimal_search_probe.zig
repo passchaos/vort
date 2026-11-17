@@ -13,6 +13,7 @@ pub fn main(init: std.process.Init) !void {
     const max_chain = try std.fmt.parseInt(usize, args.next() orelse "512", 10);
     const max_candidates = try std.fmt.parseInt(usize, args.next() orelse "256", 10);
     const nice_len = try std.fmt.parseInt(usize, args.next() orelse "258", 10);
+    const modeled = (try std.fmt.parseInt(u1, args.next() orelse "0", 10)) != 0;
 
     const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
     defer file.close(init.io);
@@ -25,15 +26,28 @@ pub fn main(init: std.process.Init) !void {
     var reader = file.reader(init.io, &buffer);
     if (try reader.interface.readSliceShort(input) != read_len) return error.InputTooSmall;
 
-    var profile: vort.lz77.OptimalSearchProfile = .{};
-    const plan = try vort.lz77.optimalPlanAllocProfiled(init.gpa, input, .{
+    const options: vort.lz77.GreedyOptions = .{
         .window_len = @min(input.len, 32 * 1024),
         .max_chain = max_chain,
         .nice_len = nice_len,
         .max_candidates = max_candidates,
         .min_match = 4,
         .max_match = 258,
-    }, init.io, &profile);
+    };
+    var profile: vort.lz77.OptimalSearchProfile = .{};
+    var literal_costs: [256]u16 = @splat(8);
+    var length_costs: [259]u16 = @splat(8);
+    const distance_costs = try init.gpa.alloc(u16, 65521);
+    defer init.gpa.free(distance_costs);
+    @memset(distance_costs, 8);
+    const plan = if (modeled)
+        try vort.lz77.optimalPlanAllocWithCostModelProfiled(init.gpa, input, options, .{
+            .literal = &literal_costs,
+            .length = &length_costs,
+            .distance = distance_costs,
+        }, init.io, &profile)
+    else
+        try vort.lz77.optimalPlanAllocProfiled(init.gpa, input, options, init.io, &profile);
     defer plan.deinit(init.gpa);
 
     std.debug.print(

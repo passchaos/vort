@@ -1581,3 +1581,12 @@ The modeled parse's ~211 ms is dominated by roughly 3M `matchLength` calls
 on the four-byte chain, versus 270k after the fixed parse's bound. The
 next step is a profiled modeled parse to locate the exact cost, not
 another bound variant.
+
+The optimal-search probe now supports a modeled parse with a uniform cost
+model (`optimalPlanAllocWithCostModelProfiled`). On the 128 KiB dickens
+prefix it takes **25.4 ms** (3.05M chain nodes, 2.86M matchLength calls,
+396k length choices), while the fixed parse with the three-byte compact
+index takes 42 ms. The real q11 modeled parse is ~211 ms, so the parser
+machinery itself is not the gap; the entropy model's actual cost values or
+the q11 context must explain it. A profiled parse with the real model is
+the next step.
