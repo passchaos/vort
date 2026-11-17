@@ -1475,3 +1475,15 @@ medians over the six 128 KiB files improved **1.047x** geometric mean
 4/4 synthetic far-copy, and 9/9 built-in bench cases. Planned q9 is now about
 2.49x geometric mean faster than the 2026-11-17 baseline.
 Evidence: [data/br-distance-coarse-gate-20261117](data/br-distance-coarse-gate-20261117/README.md).
+
+Planned q10/q11 now measure 1.28 MiB/s / 48,747 B (ref 2.22 / 44,029)
+and 0.10 MiB/s / 43,956 B (ref 0.89 / 42,949) on the 128 KiB dickens
+prefix. The q11 profile is dominated by untraced `other` (612.8 ms): the
+first optimal parse is traced at 181.8 ms, but the entropy-modeled second
+and third parses are not. Candidate tracing shows the first parse's wire
+wins on mr (30,059 vs modeled 30,345) and x-ray (77,220 vs 81,335), while
+the modeled wire wins on the other ten files. The third parse wins by only
+7-103 bytes on ten files and loses on mr/x-ray, yet costs roughly a quarter
+of q11. The next q11 decision is whether to gate the third parse on a model
+estimate or a documented small ratio budget; skipping the first parse's wire
+unconditionally is not safe.
