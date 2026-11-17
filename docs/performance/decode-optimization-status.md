@@ -1497,3 +1497,14 @@ where it did not. Dropping the third parse would cost up to 103 B and
 dropping the bonus up to 163 B (1.9% on xml), while q11 users select the
 level for ratio. The refinements stay; the remaining q11 lever is the
 optimal parser itself, not candidate pruning.
+
+The q10 ratio gap has a concrete cause: on 128 KiB blocks the q10 optimal
+parser is capped at 64 KiB, so the lazy path runs without the static
+dictionary. The dickens q10 wire has zero static-dictionary copies, while
+libbrotli q10 finds 2,406 copies / 24,190 bytes; q11's optimal path finds
+3,021 / 29,434 and is only 2.34% behind its reference. A post-hoc
+`mixStaticDictionaryWithCacheProbeLimitAlloc` candidate on the lazy q10
+commands was tested and rejected: 48,747 -> 48,662 bytes (only -85 B,
+0.17%) for 1.28 -> 0.93 MiB/s (27% slower). The dictionary must be
+integrated into the parse (or a bounded optimal parse enabled above
+64 KiB), not mixed into the finished lazy plan.
