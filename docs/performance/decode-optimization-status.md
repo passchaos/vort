@@ -1614,3 +1614,9 @@ transforms to the omit/skip transforms was wire-identical but neutral:
 q11 measured 670,343,918 ns versus the 651,687,479 ns median (within
 noise, slightly slower). The extra per-transform `kept`/suffix work
 offsets the pruned base-word comparisons. Reverted.
+
+Preloading the transform metadata into the compile-time prefix groups
+(avoiding the runtime `transformMetadata` lookup in the hot loop) was
+wire-identical and measured 647,490,621 ns versus the 651,687,479 ns
+median: within noise. The compiler already folds the lookup, so the
+restructure is not retained.
