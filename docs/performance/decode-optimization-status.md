@@ -1405,3 +1405,32 @@ mr 1.000x, sao 1.000x, webster 1.245x) with identical wire SHA-256 on 12/12
 cases. Planned q9 is now about 1.93x geometric mean faster than the
 2026-11-17 baseline.
 Evidence: [data/br-distance-parameter-gate-20261117](data/br-distance-parameter-gate-20261117/README.md).
+
+A fifth q9 step extends the distance-parameter gate to the whole search
+candidate. Tracing `best_before` against the split-aware search wire on the
+12 Silesia 128 KiB prefixes showed the search candidate never strictly won
+when the estimated saving was below the gate: dickens 48,833 vs 48,834,
+xml 9,123 vs 9,167, webster 40,534 vs 40,541, ooffice 64,646 vs 64,699,
+reymont and samba tied, while mozilla/mr/sao/nci/osdb/x-ray improved and all
+had an alternative parameter set. `src/br.zig` now computes
+`chooseDistanceParameterAlternativeAlloc` once at the q9 call site when the
+block is at least 64 KiB: a null result skips both the parameter-only and
+split-aware candidates, and a non-null result is shared by both families
+through the new `encodeCommandPlanWithDistanceParametersAllocRecorded`
+helper. Smaller inputs keep the original candidate path because the frozen
+legacy-wire test has a sample where the forced-recent baseline is the unique
+winner; skipping the whole candidate there changed a 57-byte wire. A second
+attempt also returned null from the split-aware helper when no alternative
+existed; that skipped the baseline on small inputs and changed the UTF-8
+shift trainer's baseline_frame_bytes from 3512 to 3513. The helper now still
+returns the baseline when no alternative exists; only the large-block q9 call
+site skips the whole call. A first
+attempt that recomputed the parameters at the call site duplicated the
+frequency pass and regressed mozilla/mr to 0.95-0.97x; sharing the choice
+restored them to 1.01-1.03x. Repeated medians over the six 128 KiB files
+improved **1.236x** geometric mean (dickens 1.473x, xml 1.494x, mozilla
+1.032x, mr 1.033x, sao 1.012x, webster 1.497x) with identical wire SHA-256
+on 12/12 128 KiB, 6/6 1 MiB, 3/3 4 MiB, 4/4 synthetic far-copy, and 9/9
+built-in bench cases. Planned q9 is now about 2.39x geometric mean faster
+than the 2026-11-17 baseline.
+Evidence: [data/br-distance-search-shared-20261117](data/br-distance-search-shared-20261117/README.md).

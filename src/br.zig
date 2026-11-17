@@ -5668,11 +5668,39 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         const prepared_pair_supported = schedule.quality.int() == 8 and input.len >= 8 * 1024 and
             command_stream.commands.len <= prepared_parameter_distance.max_command_count and
             !options.large_window and options.metadata.len == 0 and !original_controller;
+        // The whole-candidate skip is a large-block policy. Small inputs keep
+        // the frozen legacy wires, where the forced-recent baseline can still
+        // be the unique winner.
+        const skip_search_without_alternative = input.len >= 64 * 1024;
+        var split_alternative: ?encoder_distance.Parameters = null;
         if (prepared_pair_supported) {
             if (comptime builtin.is_test) test_parameter_pair_path_calls += 1;
             if (try parameter_pair.against(ParameterPairStrategy, trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &distance_stats, distance_options, best)) |candidate| {
                 freeQualityRecorded(trace_enabled, trace, allocator, best);
                 best = candidate;
+            }
+        } else if (skip_search_without_alternative) {
+            // Keep the established parameter-only candidate as a floor only
+            // when a non-default parameter set exists. With no alternative the
+            // baseline never beat the existing best on the measured large-block
+            // corpus, so skip its full-wire materialization.
+            split_alternative = try chooseDistanceParameterAlternativeAlloc(
+                allocator,
+                command_stream.commands,
+                distance_options,
+            );
+            if (split_alternative) |alternative_parameters| {
+                const legacy_distance_candidate = try encodeCommandPlanWithDistanceParametersAllocRecorded(
+                    trace_enabled,
+                    trace.withOrigin(.lazy),
+                    allocator,
+                    input,
+                    command_stream.commands,
+                    alternative_parameters,
+                    &distance_stats,
+                    distance_options,
+                );
+                retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, legacy_distance_candidate);
             }
         } else {
             // Keep the established parameter-only candidate as a floor: it is
@@ -5691,17 +5719,20 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         }
         // Both the legacy and prepared-pair parameter paths must see the same
         // split-aware candidate so their complete wires stay comparable.
-        const distance_candidate = try encodeDistanceParameterSearchWithSplitsAllocRecorded(
-            trace_enabled,
-            trace.withOrigin(.lazy),
-            allocator,
-            input,
-            command_stream.commands,
-            &distance_stats,
-            wire_options,
-            distance_options,
-        );
-        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+        if (prepared_pair_supported or !skip_search_without_alternative or split_alternative != null) {
+            const distance_candidate = try encodeDistanceParameterSearchWithSplitsAllocRecorded(
+                trace_enabled,
+                trace.withOrigin(.lazy),
+                allocator,
+                input,
+                command_stream.commands,
+                split_alternative,
+                &distance_stats,
+                wire_options,
+                distance_options,
+            );
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+        }
     }
 
     // The repcode-aware command-state candidate is the quality win on
@@ -7090,6 +7121,57 @@ fn encodeCommandPlanWithDistanceParameterSearchAllocRecorded(comptime trace_enab
     return baseline;
 }
 
+/// Compare one non-default distance-parameter set against the default
+/// parameters without searching again. Callers that already selected the
+/// alternative share the same parameter choice across candidate families.
+fn encodeCommandPlanWithDistanceParametersAllocRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    alternative_parameters: encoder_distance.Parameters,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) Error![]u8 {
+    const initial_stats = stats.*;
+    var baseline_stats = initial_stats;
+    const baseline = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        null,
+        &baseline_stats,
+        options,
+    );
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
+
+    var alternative_options = options;
+    alternative_options.distance_parameters = alternative_parameters;
+    alternative_options.optimize_same_last_distance = false;
+    var alternative_stats = initial_stats;
+    const alternative = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        null,
+        &alternative_stats,
+        alternative_options,
+    );
+    if (trace.prefer(alternative, baseline)) {
+        freeQualityRecorded(trace_enabled, trace, allocator, baseline);
+        stats.* = alternative_stats;
+        return alternative;
+    }
+    freeQualityRecorded(trace_enabled, trace, allocator, alternative);
+    stats.* = baseline_stats;
+    return baseline;
+}
+
 /// Distance-parameter selection is a separate candidate family from the
 /// entropy splitter. Re-encode the winning parameter set through the lazy
 /// command path so command/distance/literal block types are also available to
@@ -7100,6 +7182,7 @@ fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
     allocator: std.mem.Allocator,
     input: []const u8,
     commands: []const command_plan.Command,
+    precomputed_alternative: ?encoder_distance.Parameters,
     stats: *encoder_stats.PlannedEncodeStats,
     wire_options: LazyWireOptions,
     distance_options: CommandPlanEncodeOptions,
@@ -7120,14 +7203,15 @@ fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
     );
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
 
-    const alternative_parameters = try chooseDistanceParameterAlternativeAlloc(
-        allocator,
-        commands,
-        distance_options,
-    ) orelse {
-        stats.* = baseline_stats;
-        return baseline;
-    };
+    const alternative_parameters = precomputed_alternative orelse
+        (try chooseDistanceParameterAlternativeAlloc(
+            allocator,
+            commands,
+            distance_options,
+        ) orelse {
+            stats.* = baseline_stats;
+            return baseline;
+        });
     var alternative_options = wire_options;
     alternative_options.distance_parameters = alternative_parameters;
     alternative_options.optimize_same_last_distance = false;
