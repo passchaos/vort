@@ -1693,3 +1693,17 @@ the planned q11 path encodes the same 64 KiB in well under a second. The HQ
 engine stays an opt-in for tiny inputs. Closing the 1.11x-1.15x binary ratio
 gap must come from the planned pipeline's literal/context and command
 modeling, not from switching engines.
+
+A wire-structure comparison against libbrotli 1.0.9 on 128 KiB prefixes
+locates the binary ratio gap. On mozilla (18,676 vs 16,232 bytes) Vort's final
+wire has 1 command block type, 1 distance block type, 1 distance-context tree
+and 4 literal trees, while the reference uses 13 command types, 5 distance
+types, 6 distance-context trees and 9 literal trees; the split and
+distance-context candidates are evaluated but lose the size arbitration. The
+same rows also show far fewer implicit/recent-distance copies (mozilla 862 vs
+2,631; xml 218 vs 627; dickens 5 vs 95) and more explicit regular distances,
+so the optimal parse is not preferring ring-buffer distances even though the
+encoder can code them cheaply. Text rows are structurally closer. The next
+ratio work should therefore target (1) ring-buffer-aware distance pricing in
+the optimal parse and (2) block-type/context split quality on
+binary/structured inputs, not window size or the static dictionary.
