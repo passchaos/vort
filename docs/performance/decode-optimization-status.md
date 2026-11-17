@@ -1387,3 +1387,21 @@ mr 1.142x, sao 1.174x, webster 1.107x) with identical wire SHA-256 on 12/12
 cases. Planned q9 is now about 1.70x geometric mean faster than the
 2026-11-17 baseline.
 Evidence: [data/br-alternate-context-skip-20261117](data/br-alternate-context-skip-20261117/README.md).
+
+A fourth q9 candidate-reduction step gates the distance-parameter search on
+its own estimated saving. The selector already computes the estimated bits of
+the preferred parameter set; on blocks of at least 64 KiB, a saving below the
+64-byte arbitration margin (512 bits) never produced a winning wire on the
+measured corpus. Instrumentation showed the separation clearly: dickens/xml/
+webster estimated 46/1/14 bits and changed the wire by 0 bytes, while
+mozilla/mr/sao estimated 3,350/9,808/25,326 bits and saved 150/501/3,095
+bytes. `src/br.zig` now returns no alternative when the estimated saving is
+below 512 bits on blocks >= 64 KiB; smaller inputs keep the search because a
+few bytes still matter there (the built-in 83-byte `source` case otherwise
+regressed by one byte). Repeated medians over the six 128 KiB files improved
+**1.128x** geometric mean (dickens 1.321x, xml 1.262x, mozilla 0.995x,
+mr 1.000x, sao 1.000x, webster 1.245x) with identical wire SHA-256 on 12/12
+128 KiB, 6/6 1 MiB, 3/3 4 MiB, 4/4 synthetic far-copy, and 9/9 built-in bench
+cases. Planned q9 is now about 1.93x geometric mean faster than the
+2026-11-17 baseline.
+Evidence: [data/br-distance-parameter-gate-20261117](data/br-distance-parameter-gate-20261117/README.md).

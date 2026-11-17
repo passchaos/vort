@@ -7368,7 +7368,9 @@ fn chooseDistanceParameterAlternativeAlloc(
     var semantic_count: usize = 0;
     var short_symbol_frequencies: [16]u32 = @splat(0);
     var last_distances = options.starting_last_distances;
+    var total_output_len: usize = 0;
     for (commands) |command| {
+        total_output_len += command.insert_len + command.outputLen();
         const wire_distance = if (command.has_copy) try commandWireDistance(
             command,
             options.window_bits,
@@ -7443,6 +7445,13 @@ fn chooseDistanceParameterAlternativeAlloc(
         preferred.parameters.ndirect_high == selection.baseline.parameters.ndirect_high) or
         preferred.totalBits() >= selection.baseline.totalBits())
         return null;
+    // The estimate excludes context and block-split effects. On blocks of at
+    // least 64 KiB, candidates below the 64-byte arbitration margin never won
+    // on the measured planned-q9 corpus, so skip their full-wire
+    // materialization. Smaller inputs keep the search because a few saved
+    // bytes can still matter there.
+    if (total_output_len >= 64 * 1024 and
+        selection.baseline.totalBits() - preferred.totalBits() < 512) return null;
     return preferred.parameters;
 }
 
