@@ -1747,3 +1747,12 @@ default level remains 1 (speed-first) and levels 1-2 were already aligned by
 user choice. Changing level 3 to a speed-first policy is a product decision,
 not an internal optimization, because it trades away the measured ratio gain.
 Evidence: [data/zstd-level3-current-20261118](data/zstd-level3-current-20261118/README.md).
+
+The dirty-row prepare experiment rebuilt joint tree cost rows only for trees
+whose counts changed during the incremental move pass. It is wire-identical
+but neutral to slightly slower: dickens q11 median 891,210,581 versus
+890,145,478 ns and samba 1,302,316,414 versus 1,292,575,983 ns (0.75%
+slower, all three candidate runs above all three baseline runs). The prepare
+cost is dominated by the first full build and the row writes rather than
+repeated cost-model computation, so the dirty tracking does not pay for
+itself. Reverted.
