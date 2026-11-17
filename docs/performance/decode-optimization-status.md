@@ -1637,3 +1637,15 @@ is unchanged because the `(output_len, address)` selection is a total
 order. A comptime `prefix_len` specialization measured neutral and was
 not retained.
 Evidence: [data/br-static-dictionary-whole-group-20261117](data/br-static-dictionary-whole-group-20261117/README.md).
+
+The joint literal-context planner rebuilt a 1.3 KiB sparse view (symbols plus
+frequency copies) inside every tree-count/seed/iteration assignment pass: about
+35 thousand rescans of all 256 histogram bins per planner call. Building one
+`SparseView` per populated context after collection and reading frequencies
+from the histogram makes the assignment bit-identical and moves q11 on 128 KiB
+dickens from 1,206,015,198 to 1,017,334,905 ns (**1.185x**), samba q11
+1.203x, and dickens q10 1.243x (**1.210x** geometric mean), with all twelve
+corpus/quality wires byte-identical. q9 stays neutral. The extra scratch is
+`context_count * sizeof(SparseView)` and is charged to the existing joint
+planner budget.
+Evidence: [data/br-joint-sparse-view-20261117](data/br-joint-sparse-view-20261117/README.md).
