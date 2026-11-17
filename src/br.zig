@@ -7474,7 +7474,9 @@ fn sortDistanceFrequencies(allocator: std.mem.Allocator, entries: []distance_par
     var dst = buffer;
     var max: usize = 0;
     for (entries) |entry| max = @max(max, entry.semantic_distance);
-    var shift: u6 = 0;
+    // Shift counts must follow the pointer width: usize is u32 on wasm32 and
+    // 32-bit x86 targets, where a u6 shift count does not type-check.
+    var shift: std.math.Log2Int(usize) = 0;
     while (true) {
         var counts = [_]usize{0} ** 256;
         for (src) |entry| counts[(entry.semantic_distance >> shift) & 0xff] += 1;
