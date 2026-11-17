@@ -1434,3 +1434,10 @@ on 12/12 128 KiB, 6/6 1 MiB, 3/3 4 MiB, 4/4 synthetic far-copy, and 9/9
 built-in bench cases. Planned q9 is now about 2.39x geometric mean faster
 than the 2026-11-17 baseline.
 Evidence: [data/br-distance-search-shared-20261117](data/br-distance-search-shared-20261117/README.md).
+
+A wire-preserving attempt to always count the primary context (instead of
+materializing it when every proposal equals the primary) gave no measurable
+gain: six-file planned q9 single-run ratios were 0.995-1.008x with identical
+wires. The counted pass still pays the entropy planning, so skipping the
+primary wire emission is not the bottleneck; the change also invalidated the
+context primary count contract. Reverted without a code change.
