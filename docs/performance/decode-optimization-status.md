@@ -1449,3 +1449,13 @@ six-file run with identical wires, but repeated medians were only
 mr 1.016x, sao 1.012x, webster 1.003x). The duplicate search is not a
 material cost after the first match advances the chain. Reverted without a
 code change; the q9 match finder needs a structural change, not this dedup.
+
+A new `distance_parameters` scope around the q9 search block shows the
+selection scan itself costs **7.4 ms** on dickens (14% of planned q9) even
+when both search candidates are skipped. The scan walks 18k commands,
+dedups/sorts the semantic distances (already a radix sort for large inputs),
+and scores all 64 RFC 7932 parameter shapes with exact Huffman trees. The
+candidate gate removed the wire materialization but not this planning pass.
+The next step is a coarse-shape or sampled estimate that decides whether the
+full 64-shape search can pay; the exact search should remain the selector
+whenever the coarse estimate passes.
