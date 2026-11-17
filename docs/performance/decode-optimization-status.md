@@ -1707,3 +1707,11 @@ encoder can code them cheaply. Text rows are structurally closer. The next
 ratio work should therefore target (1) ring-buffer-aware distance pricing in
 the optimal parse and (2) block-type/context split quality on
 binary/structured inputs, not window size or the static dictionary.
+
+The repcode-bonus magnitude was screened as a cheap way to raise recent-distance
+usage in the modeled parses. Doubling the cap from 3 to 6 Q8 bits shrinks xml
+q11 by 37 bytes (8,401 -> 8,364) but grows samba by 131 bytes (40,937 ->
+41,068) and leaves dickens unchanged (43,953); the change is reverted. A fixed
+global bonus cannot represent the path-dependent ring-buffer saving, so the
+next ratio step is a parse that carries the four recent distances (or a
+bounded beam over them) instead of another static price tweak.
