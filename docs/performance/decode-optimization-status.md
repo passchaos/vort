@@ -1518,3 +1518,13 @@ itself is. Across the twelve 128 KiB files the optimal q10 runs at
 0.26-1.18 MiB/s and lands 2.4-17.1% above its reference. The ratio win is
 real but the 3.5-6x slowdown is not a free product change; the next lever
 is optimal-parser speed, not a q10 tier policy switch. Reverted.
+
+A new `run-br-optimal-search-probe` tool isolates one Brotli optimal
+parse. At the q11 budget (chain 512 / candidates 256 / nice 258) on the
+128 KiB dickens prefix it takes **42.0 ms**: index 0.5 ms, search 41.1 ms,
+reconstruct 0.3 ms. The search walks 8.06M chain nodes for 131k positions
+(~61 per position): 5.13M prefix rejections, 2.58M bound rejections, only
+270k `matchLength` calls. The q11 stage total of 181.8 ms is therefore
+about four parses, not one. The probe also documents that the optimal
+parser window is capped at `lz77.default_window_len` (32 KiB), so the
+32-64 KiB match range is unavailable to q10/q11.

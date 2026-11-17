@@ -4393,6 +4393,20 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_br_ratio_stage_profile.addArgs(args);
     const br_ratio_stage_profile_step = b.step("run-br-ratio-stage-profile", "Profile Brotli ratio candidate stages and optimal search");
     br_ratio_stage_profile_step.dependOn(&run_br_ratio_stage_profile.step);
+    const br_optimal_search_probe_exe = b.addExecutable(.{
+        .name = "vort-br-optimal-search-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/optimal_search_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_optimal_search_probe = b.addRunArtifact(br_optimal_search_probe_exe);
+    if (b.args) |args| run_br_optimal_search_probe.addArgs(args);
+    const br_optimal_search_probe_step = b.step("run-br-optimal-search-probe", "Profile the Brotli optimal search on one input prefix");
+    br_optimal_search_probe_step.dependOn(&run_br_optimal_search_probe.step);
     const run_br_ratio_stage_profile_csv = b.addRunArtifact(br_ratio_stage_profile_exe);
     run_br_ratio_stage_profile_csv.addArgs(&.{ "--iterations", "3", "--csv", "zig-out/vort-br-ratio-stage-profile.csv" });
     const br_ratio_stage_profile_gate = b.addSystemCommand(&.{ "python3", "tools/br/ratio_stage_profile_gate.py", "--csv", "zig-out/vort-br-ratio-stage-profile.csv", "--executable" });
