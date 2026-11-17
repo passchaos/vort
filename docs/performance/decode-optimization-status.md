@@ -1572,3 +1572,12 @@ non-monotonic model costs. Enabling the bound plus the compact four-chain
 for the modeled path was slower (q11 ns +8%, wire +3 B) and reverted: the
 full per-candidate cost comparison outweighs the bound savings on the
 four-byte chain.
+
+Enabling the prefix bound for the modeled parse alone (keeping the
+non-compact four-byte chain, no indexed switch) also made q11 8% slower
+(1,149,721,651 ns vs 1,062,506,030) and +3 bytes. The bound rejects few
+modeled candidates while adding a full cost comparison per candidate.
+The modeled parse's ~211 ms is dominated by roughly 3M `matchLength` calls
+on the four-byte chain, versus 270k after the fixed parse's bound. The
+next step is a profiled modeled parse to locate the exact cost, not
+another bound variant.
