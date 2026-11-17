@@ -1684,3 +1684,12 @@ those corpora is a different candidate; the split graph and the
 static-dictionary re-encode remain the largest q11 costs. This is a position
 baseline, not a leadership claim.
 Evidence: [data/br-q11-full-matrix-20261118](data/br-q11-full-matrix-20261118/README.md).
+
+Routing the binary ratio rows through the explicit HQ encoder is not viable.
+`run-br-hq-encode-probe` with its default controls (q11, block 65536, beam 16,
+two iterations, depth 64, nice 128) did not finish a 64 KiB mozilla prefix
+within 300 s, and the 128 KiB prefix exceeded 12 minutes before being killed;
+the planned q11 path encodes the same 64 KiB in well under a second. The HQ
+engine stays an opt-in for tiny inputs. Closing the 1.11x-1.15x binary ratio
+gap must come from the planned pipeline's literal/context and command
+modeling, not from switching engines.
