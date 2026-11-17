@@ -1649,3 +1649,14 @@ corpus/quality wires byte-identical. q9 stays neutral. The extra scratch is
 `context_count * sizeof(SparseView)` and is charged to the existing joint
 planner budget.
 Evidence: [data/br-joint-sparse-view-20261117](data/br-joint-sparse-view-20261117/README.md).
+
+All 18 RFC omit/skip transforms have an empty prefix and no case transform, so
+they only compete at the prefix-zero probe. Flattening them into omit-last and
+omit-first metadata tables lets one common-prefix scan replace nine separate
+base comparisons for the omit-last family and removes the per-transform
+metadata load, empty-prefix check and case switch. q11 on 128 KiB dickens moves
+from 1,010,341,333 to 890,502,371 ns (**1.1346x**); webster 1.0698x, samba
+1.0438x, xml 1.0274x, **1.0686x** geometric mean, with all twelve
+corpus/quality wires byte-identical. q9/q10 are unchanged. The general
+`transformedWordMatches` path remains as the complete-index oracle.
+Evidence: [data/br-dictionary-omit-flat-20261117](data/br-dictionary-omit-flat-20261117/README.md).

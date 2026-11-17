@@ -30,10 +30,6 @@ const PrefixGroup = struct {
     /// the matcher hoists that comparison out of the transform loop.
     whole: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
     whole_lengths: [3]u8 = @splat(0),
-    /// Omit/skip transforms retain a transform-specific base slice and keep the
-    /// general per-transform matcher path.
-    omit: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
-    omit_lengths: [3]u8 = @splat(0),
 };
 
 const transforms_by_prefix = blk: {
@@ -43,14 +39,54 @@ const transforms_by_prefix = blk: {
     var result: [6]PrefixGroup = @splat(.{});
     for (0..static_dictionary.transform_count) |transform_index| {
         const metadata = static_dictionary.transformMetadata(transform_index).?;
+        if (!metadata.keeps_whole_word) continue;
         const prefix_len = metadata.prefix_len;
         const case_index = @intFromEnum(metadata.case_kind);
-        if (metadata.keeps_whole_word) {
-            result[prefix_len].whole[case_index][result[prefix_len].whole_lengths[case_index]] = transform_index;
-            result[prefix_len].whole_lengths[case_index] += 1;
+        result[prefix_len].whole[case_index][result[prefix_len].whole_lengths[case_index]] = transform_index;
+        result[prefix_len].whole_lengths[case_index] += 1;
+    }
+    break :blk result;
+};
+
+/// Every RFC omit/skip transform has an empty prefix and no case transform, so
+/// they are only probed at the prefix-zero position. Keep their metadata in
+/// flat tables: the matcher then shares one common-prefix scan across the
+/// omit-last family instead of loading per-transform metadata and re-comparing
+/// the base bytes for each suffix variant.
+const OmitTransform = struct {
+    transform_index: u8,
+    skip: u4,
+    omit_last: u4,
+    suffix_len: u4,
+    suffix_bytes: u64,
+};
+
+const OmitTables = struct {
+    last: [static_dictionary.transform_count]OmitTransform = undefined,
+    last_len: usize = 0,
+    first: [static_dictionary.transform_count]OmitTransform = undefined,
+    first_len: usize = 0,
+};
+
+const omit_transforms: OmitTables = blk: {
+    var result: OmitTables = .{};
+    for (0..static_dictionary.transform_count) |transform_index| {
+        const metadata = static_dictionary.transformMetadata(transform_index).?;
+        if (metadata.keeps_whole_word) continue;
+        std.debug.assert(metadata.prefix_len == 0 and metadata.case_kind == .none);
+        const entry: OmitTransform = .{
+            .transform_index = transform_index,
+            .skip = metadata.omit_first,
+            .omit_last = metadata.omit_last,
+            .suffix_len = metadata.suffix_len,
+            .suffix_bytes = metadata.suffix_bytes,
+        };
+        if (metadata.omit_first != 0) {
+            result.first[result.first_len] = entry;
+            result.first_len += 1;
         } else {
-            result[prefix_len].omit[case_index][result[prefix_len].omit_lengths[case_index]] = transform_index;
-            result[prefix_len].omit_lengths[case_index] += 1;
+            result.last[result.last_len] = entry;
+            result.last_len += 1;
         }
     }
     break :blk result;
@@ -210,17 +246,45 @@ pub const Index = struct {
                     }
                 }
             }
-            for (group.omit[case_index][0..group.omit_lengths[case_index]]) |transform_index| {
-                const output_len = static_dictionary.transformedWordMatches(transform_index, word, input) orelse continue;
-                // RFC transforms may omit the complete base word. Those zero-
-                // length results cannot advance the planner and would otherwise
-                // create an infinite sequence of dictionary commands.
-                if (output_len < 4) continue;
-                const address = (@as(usize, transform_index) << bits) | candidate.word_index;
-                if (best.* == null or output_len > best.*.?.output_len or
-                    (output_len == best.*.?.output_len and address < best.*.?.address))
-                {
-                    best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(candidate.copy_len), .address = address };
+            if (prefix_len == 0 and case_index == 0) {
+                // All omit/skip transforms have an empty prefix and no case
+                // transform, so they only compete at the prefix-zero probe.
+                // One common-prefix scan answers the base comparison for the
+                // whole omit-last family; omit-first shifts the comparison by
+                // its own skip and keeps a direct byte compare.
+                var common: usize = 0;
+                const scan_limit = @min(word.len, input.len);
+                while (common < scan_limit and word[common] == input[common]) common += 1;
+                for (omit_transforms.last[0..omit_transforms.last_len]) |omit| {
+                    const kept = word.len -| omit.omit_last;
+                    const output_len = kept + omit.suffix_len;
+                    // RFC transforms may omit the complete base word. Those
+                    // zero-length results cannot advance the planner and would
+                    // otherwise create an infinite sequence of dictionary
+                    // commands.
+                    if (output_len < 4 or output_len > input.len) continue;
+                    if (common < kept) continue;
+                    if (!static_dictionary.suffixBytesMatch(omit.suffix_bytes, omit.suffix_len, input[kept..output_len])) continue;
+                    const address = (@as(usize, omit.transform_index) << bits) | candidate.word_index;
+                    if (best.* == null or output_len > best.*.?.output_len or
+                        (output_len == best.*.?.output_len and address < best.*.?.address))
+                    {
+                        best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(candidate.copy_len), .address = address };
+                    }
+                }
+                for (omit_transforms.first[0..omit_transforms.first_len]) |omit| {
+                    const skip = @min(@as(usize, omit.skip), word.len);
+                    const kept = word.len - skip;
+                    const output_len = kept + omit.suffix_len;
+                    if (output_len < 4 or output_len > input.len) continue;
+                    if (!std.mem.eql(u8, word[skip..][0..kept], input[0..kept])) continue;
+                    if (!static_dictionary.suffixBytesMatch(omit.suffix_bytes, omit.suffix_len, input[kept..output_len])) continue;
+                    const address = (@as(usize, omit.transform_index) << bits) | candidate.word_index;
+                    if (best.* == null or output_len > best.*.?.output_len or
+                        (output_len == best.*.?.output_len and address < best.*.?.address))
+                    {
+                        best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(candidate.copy_len), .address = address };
+                    }
                 }
             }
         }
@@ -551,14 +615,23 @@ test "static dictionary transform groups partition every RFC transform" {
                 try std.testing.expectEqual(case_index, @intFromEnum(metadata.case_kind));
                 seen[transform_index] += 1;
             }
-            for (group.omit[case_index][0..group.omit_lengths[case_index]]) |transform_index| {
-                const metadata = static_dictionary.transformMetadata(transform_index).?;
-                try std.testing.expect(!metadata.keeps_whole_word);
-                try std.testing.expectEqual(prefix_len, metadata.prefix_len);
-                try std.testing.expectEqual(case_index, @intFromEnum(metadata.case_kind));
-                seen[transform_index] += 1;
-            }
         }
+    }
+    for (omit_transforms.last[0..omit_transforms.last_len]) |omit| {
+        const metadata = static_dictionary.transformMetadata(omit.transform_index).?;
+        try std.testing.expect(!metadata.keeps_whole_word and metadata.omit_first == 0);
+        try std.testing.expectEqual(metadata.omit_last, omit.omit_last);
+        try std.testing.expectEqual(metadata.suffix_len, omit.suffix_len);
+        try std.testing.expectEqual(metadata.suffix_bytes, omit.suffix_bytes);
+        seen[omit.transform_index] += 1;
+    }
+    for (omit_transforms.first[0..omit_transforms.first_len]) |omit| {
+        const metadata = static_dictionary.transformMetadata(omit.transform_index).?;
+        try std.testing.expect(!metadata.keeps_whole_word and metadata.omit_first != 0);
+        try std.testing.expectEqual(metadata.omit_first, omit.skip);
+        try std.testing.expectEqual(metadata.suffix_len, omit.suffix_len);
+        try std.testing.expectEqual(metadata.suffix_bytes, omit.suffix_bytes);
+        seen[omit.transform_index] += 1;
     }
     for (seen, 0..) |count, transform_index| {
         if (count != 1) std.debug.print("transform {d} grouped {d} times\n", .{ transform_index, count });

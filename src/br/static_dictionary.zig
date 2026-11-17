@@ -243,9 +243,15 @@ pub fn transformBaseMatches(case_kind: TransformCaseKind, source: []const u8, ex
 }
 
 pub fn transformSuffixMatches(metadata: TransformMetadata, input: []const u8) bool {
-    if (metadata.suffix_len > input.len) return false;
-    var expected = metadata.suffix_bytes;
-    for (input[0..metadata.suffix_len]) |byte| {
+    return suffixBytesMatch(metadata.suffix_bytes, metadata.suffix_len, input);
+}
+
+/// Compare a packed suffix against input bytes. Encoder matchers that cache
+/// transform metadata in flat tables call this form directly.
+pub fn suffixBytesMatch(suffix_bytes: u64, suffix_len: usize, input: []const u8) bool {
+    if (suffix_len > input.len) return false;
+    var expected = suffix_bytes;
+    for (input[0..suffix_len]) |byte| {
         if (byte != @as(u8, @truncate(expected))) return false;
         expected >>= 8;
     }
