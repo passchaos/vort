@@ -724,17 +724,28 @@ pub const HashIndex = struct {
     }
 
     pub fn build(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8) !void {
-        return self.buildWithHeadLen(allocator, input, hash_head_table_size);
+        return self.buildWithHeadLenAndAnchor(allocator, input, hash_head_table_size, .three);
+    }
+
+    /// Build the shared index with a caller-selected hash anchor. Parsers whose
+    /// minimum match is four bytes use `.four` so three-byte-only collisions do
+    /// not consume the chain budget; three-byte parsers keep `.three`.
+    pub fn buildWithAnchor(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8, comptime anchor: HashAnchor) !void {
+        return self.buildWithHeadLenAndAnchor(allocator, input, hash_head_table_size, anchor);
     }
 
     fn buildWithHeadLen(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8, head_len: usize) !void {
+        return self.buildWithHeadLenAndAnchor(allocator, input, head_len, .three);
+    }
+
+    fn buildWithHeadLenAndAnchor(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8, head_len: usize, comptime anchor: HashAnchor) !void {
         std.debug.assert(std.math.isPowerOfTwo(head_len));
         std.debug.assert(head_len <= hash_head_table_size);
         try self.head.resize(allocator, head_len);
         try self.prev.resize(allocator, input.len);
         @memset(&self.head_initialized, 0);
         self.input_len = input.len;
-        for (0..input.len) |i| insertHashWithLayout(input, i, self.head.items, self.prev.items, false, true, &self.head_initialized, .three);
+        for (0..input.len) |i| insertHashWithLayout(input, i, self.head.items, self.prev.items, false, true, &self.head_initialized, anchor);
     }
 
     pub fn bestMatch(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions) Error!Token.Match {
@@ -1831,7 +1842,10 @@ fn optimalPlanReuseInternalProfiled(
         return optimalPlanReuseWithIndex(scratch, allocator, input, start, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, false, io, profile, model);
     }
     const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
-    try scratch.index.build(allocator, input);
+    if (minMatch(options) >= 4)
+        try scratch.index.buildWithAnchor(allocator, input, .four)
+    else
+        try scratch.index.build(allocator, input);
     if (comptime collect_profile) {
         profile.index_ns = elapsedNs(index_start, io);
         profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));

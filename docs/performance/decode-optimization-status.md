@@ -1528,3 +1528,16 @@ reconstruct 0.3 ms. The search walks 8.06M chain nodes for 131k positions
 about four parses, not one. The probe also documents that the optimal
 parser window is capped at `lz77.default_window_len` (32 KiB), so the
 32-64 KiB match range is unavailable to q10/q11.
+
+The optimal parser's compact index already used a four-byte hash, but the
+non-compact index used by the entropy-modeled parses still used a
+three-byte hash. With `min_match = 4`, three-byte-only chain candidates can
+never produce an accepted match; they only consume the chain budget.
+`HashIndex.buildWithAnchor` now lets the optimal parser build the
+non-compact index with `.four` when `minMatch(options) >= 4`; three-byte
+parsers keep `.three`. On the 128 KiB dickens q11 prefix the three-round
+median moved from 43,956 B @ 0.110 MiB/s to 43,953 B @ 0.120 MiB/s
+(**+9.1% speed, -3 B**). q9/q10 lazy wires are unchanged and the compact
+optimal path was already four-byte. `zig build test` passes 5666/5668
+(2 skipped) and `zig build test-br` passes 1619/1620 (1 skipped).
+Evidence: [data/br-optimal-index-anchor-20261117](data/br-optimal-index-anchor-20261117/README.md).

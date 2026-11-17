@@ -1,0 +1,2 @@
+case,base_rounds_mib_s,new_rounds_mib_s,base_median_mib_s,new_median_mib_s,speedup,base_bytes,new_bytes,byte_delta
+file0_dickens,0.110;0.100;0.110,0.120;0.120;0.120,0.110,0.120,1.0909,43956,43953,-3
