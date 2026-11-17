@@ -1441,3 +1441,11 @@ gain: six-file planned q9 single-run ratios were 0.995-1.008x with identical
 wires. The counted pass still pays the entropy planning, so skipping the
 primary wire emission is not the bottleneck; the change also invalidated the
 context primary count contract. Reverted without a code change.
+
+Carrying the lazy lookahead result into the next hash-lazy iteration (to
+avoid re-searching the same chain) looked like 1.000-1.040x in a single
+six-file run with identical wires, but repeated medians were only
+**1.007x** geometric mean (dickens 1.000x, xml 1.011x, mozilla 1.000x,
+mr 1.016x, sao 1.012x, webster 1.003x). The duplicate search is not a
+material cost after the first match advances the chain. Reverted without a
+code change; the q9 match finder needs a structural change, not this dedup.
