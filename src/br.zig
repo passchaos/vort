@@ -5923,6 +5923,19 @@ const QualityDictionaryProbe = struct {
     }
 };
 
+/// The static dictionary match at a position is independent of the optimal
+/// parse's cost model. q10/q11 run four parses over the same input, so probe
+/// each position once and reuse the result instead of repeating the longest
+/// dictionary lookup four times.
+const PrecomputedDictionaryProbe = struct {
+    matches: []const ?lz77.DictionaryMatch,
+
+    fn find(context: *anyopaque, position: usize) ?lz77.DictionaryMatch {
+        const self: *const PrecomputedDictionaryProbe = @ptrCast(@alignCast(context));
+        return self.matches[position];
+    }
+};
+
 /// Flat proxy cost for a static-dictionary copy: command/copy-length and
 /// distance symbols. Unmodeled parses price in bits, modeled parses in q8.
 const quality_dictionary_cost_bits: u16 = 22;
@@ -5944,11 +5957,19 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     }
     defer if (dictionary_indexes) |*indexes| indexes.deinit();
     var dictionary_probe: QualityDictionaryProbe = undefined;
+    var dictionary_matches: ?[]?lz77.DictionaryMatch = null;
+    var precomputed_probe: PrecomputedDictionaryProbe = undefined;
     var dictionary_provider: ?lz77.DictionaryProvider = null;
     if (dictionary_indexes) |*indexes| {
         dictionary_probe = .{ .index = indexes.compact(), .input = input };
-        dictionary_provider = .{ .context = &dictionary_probe, .find = QualityDictionaryProbe.find };
+        const matches = try allocator.alloc(?lz77.DictionaryMatch, input.len);
+        errdefer allocator.free(matches);
+        for (0..input.len) |position| matches[position] = QualityDictionaryProbe.find(&dictionary_probe, position);
+        dictionary_matches = matches;
+        precomputed_probe = .{ .matches = matches };
+        dictionary_provider = .{ .context = &precomputed_probe, .find = PrecomputedDictionaryProbe.find };
     }
+    defer if (dictionary_matches) |matches| allocator.free(matches);
     const optimal = blk: {
         var timer = trace.begin(.optimal_parse, input.len, 0);
         defer timer.finish();

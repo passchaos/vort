@@ -1590,3 +1590,14 @@ index takes 42 ms. The real q11 modeled parse is ~211 ms, so the parser
 machinery itself is not the gap; the entropy model's actual cost values or
 the q11 context must explain it. A profiled parse with the real model is
 the next step.
+
+The q11 optimal parse's real hotspot is the static dictionary probe: every
+position calls `findLongest`, and q11 runs four parses over the same input.
+Per-parse trace: 182.2 / 165.8 / 166.8 / 166.1 ms; the isolated probe
+without the dictionary provider is 25-42 ms. Precomputing the match per
+position once and reusing it across the four parses moves q11 on dickens
+from 2,166,505,689 ns to 1,303,374,958 ns (**1.662x**) with an identical
+43,953-byte wire. The memory cost is
+`input.len * @sizeOf(?lz77.DictionaryMatch)`, about 1.5 MB for 128 KiB,
+allocated once per q10/q11 optimal candidate.
+Evidence: [data/br-precomputed-dictionary-probe-20261117](data/br-precomputed-dictionary-probe-20261117/README.md).
