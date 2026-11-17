@@ -23,11 +23,17 @@ const bucket_count = 1 << bucket_bits;
 const no_entry = std.math.maxInt(u16);
 const word_index_bits = 11;
 const word_index_mask = (@as(u32, 1) << word_index_bits) - 1;
-const BaseWord = struct { word_index: usize, copy_len: usize };
 const IndexedWord = struct { word_index: usize, copy_len: usize, case_kind: static_dictionary.TransformCaseKind };
 const PrefixGroup = struct {
-    transforms: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
-    lengths: [3]u8 = @splat(0),
+    /// Whole-word transforms (`keeps_whole_word`) share the base-word byte
+    /// comparison for every suffix variant, so they are listed separately and
+    /// the matcher hoists that comparison out of the transform loop.
+    whole: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
+    whole_lengths: [3]u8 = @splat(0),
+    /// Omit/skip transforms retain a transform-specific base slice and keep the
+    /// general per-transform matcher path.
+    omit: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
+    omit_lengths: [3]u8 = @splat(0),
 };
 
 const transforms_by_prefix = blk: {
@@ -36,10 +42,16 @@ const transforms_by_prefix = blk: {
     // match the current input position.
     var result: [6]PrefixGroup = @splat(.{});
     for (0..static_dictionary.transform_count) |transform_index| {
-        const prefix_len = static_dictionary.transformPrefixLength(transform_index).?;
-        const case_index = @intFromEnum(static_dictionary.transformMetadata(transform_index).?.case_kind);
-        result[prefix_len].transforms[case_index][result[prefix_len].lengths[case_index]] = transform_index;
-        result[prefix_len].lengths[case_index] += 1;
+        const metadata = static_dictionary.transformMetadata(transform_index).?;
+        const prefix_len = metadata.prefix_len;
+        const case_index = @intFromEnum(metadata.case_kind);
+        if (metadata.keeps_whole_word) {
+            result[prefix_len].whole[case_index][result[prefix_len].whole_lengths[case_index]] = transform_index;
+            result[prefix_len].whole_lengths[case_index] += 1;
+        } else {
+            result[prefix_len].omit[case_index][result[prefix_len].omit_lengths[case_index]] = transform_index;
+            result[prefix_len].omit_lengths[case_index] += 1;
+        }
     }
     break :blk result;
 };
@@ -167,33 +179,48 @@ pub const Index = struct {
     fn findCandidates(self: *const Index, input: []const u8, prefix_len: usize, best: *?static_dictionary.Match) void {
         if (input.len - prefix_len < 4) return;
         const bucket = hashPrefix(input[prefix_len..]);
+        const group = &transforms_by_prefix[prefix_len];
         for (self.words[self.heads[bucket]..self.heads[bucket + 1]]) |encoded_word| {
             const candidate = unpackIndexedWord(encoded_word);
-            const base = BaseWord{ .word_index = candidate.word_index, .copy_len = candidate.copy_len };
-            const bits = static_dictionary.sizeBits(base.copy_len).?;
-            const word = static_dictionary.baseWord(base.copy_len, base.word_index).?;
-            const group = &transforms_by_prefix[prefix_len];
+            const bits = static_dictionary.sizeBits(candidate.copy_len).?;
+            const word = static_dictionary.baseWord(candidate.copy_len, candidate.word_index).?;
             const case_index = @intFromEnum(candidate.case_kind);
-            for (group.transforms[case_index][0..group.lengths[case_index]]) |transform_index| {
-                const address = (@as(usize, transform_index) << bits) | base.word_index;
-                // Most transforms differ only by suffix. When the complete
-                // base word fits in the remaining input, reject an incompatible
-                // first suffix byte before copying the transformed candidate.
-                const metadata = static_dictionary.transformMetadata(transform_index).?;
-                if (metadata.keeps_whole_word) {
-                    const suffix_offset = prefix_len + base.copy_len;
-                    if (suffix_offset + metadata.suffix_len > input.len) continue;
-                    if (!static_dictionary.transformSuffixMatches(metadata, input[suffix_offset..])) continue;
+            const whole_len = group.whole_lengths[case_index];
+            // Every whole-word transform keeps the complete base word, so the
+            // case-normalized comparison is identical for the entire suffix
+            // family. Rejecting an incompatible base word once replaces one
+            // comparison per transform with one per candidate.
+            if (whole_len != 0 and input.len - prefix_len >= word.len) {
+                const suffix_offset = prefix_len + word.len;
+                const suffix_input = input[suffix_offset..];
+                if (static_dictionary.transformBaseMatches(candidate.case_kind, word, input[prefix_len..][0..word.len])) {
+                    for (group.whole[case_index][0..whole_len]) |transform_index| {
+                        if (prefix_len != 0 and !transformPrefixMatches(transform_index, input)) continue;
+                        const metadata = static_dictionary.transformMetadata(transform_index).?;
+                        if (!static_dictionary.transformSuffixMatches(metadata, suffix_input)) continue;
+                        // Whole-word transforms always advance the planner:
+                        // the base word alone is at least four bytes.
+                        const output_len = suffix_offset + metadata.suffix_len;
+                        const address = (@as(usize, transform_index) << bits) | candidate.word_index;
+                        if (best.* == null or output_len > best.*.?.output_len or
+                            (output_len == best.*.?.output_len and address < best.*.?.address))
+                        {
+                            best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(candidate.copy_len), .address = address };
+                        }
+                    }
                 }
+            }
+            for (group.omit[case_index][0..group.omit_lengths[case_index]]) |transform_index| {
                 const output_len = static_dictionary.transformedWordMatches(transform_index, word, input) orelse continue;
                 // RFC transforms may omit the complete base word. Those zero-
                 // length results cannot advance the planner and would otherwise
                 // create an infinite sequence of dictionary commands.
                 if (output_len < 4) continue;
+                const address = (@as(usize, transform_index) << bits) | candidate.word_index;
                 if (best.* == null or output_len > best.*.?.output_len or
                     (output_len == best.*.?.output_len and address < best.*.?.address))
                 {
-                    best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(base.copy_len), .address = address };
+                    best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(candidate.copy_len), .address = address };
                 }
             }
         }
@@ -389,6 +416,11 @@ fn hashPrefix(bytes: []const u8) usize {
     return (word *% 0x1e35a7bd) >> (32 - bucket_bits);
 }
 
+inline fn transformPrefixMatches(transform_index: usize, input: []const u8) bool {
+    const prefix = static_dictionary.transformPrefixBytes(transform_index) orelse return false;
+    return std.mem.eql(u8, prefix, input[0..prefix.len]);
+}
+
 fn packIndexedWord(word_index: usize, copy_len: usize, case_kind: static_dictionary.TransformCaseKind) u32 {
     std.debug.assert(word_index <= word_index_mask);
     return @as(u32, @intCast(word_index)) |
@@ -442,6 +474,9 @@ test "indexed static dictionary matcher agrees with exhaustive reference" {
         "english. next",
         " the world of compression",
         "not-a-dictionary-candidate",
+        " the dictionary",
+        "s dictionary",
+        "dictionar",
     };
     for (cases) |input| {
         const expected = static_dictionary.findLongestMatch(input);
@@ -499,6 +534,57 @@ test "indexed static dictionary matcher reaches every canonical transformed word
                 try std.testing.expect(actual.address <= source_address);
                 const decoded = static_dictionary.transform(actual.address, actual.copy_len, &decoded_storage) orelse return error.TestUnexpectedResult;
                 try std.testing.expectEqualSlices(u8, transformed, decoded);
+            }
+        }
+    }
+}
+
+test "static dictionary transform groups partition every RFC transform" {
+    var seen: [static_dictionary.transform_count]u8 = @splat(0);
+    for (0..transforms_by_prefix.len) |prefix_len| {
+        const group = &transforms_by_prefix[prefix_len];
+        for (0..3) |case_index| {
+            for (group.whole[case_index][0..group.whole_lengths[case_index]]) |transform_index| {
+                const metadata = static_dictionary.transformMetadata(transform_index).?;
+                try std.testing.expect(metadata.keeps_whole_word);
+                try std.testing.expectEqual(prefix_len, metadata.prefix_len);
+                try std.testing.expectEqual(case_index, @intFromEnum(metadata.case_kind));
+                seen[transform_index] += 1;
+            }
+            for (group.omit[case_index][0..group.omit_lengths[case_index]]) |transform_index| {
+                const metadata = static_dictionary.transformMetadata(transform_index).?;
+                try std.testing.expect(!metadata.keeps_whole_word);
+                try std.testing.expectEqual(prefix_len, metadata.prefix_len);
+                try std.testing.expectEqual(case_index, @intFromEnum(metadata.case_kind));
+                seen[transform_index] += 1;
+            }
+        }
+    }
+    for (seen, 0..) |count, transform_index| {
+        if (count != 1) std.debug.print("transform {d} grouped {d} times\n", .{ transform_index, count });
+        try std.testing.expectEqual(@as(u8, 1), count);
+    }
+}
+
+test "static dictionary whole-word base comparison agrees with transformed matching" {
+    var transformed_storage: [64]u8 = undefined;
+    for (0..static_dictionary.transform_count) |transform_index| {
+        const metadata = static_dictionary.transformMetadata(transform_index).?;
+        if (!metadata.keeps_whole_word) continue;
+        const prefix = static_dictionary.transformPrefixBytes(transform_index).?;
+        var copy_len: usize = 4;
+        while (copy_len <= 24) : (copy_len += 5) {
+            const word_count = @as(usize, 1) << static_dictionary.sizeBits(copy_len).?;
+            var word_index: usize = 0;
+            while (word_index < word_count) : (word_index += 53) {
+                const word = static_dictionary.baseWord(copy_len, word_index).?;
+                const transformed = static_dictionary.transformWord(transform_index, word, &transformed_storage).?;
+                const base = transformed[prefix.len..][0..word.len];
+                try std.testing.expect(static_dictionary.transformBaseMatches(metadata.case_kind, word, base));
+                try std.testing.expectEqual(
+                    transformed.len,
+                    static_dictionary.transformedWordMatches(transform_index, word, transformed).?,
+                );
             }
         }
     }

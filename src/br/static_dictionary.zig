@@ -221,6 +221,27 @@ pub fn transformMetadata(transform_index: usize) ?TransformMetadata {
     return transform_metadata[transform_index];
 }
 
+/// Prefix bytes of one RFC transform, borrowed from the embedded prefix/suffix
+/// pool. Indexed encoder search groups whole-word suffix variants by base word
+/// and needs the prefix bytes separately from the suffix metadata.
+pub fn transformPrefixBytes(transform_index: usize) ?[]const u8 {
+    const metadata = transformMetadata(transform_index) orelse return null;
+    return prefix_suffix[transforms[transform_index].prefix..][0..metadata.prefix_len];
+}
+
+/// Compare the retained base-word bytes of a transform against input bytes
+/// without materializing the transformed word. Whole-word transforms share this
+/// comparison for every suffix variant, so encoder search computes it once per
+/// candidate word instead of once per transform.
+pub fn transformBaseMatches(case_kind: TransformCaseKind, source: []const u8, expected: []const u8) bool {
+    if (source.len != expected.len) return false;
+    return switch (case_kind) {
+        .none => std.mem.eql(u8, source, expected),
+        .first => firstUppercaseMatches(source, expected),
+        .all => allUppercaseMatches(source, expected),
+    };
+}
+
 pub fn transformSuffixMatches(metadata: TransformMetadata, input: []const u8) bool {
     if (metadata.suffix_len > input.len) return false;
     var expected = metadata.suffix_bytes;

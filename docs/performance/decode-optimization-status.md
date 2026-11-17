@@ -1620,3 +1620,20 @@ Preloading the transform metadata into the compile-time prefix groups
 wire-identical and measured 647,490,621 ns versus the 651,687,479 ns
 median: within noise. The compiler already folds the lookup, so the
 restructure is not retained.
+
+The static-dictionary matcher's 121 RFC transforms split into 103
+whole-word transforms (kind 0/10/11) and 18 omit/skip transforms. The
+old loop re-compared the complete base word for every suffix variant, so
+one candidate word paid up to 103 identical case-normalized comparisons.
+Grouping the compile-time table by `(prefix_len, case)` into whole and
+omit lists and hoisting the base-word comparison to once per candidate
+moves q11 on 128 KiB dickens from 1,308,173,945 to 1,214,380,116 ns
+(**1.0772x**) with an identical 43,953-byte wire; xml is 1.0150x and
+samba 1.0307x, **1.0406x** geometric mean, all wires byte-identical.
+q9/q10 controls are 0.36% / 0.15% slower, within noise. Whole transforms
+always retain at least four bytes, so the non-advancing filter and the
+input-length bound collapse into the suffix check; the best-match order
+is unchanged because the `(output_len, address)` selection is a total
+order. A comptime `prefix_len` specialization measured neutral and was
+not retained.
+Evidence: [data/br-static-dictionary-whole-group-20261117](data/br-static-dictionary-whole-group-20261117/README.md).
