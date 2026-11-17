@@ -1459,3 +1459,19 @@ candidate gate removed the wire materialization but not this planning pass.
 The next step is a coarse-shape or sampled estimate that decides whether the
 full 64-shape search can pay; the exact search should remain the selector
 whenever the coarse estimate passes.
+
+The 7.4 ms planning scan now has a coarse-shape gate. Twelve-file tracing
+showed the six winning rows select shapes (3,4), (1,1), (3,15), (3,15),
+(2,8), (1,14), while the six skipped rows estimate 1-176 bits. A nine-shape
+subset `(0,1) (1,1) (1,8) (1,14) (2,4) (2,8) (3,4) (3,8) (3,15)` covers every
+winner. `chooseDistanceParameterAlternativeAlloc` now scores that subset
+first on blocks >= 64 KiB; if its best cannot clear the 512-bit gate, the
+exact 64-shape search is skipped, otherwise the exact search still selects
+the parameters. The previously dead `sortDistanceFrequencies` radix sort is
+wired into the same path (same ascending order, wire-identical). Repeated
+medians over the six 128 KiB files improved **1.047x** geometric mean
+(dickens 1.106x, xml 1.077x, mozilla 0.995x, mr 1.000x, sao 1.000x, webster
+1.111x) with identical wire SHA-256 on 12/12 128 KiB, 6/6 1 MiB, 3/3 4 MiB,
+4/4 synthetic far-copy, and 9/9 built-in bench cases. Planned q9 is now about
+2.49x geometric mean faster than the 2026-11-17 baseline.
+Evidence: [data/br-distance-coarse-gate-20261117](data/br-distance-coarse-gate-20261117/README.md).

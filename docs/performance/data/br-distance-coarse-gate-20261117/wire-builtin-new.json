@@ -1,0 +1,913 @@
+{
+  "schema": "vort.codec_encode_samples",
+  "version": 1,
+  "codec": "brotli",
+  "round_count": 5,
+  "timing": {
+    "clock": "awake",
+    "unit": "nanoseconds",
+    "round_order": "vort_first_on_even_zero_based_rounds",
+    "csv_statistic": "minimum",
+    "median_statistic": "integer_floor",
+    "mix": "sum_of_encoded_lengths_wrapping_target_usize",
+    "vort_warmup": "one_untimed_encode_before_each_primary_vort_round",
+    "reference_warmup": "none",
+    "timed_work": "encoding_allocation_and_free",
+    "metadata_outside_timing": true
+  },
+  "reference_version": 16777225,
+  "reference_decoder_version": 16777225,
+  "references": [
+    {
+      "role": "brotli_encoder",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlienc.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": 16777225,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    },
+    {
+      "role": "brotli_decoder",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlidec.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": 16777225,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    },
+    {
+      "role": "brotli_common",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlicommon.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": null,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    }
+  ],
+  "provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "0-15",
+    "affinity_cpu_count": 16,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "53254a751b44f808d05ba9506c91338ea61fb59b391a10c8489ce28b28f50da2",
+    "command": "./.zig-cache/o/f6d9dc68397fe39c5b2a60d784fd968b/vort-br-planned-encode-bench --limit 131072 --planned-quality 9 --quality 9 --iterations 1 --samples-json /tmp/coarse-builtin.json --csv /tmp/coarse-builtin.csv"
+  },
+  "rows": [
+    {
+      "case": "json",
+      "input_bytes": 2640,
+      "input_sha256": "0d6239d44e1f465d045e5179cc2a5bf0997a95bdd8ad70a11eb2f3d3f4796941",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 270463,
+          "reference_ns": 127772,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 277057,
+          "reference_ns": 90099,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 264908,
+          "reference_ns": 96829,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 265632,
+          "reference_ns": 88703,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 266275,
+          "reference_ns": 95035,
+          "vort_mix": 57,
+          "reference_mix": 59
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 264908,
+        "reference_min_ns": 88703,
+        "vort_median_ns": 266275,
+        "reference_median_ns": 95035
+      },
+      "wires": {
+        "vort_bytes": 57,
+        "reference_bytes": 59,
+        "vort_sha256": "dbec693fe4de82a0d90580ebb30af74266f4e7ba28df0ae63b6233d141a096ed",
+        "reference_sha256": "344482a00571be0fca8a613409645bf66356c4e32c110bdcd3d10162ccb155ec"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "source",
+      "input_bytes": 3600,
+      "input_sha256": "664f8752c1a42f930344ca469404fd9208a6cada0f5c12af17de7ac971cf126a",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 460157,
+          "reference_ns": 127543,
+          "vort_mix": 83,
+          "reference_mix": 80
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 463465,
+          "reference_ns": 113461,
+          "vort_mix": 83,
+          "reference_mix": 80
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 460654,
+          "reference_ns": 119775,
+          "vort_mix": 83,
+          "reference_mix": 80
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 462047,
+          "reference_ns": 112429,
+          "vort_mix": 83,
+          "reference_mix": 80
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 463603,
+          "reference_ns": 119715,
+          "vort_mix": 83,
+          "reference_mix": 80
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 460157,
+        "reference_min_ns": 112429,
+        "vort_median_ns": 462047,
+        "reference_median_ns": 119715
+      },
+      "wires": {
+        "vort_bytes": 83,
+        "reference_bytes": 80,
+        "vort_sha256": "eef7d3207ae8d42fc278fc0efb0ac157760e194641ecbfe3e6d13c0d4dcd33a5",
+        "reference_sha256": "08ceb131a0d14239c8dfcf2ddb9582248359e326fe3065fc96836ebb25c10578"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "log",
+      "input_bytes": 3320,
+      "input_sha256": "2c95e37eced17194b45fabf1b8c138dc0f0731e6bdaf50662e1fc03df5986baa",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 323919,
+          "reference_ns": 126980,
+          "vort_mix": 82,
+          "reference_mix": 86
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 323880,
+          "reference_ns": 115570,
+          "vort_mix": 82,
+          "reference_mix": 86
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 319455,
+          "reference_ns": 120938,
+          "vort_mix": 82,
+          "reference_mix": 86
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 326748,
+          "reference_ns": 114746,
+          "vort_mix": 82,
+          "reference_mix": 86
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 319619,
+          "reference_ns": 124001,
+          "vort_mix": 82,
+          "reference_mix": 86
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 319455,
+        "reference_min_ns": 114746,
+        "vort_median_ns": 323880,
+        "reference_median_ns": 120938
+      },
+      "wires": {
+        "vort_bytes": 82,
+        "reference_bytes": 86,
+        "vort_sha256": "acad1ca9639a13c338682f4b7fc9ae1cf9cfdeece975ac98c3129a12134a4af3",
+        "reference_sha256": "57303a01eeb0781fa6cee878284c344c4377bf8bd4af8639168e058a120f47f4"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "dictionary",
+      "input_bytes": 65,
+      "input_sha256": "65d5216328cfb0d9dd2d871a629afe56f39006211734c23807dc72165246d93c",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 324534,
+          "reference_ns": 91561,
+          "vort_mix": 24,
+          "reference_mix": 41
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 324191,
+          "reference_ns": 84434,
+          "vort_mix": 24,
+          "reference_mix": 41
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 327766,
+          "reference_ns": 90798,
+          "vort_mix": 24,
+          "reference_mix": 41
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 322099,
+          "reference_ns": 84165,
+          "vort_mix": 24,
+          "reference_mix": 41
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 320139,
+          "reference_ns": 90214,
+          "vort_mix": 24,
+          "reference_mix": 41
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 320139,
+        "reference_min_ns": 84165,
+        "vort_median_ns": 324191,
+        "reference_median_ns": 90214
+      },
+      "wires": {
+        "vort_bytes": 24,
+        "reference_bytes": 41,
+        "vort_sha256": "af9507bda497a3688472905f4cb27a7f9df22f8bfc4d1cebae503cdc056172b9",
+        "reference_sha256": "a4a1c0f125618c6d54462693df26d50df72c8d1826b537161d44a9e0c7e79909"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "mixed",
+      "input_bytes": 53,
+      "input_sha256": "b166f1254a29b0d18360d4bf229f14424e32e503dec9145a84495b5f9cbaee13",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 210069,
+          "reference_ns": 66348,
+          "vort_mix": 29,
+          "reference_mix": 31
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 209174,
+          "reference_ns": 60315,
+          "vort_mix": 29,
+          "reference_mix": 31
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 206948,
+          "reference_ns": 64376,
+          "vort_mix": 29,
+          "reference_mix": 31
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 208117,
+          "reference_ns": 58814,
+          "vort_mix": 29,
+          "reference_mix": 31
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 206425,
+          "reference_ns": 63777,
+          "vort_mix": 29,
+          "reference_mix": 31
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 206425,
+        "reference_min_ns": 58814,
+        "vort_median_ns": 208117,
+        "reference_median_ns": 63777
+      },
+      "wires": {
+        "vort_bytes": 29,
+        "reference_bytes": 31,
+        "vort_sha256": "5f65d6c5d64978f825b06d51ff4a7aa3c269e430bd9e5f50d4f4b3d246a1c5c2",
+        "reference_sha256": "5682fdc924827588ddf326ab7ec5be7c331928e89ef951f04c22c29fead3b3ad"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "uppercase",
+      "input_bytes": 11,
+      "input_sha256": "e59da5e0b86e3865835d7026e22ae42ce7029dc02e734e514ab79a5c5d3f1aa9",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 5610,
+          "reference_ns": 29572,
+          "vort_mix": 11,
+          "reference_mix": 15
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 5512,
+          "reference_ns": 25385,
+          "vort_mix": 11,
+          "reference_mix": 15
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 5335,
+          "reference_ns": 27015,
+          "vort_mix": 11,
+          "reference_mix": 15
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 5522,
+          "reference_ns": 24565,
+          "vort_mix": 11,
+          "reference_mix": 15
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 5268,
+          "reference_ns": 26581,
+          "vort_mix": 11,
+          "reference_mix": 15
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 5268,
+        "reference_min_ns": 24565,
+        "vort_median_ns": 5512,
+        "reference_median_ns": 26581
+      },
+      "wires": {
+        "vort_bytes": 11,
+        "reference_bytes": 15,
+        "vort_sha256": "448598c3393e6acfcb93f042465bc5aec1ca3d82d4c5b5899cbc4a8127c0078c",
+        "reference_sha256": "49f60215d4dbf530b4c3020c57f49aaf82e7bfd3b682d6b17abb03e56f0f4656"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "incompressible",
+      "input_bytes": 34,
+      "input_sha256": "531fa79112575fe7bd47bd5d525837b0f18a262fe8e6412324adbe5c2ec0572f",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 2775,
+          "reference_ns": 57671,
+          "vort_mix": 38,
+          "reference_mix": 38
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 2717,
+          "reference_ns": 54963,
+          "vort_mix": 38,
+          "reference_mix": 38
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 2566,
+          "reference_ns": 55606,
+          "vort_mix": 38,
+          "reference_mix": 38
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 2647,
+          "reference_ns": 54338,
+          "vort_mix": 38,
+          "reference_mix": 38
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 2592,
+          "reference_ns": 55190,
+          "vort_mix": 38,
+          "reference_mix": 38
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 2566,
+        "reference_min_ns": 54338,
+        "vort_median_ns": 2647,
+        "reference_median_ns": 55190
+      },
+      "wires": {
+        "vort_bytes": 38,
+        "reference_bytes": 38,
+        "vort_sha256": "2ba8320e34b7ad6c8dd4aa1dd4b18e17406a3cc262161a1892ce4214c395ee8e",
+        "reference_sha256": "1ed1a8a666eee2b44e290a39ee90a917b56fca07915b4a7f46921d2f1cb82e97"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "records_q8",
+      "input_bytes": 32768,
+      "input_sha256": "57838ff8e27e47865e57963d67bc8b03c9f8957ce12d89e50bacb4f8cee74a45",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 43738701,
+          "reference_ns": 2780190,
+          "vort_mix": 3135,
+          "reference_mix": 3150
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 47452635,
+          "reference_ns": 2685815,
+          "vort_mix": 3135,
+          "reference_mix": 3150
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 42773959,
+          "reference_ns": 2951974,
+          "vort_mix": 3135,
+          "reference_mix": 3150
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 42879751,
+          "reference_ns": 2731589,
+          "vort_mix": 3135,
+          "reference_mix": 3150
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 42058178,
+          "reference_ns": 2922092,
+          "vort_mix": 3135,
+          "reference_mix": 3150
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 42058178,
+        "reference_min_ns": 2685815,
+        "vort_median_ns": 42879751,
+        "reference_median_ns": 2780190
+      },
+      "wires": {
+        "vort_bytes": 3135,
+        "reference_bytes": 3150,
+        "vort_sha256": "7958232ca3b3b4ab9fac34e1479671db8eb7b267647f58cd7db38803052a6ee1",
+        "reference_sha256": "13ca78460bb65d5d398beaba129db3a48b802a7ac60b209524a5b59d65689feb"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": 8,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    },
+    {
+      "case": "source32k",
+      "input_bytes": 32768,
+      "input_sha256": "3e386d3ba6c53db37b479b0575fd9835c03047dc1be0d72b89cc8ce80986d509",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 90402412,
+          "reference_ns": 5279538,
+          "vort_mix": 6696,
+          "reference_mix": 7204
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 91100115,
+          "reference_ns": 4869198,
+          "vort_mix": 6696,
+          "reference_mix": 7204
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 89931057,
+          "reference_ns": 5155731,
+          "vort_mix": 6696,
+          "reference_mix": 7204
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 90565281,
+          "reference_ns": 4886002,
+          "vort_mix": 6696,
+          "reference_mix": 7204
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 90116947,
+          "reference_ns": 5592588,
+          "vort_mix": 6696,
+          "reference_mix": 7204
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 89931057,
+        "reference_min_ns": 4869198,
+        "vort_median_ns": 90402412,
+        "reference_median_ns": 5155731
+      },
+      "wires": {
+        "vort_bytes": 6696,
+        "reference_bytes": 7204,
+        "vort_sha256": "6d61f5f71c2f330d220b6dd70b9930abdd9463d6717626fa7d6a8de495e74f21",
+        "reference_sha256": "40f72ceba41a8bfa3ba3d26ae430a3ec76f956e6f4cf0610b681be601cf0785c"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 9,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 9,
+        "reference_quality_override_requested": 9,
+        "reference_case_quality": 8,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": null,
+        "reference_mode_override_requested": null,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 22,
+        "parameters_match": false,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    }
+  ]
+}

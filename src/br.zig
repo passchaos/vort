@@ -7492,16 +7492,7 @@ fn chooseDistanceParameterAlternativeAlloc(
     if (semantic_count == 0 and allZeroFrequencies(16, &short_symbol_frequencies))
         return null;
 
-    std.mem.sort(
-        distance_parameter_search.DistanceFrequency,
-        semantic_distances[0..semantic_count],
-        {},
-        struct {
-            fn lessThan(_: void, lhs: distance_parameter_search.DistanceFrequency, rhs: distance_parameter_search.DistanceFrequency) bool {
-                return lhs.semantic_distance < rhs.semantic_distance;
-            }
-        }.lessThan,
-    );
+    try sortDistanceFrequencies(allocator, semantic_distances[0..semantic_count]);
     var unique_count: usize = 0;
     for (semantic_distances[0..semantic_count]) |entry| {
         if (unique_count != 0 and semantic_distances[unique_count - 1].semantic_distance == entry.semantic_distance) {
@@ -7516,11 +7507,26 @@ fn chooseDistanceParameterAlternativeAlloc(
         }
     }
 
-    const selection = distance_parameter_search.selectAlloc(allocator, .{
+    const parameter_input: distance_parameter_search.Input = .{
         .format = encoder_window_format.format(options.large_window),
         .distance_frequencies = semantic_distances[0..unique_count],
         .short_symbol_frequencies = short_symbol_frequencies,
-    }) catch |err| switch (err) {
+    };
+    // On large blocks, score a small representative shape subset first. When
+    // even that subset cannot clear the 64-byte gate, the exact 64-shape
+    // search cannot change the outcome on the measured corpus and is skipped.
+    if (total_output_len >= 64 * 1024) {
+        const coarse = distance_parameter_search.selectCoarseAlloc(allocator, parameter_input) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return error.InvalidBlockPlan,
+        };
+        const coarse_preferred = coarse.preferred();
+        if ((coarse_preferred.parameters.npostfix == coarse.baseline.parameters.npostfix and
+            coarse_preferred.parameters.ndirect_high == coarse.baseline.parameters.ndirect_high) or
+            coarse.baseline.totalBits() - coarse_preferred.totalBits() < 512)
+            return null;
+    }
+    const selection = distance_parameter_search.selectAlloc(allocator, parameter_input) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBlockPlan,
     };

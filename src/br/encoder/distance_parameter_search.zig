@@ -100,6 +100,46 @@ pub fn selectAlloc(allocator: std.mem.Allocator, input: Input) !Selection {
     return select(allocator, input, scratch);
 }
 
+/// Score a small representative subset of RFC 7932 parameter shapes. The
+/// caller uses this as a go/no-go estimate before paying for the exact
+/// 64-shape search; the subset covers the shapes that won on the measured
+/// planned-q9 corpus.
+pub fn selectCoarseAlloc(allocator: std.mem.Allocator, input: Input) !Selection {
+    if (input.format == .large_window) {
+        const scratch = try allocator.create(LargeScratch);
+        defer allocator.destroy(scratch);
+        return selectCoarse(allocator, input, scratch);
+    }
+    const scratch = try allocator.create(Scratch);
+    defer allocator.destroy(scratch);
+    return selectCoarse(allocator, input, scratch);
+}
+
+pub fn selectCoarse(allocator: std.mem.Allocator, input: Input, scratch: anytype) !Selection {
+    const baseline = try score(allocator, input, distance.Parameters.init(0, 0), scratch);
+    var alternative: ?Candidate = null;
+    const coarse_shapes = [_]distance.Parameters{
+        distance.Parameters.init(0, 1),
+        distance.Parameters.init(1, 1),
+        distance.Parameters.init(1, 8),
+        distance.Parameters.init(1, 14),
+        distance.Parameters.init(2, 4),
+        distance.Parameters.init(2, 8),
+        distance.Parameters.init(3, 4),
+        distance.Parameters.init(3, 8),
+        distance.Parameters.init(3, 15),
+    };
+    for (coarse_shapes) |parameters| {
+        const candidate = score(allocator, input, parameters, scratch) catch |err| switch (err) {
+            error.InvalidDistance => if (input.format == .large_window) continue else return err,
+            else => return err,
+        };
+        if (alternative == null or candidate.totalBits() < alternative.?.totalBits())
+            alternative = candidate;
+    }
+    return .{ .baseline = baseline, .alternative = alternative orelse baseline };
+}
+
 pub fn selectDistances(allocator: std.mem.Allocator, distances: []const usize, scratch: anytype) !Selection {
     return select(allocator, .{ .distances = distances }, scratch);
 }
