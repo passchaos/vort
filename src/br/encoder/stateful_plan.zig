@@ -10,10 +10,12 @@ pub const DictionaryMatch = struct { output_len: usize, copy_len: usize, address
 pub const CandidateList = struct { matches: []const Match, dictionary: ?DictionaryMatch };
 pub const Kind = enum { literal, lz77, dictionary };
 pub const Provider = struct {
-    context: *const anyopaque,
-    candidates: *const fn (context: *const anyopaque, position: usize) CandidateList,
+    context: *anyopaque,
+    candidates: *const fn (context: *anyopaque, position: usize) CandidateList,
 };
-pub const PriceFn = *const fn (context: *const anyopaque, insert_len: usize, kind: Kind, copy_len: usize, distance: usize) u32;
+/// `position` is the source position of the transition so literal prices can
+/// use the actual byte and match prices can see the remaining input.
+pub const PriceFn = *const fn (context: *const anyopaque, position: usize, insert_len: usize, kind: Kind, copy_len: usize, distance: usize) u32;
 
 pub const Options = struct {
     min_match: usize = 4,
@@ -73,7 +75,7 @@ pub fn plan(
             {
                 const next_bucket = bucketFor(insert_len + 1);
                 const next_index = (position + 1) * bucket_count + next_bucket;
-                const next_cost = try addCost(cost, price(price_context, insert_len, .literal, 1, 0));
+                const next_cost = try addCost(cost, price(price_context, position, insert_len, .literal, 1, 0));
                 if (next_cost < costs[next_index]) {
                     costs[next_index] = next_cost;
                     prev[next_index] = .{ .position = @intCast(position), .bucket = @intCast(bucket), .kind = .literal };
@@ -86,7 +88,7 @@ pub fn plan(
                     match.length > n - position or match.distance == 0 or match.distance > position)
                     continue;
                 const next_index = (position + match.length) * bucket_count;
-                const next_cost = try addCost(cost, price(price_context, insert_len, .lz77, match.length, match.distance));
+                const next_cost = try addCost(cost, price(price_context, position, insert_len, .lz77, match.length, match.distance));
                 if (next_cost < costs[next_index]) {
                     costs[next_index] = next_cost;
                     prev[next_index] = .{
@@ -104,7 +106,7 @@ pub fn plan(
                     dictionary.output_len > n - position)
                     continue;
                 const next_index = (position + dictionary.output_len) * bucket_count;
-                const next_cost = try addCost(cost, price(price_context, insert_len, .dictionary, dictionary.copy_len, dictionary.address));
+                const next_cost = try addCost(cost, price(price_context, position, insert_len, .dictionary, dictionary.copy_len, dictionary.address));
                 if (next_cost < costs[next_index]) {
                     costs[next_index] = next_cost;
                     prev[next_index] = .{
@@ -168,15 +170,16 @@ const TestProvider = struct {
     matches: []const Match,
     dictionary: ?DictionaryMatch,
 
-    fn candidates(context: *const anyopaque, position: usize) CandidateList {
+    fn candidates(context: *anyopaque, position: usize) CandidateList {
         _ = position;
         const self: *const TestProvider = @ptrCast(@alignCast(context));
         return .{ .matches = self.matches, .dictionary = self.dictionary };
     }
 };
 
-fn testPrice(context: *const anyopaque, insert_len: usize, kind: Kind, copy_len: usize, distance: usize) u32 {
+fn testPrice(context: *const anyopaque, position: usize, insert_len: usize, kind: Kind, copy_len: usize, distance: usize) u32 {
     _ = context;
+    _ = position;
     _ = distance;
     return switch (kind) {
         .literal => 8,

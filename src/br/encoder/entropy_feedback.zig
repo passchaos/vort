@@ -12,6 +12,8 @@ const CopyCodeHistogram = histogram_model.Histogram(24);
 const DistanceHistogram = histogram_model.Histogram(64);
 const CommandHistogram = histogram_model.Histogram(704);
 const q8 = histogram_model.cost_scale;
+/// Fixed-point scale used by every learned cost in this module.
+pub const cost_scale = histogram_model.cost_scale;
 
 /// Allocator-owned entropy costs learned from one complete Brotli command
 /// proposal. This deliberately models separable literal, copy-length, and

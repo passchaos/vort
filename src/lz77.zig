@@ -2727,6 +2727,127 @@ pub fn hashGreedyPlanAutoLazyHeadAllocObserved(
         hashGreedyPlanLazyHeadAllocWithAnchorObserved(allocator, input, options, .three, observer);
 }
 
+/// Per-position hash-chain match. `length == 0` marks a position where the
+/// bounded chain search found no admissible match.
+pub const CollectedMatch = struct {
+    length: u16 = 0,
+    distance: u16 = 0,
+};
+
+/// Collects the best hash-chain match starting at every input position.
+///
+/// The greedy planners skip positions covered by an accepted match, so their
+/// token stream is not a complete candidate source for parsers that revisit
+/// every byte. This collector queries each position before inserting it and
+/// never skips, exposing the same dense chain the reference optimal parser
+/// walks. The returned slice is indexed by position and owned by the caller.
+pub fn collectHashMatchesAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+) ![]CollectedMatch {
+    const anchor: HashAnchor = if (minMatch(options) >= 4) .four else .three;
+    if (hashPositionFitsI32(input.len)) {
+        return switch (anchor) {
+            .three => collectHashMatchesWithPosition(i32, allocator, input, options, .three),
+            .four => collectHashMatchesWithPosition(i32, allocator, input, options, .four),
+        };
+    }
+    return switch (anchor) {
+        .three => collectHashMatchesWithPosition(isize, allocator, input, options, .three),
+        .four => collectHashMatchesWithPosition(isize, allocator, input, options, .four),
+    };
+}
+
+fn collectHashMatchesWithPosition(
+    comptime Position: type,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime anchor: HashAnchor,
+) ![]CollectedMatch {
+    const matches = try allocator.alloc(CollectedMatch, input.len);
+    errdefer allocator.free(matches);
+    const head = try allocator.alloc(Position, hash_head_table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const prev_len = hashPrevTableLen(input.len, options.window_len);
+    const ring = prev_len < input.len;
+    const prev = try allocator.alloc(Position, prev_len);
+    defer allocator.free(prev);
+    if (ring) {
+        collectHashMatchesWithTables(input, options, head, prev, true, anchor, matches);
+    } else {
+        collectHashMatchesWithTables(input, options, head, prev, false, anchor, matches);
+    }
+    return matches;
+}
+
+fn collectHashMatchesWithTables(
+    input: []const u8,
+    options: GreedyOptions,
+    head: anytype,
+    prev: anytype,
+    comptime ring: bool,
+    comptime anchor: HashAnchor,
+    matches: []CollectedMatch,
+) void {
+    const search_limits = hashSearchLimits(options);
+    for (0..input.len) |pos| {
+        const search = findBestHashMatchWithLayoutAndHashLimits(
+            input,
+            pos,
+            search_limits,
+            head,
+            prev,
+            ring,
+            false,
+            {},
+            anchor,
+        );
+        const best = search.best;
+        matches[pos] = if (best.length >= search_limits.minimum and best.distance != 0)
+            .{ .length = @intCast(best.length), .distance = @intCast(best.distance) }
+        else
+            .{};
+        if (search.hash) |hash| {
+            insertKnownHashWithLayout(pos, hash, head, prev, ring, false, {});
+        }
+    }
+}
+
+test "collect hash matches indexes every position" {
+    const input = "abcabcabcabcXabcabcabcabc";
+    const matches = try collectHashMatchesAlloc(std.testing.allocator, input, .{
+        .min_match = 4,
+        .window_len = input.len,
+    });
+    defer std.testing.allocator.free(matches);
+    try std.testing.expectEqual(@as(usize, input.len), matches.len);
+    try std.testing.expectEqual(@as(u16, 0), matches[0].length);
+    try std.testing.expectEqual(@as(u16, 9), matches[3].length);
+    try std.testing.expectEqual(@as(u16, 3), matches[3].distance);
+    for (matches, 0..) |match, pos| {
+        try std.testing.expect(@as(usize, match.length) <= input.len - pos);
+        try std.testing.expect(@as(usize, match.distance) <= pos);
+        if (match.length == 0) try std.testing.expectEqual(@as(u16, 0), match.distance);
+    }
+}
+
+test "collect hash matches keeps interior candidates the greedy parser skips" {
+    // The greedy parser consumes the long run at position 3 and never queries
+    // positions 4..; the collector must still expose their own matches.
+    const input = "abcabcabcabcabcabcZabcabc";
+    const matches = try collectHashMatchesAlloc(std.testing.allocator, input, .{
+        .min_match = 4,
+        .window_len = input.len,
+    });
+    defer std.testing.allocator.free(matches);
+    try std.testing.expectEqual(@as(u16, 3), matches[3].distance);
+    try std.testing.expectEqual(@as(u16, 3), matches[4].distance);
+    try std.testing.expect(matches[4].length >= 8);
+}
+
 fn hashGreedyPlanAllocWithAnchor(
     allocator: std.mem.Allocator,
     input: []const u8,
