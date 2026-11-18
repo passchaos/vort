@@ -88,6 +88,56 @@ libbrotli 的 q11。
 最终 wire 逐字节不变（8,401/43,953/77,220）。下一步必须为 DP 提供**每个
 位置的真实 hash-chain 候选**，否则 DP 只能复现 lazy 计划的选择。
 
+## 全位置候选实测（2026-11-19）
+
+本轮把候选来源换成真实的稠密 hash chain：
+
+- `lz77.collectHashMatchesAlloc`：逐位置先查询、后插入，不跳过 match 内部
+  字节，返回每个位置的最长候选（`u16` length/distance），并有 2 个单测。
+- `br/encoder/stateful_optimal.zig`：把候选与 `entropy_feedback.Model` 接到
+  DP。literal 用 `literal_context` 价格；LZ77 用
+  `command_encoding.forLengths(insert_bucket, copy_len, false)` 的 command
+  symbol 价格 + insert/copy extra bits + `model.distance[distance]`。
+- 实测接线只打开 q11、≥64 KiB 且 ≤128 KiB 输入，`max_chain = 64`（稠密插入
+  下比 greedy 的 512 更密），每个模型（`model2`）跑一次 DP，产出命令计划后
+  走完整 wire 编码并参与最短 wire 仲裁。
+
+12 文件 128 KiB 前缀，`--planned-quality 11 --quality 11`，单次测量：
+
+| case | baseline | DP | delta | DP 用时 |
+| --- | ---: | ---: | ---: | ---: |
+| dickens | 43,953 | 43,953 | 0 | 524 ms |
+| mozilla | 18,676 | 18,676 | 0 | 605 ms |
+| mr | 30,036 | 29,639 | -397 (-1.32%) | 820 ms |
+| nci | 8,859 | 8,859 | 0 | 577 ms |
+| ooffice | 64,634 | 64,634 | 0 | 604 ms |
+| osdb | 46,778 | 46,778 | 0 | 723 ms |
+| reymont | 33,363 | 33,363 | 0 | 514 ms |
+| samba | 40,937 | 40,937 | 0 | 771 ms |
+| sao | 92,145 | 92,145 | 0 | 917 ms |
+| webster | 36,107 | 36,107 | 0 | 493 ms |
+| xml | 8,401 | 8,401 | 0 | 393 ms |
+| x-ray | 77,220 | 76,963 | -257 (-0.33%) | 713 ms |
+
+baseline 对照（同机、同命令、无 DP）：xml 352.9 ms、dickens 451.9 ms、
+x-ray 604.5 ms；DP 分别增加 11.3%、16.0%、17.9%。12 行几何平均比例改善
+约 0.14%，低于 3% 合并门槛，且 q11 编码时间上升两位数百分比，因此**不接入
+生产默认路径**；DP、桥接模块与收集器作为已测试原型保留。
+
+变体：同一 distance 上追加长度阶梯（4/8/16/32/64/128/max）反而变差：
+mr 29,699（-337）、x-ray 回到 77,220、dickens/xml 不变。说明当前
+`Model.command` 的近似价格会放大额外选择带来的误差，不是缺少长度选择。
+
+结论：`(position, insert_bucket)` 状态在二进制行（mr/x-ray）能带来
+0.3%~1.3% 的收益，但文本行 10/12 逐字节不变。下一步不是加深 chain 或加
+长度阶梯，而是：
+
+1. 候选质量：为每个位置产出 Pareto 前沿（多个 distance/长度，而不是单一
+   最长候选），对齐 `optimalPlanAlloc` 的 candidate 循环；
+2. 精确价格：`Model` 需要区分 last-distance/implicit 命令符号与 repcode
+   状态，否则命令价格仍是近似；
+3. 成本预筛：先用模型代价过滤 DP 计划，避免为必然落选的候选构建完整 wire。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。

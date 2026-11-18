@@ -1855,3 +1855,20 @@ bits per candidate, not a scalar proxy. The benchmark infrastructure gates
 Running the literal-run dictionary mix on the lazy q11 command plan is
 byte-identical on xml/dickens/x-ray (8,401/43,953/77,220), confirming the lazy
 literal runs are too short for the static dictionary.
+
+## Brotli q11 stateful DP dense-candidate screen (2026-11-19)
+
+The forward `(position, insert_bucket)` DP now consumes a dense per-position
+hash chain (`lz77.collectHashMatchesAlloc` inserts every position instead of
+skipping match interiors) and prices edges with `entropy_feedback.Model`
+(command symbol plus insert/copy extra bits plus distance). On 12 Silesia
+128 KiB prefixes at q11 the single-best-candidate DP changes only two rows:
+mr 30,036 -> 29,639 (-397, -1.32%) and x-ray 77,220 -> 76,963 (-257, -0.33%);
+the other ten wires are byte-identical. q11 encode time rises 11.3% (xml),
+16.0% (dickens) and 17.9% (x-ray) on the measured rows. The 12-row geometric
+mean ratio gain is about 0.14%, below the 3% merge bar, so the DP stays out of
+the production default path and remains a tested prototype. A same-distance
+length ladder (4/8/16/32/64/128/max) is worse (mr 29,699, x-ray back to
+77,220), so the next slice needs a per-position Pareto candidate frontier and
+repcode-aware command pricing rather than more length choices.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
