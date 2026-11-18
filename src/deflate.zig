@@ -6147,18 +6147,54 @@ const PngFilter0SemanticSink = struct {
     }
 };
 
-noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
+// WebAssembly rejects function alignment, so the hot entry point selects a
+// plain or cache-line-aligned wrapper at comptime. The forced inline body
+// keeps both wrappers out-of-line with the semantic call inlined into them.
+const decodeSemanticDynamicBlockIntoBufferedReader = if (builtin.target.cpu.arch == .wasm32)
+    decodeSemanticDynamicBlockIntoBufferedReaderPlain
+else
+    decodeSemanticDynamicBlockIntoBufferedReaderAligned;
+
+inline fn decodeSemanticDynamicBlockIntoBufferedReaderImpl(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
-) align(64) Error!usize {
+) Error!usize {
     return semantic_module.decodeDynamicBlockIntoLinearMode(
         false,
         false,
         false,
         false,
         false,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoBufferedReaderPlain(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    return decodeSemanticDynamicBlockIntoBufferedReaderImpl(
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoBufferedReaderAligned(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) align(64) Error!usize {
+    return decodeSemanticDynamicBlockIntoBufferedReaderImpl(
         reader,
         output,
         initial_out_offset,
