@@ -53,6 +53,7 @@ libbrotli 的 q11。
 | LZ77 计划 + 字典计划位置合并 | 静态 copy 原子不可拆分，部分重叠触发 `InvalidBlockPlan`，回退 |
 | lazy 计划 literal-run 字典 mix | xml/dickens/x-ray 逐字节不变 |
 | command-state DP 扩到 64 KiB | 64 KiB 输入上 xml 3,972、dickens 22,352，与默认逐字节相同 |
+| HQ codec（btultra2 级）作为 q11 候选 | depth 512 与默认 depth 64 在 128 KiB xml 上都超过 5 分钟，远慢于 q11 的亚秒级；不能作为默认级别候选 |
 
 ## 设计提案：状态化 q11 optimal DP
 
