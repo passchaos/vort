@@ -60,3 +60,28 @@ zig build run-zstd-encode-bench -- \
   --path <silesia-file> --limit 131072 --level <1|2|3> \
   --iterations 3 --rounds 3 --csv <out.csv>
 ```
+
+## 全语料单调性核验（12 文件，`--iterations 2 --rounds 2`）
+
+| case | L1 | L2 | L3 | ref L3 | L2≤L1 | L3≤L2 |
+| --- | ---: | ---: | ---: | ---: | :---: | :---: |
+| dickens | 63,414 | 55,783 | 54,086 | 51,934 | yes | yes |
+| mozilla | 25,151 | 21,341 | 20,930 | 21,338 | yes | yes |
+| mr | 37,918 | 34,382 | 36,669 | 33,978 | yes | **NO** |
+| nci | 11,608 | 11,321 | 11,479 | 11,264 | yes | **NO** |
+| ooffice | 77,758 | 74,579 | 70,671 | 72,249 | yes | yes |
+| osdb | 78,042 | 53,414 | 51,127 | 50,414 | yes | yes |
+| reymont | 47,564 | 43,217 | 41,523 | 40,509 | yes | yes |
+| samba | 55,670 | 52,255 | 50,001 | 50,611 | yes | yes |
+| sao | 115,365 | 101,650 | 100,317 | 105,695 | yes | yes |
+| webster | 51,345 | 47,465 | 45,790 | 44,728 | yes | yes |
+| xml | 12,556 | 12,503 | 11,784 | 11,921 | yes | yes |
+| x-ray | 107,219 | 102,637 | 102,323 | 103,219 | yes | yes |
+
+L2 在所有文件上都优于 L1；L3 在 10/12 上优于 L2，mr（+6.7%）与 nci（+1.4%）
+是 `double_fast` 相对 `fast` 的已知非单调点。L3 对 libzstd L3 在 8/12 上
+更小，dickens/mr/nci/webster 略大。
+
+若要严格单调，可把 L3 换成 `greedy`（dickens 51,971 B），或让 L3 在
+`fast` 与 `double_fast` 之间做一次完整 wire 仲裁（保证 L3 ≤ L2，代价约 2x）。
+本轮保留 `double_fast` 以维持与 zstd 默认级别接近的速度点。
