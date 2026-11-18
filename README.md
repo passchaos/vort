@@ -1589,9 +1589,10 @@ defer zstd_incremental_encoder.deinit();
 // caller chunks. findRawDeflateSyncPoint plus decodeRawDeflateAfterSync*, or
 // RawDeflateIncrementalFixedLiteralDecoder.resumeAfterSync(), recover the raw
 // independent suffix. ZlibIncrementalDecoder.resumeAfterSync(skipped_payload_bytes)
-// resumes the same zlib member after the marker; use ignore_adler because the
-// member checksum cannot be reconstructed from discarded corrupt output.
-// Gzip wrapper recovery remains raw-only.
+// and GzipIncrementalDecoder.resumeAfterSync(skipped_payload_bytes) resume the
+// same member after the marker; use ignore_adler or ignore_crc32/ignore_isize
+// because the member checksums cannot be reconstructed from discarded corrupt
+// output.
 // RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
 // representations per block while retaining the same rolling history core.
 // Hash and lazy-parser levels additionally retain a bounded 32 KiB predecessor

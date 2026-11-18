@@ -159,6 +159,60 @@ test "zlib incremental decoder resumes after an external sync scan" {
     try std.testing.expectEqualSlices(u8, second, output[0..output_offset]);
 }
 
+test "gzip incremental decoder resumes after an external sync scan" {
+    const first = "gzip corrupt segment before recovery\n" ** 19;
+    const second = "gzip recovered suffix after marker 0123456789\n" ** 23;
+    const raw = try makeRecoverableWire(first, second);
+    defer std.testing.allocator.free(raw);
+    const full = try std.testing.allocator.alloc(u8, first.len + second.len);
+    defer std.testing.allocator.free(full);
+    @memcpy(full[0..first.len], first);
+    @memcpy(full[first.len..], second);
+    var wire: std.ArrayList(u8) = .empty;
+    defer wire.deinit(std.testing.allocator);
+    try wire.appendSlice(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff });
+    try wire.appendSlice(std.testing.allocator, raw);
+    var footer: [8]u8 = undefined;
+    std.mem.writeInt(u32, footer[0..4], std.hash.Crc32.hash(full), .little);
+    std.mem.writeInt(u32, footer[4..8], @intCast(full.len), .little);
+    try wire.appendSlice(std.testing.allocator, &footer);
+    wire.items[10] = (wire.items[10] & ~@as(u8, 0x06)) | 0x06; // reserved BTYPE
+
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(.{
+        .expected_output_len = second.len,
+        .ignore_crc32 = true,
+        .ignore_isize = true,
+    }, &history);
+    var output: [second.len]u8 = undefined;
+    try std.testing.expectError(
+        error.InvalidDeflateBlockType,
+        decoder.step(wire.items, &output),
+    );
+    const error_input = try core.stream_count.toLocal(decoder.diagnostics().frame_input_read.?);
+    var scanner: deflate.RawDeflateSyncScanner = .{};
+    const scan = scanner.scan(wire.items[error_input..]);
+    const point = scan.point orelse return error.TestUnexpectedResult;
+    try decoder.resumeAfterSync(scan.input_read);
+    try std.testing.expectEqual(
+        error_input + point.resume_offset,
+        decoder.diagnostics().frame_input_read.?,
+    );
+    var input_offset = error_input + scan.input_read;
+    var output_offset: usize = 0;
+    while (true) {
+        const result = try decoder.step(wire.items[input_offset..], output[output_offset..]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        if (result.status == .done) break;
+        if (result.progress.input_read == 0 and result.progress.output_written == 0)
+            return error.TestUnexpectedResult;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(wire.items.len, input_offset);
+    try std.testing.expectEqualSlices(u8, second, output[0..output_offset]);
+}
+
 test "raw deflate sync scanner preserves offsets across arbitrary chunks" {
     const bytes = "prefix\x00\x00\xff\xffsuffix";
     var scanner: deflate.RawDeflateSyncScanner = .{};
