@@ -1820,9 +1820,12 @@ Evidence: [data/zstd-wide-candidate-order-20261118](data/zstd-wide-candidate-ord
 
 A diagnostic summary of the selected q11 wire on the xml 128 KiB prefix shows
 57 static-dictionary copies covering 332 bytes (wire 8,401 bytes; libbrotli
-7,441, +12.9%). The HQ DP already appends a full static frontier per position
-and prices it through `rep.choicesWithFormat`, so the gap is not a missing
-dictionary pass. The legacy literal-run `mixStaticDictionary*` helpers remain
-test-only. The next functional target is the q11 static-distance/command price
-and transform candidate coverage, not another post-pass. No production code
+7,441, +12.9%). The q11 schedule enables 4,096 dictionary probes, but
+`considerStaticDictionaryCandidate` only mixes dictionary copies into literal
+runs of the lazy command plan. The lazy plan's LZ77 copies cover most
+positions, so dictionary use stays at 332 bytes; libbrotli chooses dictionary
+copies jointly with LZ77. The legacy literal-run `mixStaticDictionary*`
+helpers remain test-only. The next functional target is a dictionary-first
+greedy re-plan that may replace LZ77 copies (same decoded output), emitted as
+an additional candidate with shortest-wire arbitration. No production code
 was changed in this screen.
