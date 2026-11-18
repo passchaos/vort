@@ -80,6 +80,10 @@ libbrotli 的 q11。
 - 保留 lazy/q10/现有 optimal 候选作为控制，最终仍取最短完整 wire，保证不回归。
 - 先用 xml/dickens 验证比例收益，再扩到 12 文件；更新 q11 golden 与 gate。
 
+首个原型已落地为 `src/br/encoder/stateful_plan.zig`：前向
+`(position, insert_bucket)` DP、literal/LZ77/dictionary 转移、前驱重建与
+5 个单元测试；尚未接入生产 q11 路径。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。

@@ -2442,6 +2442,7 @@ test {
     _ = hq_types;
     _ = hq_codec;
     _ = new_hq_parser;
+    _ = @import("br/encoder/stateful_plan.zig");
     _ = total_budget;
     _ = @import("tests/br_total_memory_contracts.zig");
     _ = @import("tests/br_total_memory_transactions.zig");
