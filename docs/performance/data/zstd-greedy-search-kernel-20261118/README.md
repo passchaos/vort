@@ -116,6 +116,15 @@ max 1.005x），是明确回归，已回退；回退后二进制与优化版逐�
 的三解析器完整仲裁（hash 25.5%、four-byte optimal 15.3%、multi-duplicate
 11.1%），需要成本代理/胜者预测级别的结构改动。
 
+## 已排除：跨 codec firstTrue 掩码替换
+
+把 controlled_search 的 `@bitCast` + `@ctz` 同样应用到 Brotli
+`hq_parser/resources`、Brotli `hq_tree/view`、zstd `hq_parser/resources`、
+zstd `repeated_pattern`、LZMA `match_finder/source`（12 文件前缀，3 对
+交错 A/B）：zstd L9 **0.996x**、Brotli q10 **1.001x**、q11 **1.000x**，
+均无实质收益；已全部回退。说明这些站点的失配归约不是热点，掩码替换只
+保留在 `controlled_search`。
+
 ## 验证
 
 - `zig build test-zstd --summary all`：5/5 steps，1430/1430 tests 通过。
