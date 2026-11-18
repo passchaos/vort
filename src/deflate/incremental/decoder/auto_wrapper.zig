@@ -197,6 +197,17 @@ pub fn Decoder(comptime Codec: type) type {
             };
         }
 
+        /// Forward raw-DEFLATE full-flush recovery to the detected wrapper.
+        /// Detection must have completed; the caller scans the payload for the
+        /// marker and supplies the skipped byte count.
+        pub fn resumeAfterSync(self: *Self, skipped_input: usize) Error!void {
+            switch (self.active) {
+                .detecting => return error.InvalidStreamState,
+                .zlib => |*decoder| try decoder.resumeAfterSync(skipped_input),
+                .gzip => |*decoder| try decoder.resumeAfterSync(skipped_input),
+            }
+        }
+
         pub fn finish(self: *Self) Error!void {
             self.last_step_progress = .{};
             return switch (self.active) {
