@@ -2915,7 +2915,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  Window_Log selects frame metadata; history bytes separately cap reachable matches
         \\                  Stream-file only: --max-input-len=BYTES --max-output-len=BYTES (source/encoded byte caps)
         \\                  Stream totals and file pledges remain wide; one-shot files/hex use addressable buffers
-        \\    Negative level -N selects fast acceleration N. New controls default to level 1.
+        \\    Negative level -N selects fast acceleration N. New controls default to level 3.
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
         \\    history_bytes is the selected history target; the standard dictionary header adds bytes. dict_id must be nonzero.

@@ -1770,15 +1770,20 @@ a conservative threshold.
 
 The user directed the public level semantics to follow zstd. The default level
 is now 3; levels 1/2/3 resolve to the legacy fast-compressed primary, the
-controlled fast parser with acceleration 2, and the controlled double-fast
-parser. Levels 4-22 keep the existing quality ladder. Explicit strategies,
-accelerations, HQ requests and encode controls still win, and the reusable
-`LevelFrameEncoder` path now applies the same 1-3 policy. On five 128 KiB
-Silesia prefixes the ladder sizes are 1.011-1.152x (L1), 0.970-1.032x (L2)
-and 0.981-1.041x (L3) of libzstd 1.4.8 at 2.6-6.9x slower; level 3 moves from
-2.2-9.1 MiB/s (32-399x slower, 0.81-1.07x size) to 29.8-129 MiB/s
-(5.4-6.5x slower, 0.98-1.04x size). nci shows a 1.4% L2/L3 inversion.
-Golden wires for the controls/HQ helpers, the large-history default, the
-encode gate and the root default-level assertion were re-frozen.
-`test-zstd` passes 1430/1430 and the encode gate passes.
+controlled fast parser with acceleration 2, and the controlled greedy parser.
+Levels 4-22 keep the existing quality ladder. Level 3 uses greedy instead of
+double-fast because double-fast inverted the ladder on mr (+6.7%) and nci
+(+1.4%); greedy is strictly smaller than level 2 on all 12 Silesia files and
+on 10/12 beats libzstd 1.4.8 level 3 (dickens +0.07%, osdb +1.35%). Explicit
+strategies, accelerations, HQ requests and encode controls still win, and the
+reusable `LevelFrameEncoder` path now applies the same 1-3 policy. On five
+128 KiB Silesia prefixes the ladder sizes are 1.011-1.152x (L1),
+0.970-1.032x (L2) and 0.902-1.001x (L3) of libzstd at 3.6-4.7x, 6.7-9.6x and
+12.0-20.5x slower respectively; level 3 moves from 2.2-9.1 MiB/s
+(32-399x slower, 0.81-1.07x size) to 10.2-50.8 MiB/s, trading roughly 2.3-2.8x
+speed versus double-fast for a strictly monotone ladder. Golden wires for the
+controls/HQ helpers, the large-history default, the encode gate and the root
+default-level assertion were re-frozen. `test-zstd` passes 1430/1430, the
+encode gate passes, and the full `test check check-wasm` gate finishes
+389/389 steps with 5756/5758 tests passing (2 skipped).
 Evidence: [data/zstd-level-semantics-aligned-20261118](data/zstd-level-semantics-aligned-20261118/README.md).
