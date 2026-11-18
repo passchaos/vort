@@ -296,6 +296,20 @@ pub fn Decoder(comptime Codec: type) type {
             return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
         }
 
+        /// Resume raw-DEFLATE decoding after an external scanner consumed the
+        /// `00 00 ff ff` full-flush marker. The wrapper stays in the same
+        /// member; its cumulative counters advance by the skipped payload
+        /// bytes. The member checksum cannot be reconstructed after corrupted
+        /// input, so callers that need the recovered suffix should use
+        /// `ignore_adler` (the footer is still consumed).
+        pub fn resumeAfterSync(self: *Self, skipped_input: usize) Error!void {
+            if (self.phase != .raw) return error.InvalidStreamState;
+            const resumed_input = try count.addLocal(self.total_input, skipped_input);
+            try self.raw.resumeAfterSync(skipped_input);
+            self.total_input = resumed_input;
+            self.clearError();
+        }
+
         fn admitStep(self: *const Self, input: []const u8, output: []u8) Error!bool {
             const writers = if (self.input_finished or self.phase == .done)
                 output[0..0]
