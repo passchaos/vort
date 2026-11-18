@@ -74,6 +74,14 @@
 （min 0.963x，max 1.010x），是明确回归；已回退，回退后二进制与优化版逐字节
 一致。链节点已基本驻留 L2/L3，提前读取与预取指令反而增加开销。
 
+## 已排除：直接跳过 repeated/multi 候选
+
+在 level 9 的 12 文件 128 KiB 前缀上分别跳过 repeated-pattern、multi-duplicate
+候选，最终 wire 全部逐字节不变；但两者同时跳过时几何平均仅 **1.040x**，且
+**mr 0.732x、sao 0.887x** 明显回归——`repeated_len` 同时参与后续 single /
+decisive 剪枝，直接跳过会丢失下界并让后续搜索变慢。保留现有仲裁；三解析器
+物化问题需要成本代理/胜者预测级别的改造，不能靠简单 skip。
+
 ## 验证
 
 - `zig build test-zstd --summary all`：5/5 steps，1430/1430 tests 通过。
