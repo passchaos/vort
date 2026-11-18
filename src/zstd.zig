@@ -21519,16 +21519,18 @@ noinline fn emitDecisiveWideMatchCompressedBlockInternal(
         error.InvalidBlockPlan => return false,
         else => return err,
     };
-    if (!try emitHashTokenSequenceBlockReuseForFrame(allocator, out, block, last, double_fast_tokens.items, double_fast_stats, large_sequence_scratch, sequence_state) or
-        out.items.len - output_start > block.len / 3)
-    {
-        out.items.len = output_start;
-        return false;
-    }
     const direct_state_applied = sequence_state != null and double_fast_stats.matches > max_native_sequence_count;
-    if (acceptWideDoubleFastTradeoff(speed_policy, out.items.len - output_start, block.len)) {
-        if (state_applied) |applied| applied.* = direct_state_applied;
-        return true;
+    if (speed_policy != .strict) {
+        if (!try emitHashTokenSequenceBlockReuseForFrame(allocator, out, block, last, double_fast_tokens.items, double_fast_stats, large_sequence_scratch, sequence_state) or
+            out.items.len - output_start > block.len / 3)
+        {
+            out.items.len = output_start;
+            return false;
+        }
+        if (acceptWideDoubleFastTradeoff(speed_policy, out.items.len - output_start, block.len)) {
+            if (state_applied) |applied| applied.* = direct_state_applied;
+            return true;
+        }
     }
 
     const rep_beam_stats = lz77.optimalRepBeamPlanZstdReuse(rep_beam, allocator, block) catch |err| switch (err) {
@@ -21546,6 +21548,17 @@ noinline fn emitDecisiveWideMatchCompressedBlockInternal(
         return false;
     }
 
+    if (speed_policy == .strict) {
+        // Strict levels only keep the double-fast wire when it matches the rep
+        // beam token-for-token. Emit it after that proof instead of building
+        // and discarding a complete losing candidate first.
+        if (!try emitHashTokenSequenceBlockReuseForFrame(allocator, out, block, last, double_fast_tokens.items, double_fast_stats, large_sequence_scratch, sequence_state) or
+            out.items.len - output_start > block.len / 3)
+        {
+            out.items.len = output_start;
+            return false;
+        }
+    }
     if (state_applied) |applied| applied.* = direct_state_applied;
     return true;
 }

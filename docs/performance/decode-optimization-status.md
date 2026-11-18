@@ -1803,3 +1803,15 @@ L22 controls stay within noise (L1 xml 1.002x, L9 0.998x, L22 0.999x).
 `test check check-wasm` gate finishes 389/389 steps with 5756/5758 tests
 passing (2 skipped).
 Evidence: [data/zstd-greedy-search-kernel-20261118](data/zstd-greedy-search-kernel-20261118/README.md).
+
+## Zstd wide-candidate emission order (2026-11-18)
+
+Strict wide-match levels now prove double-fast and rep-beam token equality
+before emitting the complete candidate wire. The losing candidate is no longer
+materialized and discarded. On 12 Silesia 128 KiB prefixes the interleaved A/B
+speedup is 1.033x geometric mean at level 9 (min 0.998x) and 1.036x at level 22
+(min 0.998x); every compared frame is byte-identical, and L1 controls stay
+within noise (dickens 0.995x, xml 0.999x). `test-zstd` passes 1430/1430, the
+encode gate passes, and the full `test check check-wasm` gate finishes 389/389
+steps with 5756/5758 tests passing (2 skipped).
+Evidence: [data/zstd-wide-candidate-order-20261118](data/zstd-wide-candidate-order-20261118/README.md).
