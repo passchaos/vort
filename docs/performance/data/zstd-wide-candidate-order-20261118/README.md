@@ -67,6 +67,13 @@
 `.fastest` 路径未改动；dickens 5×10 次迭代 0.9945x，xml 0.9987x，均在噪声内
 且高于 0.98x 控制下限。原始 CSV 在 `l1/`。
 
+## 已排除：hash 链 prefetch
+
+在 `lz77.findBestHashMatchWithLayoutAndHashLimits` 中提前读取下一个链节点并
+`@prefetch` 下一个候选的输入字节：L9 的 12 文件端到端 **0.988x** 几何平均
+（min 0.963x，max 1.010x），是明确回归；已回退，回退后二进制与优化版逐字节
+一致。链节点已基本驻留 L2/L3，提前读取与预取指令反而增加开销。
+
 ## 验证
 
 - `zig build test-zstd --summary all`：5/5 steps，1430/1430 tests 通过。
