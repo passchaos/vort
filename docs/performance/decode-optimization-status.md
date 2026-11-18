@@ -1838,3 +1838,10 @@ copy) and was reverted before producing a wire. Static dictionary copies are
 atomic and cannot be split like LZ77 copies, so a correct joint planner must
 integrate dictionary candidates into the parser/DP instead of merging two
 finished plans.
+
+A flat-cost sweep of `quality_dictionary_cost_bits` is mixed: 12 bits grows
+xml to 8,515 and dickens to 46,674; 24 bits gives xml 8,400 and dickens 44,109;
+28 bits gives xml 8,389 and dickens 44,408; the default 22 bits keeps xml
+8,401 and dickens 43,953. No fixed proxy improves both corpora, so the next
+step is per-command exact dictionary pricing inside the optimal DP, not a
+constant retune.
