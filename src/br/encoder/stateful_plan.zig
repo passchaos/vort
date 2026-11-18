@@ -56,7 +56,7 @@ pub fn plan(
     options: Options,
 ) ![]Token {
     const n = input.len;
-    const states = try std.math.mul(usize, n + 1, bucket_count);
+    const states = std.math.mul(usize, n + 1, bucket_count) catch return error.IntegerOverflow;
     const costs = try allocator.alloc(u32, states);
     defer allocator.free(costs);
     const prev = try allocator.alloc(Prev, states);

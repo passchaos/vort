@@ -84,6 +84,10 @@ libbrotli 的 q11。
 `(position, insert_bucket)` DP、literal/LZ77/dictionary 转移、前驱重建与
 5 个单元测试；尚未接入生产 q11 路径。
 
+首次集成尝试只把 lazy 计划 token 起点作为 LZ77 候选，xml/dickens/x-ray 的
+最终 wire 逐字节不变（8,401/43,953/77,220）。下一步必须为 DP 提供**每个
+位置的真实 hash-chain 候选**，否则 DP 只能复现 lazy 计划的选择。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。
