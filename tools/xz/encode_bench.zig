@@ -150,6 +150,7 @@ fn encodeVort(allocator: std.mem.Allocator, case: Case, lazy_control: bool) ![]u
     return switch (if (lazy_control) vort.XzEncodeParser.greedy else case.parser) {
         .greedy => vort.encodeXzAlloc(allocator, case.input, options),
         .lazy => vort.encodeXzLazyAlloc(allocator, case.input, options),
+        .literal_only, .fast, .normal => error.InvalidBlockPlan,
     };
 }
 
