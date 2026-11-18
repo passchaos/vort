@@ -107,6 +107,15 @@ max 1.005x），是明确回归，已回退；回退后二进制与优化版逐�
 一致。若未来要换取 1.2x 速度，需要用户明确接受 x-ray 级二进制比率回退，
 并同步重冻 golden/gate。
 
+## 已排除：lz77 8/16 字节前置比较（HQ）
+
+给共享的 `lz77.matchLength` 加上与 controlled_search 相同的 8/16 字节
+`u64` 前置比较，level 9 的 12 文件前缀端到端仅 **1.006x** 几何平均
+（min 0.995x，max 1.021x），低于 3% 门槛；已回退，回退后二进制与优化版
+逐字节一致。HQ 的下一杠杆是 `emitNativeMatchCompressedBlockWithScratch`
+的三解析器完整仲裁（hash 25.5%、four-byte optimal 15.3%、multi-duplicate
+11.1%），需要成本代理/胜者预测级别的结构改动。
+
 ## 验证
 
 - `zig build test-zstd --summary all`：5/5 steps，1430/1430 tests 通过。
