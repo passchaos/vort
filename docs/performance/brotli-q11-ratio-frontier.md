@@ -60,13 +60,23 @@ libbrotli 的 q11。
 
 最小切片（仅 q10/q11、≤128 KiB 输入）：
 
-- 在反向 DP 中加入 **insert-length 桶**（例如 0、1-3、4-7、8-15、16-31、
-  32-63、64+），使字典/命令代价可按累计 literal run 定价。
-- 复用 `hq_parser/prices.zig` 的 `Model.encodingPrice`、`command_lut` 与
-  `rep.choicesWithFormat`，为每个候选计算 command symbol、distance code 与
-  extra bits 的精确 q8 价格。
-- 每个位置保留静态/compound/serialized 字典 frontier（`hq_dictionary.Provider`），
-  与 LZ77 候选共同进入 DP；静态 copy 保持原子，不做跨命令拆分。
+- **前向 DP**，状态 `(position, insert_bucket)`，桶边界 0、1、2、3、4-7、
+  8-15、16-31、32-63、64+；首版不引入 recent-distance 维，保持与现有
+  `optimalPlanAlloc` 的距离代价口径一致。
+- 转移：
+  - literal：`(i,b) -> (i+1, min(b+1,last))`，代价 `literalCost(input[i])`；
+  - LZ77：`(i,b) -> (i+len, 0)`，候选来自现有 hash chain，代价
+    `commandCost(b, len) + fixedDistanceCost(distance)`；
+  - 静态字典：`(i,b) -> (i+output_len, 0)`，候选来自
+    `hq_dictionary.Provider.appendCandidates` 的 static frontier，代价
+    `commandCost(b, copy_len) + staticDistanceCost(address)`。
+- `commandCost` 使用 Brotli command LUT 的 insert/copy extra bits 与固定符号
+  成本；`staticDistanceCost` 使用 `prices` 的距离码价格，不再使用 22-bit
+  flat proxy。首版可用 q8 固定表，后续再接 `Model.encodingPrice`。
+- 重建：每个状态保存 predecessor；输出命令时使用真实 `insert_len`（桶内精确
+  值需要同时保存 literal 起点，或按桶边界回放）。
+- 复杂度：`n * buckets * (chain + dictionary)`；128 KiB × 8 × ~64 ≈ 65M 次
+  候选评估，先在 xml/dickens 测量耗时，超过 q11 当前预算则减桶或减 chain。
 - 保留 lazy/q10/现有 optimal 候选作为控制，最终仍取最短完整 wire，保证不回归。
 - 先用 xml/dickens 验证比例收益，再扩到 12 文件；更新 q11 golden 与 gate。
 
