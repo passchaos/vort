@@ -1852,3 +1852,6 @@ gives xml 8,400 and dickens 43,955. The q11 gap therefore requires a stateful
 optimal DP that prices insert length, command symbol, distance code and extra
 bits per candidate, not a scalar proxy. The benchmark infrastructure gates
 (native library, planned encode, planned chunks, Brotli reference) all pass.
+Running the literal-run dictionary mix on the lazy q11 command plan is
+byte-identical on xml/dickens/x-ray (8,401/43,953/77,220), confirming the lazy
+literal runs are too short for the static dictionary.
