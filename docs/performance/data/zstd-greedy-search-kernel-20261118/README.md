@@ -75,6 +75,21 @@ L1（legacy fast）与 L9/L22（HQ）不经过该搜索内核；交错 A/B 显�
 范围内：L1 xml 5×10 次迭代 1.002x，L9 xml 0.998x，L22 xml 0.999x，均高于
 0.98x 控制下限。原始 CSV 在 `controls/`。
 
+## 搜索计数（dickens 128 KiB，level 3）
+
+CLI `--strategy=greedy --level=3 --profile`：
+
+- `positions=24165`，`candidate_checks=752755`（平均约 31.1 次/位置），
+  `short_hash_probes=680278`，`rep_probes=72477`，`parser_matches=21018`，
+  `parser_matched_bytes=127923`。
+- 搜索预算 64 并未饱和；把预算减半预计只能削减少量探针，收益有限。
+
+## 已排除：packed match 返回
+
+把 `matchAt` 的 16 字节 `Match` 返回值改为 `u64`（length<<32|distance）以消除
+隐藏 sret 指针，在 12 文件前缀上为 **0.988x 几何平均**（min 0.969x，
+max 1.005x），是明确回归，已回退；回退后二进制与优化版逐字节一致。
+
 ## 验证
 
 - `zig build test-zstd --summary all`：5/5 steps，1430/1430 tests 通过。

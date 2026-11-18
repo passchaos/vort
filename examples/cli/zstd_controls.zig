@@ -342,6 +342,10 @@ pub fn printProfile(stdout: *std.Io.Writer, profile: vort.ZstdEncoderControlProf
         if (profile.effective_hq_parser_engine) |engine| @tagName(engine) else "none",
     });
     if (profile.effective_hq_max_price_evaluations) |limit| try stdout.print("{d}", .{limit}) else try stdout.writeAll("unlimited");
+    try stdout.print(" candidate_checks={d} short_hash_probes={d} rep_probes={d} skipped_positions={d} parser_matches={d} parser_matched_bytes={d}\n", .{
+        profile.candidate_checks,  profile.short_hash_probes, profile.rep_probes,
+        profile.skipped_positions, profile.parser_matches,    profile.parser_matched_bytes,
+    });
     try stdout.print(" bounded_passes={d} whole_block_passes={d} sampled_length_passes={d} complete_length_passes={d} baseline_searches={d} guarded_frames={d} price_limit_refusals={d} max_parse_positions={d} max_match_length_considered={d} max_plan_price_evaluations={d} baseline_selected_blocks={d} baseline_selected_frames={d}\n", .{
         profile.bounded_passes,             profile.whole_block_passes,       profile.sampled_length_passes,
         profile.complete_length_passes,     profile.baseline_searches,        profile.guarded_frames,
