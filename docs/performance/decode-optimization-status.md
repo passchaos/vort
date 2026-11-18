@@ -1845,3 +1845,10 @@ xml to 8,515 and dickens to 46,674; 24 bits gives xml 8,400 and dickens 44,109;
 8,401 and dickens 43,953. No fixed proxy improves both corpora, so the next
 step is per-command exact dictionary pricing inside the optimal DP, not a
 constant retune.
+
+A per-copy-length discount (slope 1/2 eighths of a bit per copy byte) is also
+marginal: slope 1 keeps xml 8,401 and dickens 43,950 (3 bytes better); slope 2
+gives xml 8,400 and dickens 43,955. The q11 gap therefore requires a stateful
+optimal DP that prices insert length, command symbol, distance code and extra
+bits per candidate, not a scalar proxy. The benchmark infrastructure gates
+(native library, planned encode, planned chunks, Brotli reference) all pass.
