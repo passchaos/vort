@@ -52,6 +52,7 @@ libbrotli 的 q11。
 | 按 copy 长度的字典折扣 slope 1/2 | slope 1：xml 8,401 / dickens 43,950；slope 2：8,400 / 43,955；边际且互相抵消 |
 | LZ77 计划 + 字典计划位置合并 | 静态 copy 原子不可拆分，部分重叠触发 `InvalidBlockPlan`，回退 |
 | lazy 计划 literal-run 字典 mix | xml/dickens/x-ray 逐字节不变 |
+| token 级字典重写（允许替换/拆分 LZ77 token） | xml/dickens/x-ray 逐字节不变；字典候选不优于 lazy token |
 | command-state DP 扩到 64 KiB | 64 KiB 输入上 xml 3,972、dickens 22,352，与默认逐字节相同 |
 | HQ codec（btultra2 级）作为 q11 候选 | depth 512 与默认 depth 64 在 128 KiB xml 上都超过 5 分钟，远慢于 q11 的亚秒级；不能作为默认级别候选 |
 
