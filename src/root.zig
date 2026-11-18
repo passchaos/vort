@@ -5168,7 +5168,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodedBlockBound;
 
     _ = ZstdError;
-    try std.testing.expectEqual(@as(c_int, 1), zstdDefaultCompressionLevel);
+    try std.testing.expectEqual(@as(c_int, 3), zstdDefaultCompressionLevel);
     _ = zstdEncodeFrameAlloc;
     _ = zstdEncodeFrameWithLevelAlloc;
     _ = zstdEncodeFrameWithOptionsAlloc;

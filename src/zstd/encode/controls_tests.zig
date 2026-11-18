@@ -16,7 +16,11 @@ test "Zstd encode controls positive auto null and profile only preserve every le
         const profiled = try zstd.encodeFrameWithLevelAndOptionsAlloc(allocator, &input, level, .{ .strategy = .auto, .fast_acceleration = null, .control_profile = &profile });
         defer allocator.free(profiled);
         try std.testing.expectEqualSlices(u8, plain, profiled);
-        try std.testing.expect(!profile.available and !profile.controls_used);
+        // Levels 2 and 3 follow the zstd-aligned controlled fast/double-fast
+        // policy, so their plain wire runs through the controlled encoder.
+        const controlled = level >= 2 and level <= 3;
+        try std.testing.expectEqual(controlled, profile.available);
+        try std.testing.expectEqual(controlled, profile.controls_used);
     }
 }
 

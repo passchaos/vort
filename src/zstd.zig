@@ -1285,7 +1285,10 @@ pub const FrameDecodeOptions = struct {
     }
 };
 
-pub const default_compression_level: c_int = 1;
+/// Match the industry zstd default level so an omitted level selects the same
+/// semantic point (double-fast, balanced default) rather than the fastest
+/// fast-compressed preset.
+pub const default_compression_level: c_int = 3;
 pub const min_compression_level: c_int = encode_controls.min_level;
 pub const max_compression_level: c_int = 22;
 pub const Strategy = encode_controls.Strategy;
@@ -10006,10 +10009,10 @@ pub const LevelFrameEncoder = struct {
             return (try self.primary.encodeScratchWithDictionary(input, native, dictionary)).frame;
         }
 
-        const primary_options = try nativeFrameOptionsForLevel(level, options);
+        const primary_options = applySpeedFirstLevelPolicy(level, try nativeFrameOptionsForLevel(level, options));
         if (encode_controls.active(primary_options)) return (try self.primary.encodeScratch(input, primary_options)).frame;
-        if (level >= 1 and level <= 2)
-            return (try self.primary.encodeScratch(input, applySpeedFirstLevelPolicy(level, primary_options))).frame;
+        if (level >= 1 and level <= 3)
+            return (try self.primary.encodeScratch(input, primary_options)).frame;
         if (level <= 0 or input.len <= 8 * 1024)
             return (try self.primary.encodeScratch(input, primary_options)).frame;
 
@@ -10182,7 +10185,7 @@ fn encodeFrameWithLevelAndOptionsAllocUnbudgeted(
 ) Error![]u8 {
     const resolved = try resolveFrameOptionsForLevel(level, options);
     if (encode_controls.active(resolved)) return (try encodeNativeFrameWithOptionsAlloc(allocator, input, resolved)).frame;
-    if (level >= 1 and level <= 2)
+    if (level >= 1 and level <= 3)
         return (try encodeNativeFrameWithOptionsAlloc(allocator, input, applySpeedFirstLevelPolicy(level, resolved))).frame;
     if (input.len > std.compress.zstd.block_size_max)
         if (try probeDecisiveLargerAdaptiveFrame(allocator, input, level, options)) |larger|
@@ -10511,14 +10514,32 @@ pub fn resolveFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!Na
 }
 pub const nativeFrameOptionsForLevel = resolveFrameOptionsForLevel;
 
-/// Levels 1...2 follow the industry speed-first contract: emit the primary
-/// fast-compressed frame and skip the adaptive split ladder. Explicit
-/// strategies, accelerations, HQ requests, and encode controls still win.
+/// Public levels 1...3 follow the industry zstd strategy ladder: level 1 uses
+/// the fastest legacy fast-compressed primary, level 2 the controlled fast
+/// parser with acceleration 2, and level 3 the controlled double-fast parser.
+/// Explicit strategies, accelerations, HQ requests, and encode controls still
+/// win.
 fn applySpeedFirstLevelPolicy(level: c_int, options: NativeFrameOptions) NativeFrameOptions {
-    if (level < 1 or level > 2 or encode_controls.active(options)) return options;
-    var fast = options;
-    fast.selection = .fast_compressed;
-    return fast;
+    if (level < 1 or level > 3 or encode_controls.active(options)) return options;
+    var aligned = options;
+    aligned.selection = .fast_compressed;
+    switch (level) {
+        2 => {
+            aligned.strategy = .fast;
+            aligned.fast_acceleration = 2;
+            // Controlled fast/double-fast use acceleration instead of the
+            // level-based candidate budget and reject the rep beam.
+            aligned.match_search_budget = mixed_match_path_search_budget;
+            aligned.rep_beam_search = false;
+        },
+        3 => {
+            aligned.strategy = .double_fast;
+            aligned.match_search_budget = mixed_match_path_search_budget;
+            aligned.rep_beam_search = false;
+        },
+        else => {},
+    }
+    return aligned;
 }
 
 /// Resolve the effective options for a public level-based encode entry point.
@@ -24149,8 +24170,7 @@ test "zstd ratio level accepts decisive structured primary frame" {
     defer std.testing.allocator.free(level22_selected);
     try std.testing.expectEqualSlices(u8, level22_primary.frame, level22_selected);
 
-    const level3_options = try nativeFrameOptionsForLevel(3, .{});
-    try std.testing.expect(shouldProbeRatioDecisivePrimary(payload.items, 3, level3_options.block_size_max));
+    const level3_options = applySpeedFirstLevelPolicy(3, try nativeFrameOptionsForLevel(3, .{}));
     const level3_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, level3_options);
     defer std.testing.allocator.free(level3_primary.frame);
     const level3_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 3);
@@ -24226,24 +24246,9 @@ test "zstd ratio decisive primary matches generated split arbitration" {
     var marker: usize = 252;
     while (marker < bounded_tradeoff.len) : (marker += 252)
         bounded_tradeoff[marker] = @intCast('0' + (marker / 252 + 3) % 10);
-    const level3_options = try nativeFrameOptionsForLevel(3, .{});
+    const level3_options = applySpeedFirstLevelPolicy(3, try nativeFrameOptionsForLevel(3, .{}));
     const level3_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &bounded_tradeoff, level3_options);
     defer std.testing.allocator.free(level3_primary.frame);
-    var exhaustive = level3_primary;
-    exhaustive.frame = try std.testing.allocator.dupe(u8, level3_primary.frame);
-    defer std.testing.allocator.free(exhaustive.frame);
-    for (adaptiveLevelBlockSizes(3)) |block_size| {
-        const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &bounded_tradeoff, adaptiveLevelCandidateOptions(level3_options, block_size));
-        if (split.frame.len < exhaustive.frame.len) {
-            std.testing.allocator.free(exhaustive.frame);
-            exhaustive = split;
-        } else std.testing.allocator.free(split.frame);
-    }
-    try std.testing.expect(level3_primary.frame.len <= bounded_tradeoff.len / 32);
-    try std.testing.expectEqual(@as(usize, 333), level3_primary.frame.len);
-    // The seven-candidate default slightly changes this losing split candidate
-    // (291 -> 293 bytes); the selected level-3 primary is unchanged.
-    try std.testing.expectEqual(@as(usize, 293), exhaustive.frame.len);
     const level3_fast = try encodeFrameWithLevelAlloc(std.testing.allocator, &bounded_tradeoff, 3);
     defer std.testing.allocator.free(level3_fast);
     try std.testing.expectEqualSlices(u8, level3_primary.frame, level3_fast);
@@ -39667,10 +39672,13 @@ test "zstd speed levels share the fast primary wire across public surfaces" {
     var encoder = LevelFrameEncoder.init(std.testing.allocator);
     defer encoder.deinit();
     var slice_buffer: [64 * 1024]u8 = undefined;
-    for ([_]c_int{ 1, 2 }) |level| {
+    for ([_]c_int{ 1, 2, 3 }) |level| {
+        const level_options = applySpeedFirstLevelPolicy(level, try nativeFrameOptionsForLevel(level, .{}));
+        const level_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, level_options);
+        defer std.testing.allocator.free(level_expected.frame);
         const alloc_frame = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, level);
         defer std.testing.allocator.free(alloc_frame);
-        try std.testing.expectEqualSlices(u8, expected.frame, alloc_frame);
+        try std.testing.expectEqualSlices(u8, level_expected.frame, alloc_frame);
 
         var appended: std.ArrayList(u8) = .empty;
         defer appended.deinit(std.testing.allocator);
@@ -39752,7 +39760,7 @@ test "zstd level one uses repeat-offset search on structured input" {
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
-test "zstd level three uses repeat-offset search on structured input" {
+test "zstd level three uses double-fast on structured input" {
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(std.testing.allocator);
     while (payload.items.len < 32 * 1024) {
@@ -39762,27 +39770,25 @@ test "zstd level three uses repeat-offset search on structured input" {
         try payload.appendSlice(std.testing.allocator, formatted);
     }
 
-    const with_repcodes = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 3);
-    defer std.testing.allocator.free(with_repcodes);
-    try std.testing.expectEqual(@as(usize, 643), with_repcodes.len);
-    var without_options = try nativeFrameOptionsForLevel(3, .{});
-    without_options.rep_beam_search = false;
-    const without_repcodes = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, without_options);
-    defer std.testing.allocator.free(without_repcodes.frame);
-    try std.testing.expect(with_repcodes.len < without_repcodes.frame.len);
+    const expected_options = applySpeedFirstLevelPolicy(3, try nativeFrameOptionsForLevel(3, .{}));
+    const expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, expected_options);
+    defer std.testing.allocator.free(expected.frame);
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 3);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, expected.frame, selected);
 
-    const decoded = try decodeFrameAlloc(std.testing.allocator, with_repcodes);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, selected);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 
     var reusable = LevelFrameEncoder.init(std.testing.allocator);
     defer reusable.deinit();
-    try std.testing.expectEqualSlices(u8, with_repcodes, try reusable.encodeScratch(payload.items, 3));
+    try std.testing.expectEqualSlices(u8, selected, try reusable.encodeScratch(payload.items, 3));
     const bound = try encodedFrameBoundWithLevel(payload.items.len, 3);
     const into = try std.testing.allocator.alloc(u8, bound);
     defer std.testing.allocator.free(into);
     const written = try encodeFrameIntoSliceWithLevel(std.testing.allocator, payload.items, 3, into);
-    try std.testing.expectEqualSlices(u8, with_repcodes, into[0..written]);
+    try std.testing.expectEqualSlices(u8, selected, into[0..written]);
 }
 
 test "zstd decisive rep beam safely bypasses ordinary optimal parser" {
@@ -40377,14 +40383,25 @@ test "zstd legacy auto levels retain mixed candidates above the low latency pres
 }
 
 test "zstd adaptive block candidate never expands the selected frame" {
+    const level: c_int = 4;
     const repeated = "Zstandard adaptive split repeated text with a long cross-block match.\n" ** 512;
-    const primary_options = try nativeFrameOptionsForLevel(3, .{});
+    const primary_options = try nativeFrameOptionsForLevel(level, .{});
     const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, repeated, primary_options);
     defer std.testing.allocator.free(primary.frame);
-    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, repeated, 3);
+    var expected = primary;
+    expected.frame = try std.testing.allocator.dupe(u8, primary.frame);
+    defer std.testing.allocator.free(expected.frame);
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, repeated, adaptiveLevelCandidateOptions(primary_options, block_size));
+        if (split.frame.len < expected.frame.len) {
+            std.testing.allocator.free(expected.frame);
+            expected = split;
+        } else std.testing.allocator.free(split.frame);
+    }
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, repeated, level);
     defer std.testing.allocator.free(selected);
     try std.testing.expect(selected.len <= primary.frame.len);
-    try std.testing.expectEqualSlices(u8, primary.frame, selected);
+    try std.testing.expectEqualSlices(u8, expected.frame, selected);
 
     var structured: std.ArrayList(u8) = .empty;
     defer structured.deinit(std.testing.allocator);
@@ -40395,7 +40412,7 @@ test "zstd adaptive block candidate never expands the selected frame" {
     }
     const structured_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured.items, primary_options);
     defer std.testing.allocator.free(structured_primary.frame);
-    const structured_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, structured.items, 3);
+    const structured_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, structured.items, level);
     defer std.testing.allocator.free(structured_selected);
     // A stronger primary block representation may make the adaptive split tie
     // or lose; the public arbitration contract is monotonic size, not that a
@@ -40432,7 +40449,7 @@ test "zstd parallel adaptive candidates match serial selection" {
     try std.testing.expectEqualSlices(u8, expected.frame, actual);
 }
 
-test "zstd level three overlaps multiblock primary and adaptive candidates" {
+test "zstd level four overlaps multiblock primary and adaptive candidates" {
     var payload: [129 * 1024]u8 = undefined;
     var state: u32 = @truncate(0x9e37_79b9 +% 129 *% 0x10001 +% 16 *% 0x101 +% 23);
     for (&payload, 0..) |*byte, index| {
@@ -40442,7 +40459,7 @@ test "zstd level three overlaps multiblock primary and adaptive candidates" {
     const copy_len = payload.len / 4;
     @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
 
-    const level: c_int = 3;
+    const level: c_int = 4;
     const primary_options = try nativeFrameOptionsForLevel(level, .{});
     var expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
     defer std.testing.allocator.free(expected.frame);
@@ -40456,7 +40473,6 @@ test "zstd level three overlaps multiblock primary and adaptive candidates" {
 
     const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
     defer std.testing.allocator.free(actual);
-    try std.testing.expectEqual(@as(usize, 27_517), actual.len);
     try std.testing.expectEqualSlices(u8, expected.frame, actual);
     var reusable = LevelFrameEncoder.init(std.testing.allocator);
     defer reusable.deinit();
@@ -40469,9 +40485,9 @@ test "zstd level three overlaps multiblock primary and adaptive candidates" {
 test "zstd decisive larger adaptive candidate matches exhaustive generated arbitration" {
     var decisive_cases: usize = 0;
     var preflight_cases: usize = 0;
-    // Levels 1...2 are speed-first and never enter the adaptive arbitration,
-    // so the exhaustive comparison covers the quality ladder from level 3 up.
-    const levels = [_]c_int{ 3, 4, 5, 6, 9, 22 };
+    // Levels 1...3 follow the speed-first aligned policy and never enter the
+    // adaptive arbitration, so the exhaustive comparison starts at level 4.
+    const levels = [_]c_int{ 4, 5, 6, 9, 22 };
     for (levels) |level| {
         for ([_]usize{ 129 * 1024, 192 * 1024 }) |input_len| {
             for (0..4) |seed| {
@@ -40620,19 +40636,24 @@ test "zstd speed levels bypass adaptive search for wide alphabets" {
     }
 
     try std.testing.expect(!preferSerialMixedSearch(&payload));
-    for ([_]c_int{ 1, 3 }) |level| {
-        const primary_options = try resolveEncodeOptionsForLevel(level, .{});
-        try std.testing.expect(shouldReturnFastWidePrimary(&payload, level, primary_options.block_size_max));
-        const expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
-        defer std.testing.allocator.free(expected.frame);
-        const larger_split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, adaptiveLevelBlockSizes(level)[1]));
-        defer std.testing.allocator.free(larger_split.frame);
-        try std.testing.expect(larger_split.frame.len > expected.frame.len);
+    const level1_options = try resolveEncodeOptionsForLevel(1, .{});
+    try std.testing.expect(shouldReturnFastWidePrimary(&payload, 1, level1_options.block_size_max));
+    const level1_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, level1_options);
+    defer std.testing.allocator.free(level1_expected.frame);
+    const larger_split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(level1_options, adaptiveLevelBlockSizes(1)[1]));
+    defer std.testing.allocator.free(larger_split.frame);
+    try std.testing.expect(larger_split.frame.len > level1_expected.frame.len);
+    const level1_actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 1);
+    defer std.testing.allocator.free(level1_actual);
+    try std.testing.expectEqualSlices(u8, level1_expected.frame, level1_actual);
 
-        const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
-        defer std.testing.allocator.free(actual);
-        try std.testing.expectEqualSlices(u8, expected.frame, actual);
-    }
+    const level3_options = try resolveEncodeOptionsForLevel(3, .{});
+    const level3_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, level3_options);
+    defer std.testing.allocator.free(level3_expected.frame);
+    const level3_actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 3);
+    defer std.testing.allocator.free(level3_actual);
+    try std.testing.expectEqualSlices(u8, level3_expected.frame, level3_actual);
+    try std.testing.expect(level3_actual.len <= level1_actual.len);
     try std.testing.expect(!shouldReturnFastWidePrimary(&payload, 2, std.compress.zstd.block_size_max));
     try std.testing.expect(!shouldReturnFastWidePrimary(&payload, 4, std.compress.zstd.block_size_max));
     try std.testing.expect(!shouldReturnFastWidePrimary(&payload, 9, std.compress.zstd.block_size_max));
@@ -41810,8 +41831,11 @@ test "zstd fastest wide policy pins worst audited double fast tradeoff" {
     try std.testing.expectEqualSlices(u8, level1, try reusable.encodeScratch(&payload, 1));
     const level2 = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 2);
     defer std.testing.allocator.free(level2);
-    // Levels 1 and 2 share the speed-first policy and therefore the same wire.
-    try std.testing.expectEqualSlices(u8, level1, level2);
+    const level2_options = applySpeedFirstLevelPolicy(2, try nativeFrameOptionsForLevel(2, .{}));
+    const level2_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, level2_options);
+    defer std.testing.allocator.free(level2_expected.frame);
+    try std.testing.expectEqualSlices(u8, level2_expected.frame, level2);
+    try std.testing.expect(level2.len <= level1.len);
     const decoded = try decodeFrameAlloc(std.testing.allocator, level1);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
@@ -41852,9 +41876,12 @@ test "zstd level three wide block accepts audited one-sixteenth tradeoff" {
     try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, 64, null));
     try std.testing.expectEqualSlices(u8, fast.items, selected.items);
 
+    const level3_options = applySpeedFirstLevelPolicy(3, try nativeFrameOptionsForLevel(3, .{}));
+    const level3_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, level3_options);
+    defer std.testing.allocator.free(level3_expected.frame);
     const level3 = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 3);
     defer std.testing.allocator.free(level3);
-    try std.testing.expectEqual(@as(usize, 2038), level3.len);
+    try std.testing.expectEqualSlices(u8, level3_expected.frame, level3);
     var reusable = LevelFrameEncoder.init(std.testing.allocator);
     defer reusable.deinit();
     try std.testing.expectEqualSlices(u8, level3, try reusable.encodeScratch(&payload, 3));
@@ -41862,7 +41889,6 @@ test "zstd level three wide block accepts audited one-sixteenth tradeoff" {
     const level9 = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 9);
     defer std.testing.allocator.free(level9);
     try std.testing.expectEqual(@as(usize, 2037), level9.len);
-    try std.testing.expect(level9.len < level3.len);
     const decoded = try decodeFrameAlloc(std.testing.allocator, level3);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);

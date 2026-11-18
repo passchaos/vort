@@ -1765,3 +1765,20 @@ and samba (40,937) stayed byte-identical. The proposals either remain below
 even the lower entropy bar or lose the complete-wire arbitration, confirming
 that the binary gap is split-proposal quality and base entropy modeling, not
 a conservative threshold.
+
+## Zstd level semantics aligned with zstd (2026-11-18)
+
+The user directed the public level semantics to follow zstd. The default level
+is now 3; levels 1/2/3 resolve to the legacy fast-compressed primary, the
+controlled fast parser with acceleration 2, and the controlled double-fast
+parser. Levels 4-22 keep the existing quality ladder. Explicit strategies,
+accelerations, HQ requests and encode controls still win, and the reusable
+`LevelFrameEncoder` path now applies the same 1-3 policy. On five 128 KiB
+Silesia prefixes the ladder sizes are 1.011-1.152x (L1), 0.970-1.032x (L2)
+and 0.981-1.041x (L3) of libzstd 1.4.8 at 2.6-6.9x slower; level 3 moves from
+2.2-9.1 MiB/s (32-399x slower, 0.81-1.07x size) to 29.8-129 MiB/s
+(5.4-6.5x slower, 0.98-1.04x size). nci shows a 1.4% L2/L3 inversion.
+Golden wires for the controls/HQ helpers, the large-history default, the
+encode gate and the root default-level assertion were re-frozen.
+`test-zstd` passes 1430/1430 and the encode gate passes.
+Evidence: [data/zstd-level-semantics-aligned-20261118](data/zstd-level-semantics-aligned-20261118/README.md).
