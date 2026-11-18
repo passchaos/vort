@@ -1815,3 +1815,14 @@ within noise (dickens 0.995x, xml 0.999x). `test-zstd` passes 1430/1430, the
 encode gate passes, and the full `test check check-wasm` gate finishes 389/389
 steps with 5756/5758 tests passing (2 skipped).
 Evidence: [data/zstd-wide-candidate-order-20261118](data/zstd-wide-candidate-order-20261118/README.md).
+
+## Brotli q11 static dictionary usage screen (2026-11-19)
+
+A diagnostic summary of the selected q11 wire on the xml 128 KiB prefix shows
+57 static-dictionary copies covering 332 bytes (wire 8,401 bytes; libbrotli
+7,441, +12.9%). The HQ DP already appends a full static frontier per position
+and prices it through `rep.choicesWithFormat`, so the gap is not a missing
+dictionary pass. The legacy literal-run `mixStaticDictionary*` helpers remain
+test-only. The next functional target is the q11 static-distance/command price
+and transform candidate coverage, not another post-pass. No production code
+was changed in this screen.
