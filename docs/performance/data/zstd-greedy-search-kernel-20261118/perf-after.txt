@@ -1,0 +1,14 @@
+# Total Lost Samples: 0
+# Samples: 1K of event 'cycles:P'
+    29.83%  bench-after5  bench-after5      [.] zstd.match.controlled_search.findBest
+    29.01%  bench-after5  bench-after5      [.] zstd.match.controlled_search.matchAt
+     7.12%  bench-after5  bench-after5      [.] zstd.match.controlled_search.planReuse
+     5.24%  bench-after5  libzstd.so.1.4.8  [.] ZSTD_compressBlock_doubleFast
+     3.30%  bench-after5  bench-after5      [.] zstd.emitLargeSequenceCompressedBlockWithStatePolicy__anon_42270
+     2.94%  bench-after5  bench-after5      [.] zstd.ReverseBitstreamWriter.addBits
+     2.67%  bench-after5  bench-after5      [.] zstd.sequence.large.predefined.plan
+     2.58%  bench-after5  bench-after5      [.] compiler_rt.memset
+     2.00%  bench-after5  bench-after5      [.] crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round
+     1.51%  bench-after5  bench-after5      [.] array_list.Aligned(zstd.match.controlled_source.Record,null).append
+     1.15%  bench-after5  bench-after5      [.] zstd.emitLongHuffmanStream__anon_40003
+     1.07%  bench-after5  bench-after5      [.] zstd.emitSequenceLiteralsSection

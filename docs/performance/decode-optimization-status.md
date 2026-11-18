@@ -1787,3 +1787,19 @@ default-level assertion were re-frozen. `test-zstd` passes 1430/1430, the
 encode gate passes, and the full `test check check-wasm` gate finishes
 389/389 steps with 5756/5758 tests passing (2 skipped).
 Evidence: [data/zstd-level-semantics-aligned-20261118](data/zstd-level-semantics-aligned-20261118/README.md).
+
+## Zstd greedy search kernel speedup (2026-11-18)
+
+The controlled greedy/lazy/optimal search kernel now locates mismatches with a
+direct bool-vector bitcast plus `@ctz` instead of `std.simd.firstTrue`'s
+portable iota/blend/min reduction, compares the first 8/16 bytes as `u64`
+words before the 32-byte vector loop, caches the incumbent sequence price in
+`findBest`, and skips the prefix hash when there is no dictionary/history
+prefix. On 12 Silesia 128 KiB prefixes at level 3 the interleaved A/B speedup
+is 1.152x geometric mean (min 1.046x, max 1.217x); full-file dickens and xml
+improve 1.187x and 1.135x. Every compared frame is byte-identical, and L1/L9/
+L22 controls stay within noise (L1 xml 1.002x, L9 0.998x, L22 0.999x).
+`test-zstd` passes 1430/1430 and the encode gate passes; the full
+`test check check-wasm` gate finishes 389/389 steps with 5756/5758 tests
+passing (2 skipped).
+Evidence: [data/zstd-greedy-search-kernel-20261118](data/zstd-greedy-search-kernel-20261118/README.md).

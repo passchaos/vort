@@ -1,0 +1,13 @@
+# Total Lost Samples: 0
+# Samples: 1K of event 'cycles:P'
+    40.10%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.match.controlled_search.matchAt
+    16.48%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.match.controlled_search.findBest
+    10.83%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.match.controlled_search.better
+     5.27%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.match.controlled_search.planReuse
+     4.55%  vort-zstd-encod  libzstd.so.1.4.8        [.] ZSTD_compressBlock_doubleFast
+     2.29%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.emitLargeSequenceCompressedBlockWithStatePolicy__anon_42270
+     2.14%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.ReverseBitstreamWriter.addBits
+     2.07%  vort-zstd-encod  vort-zstd-encode-bench  [.] crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round
+     1.91%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.sequence.large.predefined.plan
+     1.45%  vort-zstd-encod  vort-zstd-encode-bench  [.] zstd.emitLongHuffmanStream__anon_40003
+     1.37%  vort-zstd-encod  vort-zstd-encode-bench  [.] compiler_rt.memset
