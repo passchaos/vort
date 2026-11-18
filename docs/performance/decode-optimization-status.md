@@ -1829,3 +1829,12 @@ helpers remain test-only. The next functional target is a dictionary-first
 greedy re-plan that may replace LZ77 copies (same decoded output), emitted as
 an additional candidate with shortest-wire arbitration. No production code
 was changed in this screen.
+
+A follow-up prototype merged the lazy/optimal command plan with a
+dictionary-only plan through a position-based cursor that can split literals
+and LZ77 copies. It hit `InvalidBlockPlan` on static-copy partial overlaps
+(a one-byte literal segment advanced past the start of an eight-byte static
+copy) and was reverted before producing a wire. Static dictionary copies are
+atomic and cannot be split like LZ77 copies, so a correct joint planner must
+integrate dictionary candidates into the parser/DP instead of merging two
+finished plans.
