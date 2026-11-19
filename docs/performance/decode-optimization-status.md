@@ -2108,3 +2108,12 @@ sixteen-byte match copies and bit-buffer shifts. This matches the
 (four-literal batches, packed entries, secondary lookups), so the next
 deflate decode lever is the high-risk two-phase token buffer rather than
 another local table or copy edit.
+
+A follow-up read of the semantic loop confirms why local edits are
+exhausted: the next literal entry is already loaded before each match
+copy, short non-overlapping matches use a single sixteen-byte vector
+store, longer ones use the bounded `copyWide` path, and four-literal
+batches are decoded speculatively. A two-phase token buffer would add a
+token write and read per symbol to the same fused chain, so its expected
+value stays at the documented 5-8% upper bound with high implementation
+risk; no prototype was started without that budget.
