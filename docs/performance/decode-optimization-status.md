@@ -2094,3 +2094,17 @@ context/split pass recovers 4.9%, so the earlier "gains stay below two
 percent" assumption does not hold. The pre-screen was reverted; a safe
 threshold is at least 10%, where the measured benefit does not justify the
 latent ratio risk.
+
+## Deflate decode corpus probe and current hot loop (2026-11-19)
+
+Added `run-deflate-decode-corpus-probe`, which repeatedly decodes one
+raw-deflate corpus prefix into a preallocated buffer so sampling profilers
+see only the decoder. On the dickens 128 KiB L6 wire (50,649 bytes) Vort
+decodes at 752.9 MiB/s; `perf` attributes 86.4% of the time to
+`decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline`, with the
+remaining cost spread over table loads (literal primary/secondary),
+sixteen-byte match copies and bit-buffer shifts. This matches the
+2026-11-16 structural frontier: the semantic loop is already fused
+(four-literal batches, packed entries, secondary lookups), so the next
+deflate decode lever is the high-risk two-phase token buffer rather than
+another local table or copy edit.

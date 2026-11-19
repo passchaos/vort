@@ -1678,6 +1678,19 @@ pub fn build(b: *std.Build) void {
     const deflate_bench_step = b.step("bench-deflate-decode", "Run deflate/zlib/gzip decode throughput smoke benchmark");
     deflate_bench_step.dependOn(&run_deflate_bench.step);
 
+    const deflate_decode_probe = b.addExecutable(.{
+        .name = "vort-deflate-decode-corpus-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/decode_corpus_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const run_deflate_decode_probe = b.addRunArtifact(deflate_decode_probe);
+    if (b.args) |args| run_deflate_decode_probe.addArgs(args);
+    b.step("run-deflate-decode-corpus-probe", "Repeatedly decode one raw-deflate corpus prefix for profiling").dependOn(&run_deflate_decode_probe.step);
+
     const corpus_decode_bench_exe = b.addExecutable(.{
         .name = "vort-bench-corpus-decode",
         .root_module = b.createModule(.{
