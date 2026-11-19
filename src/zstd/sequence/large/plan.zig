@@ -85,15 +85,13 @@ pub noinline fn predefinedCost(
 }
 
 pub noinline fn compressedCost(
-    transition_bits: []const u8,
+    transition_bit_count: usize,
     accuracy_log: u8,
     table_payload_len: usize,
     value_bits: usize,
 ) linksection(text_section) Error!Cost {
-    if (transition_bits.len == 0) return error.CorruptFrame;
     var bit_count = std.math.add(usize, value_bits, accuracy_log) catch return error.IntegerOverflow;
-    for (transition_bits[0 .. transition_bits.len - 1]) |bits|
-        bit_count = std.math.add(usize, bit_count, bits) catch return error.IntegerOverflow;
+    bit_count = std.math.add(usize, bit_count, transition_bit_count) catch return error.IntegerOverflow;
     return .{ .payload_len = table_payload_len, .bit_count = bit_count };
 }
 
@@ -149,7 +147,7 @@ pub noinline fn select(
 
 test "fast large plan cost and selection reject malformed shapes" {
     try std.testing.expectError(error.CorruptFrame, predefinedCost(&.{}, &.{}, 0, 0));
-    try std.testing.expectError(error.CorruptFrame, compressedCost(&.{}, 5, 1, 0));
+    try std.testing.expectEqual(Cost{ .payload_len = 1, .bit_count = 5 }, try compressedCost(0, 5, 1, 0));
     try std.testing.expectEqual(@as(?Selection, null), try select(1, 0, &.{}, &.{.{ .payload_len = 0, .bit_count = 0 }}, &.{.{ .payload_len = 0, .bit_count = 0 }}));
 }
 

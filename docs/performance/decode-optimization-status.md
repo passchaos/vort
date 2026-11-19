@@ -2418,3 +2418,16 @@ non-fast ratio planner keeps the eager walk. Evidence:
 The same skip applies to level 2, which shares the fast planner: a twelve-row
 A/B at level 2 measures **1.0689x** geometric-mean encode speed (per row
 1.050-1.090) with byte-identical sizes. Rows are in the same evidence package.
+
+## Zstd fast planner transition bit count (2026-11-20)
+
+`largeFastSequenceTableCost` summed the compressed plan's `transition_bits`
+array in a separate pass even though the FSE transition fill already knows
+every width. The fill now returns `large_transition.FillResult`
+(`initial_state` plus `bit_count`), the plan stores `transition_bit_count`, and
+the cost adds it directly. The non-direct test path computes the same sum.
+Twelve 128 KiB level-1 prefixes: **1.0086x** geometric-mean encode speed (per
+row 0.996-1.019), all sizes byte-identical. This is a small structural removal
+recorded as part of the level-1 emitter series, not a standalone 3% claim.
+Evidence:
+[data/zstd-level1-transition-bit-count-20261120](data/zstd-level1-transition-bit-count-20261120/README.md).

@@ -28799,6 +28799,7 @@ const LargeCompressedSequencePlan = struct {
     accuracy_log: u8,
     codes: []const u8,
     initial_state: u8,
+    transition_bit_count: usize,
     next_states: []const u8,
     state_bits: []const u8,
     transition_values: []const u8,
@@ -29219,7 +29220,7 @@ noinline fn largeFastSequenceTableCost(
             value_bits,
         ),
         .compressed => |compressed| try large_fast_plan.compressedCost(
-            compressed.transition_bits,
+            compressed.transition_bit_count,
             compressed.accuracy_log,
             compressed.table_payload_len,
             value_bits,
@@ -30332,7 +30333,7 @@ fn planLargeCompressedSequenceCodes(
     };
     if (table_payload_len >= len) return null;
 
-    const initial_state = if (buffers.direct_transitions) blk: {
+    const fill = if (buffers.direct_transitions) blk: {
         var compression_table: FseCompressionTable = undefined;
         try buildFseCompressionTable(
             &compression_table,
@@ -30353,7 +30354,8 @@ fn planLargeCompressedSequenceCodes(
     return .{
         .accuracy_log = accuracy_log,
         .codes = buffers.codes,
-        .initial_state = initial_state,
+        .initial_state = fill.initial_state,
+        .transition_bit_count = fill.bit_count,
         .next_states = buffers.next_states,
         .state_bits = buffers.state_bits,
         .transition_values = buffers.transition_values,
@@ -30363,10 +30365,12 @@ fn planLargeCompressedSequenceCodes(
     };
 }
 
+const TransitionFill = large_transition.FillResult;
+
 fn fillLargeCompressedSequenceTransitions(
     buffers: LargeCompressedSequenceBuffers,
     entries: []const FseTableEntry,
-) Error!u8 {
+) Error!TransitionFill {
     if (buffers.codes.len == 0) return error.CorruptFrame;
     const invalid_state = std.math.maxInt(u8);
     var symbol_heads: [max_fse_compression_symbol + 1]u8 = @splat(invalid_state);
@@ -30400,6 +30404,7 @@ fn fillLargeCompressedSequenceTransitions(
     var next_state = last_state;
     buffers.next_states[last] = @intCast(entries[last_state].baseline);
     buffers.state_bits[last] = entries[last_state].bits;
+    var transition_bit_count: usize = 0;
     var i = last;
     while (i > 0) {
         i -= 1;
@@ -30410,15 +30415,16 @@ fn fillLargeCompressedSequenceTransitions(
         buffers.transition_bits[i] = entry.bits;
         buffers.next_states[i] = @intCast(entry.baseline);
         buffers.state_bits[i] = entry.bits;
+        transition_bit_count = std.math.add(usize, transition_bit_count, entry.bits) catch return error.IntegerOverflow;
         next_state = candidate_state;
     }
-    return @intCast(next_state);
+    return .{ .initial_state = @intCast(next_state), .bit_count = transition_bit_count };
 }
 
 noinline fn fillLargeCompressedSequenceTransitionsDirect(
     buffers: LargeCompressedSequenceBuffers,
     table: *const FseCompressionTable,
-) Error!u8 {
+) Error!TransitionFill {
     return large_transition.fill(
         buffers.codes,
         table.state_table[0..table.table_len],
