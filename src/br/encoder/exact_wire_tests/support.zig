@@ -17,7 +17,7 @@ pub fn Support(comptime S: type) type {
                 return projection.project(S.ProjectionStrategy, command, use_recent, context, repeats);
             }
             pub fn choose(a: std.mem.Allocator, commands: []const Command, context: Context) S.Error!Splits {
-                return S.choose(a, commands, true, true, true, true, true, context);
+                return S.choose(a, commands, true, true, true, true, true, 0, context);
             }
             pub const deinit = S.deinitSplits;
             fn options(context: Context, commands: ?*const Split, distances: ?*const Split) S.Options {

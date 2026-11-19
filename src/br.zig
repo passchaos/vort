@@ -152,6 +152,7 @@ pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
 pub const QualityCommandStateProfile = encoder_stats.QualityCommandStateProfile;
 pub const QualityQ8Profile = quality_profile.Profile;
+pub const QualityQ8ProfileEvent = quality_profile.Event;
 
 test "Brotli literal entropy contracts" {
     try @import("tests/br_literal_entropy_contracts.zig").contracts(@This());
@@ -5187,6 +5188,12 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
 }
 
 fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncodeOptions, window_bits: u5) LazyWireOptions {
+    // q11's complete-wire screen never retained a command block split: every
+    // winning wire uses one command type while the command split search
+    // consumes a large share of the encode time. Distance splits still win on
+    // very large plans (ooffice keeps eight distance types), so the distance
+    // search is limited to those plans instead of being disabled.
+    const q11 = schedule.quality == .q11;
     return .{
         .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .try_recent_distances = schedule.use_recent_distances,
@@ -5196,10 +5203,11 @@ fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncod
         .preferred_literal_context_mode = null,
         .try_literal_split = schedule.split.literal,
         .try_adaptive_literal_split = schedule.split.adaptive_literal or options.adaptive_literal_split,
-        .try_command_split = schedule.split.command,
-        .try_adaptive_command_split = schedule.split.adaptive_command or options.adaptive_command_split,
+        .try_command_split = schedule.split.command and !q11,
+        .try_adaptive_command_split = (schedule.split.adaptive_command or options.adaptive_command_split) and !q11,
         .try_distance_split = schedule.split.distance,
         .try_adaptive_distance_split = options.adaptive_distance_split orelse schedule.split.adaptive_distance,
+        .distance_split_min_commands = if (q11) 16 * 1024 else 0,
         .try_distance_context_trees = @intFromEnum(schedule.quality) >= 10,
         .large_window = options.large_window,
         .window_bits = window_bits,
@@ -5219,6 +5227,20 @@ pub fn benchmarkQualityQ8ProfileAlloc(
     io: std.Io,
     profile: *QualityQ8Profile,
 ) Error![]u8 {
+    if (input.len > 65536) return error.InvalidBlockPlan;
+    return benchmarkQualityProfileAlloc(allocator, input, io, .{ .quality = 8, .mode = .generic }, profile);
+}
+
+/// Traced one-shot quality encode for any documented preset. The complete wire
+/// remains the byte oracle; callers must not rank the instrumented call as a
+/// normal throughput sample.
+pub fn benchmarkQualityProfileAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    io: std.Io,
+    options: PlannedEncodeOptions,
+    profile: *QualityQ8Profile,
+) Error![]u8 {
     profile.reset();
     const trace: quality_profile.Recorder(true) = .{ .io = io, .profile = profile };
     var outer = trace.begin(.outer, input.len, 0);
@@ -5227,8 +5249,6 @@ pub fn benchmarkQualityQ8ProfileAlloc(
         profile.error_name = @errorName(err);
         outer.failure(err);
     }
-    if (input.len > 65536) return error.InvalidBlockPlan;
-    const options: PlannedEncodeOptions = .{ .quality = 8, .mode = .generic };
     try validatePlannedEncodeOptions(input.len, options);
     var lease = try total_budget.Lease.init(allocator, profile.request.max_total_working_memory, profile.request.memory_profile, 0);
     defer lease.deinit();
@@ -9210,6 +9230,7 @@ fn considerPlannedMetaBlockCommands(
         policy.split.adaptive_command,
         policy.split.distance,
         policy.split.adaptive_distance,
+        0,
         .{
             .large_window = state.large_window,
             .window_bits = window_bits,
@@ -10629,6 +10650,11 @@ const LazyWireOptions = struct {
     try_adaptive_command_split: bool = false,
     try_distance_split: bool = false,
     try_adaptive_distance_split: bool = false,
+    /// Minimum command count before distance block splitting runs. Zero keeps
+    /// the historical eligibility. q11 raises it because the distance split
+    /// search only retained a smaller complete wire on very large plans in the
+    /// measured corpus while consuming a large share of the encode time.
+    distance_split_min_commands: usize = 0,
     /// Try a single-block-type wire with four copy-length distance context
     /// trees in addition to the temporal distance split candidates. Ratio
     /// qualities enable this only where the extra full encode is justified.
@@ -12023,6 +12049,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
         options.try_adaptive_command_split,
         options.try_distance_split,
         options.try_adaptive_distance_split,
+        options.distance_split_min_commands,
         .{
             .large_window = options.large_window,
             .window_bits = options.window_bits,
@@ -12897,6 +12924,7 @@ fn chooseCommandAndDistanceSplitsAlloc(
     try_adaptive_command_split: bool,
     try_distance_split: bool,
     try_adaptive_distance_split: bool,
+    distance_split_min_commands: usize,
     wire_context: PlannedWireContext,
 ) Error!EntropySymbolSplits {
     var command_accumulator = if (try_command_split) command_block_split.Accumulator.init(commands.len) else null;
@@ -12904,8 +12932,9 @@ fn chooseCommandAndDistanceSplitsAlloc(
     const collect_commands = command_accumulator != null or collect_adaptive_commands;
     // There cannot be more explicit distance symbols than commands, so short
     // plans cannot qualify. Keep candidate discovery bounded on large plans.
-    const collect_legacy_distances = try_distance_split and distance_block_split.eligible(commands.len);
-    const collect_adaptive_distances = try_adaptive_distance_split and distance_block_split.adaptiveEligible(commands.len);
+    const distance_split_enabled = commands.len >= distance_split_min_commands;
+    const collect_legacy_distances = try_distance_split and distance_split_enabled and distance_block_split.eligible(commands.len);
+    const collect_adaptive_distances = try_adaptive_distance_split and distance_split_enabled and distance_block_split.adaptiveEligible(commands.len);
     const collect_distances = collect_legacy_distances or collect_adaptive_distances;
     if (!collect_commands and !collect_distances) return .{};
     const command_symbols = if (collect_commands) try allocator.alloc(u16, commands.len) else null;
@@ -28531,6 +28560,7 @@ test "br adaptive command split writes off-grid non-cyclic types" {
         true,
         false,
         false,
+        0,
         .{},
     );
     defer proposals.deinit(std.testing.allocator);
@@ -28678,6 +28708,7 @@ test "br adaptive distance split writes off-grid non-cyclic types" {
         false,
         true,
         true,
+        0,
         .{},
     );
     defer proposals.deinit(std.testing.allocator);
@@ -28782,6 +28813,7 @@ const AdaptiveDistanceCountedTestAdapter = struct {
             false,
             false,
             true,
+            0,
             .{},
         );
         errdefer splits.deinit(allocator);

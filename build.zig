@@ -4102,6 +4102,18 @@ pub fn build(b: *std.Build) void {
     const run_br_quality_stage_profile = b.addRunArtifact(br_quality_stage_profile_exe);
     if (b.args) |args| run_br_quality_stage_profile.addArgs(args);
     b.step("run-br-quality-stage-profile", "Record actual native q8 candidate stages and wires").dependOn(&run_br_quality_stage_profile.step);
+    const br_quality_stage_probe_exe = b.addExecutable(.{
+        .name = "vort-br-quality-stage-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/quality_stage_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort_br", .module = br_encode_bench_mod }},
+        }),
+    });
+    const run_br_quality_stage_probe = b.addRunArtifact(br_quality_stage_probe_exe);
+    if (b.args) |args| run_br_quality_stage_probe.addArgs(args);
+    b.step("run-br-quality-stage-probe", "Report traced quality-scheduled stages for one prefix").dependOn(&run_br_quality_stage_probe.step);
     const br_dense_huffman_bench = b.addExecutable(.{
         .name = "vort-br-dense-huffman-bench",
         .root_module = b.createModule(.{
