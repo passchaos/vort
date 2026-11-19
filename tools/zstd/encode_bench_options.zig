@@ -14,6 +14,7 @@ pub const Options = struct {
     strategy: ?zstd.Strategy = null,
     fast_acceleration: ?u32 = null,
     fast_long_matches: bool = false,
+    match_search_budget: ?usize = null,
     show_help: bool = false,
     reference_library_path: ?[]const u8 = null,
     match_hq: bool = false,
@@ -75,6 +76,12 @@ pub fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameO
     }
     // Retain the existing positive-level selection gate. New engine controls
     // and negative magnitudes always use the shared library level resolver.
+    if (options.match_search_budget) |budget| {
+        resolved.match_search_budget = budget;
+        if (options.native_selection) |selection| resolved.selection = selection;
+        try resolved.validate();
+        return resolved;
+    }
     if (level > 0 and resolved.strategy == .auto and resolved.fast_acceleration == null) {
         if (options.native_selection) |selection| return .{ .selection = selection, .content_checksum = false };
         return null;
@@ -132,6 +139,9 @@ pub fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterat
         } else if (try optionValue("--fast-acceleration", arg, args)) |value| {
             if (options.fast_acceleration != null) return error.DuplicateZstdOption;
             options.fast_acceleration = try std.fmt.parseInt(u32, value, 10);
+        } else if (try optionValue("--match-search-budget", arg, args)) |value| {
+            if (options.match_search_budget != null) return error.DuplicateZstdOption;
+            options.match_search_budget = try std.fmt.parseInt(usize, value, 10);
         } else if (std.mem.eql(u8, arg, "--fast-long-matches")) {
             if (options.fast_long_matches) return error.DuplicateZstdOption;
             options.fast_long_matches = true;

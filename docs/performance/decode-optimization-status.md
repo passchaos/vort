@@ -2117,3 +2117,23 @@ batches are decoded speculatively. A two-phase token buffer would add a
 token write and read per symbol to the same fused chain, so its expected
 value stays at the documented 5-8% upper bound with high implementation
 risk; no prototype was started without that budget.
+
+## Zstd level-3 match-search budget sweep (2026-11-19)
+
+The zstd encode bench now accepts `--match-search-budget`. With an explicit
+fast-compressed/greedy selection on the 128 KiB prefixes, the default level-3
+output is reproduced exactly at budget 64 (dickens 51,971, xml 10,748, x-ray
+93,086, mozilla 20,112), so the effective level-3 chain depth is 64 even
+though the native default option is 512. Sweep (dickens/xml/x-ray/mozilla):
+
+| budget | dickens | xml | x-ray | mozilla | speed vs default |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 4 | 62,279 | 19,369 | 93,583 | 21,439 | +0-30% |
+| 16 | 54,177 | 11,315 | 93,293 | 20,232 | +10-53% |
+| 64 (default) | 51,971 | 10,748 | 93,086 | 20,112 | 1.00x |
+| 512 | 51,252 | 10,614 | 93,093 | 20,118 | -46% on dickens |
+
+Budget 16 trades +0.2-5.3% size for 1.1-1.5x speed while staying smaller than
+libzstd 1.4.8 on xml, x-ray and mozilla; budget 4 loses too much ratio and 512
+halves speed for ~1% size. The default stays at 64; adopting 16 is a level-3
+policy decision.
