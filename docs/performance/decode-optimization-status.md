@@ -2369,3 +2369,12 @@ its 10-byte win. Command count cannot separate the ooffice win from the
 dickens/x-ray waste, so the threshold stays at 16K. The next candidate is a
 cheap distribution-shift pre-screen over the distance symbols already collected
 in the split pass; it must retain ooffice's 10-byte win.
+
+Follow-up pre-screen screen: the collected distance-symbol stream has
+58/58/47 distinct symbols (max code 58) on dickens/ooffice/x-ray, and a
+4-segment entropy gain of about 3,700 bits on dickens, 1,600 on ooffice and
+2,300 on x-ray. The split wins only on ooffice, i.e. the cheapest statistic
+has the *lowest* raw gain, so a raw entropy-gain gate is anti-correlated with
+the complete-wire outcome. The split search's own tree-header cost model is
+what decides; a cheap pre-screen would have to duplicate it. The distance-split
+threshold therefore stays at 16K commands and no pre-screen is added.
