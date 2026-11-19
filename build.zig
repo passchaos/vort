@@ -2305,6 +2305,22 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    const deflate_reference_library_dir = b.option(
+        []const u8,
+        "deflate-reference-dir",
+        "Directory containing a libdeflate shared library to link and load first",
+    );
+    if (deflate_reference_library_dir) |dir| {
+        deflate_reference_encode_bench_exe.root_module.addLibraryPath(.{ .cwd_relative = dir });
+        deflate_reference_encode_bench_exe.root_module.addRPath(.{ .cwd_relative = dir });
+    }
+    const deflate_reference_include_dir = b.option(
+        []const u8,
+        "deflate-reference-include",
+        "Directory containing the matching libdeflate.h for version reporting",
+    );
+    if (deflate_reference_include_dir) |dir|
+        deflate_reference_encode_bench_exe.root_module.addIncludePath(.{ .cwd_relative = dir });
     deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("deflate", .{});
     deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
     const run_deflate_reference_encode_bench = b.addRunArtifact(deflate_reference_encode_bench_exe);

@@ -2263,3 +2263,15 @@ Vort/libdeflate speed ratio improves from 0.2825 to 0.3756. The full
 `test`/`check`/`check-wasm` gate passed (389/389 steps, 5775/5777 tests,
 2 skipped) without re-freezing golden wires. Evidence:
 [data/deflate-chain64-default-20261120](data/deflate-chain64-default-20261120/README.md).
+
+## Deflate level-6 encode against libdeflate 1.26 (2026-11-20)
+
+The encode bench now takes `-Ddeflate-reference-dir` and
+`-Ddeflate-reference-include`, so it can link and load a non-system libdeflate
+and report the matching header version. Against the locally built 1.26 on the
+twelve 128 KiB level-6 prefixes, Vort's current source (chain-64 default plus
+the chain-node early load) reaches **0.3467x** libdeflate throughput, versus
+0.3756x against the system 1.10; 1.26 is about 8% faster overall. Vort is
+smaller on sao, xml and x-ray, and larger on the other nine rows (worst samba
++7.3%, mr +4.6%). Evidence:
+[data/deflate-encode-libdeflate-126-20261120](data/deflate-encode-libdeflate-126-20261120/README.md).
