@@ -2414,3 +2414,7 @@ literal/offset/match plans while their headers cost only 15/12/19 bytes, so
 all three walks are skipped; the walks were about 6% of level-1 cycles. The
 non-fast ratio planner keeps the eager walk. Evidence:
 [data/zstd-level1-predefined-dominance-20261120](data/zstd-level1-predefined-dominance-20261120/README.md).
+
+The same skip applies to level 2, which shares the fast planner: a twelve-row
+A/B at level 2 measures **1.0689x** geometric-mean encode speed (per row
+1.050-1.090) with byte-identical sizes. Rows are in the same evidence package.

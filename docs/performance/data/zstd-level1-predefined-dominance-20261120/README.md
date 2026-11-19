@@ -55,3 +55,10 @@ the `check`/`check-wasm` gates are the adoption checks.
 One host, one-shot level 1, 128 KiB prefixes. The lower bound uses the
 minimum predefined state width per code; a code with no predefined state
 disables the skip.
+
+## Level 2
+
+The same fast planner serves level 2. The same A/B on the twelve prefixes at
+level 2 (`--iterations 1000 --rounds 3`) measures **1.0689x** geometric-mean
+encode speed (per row 1.050-1.090) with all twelve sizes byte-identical.
+Raw rows: `level2-before.csv`, `level2-after.csv`.
