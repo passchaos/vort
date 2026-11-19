@@ -2003,3 +2003,19 @@ x-ray +3,872 bytes. The remaining literal split planning is therefore
 productive, unlike the command/distance searches removed by the previous
 increment.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Zstd level-1 fast-parser acceleration screen (2026-11-19)
+
+The 64-128 KiB fast sequence parser scans every position. A Zstd-style
+growing miss stride was screened against the current source on the twelve
+128 KiB Silesia prefixes (level 1, system libzstd 1.4.8 reference). The
+ungated stride (step grows every 64 misses) improves x-ray 1.69x and sao
+1.04x but slows ten rows by 1-3% (mozilla 0.969x, webster 0.970x, mr
+0.975x, xml 0.973x): 3.3% geometric mean with four control rows below the
+0.98x floor. A content-gated variant (text-like blocks keep the plain scan)
+still slowed text rows by 1-5% because the 16 KiB classifier runs per
+block, and sao regressed 6.7%. A branchless 256-miss stride improved x-ray
+only 1.03x and slowed the rest. The simple acceleration lever is rejected;
+closing the remaining level-1 gap (dickens 76.5 vs 276 MiB/s, xml 226 vs
+998, x-ray 130 vs 935) needs a deeper libzstd-style two-position loop with
+fewer per-position probes, not a stride on the current loop.
