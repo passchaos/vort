@@ -464,6 +464,10 @@ inline fn loadWord(bytes: []const u8, offset: usize) u64 {
 fn matchAt(source: Source, position: usize, candidate: usize) Match {
     const absolute = source.prefixLen() + position;
     if (candidate >= absolute or absolute - candidate > source.window_len or source.block.len - position < minimum_match) return .{};
+    // One-shot blocks have no dictionary or prefix history, so every compared
+    // byte lives in the block and the span selection can be skipped.
+    if (source.dictionary.len == 0 and source.history.len == 0)
+        return matchAtBlock(source.block, position, candidate, absolute);
     var length: usize = 0;
     const maximum = source.block.len - position;
     while (length < maximum) {
@@ -497,6 +501,38 @@ fn matchAt(source: Source, position: usize, candidate: usize) Match {
         }
         while (offset < limit) : (offset += 1)
             if (span[offset] != source.block[position + length + offset]) return finishMatch(length + offset, absolute - candidate);
+        length += limit;
+    }
+    return finishMatch(length, absolute - candidate);
+}
+
+fn matchAtBlock(block: []const u8, position: usize, candidate: usize, absolute: usize) Match {
+    var length: usize = 0;
+    const maximum = block.len - position;
+    while (length < maximum) {
+        const limit = maximum - length;
+        var offset: usize = 0;
+        if (limit >= 8) {
+            const difference = loadWord(block, candidate + length) ^ loadWord(block, position + length);
+            if (difference != 0)
+                return finishMatch(length + (@as(usize, @ctz(difference)) >> 3), absolute - candidate);
+            offset = 8;
+            if (limit >= 16) {
+                const second = loadWord(block, candidate + length + 8) ^ loadWord(block, position + length + 8);
+                if (second != 0)
+                    return finishMatch(length + 8 + (@as(usize, @ctz(second)) >> 3), absolute - candidate);
+                offset = 16;
+            }
+        }
+        while (offset + 32 <= limit) : (offset += 32) {
+            const left: @Vector(32, u8) = block[candidate + length + offset ..][0..32].*;
+            const right: @Vector(32, u8) = block[position + length + offset ..][0..32].*;
+            const mismatches: u32 = @bitCast(left != right);
+            if (mismatches != 0)
+                return finishMatch(length + offset + @as(usize, @ctz(mismatches)), absolute - candidate);
+        }
+        while (offset < limit) : (offset += 1)
+            if (block[candidate + length + offset] != block[position + length + offset]) return finishMatch(length + offset, absolute - candidate);
         length += limit;
     }
     return finishMatch(length, absolute - candidate);

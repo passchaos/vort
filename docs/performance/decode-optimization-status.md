@@ -2286,3 +2286,17 @@ run noise) with identical output, so the two byte stores are not a bottleneck;
 the change was reverted. Instruction annotation of the same loop puts the
 16-byte match copy load/store at ~10.6% and Huffman table loads at ~15%, which
 bounds the two-phase token-buffer upside after token write/read overhead.
+
+## Zstd level-3 block-only match fast path (2026-11-20)
+
+A flat profile of the level-3 default on the 128 KiB dickens prefix attributes
+68.7% of encode to the controlled search (`matchAt` 31.2%, `findBest` 30.6%,
+`planReuse` 6.8%). `matchAt` selected a dictionary, prefix-history or block
+span on every 32-byte comparison chunk even though one-shot frames have no
+dictionary or history. A block-only fast path now skips the per-chunk span
+selection and bound; the word/vector comparison, window check and match result
+are unchanged. Twelve 128 KiB level-3 prefixes: **1.065x** geometric-mean
+speed (per row 1.039-1.090), all twelve sizes byte-identical. Level 1 keeps
+its 59,878-byte wire (the compact parser does not use this path); level 9
+keeps its 50,404-byte wire. Evidence:
+[data/zstd-level3-block-matchat-20261120](data/zstd-level3-block-matchat-20261120/README.md).
