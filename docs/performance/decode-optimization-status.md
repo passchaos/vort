@@ -2378,3 +2378,14 @@ has the *lowest* raw gain, so a raw entropy-gain gate is anti-correlated with
 the complete-wire outcome. The split search's own tree-header cost model is
 what decides; a cheap pre-screen would have to duplicate it. The distance-split
 threshold therefore stays at 16K commands and no pre-screen is added.
+
+## Deflate decode short-distance inline-copy screen (2026-11-20)
+
+The non-overlap semantic loop used the inline 16-byte copy only when
+`length <= 16 and distance >= 16`; shorter distances fell back to an exact
+`@memcpy`. Relaxing the condition to `length <= 16` (the outer branch already
+requires `distance >= length`) moves short-distance short matches to the
+single load/store. Twelve 128 KiB prefixes: **1.0046x** geometric mean (per
+row 0.986-1.019), with mozilla, sao and x-ray regressing. The gain is below
+the 3% bar and mixed, so the condition stays `distance >= 16`; the exact-copy
+fallback is not a measured bottleneck.
