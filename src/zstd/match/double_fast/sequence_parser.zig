@@ -11,7 +11,7 @@ const text_section = switch (builtin.object_format) {
 };
 
 const short_hash_bits = 8;
-const long_hash_bits = 11;
+const long_hash_bits = 13;
 const short_hash_size = 1 << short_hash_bits;
 const long_hash_size = 1 << long_hash_bits;
 const invalid_position = std.math.maxInt(u32);

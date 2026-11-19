@@ -2031,3 +2031,18 @@ mostly negative speed deltas (x-ray 0.93x), so it is reverted as well.
 Together with the acceleration screen this confirms the level-1 gap needs
 a structural two-position loop rewrite rather than trimming the current
 parser's heuristics.
+
+## Zstd level-1 fast hash-table sizing (2026-11-19)
+
+The 64-128 KiB fast sequence parser used an 11-bit long-match table (2K
+entries). Widening it to 13 bits (8K entries, 32 KiB stack) on the twelve
+128 KiB Silesia prefixes reduces level-1 output by 1-22%: dickens 63,414 ->
+59,878 (-5.6%), mozilla 25,151 -> 24,399 (-3.0%), mr 37,918 -> 36,827
+(-2.9%), osdb 78,042 -> 61,098 (-21.7%), reymont 47,564 -> 43,617 (-8.3%),
+webster 51,345 -> 48,838 (-4.9%), xml 12,556 -> 12,323 (-1.9%), with ooffice
+and xml now smaller than libzstd 1.4.8 and ten of twelve rows within 0.4-6.4%
+of it. The geometric-mean size gain is 4.75%; paired five-iteration A/B
+speed is -1.4% geometric mean (mr +6.8%, reymont +4.5%, xml +1.1% faster;
+samba 0.945x, x-ray 0.935x, mozilla 0.954x slower). A 14-bit table buys
+another ~1.5% size for a further ~3.7% speed loss and is rejected; 12 bits
+loses most of the ratio gain. `test-zstd` passes 1434/1434.
