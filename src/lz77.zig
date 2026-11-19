@@ -2848,6 +2848,223 @@ test "collect hash matches keeps interior candidates the greedy parser skips" {
     try std.testing.expect(matches[4].length >= 8);
 }
 
+/// Bounded per-position Pareto frontier of hash-chain matches. Entries are
+/// ordered nearest-first: later entries are at least as long and at least as
+/// far, so each entry is the cheapest match for its own length.
+pub const MatchFrontier = struct {
+    entries: []CollectedMatch,
+    counts: []u8,
+    stride: usize,
+
+    pub fn at(self: MatchFrontier, position: usize) []const CollectedMatch {
+        const base = position * self.stride;
+        return self.entries[base..][0..self.counts[position]];
+    }
+
+    pub fn deinit(self: MatchFrontier, allocator: std.mem.Allocator) void {
+        allocator.free(self.entries);
+        allocator.free(self.counts);
+    }
+};
+
+pub const max_frontier_candidates: usize = 16;
+
+/// Collects a bounded Pareto frontier of hash-chain matches at every input
+/// position. The single-best collector feeds parsers that only need the
+/// longest match; a stateful DP can also trade a shorter, nearer copy against
+/// a longer one, so it needs the length/distance frontier instead. `stride == 1`
+/// reproduces `collectHashMatchesAlloc` exactly.
+pub fn collectHashFrontierAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    max_candidates: usize,
+) !MatchFrontier {
+    if (max_candidates == 0 or max_candidates > max_frontier_candidates)
+        return error.InvalidBlockPlan;
+    const anchor: HashAnchor = if (minMatch(options) >= 4) .four else .three;
+    if (hashPositionFitsI32(input.len)) {
+        return switch (anchor) {
+            .three => collectHashFrontierWithPosition(i32, allocator, input, options, max_candidates, .three),
+            .four => collectHashFrontierWithPosition(i32, allocator, input, options, max_candidates, .four),
+        };
+    }
+    return switch (anchor) {
+        .three => collectHashFrontierWithPosition(isize, allocator, input, options, max_candidates, .three),
+        .four => collectHashFrontierWithPosition(isize, allocator, input, options, max_candidates, .four),
+    };
+}
+
+fn collectHashFrontierWithPosition(
+    comptime Position: type,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    max_candidates: usize,
+    comptime anchor: HashAnchor,
+) !MatchFrontier {
+    const entries_len = std.math.mul(usize, input.len, max_candidates) catch
+        return error.IntegerOverflow;
+    const entries = try allocator.alloc(CollectedMatch, entries_len);
+    errdefer allocator.free(entries);
+    const counts = try allocator.alloc(u8, input.len);
+    errdefer allocator.free(counts);
+    @memset(entries, .{});
+    @memset(counts, 0);
+    const head = try allocator.alloc(Position, hash_head_table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const prev_len = hashPrevTableLen(input.len, options.window_len);
+    const ring = prev_len < input.len;
+    const prev = try allocator.alloc(Position, prev_len);
+    defer allocator.free(prev);
+    const frontier = MatchFrontier{
+        .entries = entries,
+        .counts = counts,
+        .stride = max_candidates,
+    };
+    if (ring) {
+        collectHashFrontierWithTables(input, options, head, prev, true, anchor, frontier);
+    } else {
+        collectHashFrontierWithTables(input, options, head, prev, false, anchor, frontier);
+    }
+    return frontier;
+}
+
+fn collectHashFrontierWithTables(
+    input: []const u8,
+    options: GreedyOptions,
+    head: anytype,
+    prev: anytype,
+    comptime ring: bool,
+    comptime anchor: HashAnchor,
+    frontier: MatchFrontier,
+) void {
+    const search_limits = hashSearchLimits(options);
+    const minimum = search_limits.minimum;
+    for (0..input.len) |pos| {
+        const base = pos * frontier.stride;
+        var count: usize = 0;
+        var best_len: usize = 0;
+        const hash = hashAtInput(input, pos, head.len, anchor);
+        if (hash) |h| {
+            if (pos + minimum <= input.len and search_limits.max_chain != 0) {
+                var candidate_i = hashHeadGet(head, h, false, {});
+                const empty = hashPositionEmpty(@TypeOf(candidate_i));
+                var checked: usize = 0;
+                var walked: usize = 0;
+                const max_len = @min(search_limits.maximum, input.len - pos);
+                const earliest = if (comptime ring) pos -| search_limits.window_len else 0;
+                while (candidate_i != empty and walked < search_limits.max_walks) : (walked += 1) {
+                    const candidate: usize = @intCast(candidate_i);
+                    if (comptime ring) {
+                        if (candidate < earliest) break;
+                    }
+                    const distance = pos - candidate;
+                    if (comptime !ring) {
+                        if (distance == 0 or distance > search_limits.window_len) break;
+                        if (best_len == max_len) break;
+                    }
+                    const required_prefix = @max(best_len, minimum - 1);
+                    if (input[candidate + required_prefix] != input[pos + required_prefix]) {
+                        candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
+                        continue;
+                    }
+                    checked += 1;
+                    const len = matchLength(input, candidate, pos, max_len);
+                    if (len >= minimum and len > best_len) {
+                        recordFrontier(frontier, base, &count, len, distance);
+                        best_len = len;
+                        if (len >= search_limits.nice_len) break;
+                        if (comptime ring) {
+                            if (len == max_len) break;
+                        }
+                    }
+                    if (checked == search_limits.max_chain) break;
+                    candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
+                }
+            }
+            insertKnownHashWithLayout(pos, h, head, prev, ring, false, {});
+        }
+        frontier.counts[pos] = @intCast(count);
+    }
+}
+
+fn recordFrontier(
+    frontier: MatchFrontier,
+    base: usize,
+    count: *usize,
+    length: usize,
+    distance: usize,
+) void {
+    const entry = CollectedMatch{
+        .length = @intCast(length),
+        .distance = @intCast(distance),
+    };
+    if (count.* < frontier.stride) {
+        frontier.entries[base + count.*] = entry;
+        count.* += 1;
+        return;
+    }
+    // Keep the nearest entries and always retain the latest (longest) match:
+    // the DP needs both the cheapest short copy and the full match span.
+    frontier.entries[base + frontier.stride - 1] = entry;
+}
+
+test "collect hash frontier with stride one matches the single-best collector" {
+    const input = "abcabcabcabcXabcabcabcabcabcabcZabcabcabcabc";
+    const best = try collectHashMatchesAlloc(std.testing.allocator, input, .{
+        .min_match = 4,
+        .window_len = input.len,
+    });
+    defer std.testing.allocator.free(best);
+    const frontier = try collectHashFrontierAlloc(std.testing.allocator, input, .{
+        .min_match = 4,
+        .window_len = input.len,
+    }, 1);
+    defer frontier.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best.len, frontier.entries.len);
+    try std.testing.expectEqualSlices(CollectedMatch, best, frontier.entries);
+}
+
+test "collect hash frontier keeps a monotone nearest-first frontier" {
+    const input = "abcdefabcdefabcdefabcdefabcdef";
+    const frontier = try collectHashFrontierAlloc(std.testing.allocator, input, .{
+        .min_match = 4,
+        .window_len = input.len,
+    }, 4);
+    defer frontier.deinit(std.testing.allocator);
+    for (0..input.len) |pos| {
+        const matches = frontier.at(pos);
+        try std.testing.expect(matches.len <= 4);
+        var previous_length: u16 = 0;
+        var previous_distance: u16 = 0;
+        for (matches) |match| {
+            try std.testing.expect(match.length >= 4);
+            try std.testing.expect(match.length <= input.len - pos);
+            try std.testing.expect(match.distance <= pos);
+            try std.testing.expect(match.length > previous_length);
+            try std.testing.expect(match.distance >= previous_distance);
+            previous_length = match.length;
+            previous_distance = match.distance;
+        }
+    }
+    // The last entry is the longest match the single-best collector reports.
+    const best = try collectHashMatchesAlloc(std.testing.allocator, input, .{
+        .min_match = 4,
+        .window_len = input.len,
+    });
+    defer std.testing.allocator.free(best);
+    for (0..input.len) |pos| {
+        const matches = frontier.at(pos);
+        if (best[pos].length == 0) {
+            try std.testing.expectEqual(@as(usize, 0), matches.len);
+        } else {
+            try std.testing.expectEqual(best[pos], matches[matches.len - 1]);
+        }
+    }
+}
+
 fn hashGreedyPlanAllocWithAnchor(
     allocator: std.mem.Allocator,
     input: []const u8,

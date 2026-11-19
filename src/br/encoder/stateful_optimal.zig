@@ -14,6 +14,9 @@ pub const Options = struct {
     window_len: usize,
     max_chain: u16,
     nice_len: u16,
+    /// Per-position Pareto frontier width. One reproduces the single-best
+    /// candidate set; larger values expose cheaper short/near copies.
+    frontier_candidates: usize = 1,
 };
 
 pub const PlanStats = struct {
@@ -38,15 +41,17 @@ const unavailable_cost: u32 = std.math.maxInt(u32) / 4;
 const PriceContext = struct {
     input: []const u8,
     model: *const entropy_feedback.Model,
-    matches: []const lz77.CollectedMatch,
-    scratch: [1]stateful_plan.Match = undefined,
+    frontier: lz77.MatchFrontier,
+    scratch: [lz77.max_frontier_candidates]stateful_plan.Match = undefined,
 
     fn candidates(context: *anyopaque, position: usize) stateful_plan.CandidateList {
         const self: *PriceContext = @ptrCast(@alignCast(context));
-        const match = self.matches[position];
-        if (match.length == 0) return .{ .matches = &.{}, .dictionary = null };
-        self.scratch[0] = .{ .length = match.length, .distance = match.distance };
-        return .{ .matches = &self.scratch, .dictionary = null };
+        const matches = self.frontier.at(position);
+        if (matches.len == 0) return .{ .matches = &.{}, .dictionary = null };
+        for (matches, 0..) |match, index| {
+            self.scratch[index] = .{ .length = match.length, .distance = match.distance };
+        }
+        return .{ .matches = self.scratch[0..matches.len], .dictionary = null };
     }
 
     fn price(
@@ -94,15 +99,15 @@ pub fn planAlloc(
     if (options.window_len == 0 or options.window_len > lz77.default_window_len)
         return error.InvalidBlockPlan;
     if (model.distance.len <= options.window_len) return error.InvalidBlockPlan;
-    const matches = try lz77.collectHashMatchesAlloc(allocator, input, .{
+    const frontier = try lz77.collectHashFrontierAlloc(allocator, input, .{
         .window_len = options.window_len,
         .max_chain = options.max_chain,
         .nice_len = options.nice_len,
         .min_match = 4,
         .max_match = lz77.max_match_len,
-    });
-    defer allocator.free(matches);
-    var context: PriceContext = .{ .input = input, .model = model, .matches = matches };
+    }, options.frontier_candidates);
+    defer frontier.deinit(allocator);
+    var context: PriceContext = .{ .input = input, .model = model, .frontier = frontier };
     const dp_tokens = try stateful_plan.plan(
         allocator,
         input,
@@ -146,6 +151,7 @@ test "stateful optimal plan round-trips a repetitive input" {
         .window_len = input.len,
         .max_chain = 16,
         .nice_len = lz77.max_match_len,
+        .frontier_candidates = 4,
     }, &model);
     defer plan.deinit(std.testing.allocator);
     const replayed = try lz77.replayAlloc(std.testing.allocator, plan.tokens);
