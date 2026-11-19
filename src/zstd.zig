@@ -2508,6 +2508,7 @@ test {
     _ = @import("tests/zstd_stream_counter_resources.zig");
     _ = @import("tests/zstd_stream_counter_transactions.zig");
     _ = @import("tests/zstd_large_history_contracts.zig");
+    _ = @import("tests/zstd_wide_fast_regression.zig");
     _ = @import("tests/zstd_large_history_resources.zig");
     _ = @import("tests/zstd_large_history_transactions.zig");
     _ = double_fast_sequence_plan;

@@ -2139,3 +2139,19 @@ libzstd 1.4.8 on xml, x-ray and mozilla; budget 32 trades +0.06-2.0% size for
 +2-34% speed and remains smaller than libzstd on three of four rows; budget 4
 loses too much ratio and 512 halves speed for ~1% size. The default stays at
 64; adopting 16 or 32 is a level-3 policy decision.
+
+## Zstd wide fast parser regression guard (2026-11-19)
+
+Added `src/tests/zstd_wide_fast_regression.zig`, a deterministic text-like
+128 KiB payload (LCG-sampled windows of repeated prose) that fills exactly
+one maximum-size block. It freezes the compact plan produced by
+`zstd/match/double_fast/sequence_parser.zig` (4,292 matches, 1,121 literals,
+129,951 matched bytes, plus the record-buffer growth past the
+one-record-per-64-bytes reservation) and adds frame-level round-trip and
+one-sided size ceilings at level 1 (11,339 bytes) and level 3 (7,140 bytes).
+Ablation: flipping `long_hash_bits` from 13 to 11 moves the plan to 4,374
+matches / 1,309 literals and the level-1 wire to 11,619 bytes (+2.47%),
+while level 3 stays at 7,140 because its wide probe uses the separate 11-bit
+double-fast candidate. The guard therefore fails on the exact table-width
+regression it was added for, and any future size improvement may lower the
+ceilings without editing the plan lock.
