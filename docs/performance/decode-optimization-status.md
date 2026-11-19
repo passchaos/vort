@@ -2460,3 +2460,17 @@ shrink). Every wire is verified by libzstd and Vort. Golden level-1 wires and
 the wide-fast regression ceiling are re-frozen; level 2/3 wires are unchanged.
 Evidence:
 [data/zstd-level1-single-table-20261120](data/zstd-level1-single-table-20261120/README.md).
+
+## Zstd level-2 compact double-fast parser (2026-11-20)
+
+Level 2 now uses the compact double-fast parser instead of the controlled fast
+parser with acceleration 2. This matches zstd's level semantics (level 1
+single-table fast, level 2 double-fast) and removes a speed cliff: on dickens
+the compact parser is 91.1 MiB/s at 59,878 bytes while controlled-fast
+acceleration 16 is only 69.4 MiB/s at 69,506 bytes, so the old setting had
+neither a speed nor a size advantage over the compact parser. Twelve 128 KiB
+level-2 prefixes: **2.0932x** geometric-mean speed, **+5.71%** geometric-mean
+size (worst osdb +14.39%, mozilla +14.33%, sao +12.60%; xml -1.44%). The size
+ladder stays monotone (dickens L1 61,059 > L2 59,878 > L3 51,971). The frozen
+level-2 wire and the controls profile expectation are re-frozen. Evidence:
+[data/zstd-level2-compact-double-fast-20261120](data/zstd-level2-compact-double-fast-20261120/README.md).

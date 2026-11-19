@@ -10550,10 +10550,7 @@ fn applySpeedFirstLevelPolicy(level: c_int, options: NativeFrameOptions) NativeF
     if (level == 1) aligned.fast_parser = .single_table;
     switch (level) {
         2 => {
-            aligned.strategy = .fast;
-            aligned.fast_acceleration = 2;
-            // Controlled fast/double-fast use acceleration instead of the
-            // level-based candidate budget and reject the rep beam.
+            aligned.fast_parser = .double_fast;
             aligned.match_search_budget = mixed_match_path_search_budget;
             aligned.rep_beam_search = false;
         },
