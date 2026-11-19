@@ -2300,3 +2300,15 @@ speed (per row 1.039-1.090), all twelve sizes byte-identical. Level 1 keeps
 its 59,878-byte wire (the compact parser does not use this path); level 9
 keeps its 50,404-byte wire. Evidence:
 [data/zstd-level3-block-matchat-20261120](data/zstd-level3-block-matchat-20261120/README.md).
+
+## Zstd controlled-search out-of-window break screen (2026-11-20)
+
+After the block-only `matchAt` fast path, `findBest` is 37.6% of level-3
+encode and its dominant instruction is the `block_previous[...]` chain load
+(30.6% of cycles). Hash chains are ordered newest first, so replacing the
+out-of-window `continue` with `break` looks like it should skip the tail.
+Measured on the twelve 128 KiB level-3 prefixes it is **0.9879x** geometric
+mean (per row 0.968-1.004) with byte-identical sizes, so the out-of-window
+tail is not a real cost and the branch/loop-shape change regressed the common
+path. The screen was reverted; the chain load itself is the next target
+(prefetch or a smaller index representation).
