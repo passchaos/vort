@@ -2474,3 +2474,13 @@ size (worst osdb +14.39%, mozilla +14.33%, sao +12.60%; xml -1.44%). The size
 ladder stays monotone (dickens L1 61,059 > L2 59,878 > L3 51,971). The frozen
 level-2 wire and the controls profile expectation are re-frozen. Evidence:
 [data/zstd-level2-compact-double-fast-20261120](data/zstd-level2-compact-double-fast-20261120/README.md).
+
+## Zstd level ladder after the level 1/2 parser alignment (2026-11-20)
+
+With level 1 on the single-table compact parser and level 2 on the compact
+double-fast parser, the twelve 128 KiB Silesia ladder against libzstd 1.6.0 is
+monotone on both axes. Geometric means: L1 size 1.0709x / speed 0.3057x, L2
+size 1.0632x / speed 0.2757x, L3 size 0.9580x / speed 0.0727x. L1 improved
+from about 4.2x to **3.27x** slower than libzstd and L2 from about 7.5x to
+**3.63x**; L3 stays 4.2% smaller and **13.75x** slower, now the dominant speed
+gap. Evidence: [zstd-level-ladder-20261120.md](zstd-level-ladder-20261120.md).
