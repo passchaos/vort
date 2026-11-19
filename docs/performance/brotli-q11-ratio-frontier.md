@@ -212,6 +212,48 @@ mozilla/sao 不变，x-ray 77,358（+138）；12 行几何平均约 0.73%。
 libbrotli 参考为 22 位）并让 token 距离支持 >65,535（u32 或 Brotli 专用
 远距离通道），否则 64 KiB 是本架构的硬上限。
 
+### literal context 消融与 wire 结构对照（同日追加）
+
+bench 新增 `--no-literal-context-modeling`（`run-br-planned-encode-bench`），
+q11 128 KiB 结果：
+
+| case | context on | context off | 差值 |
+| --- | ---: | ---: | ---: |
+| dickens | 43,953 | 45,358 | +1,405 (+3.20%) |
+| mozilla | 18,676 | 18,878 | +202 (+1.08%) |
+| mr | 30,036 | 30,462 | +426 (+1.42%) |
+| nci | 8,859 | 9,027 | +168 (+1.90%) |
+| xml | 8,401 | 8,768 | +367 (+4.37%) |
+| x-ray | 77,220 | 85,209 | +7,989 (+10.35%) |
+
+literal context 在 x-ray/xml 上贡献很大，但在差距最大的 mozilla/nci/mr
+上只有 1~2%，因此不是这三行的主要缺口。
+
+`run-br-quality-compare-probe` 的 wire 结构对照（vort vs libbrotli q11）：
+
+| case | vort implicit/copies | ref implicit/copies | vort cmd/dist types | ref cmd/dist types |
+| --- | ---: | ---: | ---: | ---: |
+| mozilla | 862/5,805 (14.9%) | 2,631/5,480 (48.0%) | 1/1 | 13/5 |
+| nci | 451/2,731 (16.5%) | 1,272/2,809 (45.3%) | 1/1 | 1/1 |
+| mr | 110/11,336 (1.0%) | 1,395/9,502 (14.7%) | 1/1 | 4/4 |
+| dickens | 5/11,399 (0.04%) | 95/11,744 (0.8%) | 1/1 | 2/3 |
+| x-ray | 0/6,335 (0%) | 521/13,142 (4.0%) | 1/1 | 2/4 |
+| xml | 218/2,229 (9.8%) | 627/2,350 (26.7%) | 1/1 | 1/2 |
+
+两个结构性差距：
+
+1. **last-distance/repcode 解析**：libbrotli 的 Zopfli 最优解析为每个 DP
+   节点携带 4 项 distance cache，并维护 8 个不同 cache 的起始位置队列；
+   vort 的最优 DP 无 cache 状态，implicit distance 占比低一个数量级。
+   这是 mozilla/nci/mr/xml 差距的共同主因。
+2. **command/distance block types**：libbrotli 在 mozilla/mr/x-ray 上分出
+   多个命令/距离块类型，vort 即使开启 adaptive split 仍只有 1 个类型；
+   分块候选存在但完整 wire 竞争落败，说明搜索或成本模型偏弱。
+
+结论：q11 的下一步应优先实现 repcode-aware 最优解析（在 DP 状态中携带
+distance cache，或按 libbrotli 的 8 起点队列近似），其次再调
+command/distance block split；literal context 与匹配窗口都不是主杠杆。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。

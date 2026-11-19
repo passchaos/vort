@@ -1910,3 +1910,23 @@ already searched 65,520 bytes, so the old table was an out-of-bounds read
 for accepted matches beyond 32 KiB. Reaching libbrotli's lgwin=22 behavior
 would require wider token distances and larger wire window bits.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 literal-context ablation and wire-structure screen (2026-11-19)
+
+`run-br-planned-encode-bench --no-literal-context-modeling` isolates the
+literal context contribution at q11 on 128 KiB prefixes: dickens +1,405
+bytes (3.20%), xml +367 (4.37%), x-ray +7,989 (10.35%), mr +426 (1.42%),
+mozilla +202 (1.08%), nci +168 (1.90%). Context modeling is therefore not
+the main gap on the worst rows. `run-br-quality-compare-probe` shows the
+structural difference instead: libbrotli emits implicit (last-distance)
+commands for 48.0% of mozilla copies versus Vort's 14.9%, 45.3% versus
+16.5% on nci, 14.7% versus 1.0% on mr, and 26.7% versus 9.8% on xml. The
+reference also uses multiple command/distance block types on mozilla
+(13/5 versus 1/1), mr (4/4), dickens (2/3) and x-ray (2/4), while Vort's
+adaptive splitters produce one type. Upstream's Zopfli parser stores a
+4-entry distance cache per DP node and keeps an 8-entry queue of distinct
+cache start positions; Vort's optimal DP has no cache state. The next q11
+increment should add repcode-aware parsing (per-node distance cache or the
+bounded start-position queue), with command/distance block splitting as the
+secondary lever.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
