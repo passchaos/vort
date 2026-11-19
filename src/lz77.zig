@@ -3793,7 +3793,7 @@ fn findBestCombinedHashMatchLazy(dict: []const u8, input: []const u8, current: u
     return findBestCombinedHashMatch(dict, input, current, options, head, prev);
 }
 
-fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
+pub fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     var len: usize = 0;
     // Long matches dominate the optimal and repeat-aware Zstd parsers. Compare
     // four words at once, then use the equality mask to preserve the exact
