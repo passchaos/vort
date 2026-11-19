@@ -2291,6 +2291,27 @@ pub fn build(b: *std.Build) void {
     const deflate_reference_bench_step = b.step("run-deflate-reference-bench", "Compare one-shot raw Deflate decode against libdeflate");
     deflate_reference_bench_step.dependOn(&run_deflate_reference_bench.step);
 
+    const deflate_reference_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-deflate-encode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "zlib", .module = zlib_compat_mod },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("deflate", .{});
+    deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
+    const run_deflate_reference_encode_bench = b.addRunArtifact(deflate_reference_encode_bench_exe);
+    if (b.args) |args| run_deflate_reference_encode_bench.addArgs(args);
+    const deflate_reference_encode_bench_step = b.step("run-deflate-encode-bench", "Compare one-shot raw Deflate encode against zlib and libdeflate");
+    deflate_reference_encode_bench_step.dependOn(&run_deflate_reference_encode_bench.step);
+
     const deflate_incremental_decode_gate = b.addSystemCommand(&.{
         "python3",
         "tools/deflate_incremental_decode_gate.py",

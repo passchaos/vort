@@ -2195,3 +2195,24 @@ whole candidate search. On the twelve 128 KiB level-1 prefixes it measured
 **0.9616x** geometric mean (worst row 0.89x) with byte-identical output, so
 recomputing the probe is cheaper than the added register and stack pressure.
 The cache was reverted.
+
+## Deflate encode baseline and level-6 search-depth sweep (2026-11-19)
+
+The repository had matched Deflate decode evidence but no encode comparison.
+`run-deflate-encode-bench` now encodes the same 128 KiB prefix with Vort
+`encodeRawLevelAlloc`, zlib 1.2.11 and libdeflate 1.10, verifies every wire
+with both Vort and libdeflate, and times the allocating one-shot APIs in
+rotating order. On the twelve Silesia prefixes at level 6, Vort reaches
+**0.2825x** libdeflate throughput and **0.7086x** zlib throughput with mixed
+sizes (six rows smaller than libdeflate; samba +7.1%, mr +4.1% are the worst).
+Flat `perf` attributes 42.67% of the encode to the hash-chain match finder,
+4.47% to `lazyGreedyPlanAlloc` and 2.01% to `matchLength`.
+
+The default preset searches `max_chain = 160`, deeper than zlib's 128 and far
+deeper than libdeflate level 6's 35. A Vort-only sweep measured chain 64 at
+**1.2985x** speed for +0.73% geometric-mean size (worst row +2.0%, no speed
+row below 1.015x), chain 96 at 1.1547x for +0.34%, and chain 35 at 1.5393x for
++1.41% size (one row 0.970x). Chain 64 is the cleanest knee, but changing the
+preset also changes the zlib level-6 and archive defaults, so this increment
+only adds the benchmark and evidence. Evidence:
+[data/deflate-encode-baseline-20261119](data/deflate-encode-baseline-20261119/README.md).
