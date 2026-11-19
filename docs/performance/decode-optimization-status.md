@@ -1872,3 +1872,20 @@ length ladder (4/8/16/32/64/128/max) is worse (mr 29,699, x-ray back to
 77,220), so the next slice needs a per-position Pareto candidate frontier and
 repcode-aware command pricing rather than more length choices.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 Pareto frontier DP screen (2026-11-19)
+
+`lz77.collectHashFrontierAlloc` records a bounded nearest-first Pareto
+frontier per position (increasing length, non-decreasing distance) and
+`stride == 1` is verified equal to `collectHashMatchesAlloc`. Feeding a
+4-wide frontier to the stateful DP changes the 12-file q11 screen to mr
+30,036 -> 29,559 (-477, -1.59%) and x-ray 77,220 -> 76,971 (-249, -0.32%)
+with the other ten sizes unchanged. Relative to the single-candidate DP, mr
+gains 80 bytes and x-ray loses 8. Encode time on xml/dickens/x-ray is
++13.2%/+18.1%/+19.3% over baseline, and the 12-row geometric-mean ratio gain
+is about 0.16%, still far below the 3% merge bar. The frontier is therefore
+not wired to the production default path. Since wider candidates do not move
+the text rows, the remaining q11 lever is model-to-wire convergence (rebuild
+the entropy model from the DP plan and iterate) or a stronger candidate
+structure such as a binary-tree search, not more frontier width.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
