@@ -2332,3 +2332,21 @@ Together with the earlier out-of-window `break` screen (0.9879x), this closes
 the cheap chain-walk surface: the load is a cache-bound 128K-entry index, and
 a smaller representation needs a smaller window or a different index layout,
 not a local edit.
+
+## Zstd controlled-search index-build screens (2026-11-20)
+
+Two further wire-identical attempts on the level-3 chain index were measured
+on the twelve 128 KiB prefixes and rejected:
+
+- Dropping the `block_previous` clear and guarding `Cursor.init` with
+  `position % acceleration`: **0.9786x** (0.961-1.014). The runtime modulo in
+  every query costs more than the 512 KiB clear it removes.
+- Fusing the block-chain build into the parse (insert positions as the parser
+  advances, keep the clear): **0.9583x** (0.913-0.997) with byte-identical
+  sizes. The sequential full-block build is cache-friendly; interleaving
+  random chain queries with insertion competes for the same cache and loses
+  more than the removed pass saves.
+
+Together with the break (0.9879x), prefetch (0.9638x) and inline (0.9797x)
+screens, this closes the controlled-search index surface for local edits. The
+accepted level-3 increment remains the block-only `matchAt` fast path.
