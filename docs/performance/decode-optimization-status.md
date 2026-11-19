@@ -2312,3 +2312,23 @@ mean (per row 0.968-1.004) with byte-identical sizes, so the out-of-window
 tail is not a real cost and the branch/loop-shape change regressed the common
 path. The screen was reverted; the chain load itself is the next target
 (prefetch or a smaller index representation).
+
+## Zstd controlled-search chain-load screens (2026-11-20)
+
+After the block-only `matchAt` fast path, `findBest` is 37.6% of level-3
+encode and its dominant instruction is the scattered
+`block_previous[...]` chain load (30.6% of cycles) over a 512 KiB u32 array.
+Two further wire-identical attempts were measured on the twelve 128 KiB
+level-3 prefixes and rejected:
+
+- Prefetching the node after `next_block`: **0.9638x** geometric mean
+  (0.953-0.975) with identical sizes. The extra prefetch traffic outweighs
+  the latency it hides.
+- Marking `matchAt` inline: **0.9797x** (0.964-0.998) with identical sizes.
+  The expanded caller increases code pressure without improving the chain
+  load.
+
+Together with the earlier out-of-window `break` screen (0.9879x), this closes
+the cheap chain-walk surface: the load is a cache-bound 128K-entry index, and
+a smaller representation needs a smaller window or a different index layout,
+not a local edit.
