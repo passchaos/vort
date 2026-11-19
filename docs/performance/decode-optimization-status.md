@@ -2082,3 +2082,15 @@ dickens +92, nci +20, reymont +29, samba +140, webster +82, xml +10 bytes
 and, decisively, x-ray +3,783 bytes (+4.9%). The unmodeled optimal plan is
 load-bearing as both a candidate wire and the model seed, especially on
 binary content, so all three optimal passes stay.
+
+## Brotli q11 candidate pre-screen boundary (2026-11-19)
+
+Skipping literal/context/split planning when a candidate's base wire is far
+above the incumbent was measured with 10% and 5% slack. At 10% all twelve
+sizes stay identical and q11 speeds up ~1.8% geometric mean (mozilla -10%),
+below the 3% bar. At 5% x-ray regresses by 3,872 bytes (+4.9%): its winning
+candidate's base wire sits more than 5% above the lazy incumbent and the
+context/split pass recovers 4.9%, so the earlier "gains stay below two
+percent" assumption does not hold. The pre-screen was reverted; a safe
+threshold is at least 10%, where the measured benefit does not justify the
+latent ratio risk.
