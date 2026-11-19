@@ -331,3 +331,19 @@ command 数 ≥16K 的计划（本语料仅 ooffice 达标）。12 个 128 KiB �
 3. 12 文件 A/B：目标 q11 几何平均比例改善 ≥3%，无控制行低于 0.98x。
 4. 门控：`test-br*`、`run-br-planned-encode-bench-gate`、全门
    `zig build -j2 test check check-wasm`。
+
+### q10 继承与 adaptive literal split 开销评估（同日追加）
+
+q11 在自身管线之前完整跑一遍 q10 并保留其 wire，以保证 `q11 <= q10`
+的公开尺寸单调性。12 行 128 KiB 实测：跳过 q10 继承后，**所有尺寸完全
+不变**，而 q11 编码时间大幅下降（dickens 354.6 ms、mozilla 399.6 ms、
+ooffice 355.5 ms、osdb 387.9 ms、sao 479.9 ms、x-ray 328.0 ms，相对
+保留继承的 430/510/460/590/740/505 ms 约快 17%~35%）。但该继承是刻意
+的公开契约（`4718e926` 注释：q11 保留完整 q10 winner，使尺寸契约不依赖
+proxy 成本、上下文/分块选择与字典），因此实验已回退；若要去掉，需要
+显式修改契约或给出更廉价的单调性证明。
+
+adaptive literal split 不能关：关闭后 dickens +26、osdb +26、reymont
++25、samba +867、sao +54、webster +10、x-ray +3,872 字节。说明当前
+split_planning 的剩余成本（literal 侧）是有效投入，与 command/distance
+搜索不同。

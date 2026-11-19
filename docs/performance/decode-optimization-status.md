@@ -1987,3 +1987,19 @@ x-ray gain most). `test-br` passes 1636/1637 (1 skipped). The distance
 threshold is calibrated on this corpus; the planned encode gate covers the
 built-in cases.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 q10-inheritance and literal-split cost screen (2026-11-19)
+
+q11 runs the complete q10 pipeline first and retains its wire to guarantee
+`q11 <= q10`. Skipping that inheritance for 128 KiB inputs leaves all twelve
+Silesia sizes unchanged while cutting encode time by roughly 17-35% on the
+measured rows (dickens 354.6 vs 430 ms, mozilla 399.6 vs 510, ooffice 355.5
+vs 460, osdb 387.9 vs 590, sao 479.9 vs 740, x-ray 328.0 vs 505). The
+inheritance is a deliberate public size-monotonicity contract, so the
+experiment was reverted; removing it needs an explicit contract change or a
+cheaper proof. Disabling the adaptive literal split is not viable either:
+dickens +26, osdb +26, reymont +25, samba +867, sao +54, webster +10 and
+x-ray +3,872 bytes. The remaining literal split planning is therefore
+productive, unlike the command/distance searches removed by the previous
+increment.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
