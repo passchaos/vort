@@ -2184,3 +2184,14 @@ The deferral was removed. The remaining level-1 profile is parser-bound
 (~34%), then predefined planning (~6%), emission orchestration (~6%) and
 literal Huffman (~5.7%); the next structural lever is either the parser policy
 (single-table fast parser) or fusing plan and emission passes.
+
+## Zstd level-1 rep0 probe caching screen (2026-11-19)
+
+The wide fast parser probes rep0 at the anchor to choose the one-byte
+lookahead position and probes the same distance again during candidate
+arbitration. Caching the first `Match` in a local and reusing it removes one
+`matchAtDistance` per iteration but keeps a 24-byte struct live across the
+whole candidate search. On the twelve 128 KiB level-1 prefixes it measured
+**0.9616x** geometric mean (worst row 0.89x) with byte-identical output, so
+recomputing the probe is cheaper than the added register and stack pressure.
+The cache was reverted.
