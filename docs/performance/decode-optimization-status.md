@@ -2046,3 +2046,13 @@ speed is -1.4% geometric mean (mr +6.8%, reymont +4.5%, xml +1.1% faster;
 samba 0.945x, x-ray 0.935x, mozilla 0.954x slower). A 14-bit table buys
 another ~1.5% size for a further ~3.7% speed loss and is rejected; 12 bits
 loses most of the ratio gain. `test-zstd` passes 1434/1434.
+
+## Zstd level-1 short hash-table screen (2026-11-19)
+
+With the 13-bit long table in place, widening the 4-byte short table from 8
+bits (256 entries) to 10 bits (1K entries) changes level-1 sizes by -3.8%
+to +1.3% (nci +1.3% and xml +0.7% regress; sao -3.8%, osdb -3.6%, dickens
+-3.0%) while slowing the encoder by 2.5-18% on most rows (dickens 0.82x,
+sao 0.85x, samba 0.88x, webster 0.87x). The 1K-entry table hurts cache
+locality more than the collisions it removes, so the 8-bit short table is
+kept.
