@@ -310,6 +310,20 @@ splitter 的提案无法感知树描述/类型图/字面量成本，完整 wire 
 拒绝了这些提案。下一步应改进 splitter 的搜索与成本模型（把类型/树开销
 计入提案、增加迭代/类型数），而不是补候选接线。
 
+### q11 符号分块搜索裁剪（同日追加）
+
+`run-br-quality-stage-probe` 给出 dickens 128 KiB q11 的阶段占比：
+optimal_parse 22.4%、wire 24.9%、split_planning 19.5%、lazy_parse 7.3%、
+evaluate 7.6%、context_proposals 6.2%、other 10.6%，共 60 次完整 wire
+尝试。12 行 q11 的最终 wire 全部只有 1 个 command block type；distance
+split 只在 ooffice 上获胜（8 个 distance types，省 10 字节）。
+
+据此把 q11 的 command split 搜索关闭，并把 distance split 搜索限制在
+command 数 ≥16K 的计划（本语料仅 ooffice 达标）。12 个 128 KiB 前缀的
+尺寸全部保持不变；五轮配对的编码耗时 A/B 得到 **6.6% 几何平均加速**
+（逐行 1.02x~1.16x，ooffice/x-ray 最明显）。`test-br` 1636/1637 通过
+（1 skipped）。该阈值按本语料校准，内置 case 由 planned encode gate 覆盖。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。

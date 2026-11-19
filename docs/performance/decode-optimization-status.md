@@ -1967,3 +1967,23 @@ about 6.6 KB) versus an 18.9 KB complete wire, so its proposals cannot see
 tree/type-map and literal costs. The next splitter step is to include those
 costs in the proposal search or to increase its type/iteration budget.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 symbol-split search gating (2026-11-19)
+
+`run-br-quality-stage-probe` (new, traced one-shot quality encode) shows the
+q11 stage split on the 128 KiB dickens prefix: optimal_parse 22.4%, wire
+24.9%, split_planning 19.5%, lazy_parse 7.3%, evaluate 7.6%,
+context_proposals 6.2%, other 10.6%, with 60 complete wire attempts. The
+complete-wire screen never retains a command block split at q11 (every
+winning wire has one command type), while distance splits win only on very
+large plans (ooffice keeps eight distance types). q11 now skips the command
+split search entirely and runs the distance split search only for plans with
+at least 16K commands. On the twelve 128 KiB Silesia prefixes all sizes are
+unchanged (dickens 43,953, mozilla 18,676, mr 30,036, nci 8,859, ooffice
+64,634, osdb 46,778, reymont 33,363, samba 40,937, sao 92,145, webster
+36,107, xml 8,401, x-ray 77,220). A paired five-iteration A/B measures a
+**6.6% geometric-mean encode speedup** (per-row 1.02x-1.16x; ooffice and
+x-ray gain most). `test-br` passes 1636/1637 (1 skipped). The distance
+threshold is calibrated on this corpus; the planned encode gate covers the
+built-in cases.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
