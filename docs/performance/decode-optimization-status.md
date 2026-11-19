@@ -2019,3 +2019,15 @@ only 1.03x and slowed the rest. The simple acceleration lever is rejected;
 closing the remaining level-1 gap (dickens 76.5 vs 276 MiB/s, xml 226 vs
 998, x-ray 130 vs 935) needs a deeper libzstd-style two-position loop with
 fewer per-position probes, not a stride on the current loop.
+
+## Brotli q11 modeled2 and Zstd level-1 rep-probe screens (2026-11-19)
+
+Skipping q11's second modeled optimal parse (>=64 KiB) regresses dickens
++82, nci +130, reymont +96, samba +211, webster +83 and xml +187 bytes, so
+the second iteration stays. Removing the fast sequence parser's extra
+rep1/rep2 probes (the `repeatRank == 3` loop) changes level-1 sizes by
++8 to +348 bytes (nci +2.8%, mozilla +1.4%, xml +1.2%) with mixed and
+mostly negative speed deltas (x-ray 0.93x), so it is reverted as well.
+Together with the acceleration screen this confirms the level-1 gap needs
+a structural two-position loop rewrite rather than trimming the current
+parser's heuristics.
