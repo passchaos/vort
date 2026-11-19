@@ -2389,3 +2389,12 @@ single load/store. Twelve 128 KiB prefixes: **1.0046x** geometric mean (per
 row 0.986-1.019), with mozilla, sao and x-ray regressing. The gain is below
 the 3% bar and mixed, so the condition stays `distance >= 16`; the exact-copy
 fallback is not a measured bottleneck.
+
+Follow-up: the lazy-ring screen was re-tested with the ring path's missing
+`best.length == max_len` early exit restored (the non-ring path already had
+it). The early exit is wire-identical and removes the wasted tail, but the
+twelve-prefix result is still mixed: **1.0103x** geometric mean with text rows
+mozilla 0.954x, mr 0.930x, nci 0.966x and xml 0.964x, while ooffice 1.105x and
+x-ray 1.092x improve. The ring's cache benefit is content-dependent and the
+weak rows fall below the 0.98 control floor, so the full-table predecessor
+index stays.
