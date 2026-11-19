@@ -2398,3 +2398,19 @@ mozilla 0.954x, mr 0.930x, nci 0.966x and xml 0.964x, while ooffice 1.105x and
 x-ray 1.092x improve. The ring's cache benefit is content-dependent and the
 weak rows fall below the 0.98 control floor, so the full-table predecessor
 index stays.
+
+## Zstd level-1 predefined-plan dominance skip (2026-11-20)
+
+The fast large-sequence planner ran the predefined viability walk for the
+literal, offset and match tables on every block. A per-code minimum-width
+table now gives a lower bound on the predefined bit cost; the walk is skipped
+only when the compressed plan's exact cost plus its header (8 bits per byte)
+plus one byte of rounding slack is still below that lower bound, which is a
+strict dominance proof and cannot change the selected plan. Twelve 128 KiB
+level-1 prefixes: **1.0919x** geometric-mean encode speed (per row
+1.005-1.138), all twelve sizes byte-identical. On dickens the compressed
+alternatives are 7,445/10,984/13,582 bits cheaper than the predefined
+literal/offset/match plans while their headers cost only 15/12/19 bytes, so
+all three walks are skipped; the walks were about 6% of level-1 cycles. The
+non-fast ratio planner keeps the eager walk. Evidence:
+[data/zstd-level1-predefined-dominance-20261120](data/zstd-level1-predefined-dominance-20261120/README.md).

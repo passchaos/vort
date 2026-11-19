@@ -25092,6 +25092,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     };
     const literal_alternatives = try largeSequenceTablePlanAlternatives(
         .literal,
+        use_fast_cached_planner,
         literal_lens,
         literal_states,
         scratch.viable_masks.items,
@@ -25101,6 +25102,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         if (repeat_tables) |tables| previousSequenceTable(tables, .literal) else null,
     );
     const offset_alternatives = try largeOffsetSequenceTablePlanAlternatives(
+        use_fast_cached_planner,
         literal_lens,
         offsets,
         offset_states,
@@ -25115,6 +25117,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     );
     const match_alternatives = try largeSequenceTablePlanAlternatives(
         .match,
+        use_fast_cached_planner,
         match_lens,
         match_states,
         scratch.viable_masks.items,
@@ -28843,6 +28846,7 @@ const LargeSequenceTablePlanAlternatives = struct {
 
 fn largeSequenceTablePlanAlternatives(
     comptime kind: SequenceTableKind,
+    comptime fast_planner: bool,
     values: []const usize,
     predefined_states: []u8,
     viable_masks: []u64,
@@ -28860,6 +28864,13 @@ fn largeSequenceTablePlanAlternatives(
     // every LL/ML value independently for each candidate family.
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
+    const min_state_bits: []const u8 = switch (kind) {
+        .literal => &predefined_literal_min_state_bits,
+        .offset => &predefined_offset_min_state_bits,
+        .match => &predefined_match_min_state_bits,
+    };
+    var predefined_min_bits: usize = 0;
+    var predefined_min_ok = fast_planner;
     for (values, 0..) |value, i| {
         const code = sequenceCodeForValue(value, bases, bits) catch |err| switch (err) {
             error.CorruptFrame => return alternatives,
@@ -28868,26 +28879,53 @@ fn largeSequenceTablePlanAlternatives(
         if (code > max_fse_compression_symbol) return alternatives;
         compressed_buffers.codes[i] = code;
         alternatives.value_bit_count += bits[code];
+        if (comptime fast_planner) {
+            const width: u8 = if (code < min_state_bits.len) min_state_bits[code] else std.math.maxInt(u8);
+            if (width == std.math.maxInt(u8)) {
+                predefined_min_ok = false;
+            } else if (i + 1 < values.len) {
+                predefined_min_bits = std.math.add(usize, predefined_min_bits, width) catch return error.IntegerOverflow;
+            }
+        }
     }
     if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
-    const predefined_ok = large_predefined.plan(
-        compressed_buffers.codes,
-        switch (kind) {
-            .literal => &predefined_literal_state_masks,
-            .offset => &predefined_offset_code_state_masks,
-            .match => &predefined_match_state_masks,
-        },
-        switch (kind) {
-            .literal => .literal,
-            .offset => .offset,
-            .match => .match,
-        },
-        predefined_states,
-        viable_masks,
-    );
-    if (predefined_ok) try alternatives.add(.{ .predefined = predefined_states });
-    if (try planLargeCompressedSequenceCodes(values.len, compressed_buffers)) |plan|
+    const compressed_plan = try planLargeCompressedSequenceCodes(values.len, compressed_buffers);
+    var skip_predefined = false;
+    if (comptime fast_planner) {
+        if (predefined_min_ok) if (compressed_plan) |plan| {
+            const min_bits = std.math.add(
+                usize,
+                std.math.add(usize, alternatives.value_bit_count, predefined_min_bits) catch return error.IntegerOverflow,
+                predefinedInitialStateBits(kind),
+            ) catch return error.IntegerOverflow;
+            const probe: LargeSequenceTableEmitPlan = .{ .compressed = plan };
+            const cost = try largeFastSequenceTableCost(&probe, kind, values.len, alternatives.value_bit_count);
+            const header_bits = std.math.mul(usize, cost.payload_len, 8) catch return error.IntegerOverflow;
+            const margin = std.math.add(usize, cost.bit_count, header_bits) catch return error.IntegerOverflow;
+            const bound = std.math.add(usize, margin, 8) catch return error.IntegerOverflow;
+            skip_predefined = min_bits > bound;
+        };
+    }
+    if (!skip_predefined) {
+        const predefined_ok = large_predefined.plan(
+            compressed_buffers.codes,
+            switch (kind) {
+                .literal => &predefined_literal_state_masks,
+                .offset => &predefined_offset_code_state_masks,
+                .match => &predefined_match_state_masks,
+            },
+            switch (kind) {
+                .literal => .literal,
+                .offset => .offset,
+                .match => .match,
+            },
+            predefined_states,
+            viable_masks,
+        );
+        if (predefined_ok) try alternatives.add(.{ .predefined = predefined_states });
+    }
+    if (compressed_plan) |plan|
         try alternatives.add(.{ .compressed = plan });
     if (previous) |source| if (try planLargeRepeatSequenceCodes(compressed_buffers.codes, kind, source, repeat_states, repeat_viable_masks)) |plan|
         try alternatives.add(.{ .repeat = plan });
@@ -28989,6 +29027,7 @@ fn repeatSequenceMaskWordCount(source: RepeatSequenceSource) Error!usize {
 }
 
 fn largeOffsetSequenceTablePlanAlternatives(
+    comptime fast_planner: bool,
     literal_lens: []const usize,
     offsets: []const usize,
     predefined_states: []u8,
@@ -29004,6 +29043,8 @@ fn largeOffsetSequenceTablePlanAlternatives(
     if (literal_lens.len != offsets.len or offset_extras.len != offsets.len) return error.CorruptFrame;
     var alternatives: LargeSequenceTablePlanAlternatives = .{};
     var repeated_offsets = initial_offsets;
+    var predefined_min_bits: usize = 0;
+    var predefined_min_ok = fast_planner;
     for (offsets, 0..) |offset, i| {
         const selection = if (exact_offset_values) |values| exact: {
             if (values.len != offsets.len) return error.InvalidBlockPlan;
@@ -29017,19 +29058,47 @@ fn largeOffsetSequenceTablePlanAlternatives(
         compressed_buffers.codes[i] = selection.code;
         offset_extras[i] = selection.extra;
         alternatives.value_bit_count += of_bits[selection.code];
+        if (comptime fast_planner) {
+            const code: usize = selection.code;
+            const width: u8 = if (code < predefined_offset_min_state_bits.len) predefined_offset_min_state_bits[code] else std.math.maxInt(u8);
+            if (width == std.math.maxInt(u8)) {
+                predefined_min_ok = false;
+            } else if (i + 1 < offsets.len) {
+                predefined_min_bits = std.math.add(usize, predefined_min_bits, width) catch return error.IntegerOverflow;
+            }
+        }
     }
     if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
-    const offset_viable_bytes = std.mem.sliceAsBytes(viable_masks);
-    const offset_viable_masks = std.mem.bytesAsSlice(u32, offset_viable_bytes[0 .. offsets.len * @sizeOf(u32)]);
-    const predefined_ok = large_predefined.planOffset(
-        compressed_buffers.codes,
-        &predefined_offset_code_state_masks,
-        predefined_states,
-        offset_viable_masks,
-    );
-    if (predefined_ok) try alternatives.add(.{ .predefined = predefined_states });
-    if (try planLargeCompressedSequenceCodes(offsets.len, compressed_buffers)) |plan|
+    const compressed_plan = try planLargeCompressedSequenceCodes(offsets.len, compressed_buffers);
+    var skip_predefined = false;
+    if (comptime fast_planner) {
+        if (predefined_min_ok) if (compressed_plan) |plan| {
+            const min_bits = std.math.add(
+                usize,
+                std.math.add(usize, alternatives.value_bit_count, predefined_min_bits) catch return error.IntegerOverflow,
+                predefinedInitialStateBits(.offset),
+            ) catch return error.IntegerOverflow;
+            const probe: LargeSequenceTableEmitPlan = .{ .compressed = plan };
+            const cost = try largeFastSequenceTableCost(&probe, .offset, offsets.len, alternatives.value_bit_count);
+            const header_bits = std.math.mul(usize, cost.payload_len, 8) catch return error.IntegerOverflow;
+            const margin = std.math.add(usize, cost.bit_count, header_bits) catch return error.IntegerOverflow;
+            const bound = std.math.add(usize, margin, 8) catch return error.IntegerOverflow;
+            skip_predefined = min_bits > bound;
+        };
+    }
+    if (!skip_predefined) {
+        const offset_viable_bytes = std.mem.sliceAsBytes(viable_masks);
+        const offset_viable_masks = std.mem.bytesAsSlice(u32, offset_viable_bytes[0 .. offsets.len * @sizeOf(u32)]);
+        const predefined_ok = large_predefined.planOffset(
+            compressed_buffers.codes,
+            &predefined_offset_code_state_masks,
+            predefined_states,
+            offset_viable_masks,
+        );
+        if (predefined_ok) try alternatives.add(.{ .predefined = predefined_states });
+    }
+    if (compressed_plan) |plan|
         try alternatives.add(.{ .compressed = plan });
     if (previous) |source| if (try planLargeRepeatSequenceCodes(compressed_buffers.codes, .offset, source, repeat_states, repeat_viable_masks)) |plan|
         try alternatives.add(.{ .repeat = plan });
@@ -34876,6 +34945,33 @@ const predefined_literal_state_masks = buildPredefinedStateMasks(&sequence_prede
 const predefined_offset_state_masks = buildPredefinedStateMasks(&sequence_predefined.offset_symbols, &of_base, &of_bits, 2);
 const predefined_offset_code_state_masks = buildPredefinedStateMasks(&sequence_predefined.offset_symbols, &of_base, &of_bits, 0);
 const predefined_match_state_masks = buildPredefinedStateMasks(&sequence_predefined.match_symbols, &ml_base, &ml_bits, 0);
+
+/// Minimum predefined transition width per canonical code. `maxInt(u8)`
+/// marks a code with no predefined state. The greedy fast planner uses this
+/// to prove a compressed table strictly dominates the predefined alternative
+/// before paying for the viability walk.
+fn buildPredefinedMinStateBits(
+    comptime symbols: []const SequenceSymbol,
+    comptime bases: []const usize,
+    comptime bits: []const u8,
+    comptime min_additional_bits: u8,
+) [bases.len]u8 {
+    @setEvalBranchQuota(10_000);
+    var widths: [bases.len]u8 = @splat(std.math.maxInt(u8));
+    for (symbols) |symbol| {
+        if (symbol.additional_bits < min_additional_bits) continue;
+        for (bases, bits, 0..) |base, bit_count, code| {
+            if (symbol.base != base or symbol.additional_bits != bit_count) continue;
+            widths[code] = @min(widths[code], symbol.state_bits);
+            break;
+        }
+    }
+    return widths;
+}
+
+const predefined_literal_min_state_bits = buildPredefinedMinStateBits(&sequence_predefined.literal_symbols, &ll_base, &ll_bits, 0);
+const predefined_offset_min_state_bits = buildPredefinedMinStateBits(&sequence_predefined.offset_symbols, &of_base, &of_bits, 0);
+const predefined_match_min_state_bits = buildPredefinedMinStateBits(&sequence_predefined.match_symbols, &ml_base, &ml_bits, 0);
 
 fn buildPredefinedMinimumCosts(
     comptime symbols: []const SequenceSymbol,
