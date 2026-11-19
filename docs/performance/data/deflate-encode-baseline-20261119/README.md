@@ -75,7 +75,11 @@ the benchmark and the evidence; the production preset is unchanged.
 One host, one 128 KiB prefix per file, one-shot raw Deflate, min-of-five
 interleaved rounds, single thread. libdeflate 1.10 and zlib 1.2.11 are the
 system libraries; a libdeflate 1.26 comparison is a follow-up once the encode
-tool grows an explicit reference-path option. Levels 1 and 9 were spot-checked
+tool grows an explicit reference-path option. libdeflate's compressor is
+allocated once per measurement round and reused across iterations, while Vort
+and zlib pay their allocating one-shot API per iteration, so the reported
+Vort/libdeflate ratio is conservative; a per-call compressor lifecycle is a
+follow-up measurement. Levels 1 and 9 were spot-checked
 (dickens level 1: Vort 89.72 MiB/s vs libdeflate 191.34, sizes 54,008 vs
 54,677; level 9: Vort 1.14 MiB/s vs libdeflate 31.32, sizes 48,229 vs 50,040)
 but not swept across the corpus.

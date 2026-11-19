@@ -2216,3 +2216,17 @@ row below 1.015x), chain 96 at 1.1547x for +0.34%, and chain 35 at 1.5393x for
 preset also changes the zlib level-6 and archive defaults, so this increment
 only adds the benchmark and evidence. Evidence:
 [data/deflate-encode-baseline-20261119](data/deflate-encode-baseline-20261119/README.md).
+
+## Deflate hash-chain early node load (2026-11-19)
+
+The deflate hash-chain finder loaded the next `prev[candidate]` only after
+the prefix screen and match scan. The next node is independent of the scan,
+so the load now issues before both, overlapping its latency with the
+candidate comparison and `matchLength`. Traversal order and match selection
+are unchanged. On the twelve 128 KiB level-6 prefixes the geometric-mean
+encode speed is **1.0367x** (per row 0.9905-1.1324) and every output is
+byte-identical; level 1 and level 9 spot checks keep their sizes and speed.
+Evidence:
+[data/deflate-encode-early-chain-20261119](data/deflate-encode-early-chain-20261119/README.md).
+The shared finder also serves the zstd hash parsers, so adoption is gated on
+the full `test`/`check`/`check-wasm` run.

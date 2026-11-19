@@ -3664,9 +3664,12 @@ fn findBestHashMatchWithLayoutAndHashLimits(
             if (distance == 0 or distance > limits.window_len) break;
             if (best.length == max_len) break;
         }
+        // Load the next chain node before the match scan so the dependent
+        // load overlaps the candidate comparison and matchLength work.
+        const next_candidate = prev[hashPrevIndex(candidate, prev, ring)];
         const required_prefix = @max(best.length, minimum - 1);
         if (input[candidate + required_prefix] != input[pos + required_prefix]) {
-            candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
+            candidate_i = next_candidate;
             continue;
         }
         checked += 1;
@@ -3693,7 +3696,7 @@ fn findBestHashMatchWithLayoutAndHashLimits(
                     std.mem.readInt(u16, input[pos..][0..2], .little);
             if (!prefix_matches) {
                 if (checked == limits.max_chain) break;
-                candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
+                candidate_i = next_candidate;
                 continue;
             }
         }
@@ -3706,7 +3709,7 @@ fn findBestHashMatchWithLayoutAndHashLimits(
             }
         }
         if (checked == limits.max_chain) break;
-        candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
+        candidate_i = next_candidate;
     }
     return .{ .best = best, .hash = hash };
 }
