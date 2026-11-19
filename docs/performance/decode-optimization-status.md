@@ -1930,3 +1930,20 @@ increment should add repcode-aware parsing (per-node distance cache or the
 bounded start-position queue), with command/distance block splitting as the
 secondary lever.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 repcode-aware beam parser screen (2026-11-19)
+
+`src/br/encoder/rep_optimal.zig` is a forward beam DP that carries Brotli's
+four-entry distance cache and the exact insert length in every state, with
+hash-frontier and cached-distance candidates priced through implicit, short
+and regular distance codes. At beam 8 / frontier 4 on q11 128 KiB prefixes
+it changes only the binary rows: mr 30,036 -> 29,565 (-471, -1.57%) and
+x-ray 77,220 -> 77,092 (-128, -0.17%); dickens, mozilla, nci and xml are
+size-identical. Encode time rises 28-50% (dickens 581 ms, mozilla 662 ms,
+mr 938 ms, xml 480 ms). Pricing implicit commands with the explicit symbol
+as a proxy and widening the beam to 16 / frontier to 8 still leaves every
+text row unchanged. The parser is kept as a tested prototype but not wired
+to the production default path. Together with the frontier-DP screen this
+shows the text gap is not caused by the absence of cache state alone; the
+remaining levers are candidate quality and model-to-wire convergence.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).

@@ -254,6 +254,33 @@ literal context 在 x-ray/xml 上贡献很大，但在差距最大的 mozilla/nc
 distance cache，或按 libbrotli 的 8 起点队列近似），其次再调
 command/distance block split；literal context 与匹配窗口都不是主杠杆。
 
+### repcode-aware beam 解析器实测（同日追加）
+
+`src/br/encoder/rep_optimal.zig` 实现前向 beam DP：每个状态携带 Brotli
+4 项 distance cache 与精确 insert 长度，候选来自 hash 前沿（4 宽）与 4 个
+cache 距离，按 implicit/short/regular 距离真实定价；beam 宽 8，含 round-trip
+与“重复距离”单测。q11 128 KiB 实测（beam=8、frontier=4）：
+
+| case | baseline | rep beam | delta | 用时 |
+| --- | ---: | ---: | ---: | ---: |
+| dickens | 43,953 | 43,953 | 0 | 581 ms |
+| mozilla | 18,676 | 18,676 | 0 | 662 ms |
+| mr | 30,036 | 29,565 | -471 (-1.57%) | 938 ms |
+| nci | 8,859 | 8,859 | 0 | 678 ms |
+| xml | 8,401 | 8,401 | 0 | 480 ms |
+| x-ray | 77,220 | 77,092 | -128 (-0.17%) | 734 ms |
+
+变体：把 implicit 命令符号改为按 explicit 符号定价（避免 unseen penalty）
+后，mr 29,822、x-ray 77,095，文本行仍不变；beam 加宽到 16、前沿加到 8
+后文本行依旧不变（dickens/mozilla/nci/xml），用时进一步上升（672/864/789/
+598 ms）。
+
+结论：cache 状态确实能在二进制行（mr/x-ray）带来 0.2~1.6% 收益，但
+文本行完全不动，且 q11 编码时间上升 28~50%。低于 3% 合并门槛，因此
+不接入生产默认路径；解析器与单测作为原型保留。文本行的差距更可能来自
+候选质量/熵模型收敛，而不是“是否有 cache 状态”本身——这与前沿 DP 的
+结论一致。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。
