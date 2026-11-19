@@ -2431,3 +2431,14 @@ row 0.996-1.019), all sizes byte-identical. This is a small structural removal
 recorded as part of the level-1 emitter series, not a standalone 3% claim.
 Evidence:
 [data/zstd-level1-transition-bit-count-20261120](data/zstd-level1-transition-bit-count-20261120/README.md).
+
+## Zstd fast-parser inlining screen (2026-11-20)
+
+`storeMatch` and `consumeImmediateReps` are deliberately `noinline` in the
+compact sequence parser. Making both inline was measured on the twelve
+128 KiB level-1 prefixes: **0.8071x** geometric mean (per row 0.620-0.917,
+x-ray 0.620x) with byte-identical sizes. The expanded main loop destroys the
+I-cache/branch layout, so the `noinline` boundary is load-bearing and stays.
+The accepted level-1 series remains the 13-bit long table, the reserved
+bitstream writer, the predefined dominance skip and the transition bit-count
+fusion.
