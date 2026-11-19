@@ -2275,3 +2275,14 @@ the chain-node early load) reaches **0.3467x** libdeflate throughput, versus
 smaller on sao, xml and x-ray, and larger on the other nine rows (worst samba
 +7.3%, mr +4.6%). Evidence:
 [data/deflate-encode-libdeflate-126-20261120](data/deflate-encode-libdeflate-126-20261120/README.md).
+
+## Deflate decode literal pair-store screen (2026-11-20)
+
+The fused semantic loop wrote literals with two byte stores in the one-shot
+non-pause path, while the pair writer used by the pause/rle modes performs one
+u16 store. Using the pair writer unconditionally measured **750.0 MiB/s**
+versus **747.7 MiB/s** on the dickens 128 KiB probe (three runs each, within
+run noise) with identical output, so the two byte stores are not a bottleneck;
+the change was reverted. Instruction annotation of the same loop puts the
+16-byte match copy load/store at ~10.6% and Huffman table loads at ~15%, which
+bounds the two-phase token-buffer upside after token write/read overhead.
