@@ -1889,3 +1889,24 @@ the text rows, the remaining q11 lever is model-to-wire convergence (rebuild
 the entropy model from the DP plan and iterate) or a stronger candidate
 structure such as a binary-tree search, not more frontier width.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 match-window probe and 64 KiB optimal window (2026-11-19)
+
+A new `run-br-window-probe` diagnostic compares the longest hash-chain match
+at every position for a 32 KiB and a 65,520-byte search window. All twelve
+Silesia 128 KiB prefixes gain coverage at 65,520: mozilla +645,009 matched
+bytes (5,801 positions with at least 8 extra bytes), xml +200,562 (3,291),
+nci +112,572 (2,863), reymont +76,987, webster +71,443, osdb +70,890, and
+dickens +56,673, among others. Temporarily lifting the quality-scheduled
+optimal window to the 16-bit wire window and extending the lz77 fixed
+distance table to 65,535 changes q11 to dickens -695, osdb -873, webster
+-606, reymont -530, ooffice -225, nci -101, mr -91, samba -29 and xml -24
+bytes, with mozilla/sao unchanged and x-ray +138. The 12-row geometric mean
+gain is about 0.73% at xml/dickens encode-time costs of +24.7%/+14.2%, below
+the 3% merge bar and with one size regression, so the production window cap
+stays at 32 KiB and the q11 output returns to baseline. The lz77 capability
+and the corrected 64 KiB fixed distance table remain: the lazy q11 parser
+already searched 65,520 bytes, so the old table was an out-of-bounds read
+for accepted matches beyond 32 KiB. Reaching libbrotli's lgwin=22 behavior
+would require wider token distances and larger wire window bits.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
