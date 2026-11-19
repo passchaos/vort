@@ -25091,8 +25091,8 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         .transition_bits = scratch.transition_bits.items[sequence_count * 2 .. sequence_count * 3],
     };
     const literal_alternatives = try largeSequenceTablePlanAlternatives(
-        literal_lens,
         .literal,
+        literal_lens,
         literal_states,
         scratch.viable_masks.items,
         literal_compressed,
@@ -25114,8 +25114,8 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         scratch.offset_extras.items[0..sequence_count],
     );
     const match_alternatives = try largeSequenceTablePlanAlternatives(
-        match_lens,
         .match,
+        match_lens,
         match_states,
         scratch.viable_masks.items,
         match_compressed,
@@ -25178,17 +25178,23 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         // order while selecting codes, so reuse them here.
         repeated_offsets = offset_alternatives.final_offsets;
     }
+    // Worst-case per-sequence fields stay below 90 bits (three transitions
+    // plus LL/ML/OF extras), so 16 bytes per sequence plus one spare word
+    // covers the whole reverse bitstream. Reserving once lets the hot loop use
+    // the capacity-check-free writer while emitting the same bytes.
+    const sequence_bits_capacity = std.math.mul(usize, sequence_count, 16) catch return error.IntegerOverflow;
+    try scratch.sequence_bits.ensureTotalCapacity(allocator, std.math.add(usize, sequence_bits_capacity, 16) catch return error.IntegerOverflow);
     var i = sequence_count;
     while (i > 0) {
         i -= 1;
         const literal_value = if (comptime use_fast_cached_planner)
-            try large_fast_plan.valueField(literal_compressed.codes, &ll_base, &ll_bits, i)
+            large_fast_plan.valueFieldAssumeValid(literal_compressed.codes, &ll_base, &ll_bits, i)
         else value: {
             const symbol = try largeSequenceTableSymbol(&plan.plan.literal, .literal, i);
             break :value large_fast_plan.ValueField{ .base = symbol.base, .additional_bits = symbol.additional_bits };
         };
         const offset_symbol = if (comptime use_fast_cached_planner) symbol: {
-            const value = try large_fast_plan.valueField(offset_compressed.codes, &of_base, &of_bits, i);
+            const value = large_fast_plan.valueFieldAssumeValid(offset_compressed.codes, &of_base, &of_bits, i);
             break :symbol SequenceSymbol{
                 .base = @intCast(value.base),
                 .additional_bits = value.additional_bits,
@@ -25197,7 +25203,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
             };
         } else try largeSequenceTableSymbol(&plan.plan.offset, .offset, i);
         const match_value = if (comptime use_fast_cached_planner)
-            try large_fast_plan.valueField(match_compressed.codes, &ml_base, &ml_bits, i)
+            large_fast_plan.valueFieldAssumeValid(match_compressed.codes, &ml_base, &ml_bits, i)
         else value: {
             const symbol = try largeSequenceTableSymbol(&plan.plan.match, .match, i);
             break :value large_fast_plan.ValueField{ .base = symbol.base, .additional_bits = symbol.additional_bits };
@@ -25214,12 +25220,16 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
             try packLargeSequenceTransition(&transition_value, &transition_bits, offset_transition);
             try packLargeSequenceTransition(&transition_value, &transition_bits, match_transition);
             try packLargeSequenceTransition(&transition_value, &transition_bits, literal_transition);
-            try writer.addBits(allocator, &scratch.sequence_bits, transition_value, transition_bits);
+            try writer.addBitsReserved(allocator, &scratch.sequence_bits, transition_value, transition_bits);
         }
-        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_value.base, literal_value.additional_bits);
-        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_value.base, match_value.additional_bits);
-        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, offset_extras[i], offset_symbol.additional_bits);
+        try addCheckedReverseBitsReserved(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_value.base, literal_value.additional_bits);
+        try addCheckedReverseBitsReserved(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_value.base, match_value.additional_bits);
+        try addCheckedReverseBitsReserved(&writer, allocator, &scratch.sequence_bits, offset_extras[i], offset_symbol.additional_bits);
     }
+    // The reserved writer may hold a full accumulator; the checked initial
+    // state writer expects at most seven buffered bits, so flush full bytes
+    // before switching back to the capacity-checking path.
+    writer.flushBytesReserved(&scratch.sequence_bits);
     try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.match, .match);
     try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.offset, .offset);
     try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.literal, .literal);
@@ -28832,8 +28842,8 @@ const LargeSequenceTablePlanAlternatives = struct {
 };
 
 fn largeSequenceTablePlanAlternatives(
+    comptime kind: SequenceTableKind,
     values: []const usize,
-    kind: SequenceTableKind,
     predefined_states: []u8,
     viable_masks: []u64,
     compressed_buffers: LargeCompressedSequenceBuffers,
@@ -31999,6 +32009,33 @@ const ReverseBitstreamWriter = struct {
         self.bit_count -= @intCast(byte_count * 8);
     }
 
+    /// Capacity-reserved variant for callers that preallocated the worst-case
+    /// byte budget. Flushes only when the next field cannot fit in the
+    /// accumulator, so the emitted byte stream is identical while the hot loop
+    /// avoids one capacity check per field.
+    inline fn addBitsReserved(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: usize, bits: u8) Error!void {
+        if (bits > 56) {
+            // The checked wide path assumes at most seven buffered bits.
+            self.flushBytesReserved(out);
+            return self.addBits(allocator, out, value, bits);
+        }
+        if (bits == 0) return;
+        if (@as(u16, self.bit_count) + bits > 64) self.flushBytesReserved(out);
+        const mask = (@as(u64, 1) << @intCast(bits)) - 1;
+        self.accumulator |= (@as(u64, value) & mask) << @intCast(self.bit_count);
+        self.bit_count += bits;
+    }
+
+    fn flushBytesReserved(self: *ReverseBitstreamWriter, out: *std.ArrayList(u8)) void {
+        const byte_count = self.bit_count / 8;
+        if (byte_count == 0) return;
+        for (0..byte_count) |_| {
+            out.appendAssumeCapacity(@truncate(self.accumulator));
+            self.accumulator >>= 8;
+        }
+        self.bit_count -= @intCast(byte_count * 8);
+    }
+
     fn finish(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) Error!void {
         self.accumulator |= @as(u64, 1) << @intCast(self.bit_count);
         self.bit_count += 1;
@@ -32024,6 +32061,20 @@ fn addCheckedReverseBits(
         if (value != 0) return error.CorruptFrame;
     } else if (bits < @bitSizeOf(usize) and value >= (@as(usize, 1) << @intCast(bits))) return error.CorruptFrame;
     try writer.addBits(allocator, out, value, bits);
+}
+
+fn addCheckedReverseBitsReserved(
+    writer: *ReverseBitstreamWriter,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    value: usize,
+    bits: u8,
+) Error!void {
+    if (bits > @bitSizeOf(usize)) return error.CorruptFrame;
+    if (bits == 0) {
+        if (value != 0) return error.CorruptFrame;
+    } else if (bits < @bitSizeOf(usize) and value >= (@as(usize, 1) << @intCast(bits))) return error.CorruptFrame;
+    try writer.addBitsReserved(allocator, out, value, bits);
 }
 
 fn emitFseHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!bool {
@@ -44121,6 +44172,38 @@ test "zstd reverse bitstream writer rejects oversized bit fields as corrupt" {
 test "zstd reverse bitstream reader rejects oversized bit fields as corrupt" {
     var reader = try ReverseBitReader.init(&.{0x01});
     try std.testing.expectError(error.CorruptFrame, reader.read(@bitSizeOf(usize) + 1));
+}
+
+test "zstd reserved reverse writer matches the checked writer byte for byte" {
+    var checked: std.ArrayList(u8) = .empty;
+    defer checked.deinit(std.testing.allocator);
+    var reserved: std.ArrayList(u8) = .empty;
+    defer reserved.deinit(std.testing.allocator);
+    var checked_writer: ReverseBitstreamWriter = .{};
+    var reserved_writer: ReverseBitstreamWriter = .{};
+
+    var state: u32 = 0x9e37_79b9;
+    for (0..512) |_| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const bits: u8 = @intCast(state % 57);
+        const value: usize = if (bits == 0) 0 else (@as(usize, state >> 8) & ((@as(usize, 1) << @intCast(bits)) - 1));
+        try checked_writer.addBits(std.testing.allocator, &checked, value, bits);
+        try reserved.ensureUnusedCapacity(std.testing.allocator, 16);
+        try reserved_writer.addBitsReserved(std.testing.allocator, &reserved, value, bits);
+    }
+    // A full-word field followed by the checked writer exercises both
+    // accumulator invariants: the reserved path may hold a complete word, and
+    // the checked wide path expects at most seven buffered bits.
+    const wide: usize = 0x1234_5678_9abc_def0;
+    try checked_writer.addBits(std.testing.allocator, &checked, wide, 64);
+    try reserved.ensureUnusedCapacity(std.testing.allocator, 16);
+    try reserved_writer.addBitsReserved(std.testing.allocator, &reserved, wide, 64);
+    try checked_writer.addBits(std.testing.allocator, &checked, 5, 3);
+    reserved_writer.flushBytesReserved(&reserved);
+    try reserved_writer.addBits(std.testing.allocator, &reserved, 5, 3);
+    try checked_writer.finish(std.testing.allocator, &checked);
+    try reserved_writer.finish(std.testing.allocator, &reserved);
+    try std.testing.expectEqualSlices(u8, checked.items, reserved.items);
 }
 
 test "zstd sequence emitter supports compressed FSE literal-length table" {

@@ -2155,3 +2155,32 @@ while level 3 stays at 7,140 because its wide probe uses the separate 11-bit
 double-fast candidate. The guard therefore fails on the exact table-width
 regression it was added for, and any future size improvement may lower the
 ceilings without editing the plan lock.
+
+## Zstd level-1 fast sequence bitstream writer (2026-11-19)
+
+A flat `perf` profile of the 128 KiB dickens level-1 encode against libzstd
+1.6.0 (Vort 78.1 MiB/s at 59,878 bytes, libzstd 331.8 MiB/s at 56,148)
+attributed 5.4% of cycles to `ReverseBitstreamWriter.addBits` and 1.6% to the
+per-field `ensureUnusedCapacity` check: every sequence flushed full bytes and
+rechecked capacity four times. The fast large-sequence emitter now reserves
+16 bytes per sequence plus one spare word (worst-case fields stay below 90
+bits) and uses `addBitsReserved`, which flushes only when the next field
+cannot fit; the checked writer still emits the three initial states after a
+full-byte flush, and a differential unit test pins both writers to identical
+bytes including a full-word field.
+
+Twelve 128 KiB Silesia prefixes, level 1, one-shot, ReleaseFast, interleaved
+Vort-first/reference-first rounds (`--iterations 1 --rounds 5`): geometric-mean
+Vort encode speed **1.0672x** (per row 1.025-1.106), all twelve output sizes
+byte-identical. The weakest row is ooffice at +2.5%, above the 0.98x control
+floor. Evidence:
+[data/zstd-fast-reserved-writer-20261119](data/zstd-fast-reserved-writer-20261119/README.md).
+
+A deferred predefined-table viability walk was prototyped in the same session.
+Literal and match codes include predefined states with mixed transition widths
+(LL 1, LL 17, ML 2), so only the offset kind could be deferred; writer-only
+measured 1.0760x geometric mean versus 1.0752x with the deferral, i.e. no gain.
+The deferral was removed. The remaining level-1 profile is parser-bound
+(~34%), then predefined planning (~6%), emission orchestration (~6%) and
+literal Huffman (~5.7%); the next structural lever is either the parser policy
+(single-table fast parser) or fusing plan and emission passes.

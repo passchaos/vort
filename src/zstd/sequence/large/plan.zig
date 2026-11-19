@@ -41,6 +41,17 @@ pub inline fn valueField(
     return .{ .base = bases[code], .additional_bits = bit_widths[code] };
 }
 
+/// Emission-loop variant for callers whose plan already validated every code.
+pub inline fn valueFieldAssumeValid(
+    codes: []const u8,
+    bases: []const usize,
+    bit_widths: []const u8,
+    index: usize,
+) ValueField {
+    const code = codes[index];
+    return .{ .base = bases[code], .additional_bits = bit_widths[code] };
+}
+
 pub noinline fn valueBits(
     codes: []const u8,
     bit_widths: []const u8,
