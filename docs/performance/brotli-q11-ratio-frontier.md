@@ -281,6 +281,35 @@ cache 距离，按 implicit/short/regular 距离真实定价；beam 宽 8，含 
 候选质量/熵模型收敛，而不是“是否有 cache 状态”本身——这与前沿 DP 的
 结论一致。
 
+### command/distance block split 诊断（同日追加）
+
+对 `encodeEntropySplitCandidateAllocRecorded` 加临时诊断后发现：
+adaptive command/distance plan 在每一行都存在（多数 `type_count=8/8`，
+x-ray 命令类型 5），但**combined adaptive command+distance 候选从未被
+物化**：`if/else` 链先命中 adaptive literal 分支（或同时存在两个 adaptive
+plan 时只编码 command-only），combined 候选没有调用点。
+
+临时补上 combined 候选后，q11 的完整 wire 对比：
+
+| case | baseline | combined split 候选 |
+| --- | ---: | ---: |
+| mozilla（胜出 parse） | 18,676 | 18,903 (+227) |
+| mr（胜出 parse） | 30,036 | 30,146~30,339 |
+| x-ray | 85,848 | 86,157 (+309) |
+| dickens | 44,061 | 44,337 (+276) |
+| xml | 8,588 | 8,682 (+94) |
+| nci | 8,989 | 9,300 (+311) |
+
+q9 A/B：加不加该候选，xml/dickens/mozilla/mr 尺寸完全相同
+（9,123 / 48,833 / 18,704 / 30,317），耗时 +3~8%。因此回退了该改动，
+避免“无尺寸收益的固定时间成本”。
+
+原因：`block_split_plan.Plan.estimated_bits` 只覆盖 command/distance
+符号载荷（mozilla 30,889+21,696 bit ≈ 6.6 KB），而完整 wire 是 18.9 KB；
+splitter 的提案无法感知树描述/类型图/字面量成本，完整 wire 仲裁正确地
+拒绝了这些提案。下一步应改进 splitter 的搜索与成本模型（把类型/树开销
+计入提案、增加迭代/类型数），而不是补候选接线。
+
 ## 验证计划
 
 1. 单元：状态桶、字典边定价、原子 copy 边界、回滚。

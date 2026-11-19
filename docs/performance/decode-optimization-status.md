@@ -1947,3 +1947,23 @@ to the production default path. Together with the frontier-DP screen this
 shows the text gap is not caused by the absence of cache state alone; the
 remaining levers are candidate quality and model-to-wire convergence.
 Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
+
+## Brotli q11 command/distance block-split diagnostic (2026-11-19)
+
+The reference q11 wire uses multiple command/distance block types on several
+rows (mozilla 13/5, mr 4/4, x-ray 2/4) while Vort emits one type. Temporary
+instrumentation showed the adaptive command/distance plans exist on every
+measured row (type_count 8/8, x-ray command 5), but the combined adaptive
+command+distance candidate was never materialized: the candidate if/else
+chain selects the adaptive literal candidate first, and encodes command-only
+when both symbol plans exist. Materializing the combined candidate leaves
+every q9 and q11 size unchanged because its complete wire is larger:
+mozilla 18,903 vs 18,676, mr 30,146-30,339 vs 30,036, x-ray 86,157 vs
+85,848, dickens 44,337 vs 44,061, xml 8,682 vs 8,588 and nci 9,300 vs 8,989
+on the winning parses. q9 sizes are identical with and without the candidate
+at +3-8% encode time, so the change was reverted. The block splitter's
+`estimated_bits` covers only the command/distance symbol payload (mozilla
+about 6.6 KB) versus an 18.9 KB complete wire, so its proposals cannot see
+tree/type-map and literal costs. The next splitter step is to include those
+costs in the proposal search or to increase its type/iteration budget.
+Evidence: [brotli-q11-ratio-frontier.md](brotli-q11-ratio-frontier.md).
