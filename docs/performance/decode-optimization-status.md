@@ -2350,3 +2350,22 @@ on the twelve 128 KiB prefixes and rejected:
 Together with the break (0.9879x), prefetch (0.9638x) and inline (0.9797x)
 screens, this closes the controlled-search index surface for local edits. The
 accepted level-3 increment remains the block-only `matchAt` fast path.
+
+## Brotli q11 distance-split boundary (2026-11-20)
+
+After the command-split gating, the 128 KiB dickens q11 stage split is wire
+26.4%, optimal_parse 23.2%, split_planning 18.0%, lazy_parse 7.5%, evaluate
+6.9%, context_proposals 6.6% and other 10.1% (54 wire attempts, 43,953 bytes).
+A flat perf profile spreads the wire stage across command pricing/emission
+functions, the largest being `encodeCommandPlanWithStandardWrite` at 6.0%;
+there is no single dominant wire function.
+
+Only three prefixes cross the 16K distance-split threshold: dickens 18,006
+commands, ooffice 16,769 and x-ray 26,647. Raising the threshold above the
+corpus leaves 11/12 sizes byte-identical and makes ooffice 64,644 (+10 bytes);
+it removes 10/4 wire attempts and saves 6.0% on dickens (461.3 -> 433.7 ms)
+and 5.9% on x-ray (576.1 -> 541.9 ms), while ooffice saves only 1.0% and loses
+its 10-byte win. Command count cannot separate the ooffice win from the
+dickens/x-ray waste, so the threshold stays at 16K. The next candidate is a
+cheap distribution-shift pre-screen over the distance symbols already collected
+in the split pass; it must retain ooffice's 10-byte win.
