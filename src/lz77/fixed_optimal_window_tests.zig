@@ -46,7 +46,7 @@ const Snapshot = struct {
 };
 
 test "fixed optimal window rejects unsupported options before any allocation" {
-    for ([_]usize{ lz77.default_window_len + 1, lz77.max_window_len, lz77.max_window_len + 1, std.math.maxInt(usize) }) |window| {
+    for ([_]usize{ lz77.max_window_len + 1, std.math.maxInt(usize) }) |window| {
         for ([_][]const u8{ "", "a", "abcdefghabcdefgh" }) |input| {
             var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
             const allocator = failing.allocator();
@@ -79,7 +79,7 @@ test "fixed optimal window rejection preserves reusable and prepared initialized
     const prepared_snapshot = try Snapshot.capture(&prepared.scratch);
     defer prepared_snapshot.deinit();
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
-    for ([_]usize{ lz77.default_window_len + 1, lz77.max_window_len, std.math.maxInt(usize) }) |window| {
+    for ([_]usize{ lz77.max_window_len + 1, std.math.maxInt(usize) }) |window| {
         var invalid = options;
         invalid.window_len = window;
         try std.testing.expectError(error.InvalidBlockPlan, lz77.optimalPlanReuse(&scratch, failing.allocator(), input, invalid));
@@ -103,7 +103,7 @@ test "fixed optimal window rejection preserves reusable and prepared initialized
 
 test "fixed optimal zero and maximum windows replay while prepared wide modeled remains supported" {
     const input = "abcdefghabcdefghabcdefgh";
-    for ([_]usize{ 0, 1, lz77.default_window_len }) |window| {
+    for ([_]usize{ 0, 1, lz77.default_window_len, lz77.max_window_len }) |window| {
         const plan = try lz77.optimalPlanAlloc(std.testing.allocator, input, .{ .window_len = window });
         defer plan.deinit(std.testing.allocator);
         const replay = try lz77.replayAlloc(std.testing.allocator, plan.tokens);
@@ -121,13 +121,14 @@ test "fixed optimal zero and maximum windows replay while prepared wide modeled 
     defer wide.deinit(std.testing.allocator);
     const modeled = try wide.planModeledAlloc(std.testing.allocator, model);
     defer modeled.deinit(std.testing.allocator);
-    const snapshot = try Snapshot.capture(&wide.scratch);
-    defer snapshot.deinit();
-    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
-    try std.testing.expectError(error.InvalidBlockPlan, wide.planFixedAlloc(failing.allocator()));
-    try snapshot.expectUnchanged(&wide.scratch);
-    try std.testing.expectEqual(@as(usize, 0), failing.alloc_index);
+    // The fixed parser now accepts the full u16 window as well; the wide
+    // prepared scratch is reusable across both cost models.
+    const fixed = try wide.planFixedAlloc(std.testing.allocator);
+    defer fixed.deinit(std.testing.allocator);
     const replay = try lz77.replayAlloc(std.testing.allocator, modeled.tokens);
     defer std.testing.allocator.free(replay);
     try std.testing.expectEqualStrings(input, replay);
+    const fixed_replay = try lz77.replayAlloc(std.testing.allocator, fixed.tokens);
+    defer std.testing.allocator.free(fixed_replay);
+    try std.testing.expectEqualStrings(input, fixed_replay);
 }

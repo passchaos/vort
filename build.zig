@@ -630,6 +630,23 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.step("build-br-metadata-probe", "Compile the public Brotli metadata compatibility probe").dependOn(&br_metadata_probe.step);
+    const br_window_probe = b.addExecutable(.{
+        .name = "vort-br-window-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/window_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "lz77", .module = b.createModule(.{
+                .root_source_file = b.path("src/lz77.zig"),
+                .target = target,
+                .optimize = .ReleaseFast,
+            }) }},
+        }),
+    });
+    b.step("build-br-window-probe", "Compile the Brotli match-window coverage probe").dependOn(&br_window_probe.step);
+    const run_br_window_probe = b.addRunArtifact(br_window_probe);
+    if (b.args) |args| run_br_window_probe.addArgs(args);
+    b.step("run-br-window-probe", "Compare Brotli match coverage at two search windows").dependOn(&run_br_window_probe.step);
     const br_metadata_diff = b.addSystemCommand(&.{ "python3", "tools/br/metadata_diff.py", "--probe" });
     br_metadata_diff.addArtifactArg(br_metadata_probe);
     br_metadata_diff.addArgs(&.{ "--directory", "zig-out/br-metadata" });

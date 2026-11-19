@@ -7002,8 +7002,8 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
     // the retained source corpus. The fixed-bit DP is only a proposal stage:
     // exact Brotli wire size decides whether the candidate survives.
     const optimal_plan = try lz77.optimalPlanAlloc(allocator, input, .{
-        // `optimalPlanAlloc` currently has a precomputed 32 KiB distance-cost
-        // table. The existing lazy and long-distance paths cover farther hits.
+        // The legacy ratio level keeps its established 32 KiB optimal window;
+        // the quality-scheduled q10/q11 path searches the full wire window.
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,

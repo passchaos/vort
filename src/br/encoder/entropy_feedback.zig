@@ -88,7 +88,7 @@ fn buildInternal(
     starting_last_distances: [4]usize,
     repcode_bonus: bool,
 ) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
-    if (input.len == 0 or window_len == 0 or window_len > lz77.default_window_len)
+    if (input.len == 0 or window_len == 0 or window_len > lz77.max_window_len)
         return error.InvalidBlockPlan;
     for (starting_last_distances) |value|
         if (value == 0) return error.InvalidBlockPlan;

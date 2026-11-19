@@ -22,11 +22,11 @@ const HashAnchor = enum { three, four };
 const min_hash_prev_ring_input_len: usize = 64 * 1024 + 1;
 const fixed_distance_costs = blk: {
     @setEvalBranchQuota(1_000_000);
-    break :blk fixedDistanceCostTable(default_window_len);
+    break :blk fixedDistanceCostTable(max_window_len);
 };
 
 pub inline fn fixedDistanceCost(distance: usize) usize {
-    std.debug.assert(distance > 0 and distance <= default_window_len);
+    std.debug.assert(distance > 0 and distance <= max_window_len);
     return fixed_distance_costs[distance];
 }
 
@@ -612,7 +612,7 @@ fn validateOptimalInputLength(len: usize) error{InvalidBlockPlan}!void {
 }
 
 fn validateFixedOptimalWindow(window_len: usize) error{InvalidBlockPlan}!void {
-    if (window_len > default_window_len) return error.InvalidBlockPlan;
+    if (window_len > max_window_len) return error.InvalidBlockPlan;
 }
 
 pub const RepBeamScratch = struct {
@@ -2295,7 +2295,7 @@ fn acceptsEveryHashMatch(options: GreedyOptions) bool {
     // literal costs at least eight bits. If that lower bound pays the
     // worst-distance match plus the requested savings for every permitted
     // length, `acceptMatch` cannot reject any match returned by the parser.
-    if (options.window_len == 0 or options.window_len > default_window_len) {
+    if (options.window_len == 0 or options.window_len > max_window_len) {
         return false;
     }
     const distance_cost = fixedDistanceSymbolCost(options.window_len);
@@ -2641,9 +2641,9 @@ fn fixedDistanceExtraBitsFast(distance: usize) usize {
     return std.math.log2_int(usize, distance - 1) - 1;
 }
 
-fn fixedDistanceCostTable(window_len: usize) [default_window_len + 1]u8 {
-    var table: [default_window_len + 1]u8 = @splat(0);
-    const limit = @min(window_len, default_window_len);
+fn fixedDistanceCostTable(window_len: usize) [max_window_len + 1]u8 {
+    var table: [max_window_len + 1]u8 = @splat(0);
+    const limit = @min(window_len, max_window_len);
     var distance: usize = 1;
     while (distance <= limit) : (distance += 1) {
         table[distance] = @intCast(fixedDistanceSymbolCost(distance));
@@ -2653,7 +2653,7 @@ fn fixedDistanceCostTable(window_len: usize) [default_window_len + 1]u8 {
 
 test "compile-time fixed distance costs match scalar range" {
     try std.testing.expectEqual(@as(u8, 0), fixed_distance_costs[0]);
-    for (1..default_window_len + 1) |distance| {
+    for (1..max_window_len + 1) |distance| {
         try std.testing.expectEqual(@as(u8, @intCast(fixedDistanceSymbolCost(distance))), fixed_distance_costs[distance]);
     }
 }
@@ -4073,7 +4073,7 @@ const HashMatchSearch = struct {
 fn findBestMatch(input: []const u8, pos: usize, options: GreedyOptions) MatchCandidate {
     const minimum = minMatch(options);
     if (input.len - pos < minimum) return .{};
-    const window_len = @min(options.window_len, default_window_len);
+    const window_len = @min(options.window_len, max_window_len);
     const start = pos -| window_len;
     const max_len = @min(maxMatch(options), input.len - pos);
     var best = MatchCandidate{};
@@ -5388,7 +5388,7 @@ test "hash match fast acceptance is a sufficient condition" {
     expensive.min_savings_bits = 9;
     try std.testing.expect(!acceptsEveryHashMatch(expensive));
     var oversized_window = fastest;
-    oversized_window.window_len = default_window_len + 1;
+    oversized_window.window_len = max_window_len + 1;
     try std.testing.expect(!acceptsEveryHashMatch(oversized_window));
 }
 
@@ -5411,7 +5411,7 @@ test "constant-time hash match acceptance matches exhaustive length scan" {
 }
 
 fn acceptsEveryHashMatchReference(options: GreedyOptions) bool {
-    if (options.window_len == 0 or options.window_len > default_window_len) return false;
+    if (options.window_len == 0 or options.window_len > max_window_len) return false;
     const distance_cost = fixedDistanceSymbolCost(options.window_len);
     var length = minMatch(options);
     while (length <= maxMatch(options)) : (length += 1) {
@@ -5431,9 +5431,9 @@ test {
 const PrefixBoundRoot = @This();
 test "optimal prefix bound fixed distance prices are nondecreasing" {
     var prior: usize = 0;
-    for (1..default_window_len + 1) |distance| {
+    for (1..max_window_len + 1) |distance| {
         const cost = fixedDistanceCost(distance);
-        try std.testing.expect(cost >= prior and cost >= 5 and cost <= 18);
+        try std.testing.expect(cost >= prior and cost >= 5 and cost <= 19);
         prior = cost;
     }
 }
