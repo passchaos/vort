@@ -2073,3 +2073,12 @@ it diverges from the token-parser differential oracle and trades ratio for
 speed at the ratio-first level-1 preset boundary. The measured tradeoff is
 recorded as the design basis for a future two-parser level policy (for
 example speed-first level 1 and ratio-first level 2).
+
+## Brotli q11 lazy-seeded model screen (2026-11-19)
+
+Seeding the q11 entropy model from the lazy command plan and skipping the
+unmodeled optimal parse (the first of three optimal passes) is not viable:
+dickens +92, nci +20, reymont +29, samba +140, webster +82, xml +10 bytes
+and, decisively, x-ray +3,783 bytes (+4.9%). The unmodeled optimal plan is
+load-bearing as both a candidate wire and the model seed, especially on
+binary content, so all three optimal passes stay.
