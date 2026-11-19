@@ -2056,3 +2056,20 @@ to +1.3% (nci +1.3% and xml +0.7% regress; sao -3.8%, osdb -3.6%, dickens
 sao 0.85x, samba 0.88x, webster 0.87x). The 1K-entry table hurts cache
 locality more than the collisions it removes, so the 8-bit short table is
 kept.
+
+## Zstd level-1 libzstd-style parser prototype (2026-11-19)
+
+A standalone prototype replaced the double-fast sequence parser with a
+libzstd-shaped loop for 64-128 KiB blocks: one 8-byte hash table, a rep0
+check plus one hash candidate per position, backward extension, jump to the
+match end, and an immediate rep loop. On the twelve 128 KiB Silesia
+prefixes it is **1.5x geometric-mean faster** (dickens 78 -> 134 MiB/s,
+mr 73 -> 141, sao 102 -> 172, x-ray 126 -> 167) but outputs 3-9% more bytes
+(dickens +2.8%, mozilla +8.9%, reymont +9.1%), leaving level 1 at +0.6% to
++21.7% versus libzstd 1.4.8. Adding the 4-byte short table back gives +12%
+geometric-mean speed for +1.9% size; adding the adjacent-position probe
+costs 5% speed for no measurable size gain. The prototype is not adopted:
+it diverges from the token-parser differential oracle and trades ratio for
+speed at the ratio-first level-1 preset boundary. The measured tradeoff is
+recorded as the design basis for a future two-parser level policy (for
+example speed-first level 1 and ratio-first level 2).
