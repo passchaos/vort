@@ -2230,3 +2230,19 @@ Evidence:
 [data/deflate-encode-early-chain-20261119](data/deflate-encode-early-chain-20261119/README.md).
 The shared finder also serves the zstd hash parsers, so adoption is gated on
 the full `test`/`check`/`check-wasm` run.
+
+## Deflate match-finder prefetch and lazy ring screens (2026-11-20)
+
+Two wire-identical follow-ups to the early chain-node load were measured on
+the twelve 128 KiB level-6 prefixes and rejected:
+
+- Prefetching the chain node after `next_candidate`: **0.8996x** geometric
+  mean (min row 0.856x) with identical sizes. The extra prefetch traffic and
+  cache pollution outweigh any latency hiding.
+- A ring-sized lazy-planner predecessor table (`hashPrevTableLen`, u32 x 32 KiB
+  instead of u32 x input length): **0.9745x** geometric mean (text rows
+  0.905-0.962x, x-ray 1.081x, webster 1.066x) with identical sizes. The
+  per-candidate `earliest` check and mask arithmetic cost more than the
+  smaller footprint saves.
+
+Both were reverted; the early chain-node load remains the accepted increment.
