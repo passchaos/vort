@@ -1864,7 +1864,7 @@ skipping match interiors) and prices edges with `entropy_feedback.Model`
 (command symbol plus insert/copy extra bits plus distance). On 12 Silesia
 128 KiB prefixes at q11 the single-best-candidate DP changes only two rows:
 mr 30,036 -> 29,639 (-397, -1.32%) and x-ray 77,220 -> 76,963 (-257, -0.33%);
-the other ten wires are byte-identical. q11 encode time rises 11.3% (xml),
+the other ten sizes are unchanged. q11 encode time rises 11.3% (xml),
 16.0% (dickens) and 17.9% (x-ray) on the measured rows. The 12-row geometric
 mean ratio gain is about 0.14%, below the 3% merge bar, so the DP stays out of
 the production default path and remains a tested prototype. A same-distance
