@@ -2130,10 +2130,12 @@ though the native default option is 512. Sweep (dickens/xml/x-ray/mozilla):
 | ---: | ---: | ---: | ---: | ---: | ---: |
 | 4 | 62,279 | 19,369 | 93,583 | 21,439 | +0-30% |
 | 16 | 54,177 | 11,315 | 93,293 | 20,232 | +10-53% |
+| 32 | 52,716 | 10,958 | 93,138 | 20,143 | +2-34% |
 | 64 (default) | 51,971 | 10,748 | 93,086 | 20,112 | 1.00x |
 | 512 | 51,252 | 10,614 | 93,093 | 20,118 | -46% on dickens |
 
 Budget 16 trades +0.2-5.3% size for 1.1-1.5x speed while staying smaller than
-libzstd 1.4.8 on xml, x-ray and mozilla; budget 4 loses too much ratio and 512
-halves speed for ~1% size. The default stays at 64; adopting 16 is a level-3
-policy decision.
+libzstd 1.4.8 on xml, x-ray and mozilla; budget 32 trades +0.06-2.0% size for
++2-34% speed and remains smaller than libzstd on three of four rows; budget 4
+loses too much ratio and 512 halves speed for ~1% size. The default stays at
+64; adopting 16 or 32 is a level-3 policy decision.
