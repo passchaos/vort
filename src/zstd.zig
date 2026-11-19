@@ -1828,6 +1828,15 @@ pub const NativeFrameSelection = enum {
     fast_compressed,
 };
 
+/// Parser used by the fast-compressed level-1 path on 64...128 KiB blocks.
+/// `auto` keeps the two-table double-fast parser; `single_table` drops the
+/// 4-byte short table for speed-first level-1 semantics.
+pub const FastParserSelection = enum {
+    auto,
+    double_fast,
+    single_table,
+};
+
 pub const NativeFrameOptions = struct {
     format: FrameFormat = .standard,
     content_checksum: bool = true,
@@ -1862,6 +1871,8 @@ pub const NativeFrameOptions = struct {
     rep_beam_search: bool = false,
     /// Explicit parser selection; auto/null preserves the legacy level policy.
     strategy: Strategy = .auto,
+    /// Fast-compressed compact parser variant; auto keeps the two-table parser.
+    fast_parser: FastParserSelection = .auto,
     /// Match sampling acceleration for fast/double_fast (1...131072). Auto
     /// with an acceleration selects fast; negative levels supply their magnitude.
     fast_acceleration: ?u32 = null,
@@ -1965,7 +1976,7 @@ const IncrementalEncoderCodec = struct {
         defer block_scratch.deinit(allocator);
         var large_sequence_scratch: LargeSequenceScratch = .{};
         defer large_sequence_scratch.deinit(allocator);
-        try emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionaryVisibleAtOffset(dictionary, frame_offset, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last)), &large_sequence_scratch, &block_scratch);
+        try emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionaryVisibleAtOffset(dictionary, frame_offset, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last)), &large_sequence_scratch, &block_scratch, options.fast_parser);
     }
     fn writeControlled(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: Count) zstd.Error!void {
         var records: std.ArrayList(controlled_source.Record) = .empty;
@@ -2265,7 +2276,18 @@ pub const ParallelCodecSupport = struct {
     pub const emitLargeSequences = emitLargeSequenceCompressedBlockWithState;
     pub const commitSequences = appendSequenceCandidateAndCommit;
     pub const emitEntropy = emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl;
-    pub const emitFast = emitFastCompressedBlockWithScratch;
+    pub fn emitFast(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        block: []const u8,
+        last: bool,
+        state: *LiteralOnlyEncoderState,
+        dictionary: ?NativeDictionary,
+        large_sequence_scratch: *LargeSequenceScratch,
+        scratch: *NativeBlockEncodeScratch,
+    ) !void {
+        return emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionary, large_sequence_scratch, scratch, .auto);
+    }
     pub const frameHeader = emitFrameHeader;
     pub const frameChecksum = emitContentChecksum;
     pub const checkedU64 = checkedUsizeToU64;
@@ -10525,6 +10547,7 @@ fn applySpeedFirstLevelPolicy(level: c_int, options: NativeFrameOptions) NativeF
     if (level < 1 or level > 3 or encode_controls.active(options)) return options;
     var aligned = options;
     aligned.selection = .fast_compressed;
+    if (level == 1) aligned.fast_parser = .single_table;
     switch (level) {
         2 => {
             aligned.strategy = .fast;
@@ -11519,13 +11542,13 @@ pub const NativeFrameEncoder = struct {
                 const block_size_max = try nativeBlockSizeMax(frame_options);
                 var state: LiteralOnlyEncoderState = .{};
                 if (input.len == 0) {
-                    try emitFastCompressedBlockWithScratch(self.allocator, out, "", true, &state, dictionary, &self.large_sequence_scratch, &self.block_scratch);
+                    try emitFastCompressedBlockWithScratch(self.allocator, out, "", true, &state, dictionary, &self.large_sequence_scratch, &self.block_scratch, frame_options.fast_parser);
                 } else {
                     var offset: usize = 0;
                     while (offset < input.len) {
                         const end = @min(input.len, offset + block_size_max);
                         const last = end == input.len;
-                        try emitFastCompressedBlockWithScratch(self.allocator, out, input[offset..end], last, &state, dictionaryVisibleAtOffset(dictionary, offset, try nativeMatchWindowLenForBlock(frame_options, offset, end - offset, last)), &self.large_sequence_scratch, &self.block_scratch);
+                        try emitFastCompressedBlockWithScratch(self.allocator, out, input[offset..end], last, &state, dictionaryVisibleAtOffset(dictionary, offset, try nativeMatchWindowLenForBlock(frame_options, offset, end - offset, last)), &self.large_sequence_scratch, &self.block_scratch, frame_options.fast_parser);
                         offset = end;
                     }
                 }
@@ -21118,6 +21141,7 @@ fn emitFastCompressedBlockWithScratch(
     dictionary: ?NativeDictionary,
     large_sequence_scratch: *LargeSequenceScratch,
     scratch: *NativeBlockEncodeScratch,
+    fast_parser: FastParserSelection,
 ) Error!void {
     try ensureEncoderSequenceState(state, dictionary);
     if (rleByte(block)) |byte| {
@@ -21159,7 +21183,7 @@ fn emitFastCompressedBlockWithScratch(
     }
 
     candidate.clearRetainingCapacity();
-    const match_result = try emitFastMatchCandidate(allocator, candidate, block, last, large_sequence_scratch, scratch);
+    const match_result = try emitFastMatchCandidate(allocator, candidate, block, last, large_sequence_scratch, scratch, fast_parser == .single_table);
     const match_ok = match_result.match_ok;
     const use_fast_large_planner = match_result.use_fast_large_planner;
     if (comptime builtin.is_test) {
@@ -24554,6 +24578,7 @@ noinline fn emitFastMatchCandidate(
     last: bool,
     large_sequence_scratch: *LargeSequenceScratch,
     scratch: *NativeBlockEncodeScratch,
+    single_table: bool,
 ) linksection(fast_encode_helper_text_section) Error!FastMatchCandidateResult {
     const parser_options = zstdHashParserOptions(block.len);
     if (block.len >= double_fast_match.sequence_plan_input_min and
@@ -24567,6 +24592,7 @@ noinline fn emitFastMatchCandidate(
             large_sequence_scratch,
             scratch,
             parser_options,
+            single_table,
         );
     }
     const stats: lz77.PlanStats = double_fast_match.planReuse(&scratch.greedy_tokens, allocator, block, parser_options) catch |err| switch (err) {
@@ -24609,12 +24635,14 @@ noinline fn emitFastSequenceRecordCandidate(
     large_sequence_scratch: *LargeSequenceScratch,
     scratch: *NativeBlockEncodeScratch,
     parser_options: lz77.GreedyOptions,
+    single_table: bool,
 ) linksection(fast_sequence_record_text_section) Error!FastMatchCandidateResult {
     const stats: lz77.PlanStats = double_fast_match.planSequencesReuse(
         &large_sequence_scratch.viable_masks,
         allocator,
         block,
         parser_options,
+        single_table,
     ) catch |err| switch (err) {
         error.InvalidBlockPlan => lz77.PlanStats{},
         else => return err,
@@ -46803,6 +46831,7 @@ test "zstd fast large known offsets commit matches decoded state" {
         false,
         &large_scratch,
         &block_scratch,
+        false,
     );
     try std.testing.expect(result.match_ok);
     try std.testing.expect(result.use_fast_large_planner);

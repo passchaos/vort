@@ -168,8 +168,9 @@ pub fn planSequencesReuse(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: lz77.GreedyOptions,
+    single_table: bool,
 ) !lz77.PlanStats {
-    return sequence_parser.planReuse(records, allocator, input, options);
+    return sequence_parser.planReuse(records, allocator, input, options, single_table);
 }
 
 fn consumeImmediateReps(
@@ -431,7 +432,7 @@ test "double-fast compact sequence plan matches token plan" {
         const allocator = counting.allocator();
         var records: std.ArrayList(SequenceRecord) = .empty;
         defer records.deinit(allocator);
-        const actual_stats = try planSequencesReuse(&records, allocator, &input, options);
+        const actual_stats = try planSequencesReuse(&records, allocator, &input, options, false);
         try std.testing.expectEqual(expected_stats, actual_stats);
         try std.testing.expectEqual(expected_stats.matches, records.items.len);
         try std.testing.expect(records.items.len <= input.len / 64);
@@ -457,7 +458,7 @@ test "double-fast compact sequence plan materializes sparse wide input" {
 
     var records: std.ArrayList(SequenceRecord) = .empty;
     defer records.deinit(std.testing.allocator);
-    const actual_stats = try planSequencesReuse(&records, std.testing.allocator, input, options);
+    const actual_stats = try planSequencesReuse(&records, std.testing.allocator, input, options, false);
     try std.testing.expectEqual(expected_stats, actual_stats);
     var actual: std.ArrayList(lz77.Token) = .empty;
     defer actual.deinit(std.testing.allocator);
@@ -477,7 +478,7 @@ test "double-fast compact sequence plan releases allocation failures" {
         fn run(allocator: std.mem.Allocator, bytes: []const u8, parser_options: lz77.GreedyOptions) !void {
             var records: std.ArrayList(SequenceRecord) = .empty;
             defer records.deinit(allocator);
-            const stats = try planSequencesReuse(&records, allocator, bytes, parser_options);
+            const stats = try planSequencesReuse(&records, allocator, bytes, parser_options, false);
             try std.testing.expectEqual(stats.matches, records.items.len);
             try std.testing.expectEqual(bytes.len, stats.literals + stats.matched_bytes);
         }

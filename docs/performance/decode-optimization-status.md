@@ -2442,3 +2442,21 @@ I-cache/branch layout, so the `noinline` boundary is load-bearing and stays.
 The accepted level-1 series remains the 13-bit long table, the reserved
 bitstream writer, the predefined dominance skip and the transition bit-count
 fusion.
+
+## Zstd level-1 single-table parser (2026-11-20)
+
+Level 1 now uses the compact parser's single-table variant: the 8-byte hash
+table, lazy lookahead and rep probes stay, while the 4-byte short table is
+dropped. This follows the user-directed zstd level semantics (libzstd level 1
+is the speed-first fast parser, level 2 the double-fast parser); levels 2-3 are
+unchanged, so the ladder remains monotone. The variant is exposed as
+`FastParserSelection` on `NativeFrameOptions`; `applySpeedFirstLevelPolicy`
+selects `single_table` for level 1 only, and explicit strategies and encode
+controls still take precedence.
+
+Twelve 128 KiB level-1 prefixes: geometric-mean speed **1.3466x**,
+geometric-mean size **+3.23%** (worst mozilla +9.87%; mr -3.64% and nci -1.19%
+shrink). Every wire is verified by libzstd and Vort. Golden level-1 wires and
+the wide-fast regression ceiling are re-frozen; level 2/3 wires are unchanged.
+Evidence:
+[data/zstd-level1-single-table-20261120](data/zstd-level1-single-table-20261120/README.md).
