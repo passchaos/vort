@@ -2246,3 +2246,20 @@ the twelve 128 KiB level-6 prefixes and rejected:
   smaller footprint saves.
 
 Both were reverted; the early chain-node load remains the accepted increment.
+
+## Deflate level-6 default search depth 160 -> 64 (2026-11-20)
+
+`optionsForLevel(.default)` now uses `max_chain = 64` instead of 160. This
+preset drives zlib/gzip level 6 and the archive defaults. The flat profile put
+42.7% of level-6 encode in the hash-chain finder, and chain 160 was deeper than
+zlib's 128 and far deeper than libdeflate level 6's 35. Twelve 128 KiB Silesia
+prefixes, one-shot ReleaseFast, interleaved rounds: **1.2816x** geometric-mean
+encode speed for **+0.73%** geometric-mean size (worst row xml +1.97%). x-ray
+is the only sub-parity row in that matrix at 0.975x; a separate three-run
+re-measurement gave 32.67/32.78/33.01 MiB/s versus 32.56 before, so it is run
+noise. Combined with the earlier chain-node load, the current source is
+**1.3286x** the pre-2026-11-19 level-6 speed for +0.73% size, and the
+Vort/libdeflate speed ratio improves from 0.2825 to 0.3756. The full
+`test`/`check`/`check-wasm` gate passed (389/389 steps, 5775/5777 tests,
+2 skipped) without re-freezing golden wires. Evidence:
+[data/deflate-chain64-default-20261120](data/deflate-chain64-default-20261120/README.md).
