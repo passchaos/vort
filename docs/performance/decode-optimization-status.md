@@ -2553,3 +2553,18 @@ and the extra table load dominate. The default lazy parser stays; a
 content-adaptive choice or a budget-preserving chain tag would be the next
 attempt. Evidence:
 [data/deflate-hash34-screen-20261120](data/deflate-hash34-screen-20261120/README.md).
+
+## Zstd unchecked FSE transition fill screen (2026-11-20)
+
+The large fast-compressed emitter's fill kernel (`large_transition.fill`) ran
+six per-symbol range checks even though the planner validates every code and
+`buildFseCompressionTable` enforces the FSE construction invariants. A
+`fillAssumeValid` variant with debug assertions only replaced the production
+checks and kept the checked kernel as the oracle. Wires stayed byte-identical
+on all twenty-four rows, but the result is not a win: level 1 is **1.0086x**
+geometric mean (sao 0.964x, x-ray 0.991x, nci 0.991x) and level 3 is
+**0.9891x** (nci 0.971x, mr 0.979x, xml 0.981x). The checks are not the cost;
+the kernel is bound by the dependent `state_table[state_index]` load. The
+checked fill stays, and the next lever is overlapping the literal, offset and
+match fills in one pass. Evidence:
+[data/zstd-fill-unchecked-20261120](data/zstd-fill-unchecked-20261120/README.md).
