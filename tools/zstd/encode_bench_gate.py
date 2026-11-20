@@ -115,10 +115,10 @@ def main() -> int:
     # cost is not ordered against the level-9 ladder, so keep only the absolute
     # ceiling against the former recursive-planner cliff.
     tradeoff_rows = {int(row["level"]): row for row in rows if row["case"] == "level3_tradeoff"}
-    # Level 3 uses the aligned greedy parser with the 32-candidate budget
-    # (2,111 bytes here), while level 9 retains exhaustive arbitration and its
+    # Level 3 uses the aligned greedy parser with the 24-candidate budget
+    # (2,102 bytes here), while level 9 retains exhaustive arbitration and its
     # smaller 2,037-byte wire.
-    assert int(tradeoff_rows[3]["vort_bytes"]) == 2_111, tradeoff_rows
+    assert int(tradeoff_rows[3]["vort_bytes"]) == 2_102, tradeoff_rows
     assert int(tradeoff_rows[9]["vort_bytes"]) == 2_037, tradeoff_rows
     assert int(tradeoff_rows[22]["vort_bytes"]) == 2_037, tradeoff_rows
     assert int(tradeoff_rows[3]["vort_ns"]) <= 8_000_000, tradeoff_rows
@@ -128,7 +128,7 @@ def main() -> int:
     # not run the adaptive split ladder, so its frame is intentionally larger
     # than the level-3+ arbitration result on this cross-block corpus.
     assert int(multiblock_rows[1]["vort_bytes"]) == 34_228, multiblock_rows
-    assert int(multiblock_rows[3]["vort_bytes"]) == 26_806, multiblock_rows
+    assert int(multiblock_rows[3]["vort_bytes"]) == 26_786, multiblock_rows
     assert int(multiblock_rows[9]["vort_bytes"]) == 27_363, multiblock_rows
     assert int(multiblock_rows[22]["vort_bytes"]) == 26_679, multiblock_rows
     assert int(multiblock_rows[22]["vort_bytes"]) < int(multiblock_rows[9]["vort_bytes"]), multiblock_rows

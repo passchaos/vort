@@ -2496,3 +2496,18 @@ sizes byte-for-byte, level 3 remains smaller than libzstd 1.6.0, and the size
 ladder stays monotone (dickens L2 59,878 > L3 52,716). The frozen level-3 wire
 and the adaptive-budget assertion are re-frozen. Evidence:
 [data/zstd-level3-budget32-20261120](data/zstd-level3-budget32-20261120/README.md).
+
+## Zstd level-3 match-search budget 32 -> 24 (2026-11-20)
+
+The level-3 greedy budget moves to 24 after a twelve-prefix knee sweep:
+32 -> 24 measures **1.0572x** geometric-mean speed for **+0.51%** size
+(worst nci +1.46%, xml +1.07%), while 32 -> 16 buys 1.1565x for +1.66%, a
+worse size-per-speed trade. Level 3 stays smaller than libzstd 1.6.0
+(575,418 vs 597,138 bytes) and the size ladder stays monotone. The policy path
+reproduces the explicit budget-24 sizes byte-for-byte. The frozen level-3
+wire (7,515-byte wide-block guard), the adaptive-budget assertion and the
+encode-gate exact sizes (2,102 tradeoff, 26,786 multiblock) are re-frozen.
+Two wire-identical or below-bar screens are recorded in the same package: a
+16-bit controlled-search hash (0.9747x, byte-identical output) and a 64-byte
+long-match early exit (1.0089x, +0.17% size, mixed). Evidence:
+[data/zstd-level3-budget-knee-20261120](data/zstd-level3-budget-knee-20261120/README.md).

@@ -45,3 +45,13 @@ staying 4.2% smaller, and is now the dominant speed gap.
 
 `data/zstd-level-ladder-20261120/ladder.csv` (36 rows, schema of
 `run-zstd-encode-bench`).
+
+## Update 2026-11-20: level-3 budget alignment
+
+After the level-3 greedy budget moved 64 -> 32 -> 24, the level-3 row above is
+superseded. Re-measured on the same twelve 128 KiB Silesia prefixes against
+libzstd 1.6.0 (rows in
+[data/zstd-level3-budget-knee-20261120](data/zstd-level3-budget-knee-20261120/README.md)):
+level 3 is **0.9636x** size and **0.0935x** speed, i.e. 3.6% smaller and
+**10.7x** slower instead of 4.2% smaller and 13.75x slower. Levels 1 and 2 are
+unchanged.
