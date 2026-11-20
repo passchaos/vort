@@ -78,6 +78,11 @@ pub fn Encoder(comptime Codec: type) type {
             const window = window_limit orelse try Codec.matchWindow(options, frame_offset, block.len, last);
             const source = try source_mod.Source.initChecked(if (dictionary) |dict| dict.content else &.{}, history, block, window);
             const parameters: source_mod.Parameters = .{ .strategy = selected, .acceleration = acceleration, .fast_long_matches = options.fast_long_matches, .search_budget = options.match_search_budget, .initial_repeated_offsets = state.sequence_state.repeated_offsets, .profile = profile };
+            // The controlled parsers emit about one record per five to six
+            // input bytes on text. Reserve that density once so the record
+            // list does not repeatedly copy its whole prefix while parsing.
+            if (selected == .greedy or selected == .lazy or selected == .optimal)
+                try records.ensureTotalCapacity(allocator, block.len / 5 + 8);
             switch (selected) {
                 .fast, .double_fast => try fast.planReuse(records, allocator, source, parameters),
                 .greedy, .lazy, .optimal => try search.planReuse(records, allocator, source, parameters),

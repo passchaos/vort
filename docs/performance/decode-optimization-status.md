@@ -2568,3 +2568,16 @@ the kernel is bound by the dependent `state_table[state_index]` load. The
 checked fill stays, and the next lever is overlapping the literal, offset and
 match fills in one pass. Evidence:
 [data/zstd-fill-unchecked-20261120](data/zstd-fill-unchecked-20261120/README.md).
+
+## Zstd controlled-parser record reservation (2026-11-20)
+
+The greedy/lazy/optimal parse reserved no record capacity, so one-shot encodes
+grew the persistent 40-byte `Record` list from zero and repeatedly copied its
+prefix (1.36% self for `Record.append` plus a 1.45% growth `memmove` on the
+level-3 dickens profile). The block writer now reserves
+`block.len / 5 + 8` records before `planReuse`, which matches the measured
+record density and still lets denser blocks grow once. Twelve 128 KiB level-3
+prefixes: **1.0388x** geometric-mean encode speed (per row 0.998-1.075;
+dickens 0.998 is run noise, every other row at least 1.011x) with
+byte-identical wires on all twelve rows. Evidence:
+[data/zstd-record-reservation-20261120](data/zstd-record-reservation-20261120/README.md).
