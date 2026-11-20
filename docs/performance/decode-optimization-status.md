@@ -2484,3 +2484,15 @@ size 1.0632x / speed 0.2757x, L3 size 0.9580x / speed 0.0727x. L1 improved
 from about 4.2x to **3.27x** slower than libzstd and L2 from about 7.5x to
 **3.63x**; L3 stays 4.2% smaller and **13.75x** slower, now the dominant speed
 gap. Evidence: [zstd-level-ladder-20261120.md](zstd-level-ladder-20261120.md).
+
+## Zstd level-3 match-search budget 64 -> 32 (2026-11-20)
+
+Level 3 now uses a 32-candidate controlled greedy budget; the previous
+effective depth was 64. Twelve 128 KiB level-3 prefixes: **1.1509x**
+geometric-mean speed for **+1.01%** size (worst nci +2.63%, reymont +2.47%,
+xml +1.95%). The policy path reproduces the explicit
+`--native-selection fast_compressed --strategy greedy --match-search-budget 32`
+sizes byte-for-byte, level 3 remains smaller than libzstd 1.6.0, and the size
+ladder stays monotone (dickens L2 59,878 > L3 52,716). The frozen level-3 wire
+and the adaptive-budget assertion are re-frozen. Evidence:
+[data/zstd-level3-budget32-20261120](data/zstd-level3-budget32-20261120/README.md).

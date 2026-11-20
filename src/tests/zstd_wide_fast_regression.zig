@@ -73,7 +73,7 @@ test "Zstd wide fast level one and three round trip at the 128 KiB block bound" 
     // growth (for example a narrower long-match hash table) fails.
     for ([_]struct { level: i32, max_encoded: usize }{
         .{ .level = 1, .max_encoded = 11_524 },
-        .{ .level = 3, .max_encoded = 7_140 },
+        .{ .level = 3, .max_encoded = 7_385 },
     }) |row| {
         const encoded = try zstd.encodeFrameWithLevelAndOptionsAlloc(a, &payload, row.level, .{});
         defer a.free(encoded);

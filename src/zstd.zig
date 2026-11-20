@@ -10555,10 +10555,11 @@ fn applySpeedFirstLevelPolicy(level: c_int, options: NativeFrameOptions) NativeF
             aligned.rep_beam_search = false;
         },
         3 => {
-            // Greedy keeps the level-3 candidate budget so the default level
-            // stays materially faster than the ratio ladder; the controlled
-            // path rejects the rep beam.
+            // Greedy with a 32-candidate budget: the twelve-prefix sweep
+            // measured 1.15x level-3 speed for +1.0% size versus the previous
+            // effective depth of 64; the controlled path rejects the rep beam.
             aligned.strategy = .greedy;
+            aligned.match_search_budget = 32;
             aligned.rep_beam_search = false;
         },
         else => {},
@@ -40499,7 +40500,7 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     const level3 = try nativeEncodeLevelDiagnostics(3, .{});
     const level5 = try nativeEncodeLevelDiagnostics(5, .{});
     const level9 = try nativeEncodeLevelDiagnostics(9, .{});
-    try std.testing.expectEqual(@as(usize, 64), level3.adaptive_match_search_budget);
+    try std.testing.expectEqual(@as(usize, 32), level3.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level5.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level9.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
