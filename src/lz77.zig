@@ -167,6 +167,12 @@ pub const GreedyOptions = struct {
     /// equal-length matches prefer a cached distance so the wire can use
     /// short/implicit distance symbols.
     recent_distances: ?[4]usize = null,
+    /// Route moderately compressible blocks to the lazy parser's chainless
+    /// 3-byte slot plus 4-byte hash chain. The block classifier keeps
+    /// long-match and near-incompressible content on the historical 3-byte
+    /// chain, where the extra table is pure overhead. Only the heap path
+    /// (32-bit positions) implements this parser.
+    hash4_chain: bool = false,
     /// Optional static-dictionary candidates for the optimal parser. Zero
     /// `dictionary_cost` disables them.
     dictionary: ?DictionaryProvider = null,
@@ -1346,6 +1352,22 @@ fn hashLazyGreedyPlanAllocWithPosition(
     input: []const u8,
     options: GreedyOptions,
 ) !GreedyPlan {
+    if (comptime Position == u32) {
+        if (options.hash4_chain and preferHash4Chain(input, options.window_len)) {
+            const head3 = try allocator.alloc(u32, 1 << 15);
+            defer allocator.free(head3);
+            @memset(head3, std.math.maxInt(u32));
+            const head4 = try allocator.alloc(u32, 1 << 16);
+            defer allocator.free(head4);
+            @memset(head4, std.math.maxInt(u32));
+            const prev = try allocator.alloc(u32, input.len);
+            defer allocator.free(prev);
+            var tokens = try initTokenList(allocator, input.len);
+            errdefer tokens.deinit(allocator);
+            const stats = try hashLazyGreedyPlanHash4Reuse(&tokens, allocator, input, options, head3, head4, prev);
+            return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+        }
+    }
     const table_size = 1 << 15;
     const head = try allocator.alloc(Position, table_size);
     defer allocator.free(head);
@@ -3712,6 +3734,208 @@ fn findBestHashMatchWithLayoutAndHashLimits(
         candidate_i = next_candidate;
     }
     return .{ .best = best, .hash = hash };
+}
+
+const hash4_chain_window = 4 * 1024;
+const hash4_chain_stride = 8;
+const hash4_chain_match_cap = 64;
+const hash4_chain_classifier_head_bits = 14;
+const hash4_chain_classifier_head_size = 1 << hash4_chain_classifier_head_bits;
+
+/// Classify a block by the sampled match length of the most recent 4-byte
+/// hash occurrence over a middle 4 KiB window. Moderate values (3.5...10.5
+/// bytes) are where a 4-byte chain prunes deep 3-byte collision lists without
+/// losing long-match anchors; longer or near-zero values keep the historical
+/// 3-byte chain, where the extra hash4 table load is pure overhead.
+fn preferHash4Chain(input: []const u8, window_len: usize) bool {
+    if (input.len < hash4_chain_window) return false;
+    const start = (input.len - hash4_chain_window) / 2;
+    const block = input[start..][0..hash4_chain_window];
+    const empty = std.math.maxInt(u32);
+    var head: [hash4_chain_classifier_head_size]u32 = @splat(empty);
+    var total_best: usize = 0;
+    var probes: usize = 0;
+    var position: usize = 0;
+    while (position + 4 <= block.len) : (position += 1) {
+        const word = std.mem.readInt(u32, block[position..][0..4], .little);
+        const hash = ((word *% 2654435761) >> 16) & (hash4_chain_classifier_head_size - 1);
+        const candidate = head[hash];
+        if (candidate != empty and position % hash4_chain_stride == 0) {
+            const candidate_position: usize = candidate;
+            if (position - candidate_position <= window_len) {
+                var length: usize = 0;
+                while (length < hash4_chain_match_cap and position + length < block.len and
+                    block[candidate_position + length] == block[position + length]) : (length += 1)
+                {}
+                total_best += length;
+                probes += 1;
+            }
+        }
+        head[hash] = @intCast(position);
+    }
+    if (probes == 0) return false;
+    return total_best * 2 >= probes * 7 and total_best * 2 <= probes * 21;
+}
+
+fn hash4AtInput(input: []const u8, pos: usize, head_len: usize) ?usize {
+    if (pos + 4 > input.len) return null;
+    const word = std.mem.readInt(u32, input[pos..][0..4], .little);
+    return ((word *% 2654435761) >> 16) & (head_len - 1);
+}
+
+fn insertHash4Chain(input: []const u8, pos: usize, head3: []u32, head4: []u32, prev: []u32) void {
+    if (pos + 4 <= input.len) {
+        const h4 = hash4AtInput(input, pos, head4.len).?;
+        prev[pos] = head4[h4];
+        head4[h4] = @intCast(pos);
+    }
+    if (pos + 3 <= input.len) {
+        const h3 = hash3(input[pos..][0..3]) & (head3.len - 1);
+        head3[h3] = @intCast(pos);
+    }
+}
+
+fn findBestHash4Chain(
+    input: []const u8,
+    pos: usize,
+    limits: HashSearchLimits,
+    head3: []const u32,
+    head4: []const u32,
+    prev: []const u32,
+) MatchCandidate {
+    const minimum = limits.minimum;
+    if (pos + minimum > input.len) return .{};
+    if (limits.max_chain == 0) return .{};
+    const max_len = @min(limits.maximum, input.len - pos);
+    var best = MatchCandidate{};
+    if (pos + 3 <= input.len) {
+        const h3 = hash3(input[pos..][0..3]) & (head3.len - 1);
+        const candidate_i = head3[h3];
+        if (candidate_i != std.math.maxInt(u32)) {
+            const candidate: usize = @intCast(candidate_i);
+            const distance = pos - candidate;
+            if (distance != 0 and distance <= limits.window_len and
+                input[candidate] == input[pos] and input[candidate + 1] == input[pos + 1] and input[candidate + 2] == input[pos + 2])
+            {
+                const len = matchLength(input, candidate, pos, max_len);
+                if (len >= minimum and len > best.length)
+                    best = .{ .length = len, .distance = distance };
+            }
+        }
+    }
+    if (best.length >= limits.nice_len) return best;
+    const hash = hash4AtInput(input, pos, head4.len) orelse return best;
+    var candidate_i = head4[hash];
+    var checked: usize = 0;
+    var walked: usize = 0;
+    while (candidate_i != std.math.maxInt(u32) and walked < limits.max_walks) : (walked += 1) {
+        const candidate: usize = @intCast(candidate_i);
+        const distance = pos - candidate;
+        if (distance == 0 or distance > limits.window_len) break;
+        if (best.length == max_len) break;
+        const next_candidate = prev[candidate];
+        const required_prefix = @max(best.length, minimum - 1);
+        if (input[candidate + required_prefix] != input[pos + required_prefix]) {
+            candidate_i = next_candidate;
+            continue;
+        }
+        checked += 1;
+        const prefix_matches = if (best.length >= 8)
+            std.mem.readInt(u64, input[candidate..][0..8], .little) ==
+                std.mem.readInt(u64, input[pos..][0..8], .little) and
+                std.mem.readInt(u64, input[candidate + best.length - 7 ..][0..8], .little) ==
+                    std.mem.readInt(u64, input[pos + best.length - 7 ..][0..8], .little)
+        else if (best.length >= 4)
+            std.mem.readInt(u32, input[candidate..][0..4], .little) ==
+                std.mem.readInt(u32, input[pos..][0..4], .little) and
+                std.mem.readInt(u32, input[candidate + best.length - 3 ..][0..4], .little) ==
+                    std.mem.readInt(u32, input[pos + best.length - 3 ..][0..4], .little)
+        else
+            std.mem.readInt(u16, input[candidate..][0..2], .little) ==
+                std.mem.readInt(u16, input[pos..][0..2], .little);
+        if (!prefix_matches) {
+            if (checked == limits.max_chain) break;
+            candidate_i = next_candidate;
+            continue;
+        }
+        const len = matchLength(input, candidate, pos, max_len);
+        if (len >= minimum and len > best.length) {
+            best = .{ .length = len, .distance = distance };
+            if (len >= limits.nice_len) break;
+        }
+        if (checked == limits.max_chain) break;
+        candidate_i = next_candidate;
+    }
+    return best;
+}
+
+fn hashLazyGreedyPlanHash4Reuse(
+    tokens: *std.ArrayList(Token),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    head3: []u32,
+    head4: []u32,
+    prev: []u32,
+) !PlanStats {
+    var stats = PlanStats{};
+    var recent = options.recent_distances;
+    const limits = hashSearchLimits(options);
+    var pos: usize = 0;
+    while (pos < input.len) {
+        var best = findBestHash4Chain(input, pos, limits, head3, head4, prev);
+        if (recent) |*cache| {
+            const candidate = recentMatchAt(
+                input,
+                pos,
+                cache.*,
+                minMatch(options),
+                @min(maxMatch(options), input.len - pos),
+            );
+            if (candidate.length >= best.length and candidate.length != 0) {
+                best = .{ .length = candidate.length, .distance = candidate.distance };
+            }
+        }
+        if (!acceptMatch(input, pos, best.length, best.distance, options)) {
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            insertHash4Chain(input, pos, head3, head4, prev);
+            pos += 1;
+            continue;
+        }
+
+        var current_inserted = false;
+        if (pos + 1 < input.len) {
+            insertHash4Chain(input, pos, head3, head4, prev);
+            current_inserted = true;
+            const next = findBestHash4Chain(input, pos + 1, limits, head3, head4, prev);
+            if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
+                try appendToken(tokens, allocator, .{ .literal = input[pos] });
+                stats.literals += 1;
+                pos += 1;
+                continue;
+            }
+        }
+
+        try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+        stats.matches += 1;
+        stats.matched_bytes += best.length;
+        if (recent) |*cache| {
+            if (best.distance != cache[3]) {
+                cache[0] = cache[1];
+                cache[1] = cache[2];
+                cache[2] = cache[3];
+                cache[3] = best.distance;
+            }
+        }
+        var insert_pos = if (current_inserted) pos + 1 else pos;
+        const end = @min(input.len, pos + best.length);
+        while (insert_pos < end) : (insert_pos += 1)
+            insertHash4Chain(input, insert_pos, head3, head4, prev);
+        pos += best.length;
+    }
+
+    return stats;
 }
 
 fn maxHashChainWalks(options: GreedyOptions, minimum: usize) usize {

@@ -2581,3 +2581,19 @@ prefixes: **1.0388x** geometric-mean encode speed (per row 0.998-1.075;
 dickens 0.998 is run noise, every other row at least 1.011x) with
 byte-identical wires on all twelve rows. Evidence:
 [data/zstd-record-reservation-20261120](data/zstd-record-reservation-20261120/README.md).
+
+## Deflate hash4-chain parser with a block classifier (2026-11-20)
+
+Level 6 (raw/zlib/gzip `.default`) now enables the lazy parser's chainless
+3-byte slot plus 4-byte hash chain (`GreedyOptions.hash4_chain`) when a middle
+4 KiB sample shows an average best match length of 3.5...10.5 bytes; Brotli
+and every default-option caller keep the historical 3-byte chain. Twelve
+128 KiB level-6 prefixes: **1.0313x** geometric-mean encode speed for
+**-0.28%** size (worst xml 0.980x, the control floor; selected rows dickens
+1.204x, webster 1.081x, reymont 1.080x, ooffice 1.059x). Six 1 MiB prefixes:
+**1.0716x** for **-0.45%**. An always-on experiment showed the change only
+touches heap-lazy wires; scoping through the option keeps Brotli and the
+lz77 u32/isize differential on the historical parser, and the full
+`test check check-wasm` matrix is green (389/389 steps, 5775/5777 tests).
+Evidence:
+[data/deflate-hash4-classifier-20261120](data/deflate-hash4-classifier-20261120/README.md).

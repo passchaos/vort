@@ -1271,7 +1271,7 @@ pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
         // Level 6 aligns with the industry default: chain 64 measured 1.28x the
         // previous 160-chain encode speed for +0.73% size on the Silesia
         // prefixes, and keeps every row above the 0.98x control floor.
-        .default => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 64, .nice_len = 80, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
+        .default => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 64, .nice_len = 80, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 1, .hash4_chain = true }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
         .best => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 512, .nice_len = 128, .max_candidates = lz77.default_best_optimal_candidates, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 }, .dynamic_cost_refinement = true },
     };
 }
