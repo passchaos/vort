@@ -2511,3 +2511,23 @@ Two wire-identical or below-bar screens are recorded in the same package: a
 16-bit controlled-search hash (0.9747x, byte-identical output) and a 64-byte
 long-match early exit (1.0089x, +0.17% size, mixed). Evidence:
 [data/zstd-level3-budget-knee-20261120](data/zstd-level3-budget-knee-20261120/README.md).
+
+## Deflate multi-hop chain-word screens (2026-11-20)
+
+The level-6 hash-chain finder is the dominant encode cost (34.32% self of the
+44.64% Vort share on the 128 KiB dickens prefix; the `prev[...]` chain load is
+39.72% of all sampled cycles). Two wire-identical multi-hop layouts were
+measured on the twelve 128 KiB level-6 prefixes and rejected:
+
+- Two-hop words (`u32`, two `u16` deltas): byte-identical 50,996-byte dickens
+  output, but 20.57/20.75/20.36 MiB/s across three alternating runs versus
+  22.12/22.29/21.93 for the predecessor table (about 0.93x).
+- Four-hop words (`u64`, four `u16` deltas): **0.901x** geometric-mean speed
+  (per row 0.765-1.028, only dickens 1.012x, osdb 1.028x and webster 1.012x
+  improve) with byte-identical sizes on all twelve rows.
+
+Building a hop word reads the previous head's hop word during insertion, so
+every input position pays one extra dependent random load; at the measured
+roughly three-node average chain depth the saved search loads do not repay it,
+and the group decode adds arithmetic. The predecessor table stays. Evidence:
+[data/deflate-multihop-screen-20261120](data/deflate-multihop-screen-20261120/README.md).
