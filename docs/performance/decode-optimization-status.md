@@ -2531,3 +2531,25 @@ every input position pays one extra dependent random load; at the measured
 roughly three-node average chain depth the saved search loads do not repay it,
 and the group decode adds arithmetic. The predecessor table stays. Evidence:
 [data/deflate-multihop-screen-20261120](data/deflate-multihop-screen-20261120/README.md).
+
+## Deflate hash3/hash4 parser screens (2026-11-20)
+
+The level-6 chain load is about 30% of Vort encode time, and libdeflate's HC
+matchfinder keeps a chainless 3-byte table plus a 4-byte hash chain instead of
+one 3-byte chain. Two wire-changing replacements of the lazy parser were
+measured on the twelve 128 KiB level-6 prefixes and rejected:
+
+- Full insertion (15/16 tables): **1.0034x** geometric-mean speed for
+  **-0.61%** size (570,101 vs 572,151 bytes); dickens 1.226x, webster 1.101x,
+  reymont 1.074x, but xml 0.864x, nci 0.933x, mr 0.934x, mozilla 0.944x and
+  sao 0.962x. A 13/15 width screen does not remove the structured-input
+  regression (xml 0.877x).
+- Skipping `head3` insertion inside accepted matches (13/15 tables):
+  **1.0416x** for **+0.12%** size, but mr 0.958x, sao 0.957x, xml 0.964x and
+  x-ray +3.25%, so it fails the 0.98x control floor and the ratio budget.
+
+The 4-byte chain wins where 3-byte chains are deep and loses where insertion
+and the extra table load dominate. The default lazy parser stays; a
+content-adaptive choice or a budget-preserving chain tag would be the next
+attempt. Evidence:
+[data/deflate-hash34-screen-20261120](data/deflate-hash34-screen-20261120/README.md).
