@@ -1,7 +1,7 @@
 # Zstd dense decoder register-pressure screen, 2026-11-23
 
-Three variants of the dense split-Huffman sequence executor were measured
-against committed `f3e80aa7`. All three were rejected. The screen records the
+Five variants of the dense split-Huffman sequence executor were measured
+against committed `f3e80aa7`. All five were rejected. The screen records the
 register/branch-predictability wall the executor now sits against, so the next
 attempt starts from the profile evidence instead of repeating these shapes.
 
@@ -143,5 +143,6 @@ target but needs a copy shape that avoids a new unpredictable branch.
 
 `r{1..5}-<case>-<size>-{B,V}.csv` for the 24 rows and five rounds of screen 1
 (schema of `run-zstd-reference-bench`); `analysis.txt` is the exact analyzer
-output used above. Screens 2 and 3 were quick alternating runs and were not
-expanded after the large negative signal.
+output used above. Screens 2--5 were quick alternating runs and were not
+expanded after the negative signal; their exact observed ratios are recorded
+in the tables above.
