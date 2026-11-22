@@ -207,3 +207,28 @@ Reverted.
 
 The 2026-10-25 note should not be used for current rankings; this package
 replaces its level-3 rows for the measured slice.
+
+## Handoff: next encoder experiment (2026-11-23)
+
+State: all local decode/encode screens are committed and pushed at `873f1f28`;
+source is identical to the validated `f3e80aa7` (full Debug suite
+5,745/5,747 with two skipped, `check-wasm` green). The next turn should start
+the match-finder restructure, not another micro-edit.
+
+Order of work:
+
+1. Read `planReuse` (src/zstd/match/double_fast.zig:41) and `storeMatch`
+   (same file, :201) together. The measured cost is real match evaluation and
+   storage, not duplicate calls (explicit rep0 caching was neutral because
+   LLVM already CSEs the pure call) and not the candidate budget (24 to 12 was
+   a bad size/speed trade).
+2. Candidate change: fuse the rep0 probe and the hash-candidate evaluation at
+   one position so each position pays one distance probe, or skip the rep
+   probe when the hash candidate already exceeds the rep length by a margin.
+   Keep the chosen match sequence unchanged first; if the match sequence must
+   change, treat it as a ratio trade and measure both size and speed.
+3. Verification ladder: twelve 128 KiB Silesia files frame SHA/size, then the
+   four-file 64 KiB matrix at levels 1/2/3, then the 24-row paired campaign
+   (64 KiB/1 MiB, alternating pairs, 0.98x control floor). Only then consider
+   the level-9 lookahead budget (512 to 256) and the controlled-search
+   candidate loop.
