@@ -1,0 +1,4 @@
+codec differential fuzz: seed=539365664 deep=true only=raw-deflate
+  valid wires=2184 (variants=936) vort_roundtrip=2184 exact_size=2184 reference_interop=2184
+  truncation cuts=53446 (both_rejected=53446 agreed_accept=0)
+  mutations xor=32760 bitflip=10920 overwrite=14724 double-overwrite=4636 insert=4908 delete=4908 (rejected=39860 one_sided_divergence=3905)

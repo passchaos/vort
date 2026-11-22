@@ -1,0 +1,22 @@
+{
+  "executable": "/home/passchaos/project-z/vort/.zig-cache/o/b9d093b8b73edc21fbdf90ec018f8c0a/vort-codec-differential-fuzz",
+  "executable_sha256": "edd3e2cd3b2b34c4fd4247550c670779100422bf1623b5ee1cfff6cca8847671",
+  "cases": [
+    {
+      "case": "replay",
+      "args": [
+        "--replay-dir=/home/passchaos/project-z/vort/docs/performance/data/codec-differential-reporting-20261120/samples"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "conflicting-modes",
+      "args": [
+        "--replay-dir=/home/passchaos/project-z/vort/docs/performance/data/codec-differential-reporting-20261120/samples",
+        "--divergence-dir=/tmp/vort-codec-mainline-contracts-38wmyw7o/conflicting-artifacts"
+      ],
+      "exit_code": 1
+    }
+  ],
+  "conflicting_modes_created_directory": false
+}

@@ -1,0 +1,85 @@
+{
+  "samples": [
+    {
+      "library": "system",
+      "runtime_version": "1.4.8",
+      "sample": 8,
+      "wire_kind": "original_wire",
+      "capacity": 4097,
+      "error": null,
+      "output_bytes": 1,
+      "output_sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    },
+    {
+      "library": "system",
+      "runtime_version": "1.4.8",
+      "sample": 8,
+      "wire_kind": "mutated_wire",
+      "capacity": 4097,
+      "error": "Frame requires too much memory for decoding",
+      "output_bytes": null,
+      "output_sha256": null
+    },
+    {
+      "library": "system",
+      "runtime_version": "1.4.8",
+      "sample": 10,
+      "wire_kind": "original_wire",
+      "capacity": 4097,
+      "error": null,
+      "output_bytes": 2,
+      "output_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+    },
+    {
+      "library": "system",
+      "runtime_version": "1.4.8",
+      "sample": 10,
+      "wire_kind": "mutated_wire",
+      "capacity": 4097,
+      "error": null,
+      "output_bytes": 2050,
+      "output_sha256": "382e008e5bc647359ed6f41cb932f732b000a96c6048edd3cae85e65df04c175"
+    },
+    {
+      "library": "modern",
+      "runtime_version": "1.6.0",
+      "sample": 8,
+      "wire_kind": "original_wire",
+      "capacity": 4097,
+      "error": null,
+      "output_bytes": 1,
+      "output_sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    },
+    {
+      "library": "modern",
+      "runtime_version": "1.6.0",
+      "sample": 8,
+      "wire_kind": "mutated_wire",
+      "capacity": 4097,
+      "error": "Frame requires too much memory for decoding",
+      "output_bytes": null,
+      "output_sha256": null
+    },
+    {
+      "library": "modern",
+      "runtime_version": "1.6.0",
+      "sample": 10,
+      "wire_kind": "original_wire",
+      "capacity": 4097,
+      "error": null,
+      "output_bytes": 2,
+      "output_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+    },
+    {
+      "library": "modern",
+      "runtime_version": "1.6.0",
+      "sample": 10,
+      "wire_kind": "mutated_wire",
+      "capacity": 4097,
+      "error": null,
+      "output_bytes": 2050,
+      "output_sha256": "382e008e5bc647359ed6f41cb932f732b000a96c6048edd3cae85e65df04c175"
+    }
+  ],
+  "modern_library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+}

@@ -1,0 +1,22 @@
+{
+  "recorded_utc": "2026-11-20T13:56:11.593173+00:00",
+  "mainline_default_exit_code": 0,
+  "mainline_artifact_exit_code": 0,
+  "mainline_replay_exit_code": 0,
+  "mainline_conflict_rejection_before_directory_creation": true,
+  "build_steps_per_deep_run": "7/7",
+  "legacy_and_classified_counts_match_isolated_producer": true,
+  "ordered_wire_and_mutation_digests_match_isolated_producer": true,
+  "source_sha256": {
+    "tools/codec_differential_fuzz.zig": "beb7f9e943f51af0fc2bacdc493e7501270598a7f1e0b5f4e87028709cba52a8",
+    "tools/codec_differential/reporting.zig": "11e1c539f537dcc1de563f726410818cf50db9abfff1aeadf20329dbaf74adf2"
+  },
+  "codec_source_matches_prior_frozen_snapshot": true,
+  "source_scope": "Reporting-only mainline increment, before dynamic Huffman admission repair",
+  "mainline_changes_from_producer": [
+    "Reporting helper moved to cohesive tools/codec_differential directory",
+    "Conflicting replay/capture arguments rejected before Reporter.init directory creation"
+  ],
+  "git_pull_rebase_result": "Already up to date",
+  "unrelated_lz77_diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a"
+}

@@ -33,6 +33,7 @@
 
 const std = @import("std");
 const vort = @import("vort");
+const reporting = @import("codec_differential/reporting.zig");
 
 const c = @cImport({
     @cInclude("zlib.h");
@@ -156,25 +157,7 @@ const WireCase = struct {
     serialized_dictionary_bytes: ?[]u8 = null,
 };
 
-const Stats = struct {
-    wires: u64 = 0,
-    variant_wires: u64 = 0,
-    vort_roundtrip_ok: u64 = 0,
-    exact_size_ok: u64 = 0,
-    reference_ok: u64 = 0,
-    reference_rejected_valid: u64 = 0,
-    truncation_cuts: u64 = 0,
-    truncation_both_rejected: u64 = 0,
-    truncation_agreed: u64 = 0,
-    mutations_xor: u64 = 0,
-    mutations_bitflip: u64 = 0,
-    mutations_overwrite: u64 = 0,
-    mutations_double_overwrite: u64 = 0,
-    mutations_insert: u64 = 0,
-    mutations_delete: u64 = 0,
-    mutation_rejected: u64 = 0,
-    one_sided_divergence: u64 = 0,
-};
+const Stats = reporting.Stats;
 
 const Failure = struct {
     codec: Codec,
@@ -190,6 +173,9 @@ const Harness = struct {
     allocator: std.mem.Allocator,
     rng: Rng,
     stats: Stats = .{},
+    reporting: reporting.Reporter,
+    active_level: u4 = 0,
+    last_reference: reporting.ReferenceObservation = .{},
     failures: std.ArrayList(Failure),
     only: ?Codec,
     deep: bool,
@@ -332,7 +318,7 @@ const Harness = struct {
         return decoded;
     }
 
-    fn vortDecode(self: *Harness, codec: Codec, wire_case: WireCase) ?[]u8 {
+    pub fn vortDecode(self: *Harness, codec: Codec, wire_case: WireCase) ?[]u8 {
         const a = self.allocator;
         const wire = wire_case.wire;
         const dict = wire_case.dictionary;
@@ -436,21 +422,22 @@ const Harness = struct {
         };
     }
 
-    fn referenceDecode(self: *Harness, codec: Codec, wire_case: WireCase, capacity: usize) ?[]u8 {
+    pub fn referenceDecode(self: *Harness, codec: Codec, wire_case: WireCase, capacity: usize) ?[]u8 {
         const a = self.allocator;
         // One byte of slack keeps zero-length outputs addressable and lets
         // overrun-prone implementations fail loudly instead of aliasing. The
         // 4x headroom tolerates RLE-style expansion in mutated wires while a
         // fixed ceiling bounds every reference allocation.
         const target_cap = @min(@max(capacity *% 4, 4096), 1 << 20);
+        self.last_reference = .{ .output_capacity = target_cap + 1 };
         const dst = a.alloc(u8, target_cap + 1) catch return null;
         switch (codec) {
-            .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary),
-            .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary),
+            .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary, &self.last_reference),
+            .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary, &self.last_reference),
             .gzip => if (wire_case.gzip_multi_member)
                 return gzipInflateMembers(a, dst, wire_case.wire)
             else
-                return zlibInflate(a, dst, wire_case.wire, 31, null),
+                return zlibInflate(a, dst, wire_case.wire, 31, null, &self.last_reference),
             .zstd => {
                 if (wire_case.zstd_stream_reference) {
                     return zstdDecompressStream(a, dst, wire_case.wire);
@@ -506,6 +493,7 @@ const Harness = struct {
         wire: []const u8,
         window_bits: c_int,
         dictionary: ?[]const u8,
+        observation: *reporting.ReferenceObservation,
     ) ?[]u8 {
         var stream: c.z_stream = std.mem.zeroes(c.z_stream);
         if (c.inflateInit2(&stream, window_bits) != c.Z_OK) {
@@ -543,6 +531,7 @@ const Harness = struct {
             }
             code = c.inflate(&stream, c.Z_FINISH);
         }
+        observation.* = .{ .output_capacity = dst.len, .input_consumed = wire.len - @as(usize, stream.avail_in), .input_remaining = stream.avail_in, .result_code = code };
         _ = c.inflateEnd(&stream);
         if (code != c.Z_STREAM_END) {
             a.free(dst);
@@ -1303,6 +1292,8 @@ const Harness = struct {
         const a = self.allocator;
         const input = wire_case.source;
         const wire = wire_case.wire;
+        self.active_level = level;
+        self.reporting.observeWire(self.info(codec, pattern, wire_case), wire_case);
         self.stats.wires += 1;
         if (!std.mem.eql(u8, wire_case.label, "baseline")) self.stats.variant_wires += 1;
 
@@ -1341,6 +1332,7 @@ const Harness = struct {
         //    frame descriptors; both rely on the two Vort decode contracts
         //    plus the no-reference rejection check below.
         if (!wire_case.brotli_shared_dictionary and !wire_case.zstd_magicless and !wire_case.brotli_serialized_dictionary) {
+            self.stats.by_codec[@intFromEnum(codec)].external_valid_checks += 1;
             const reference = self.referenceDecode(codec, wire_case, input.len) orelse {
                 self.stats.reference_rejected_valid += 1;
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} system reference rejected Vort wire", .{level});
@@ -1352,6 +1344,7 @@ const Harness = struct {
                 return;
             }
             self.stats.reference_ok += 1;
+            self.stats.by_codec[@intFromEnum(codec)].external_valid_ok += 1;
         } else if (wire_case.brotli_shared_dictionary) {
             // Without the attached prefix the wire must not decode: otherwise
             // the encoder emitted a stream that does not actually need the
@@ -1386,6 +1379,8 @@ const Harness = struct {
             self.stats.reference_ok += 1;
         }
 
+        if (!reporting.hasReference(wire_case)) self.stats.by_codec[@intFromEnum(codec)].vort_only_valid_contracts += 1;
+
         // 4. Truncation with cross-decoder agreement. Every prefix is fed to
         //    both Vort and the system reference. Both rejecting is the normal
         //    incomplete-stream outcome; both accepting must yield identical
@@ -1406,6 +1401,8 @@ const Harness = struct {
             // prefix can never decode further than the full wire and any
             // accepted prefix must reproduce the source prefix exactly.
             if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless or wire_case.brotli_serialized_dictionary) {
+                self.stats.by_codec[@intFromEnum(codec)].truncation_no_reference_checks += 1;
+                if (vort_result != null) self.stats.by_codec[@intFromEnum(codec)].truncation_no_reference_accept += 1 else self.stats.by_codec[@intFromEnum(codec)].truncation_no_reference_reject += 1;
                 if (vort_result) |decoded| {
                     if (decoded.len > input.len or !std.mem.eql(u8, decoded, input[0..decoded.len])) {
                         try self.fail(codec, pattern, wire_case.label, input.len, cut, "truncation", "prefix of {d} bytes: Vort-only decode output mismatch", .{cut});
@@ -1419,6 +1416,9 @@ const Harness = struct {
             }
             const reference_result = self.referenceDecode(codec, prefix_case, input.len);
             defer if (reference_result) |decoded| a.free(decoded);
+            const truncation = &self.stats.by_codec[@intFromEnum(codec)];
+            truncation.truncation_external_checks += 1;
+            if (vort_result != null and reference_result != null) truncation.truncation_external_both_accept += 1 else if (vort_result == null and reference_result == null) truncation.truncation_external_both_reject += 1 else truncation.truncation_external_one_sided += 1;
             if (vort_result == null and reference_result == null) {
                 self.stats.truncation_both_rejected += 1;
                 continue;
@@ -1579,6 +1579,7 @@ const Harness = struct {
         // Brotli dictionaries can change copy boundaries under corruption, so
         // both length and content changes are recorded rather than failing.
         if (wire_case.brotli_shared_dictionary or wire_case.brotli_serialized_dictionary) {
+            try self.reporting.mutation(&self.stats, self.info(codec, pattern, wire_case), wire_case, mutated, operator, vort_result, null, .{});
             if (vort_result) |decoded| {
                 if (decoded.len != expected_len or !std.mem.eql(u8, decoded, wire_case.source)) {
                     self.stats.one_sided_divergence += 1;
@@ -1589,6 +1590,7 @@ const Harness = struct {
             return;
         }
         if (wire_case.zstd_magicless) {
+            try self.reporting.mutation(&self.stats, self.info(codec, pattern, wire_case), wire_case, mutated, operator, vort_result, null, .{});
             if (vort_result) |decoded| {
                 if (decoded.len != expected_len) {
                     try self.fail(codec, pattern, wire_case.label, expected_len, mutated.len, "mutation", "{s}: Vort-only decode changed output length", .{operator});
@@ -1604,6 +1606,7 @@ const Harness = struct {
         }
         const reference_result = self.referenceDecode(codec, mutated_case, expected_len);
         defer if (reference_result) |decoded| a.free(decoded);
+        try self.reporting.mutation(&self.stats, self.info(codec, pattern, wire_case), wire_case, mutated, operator, vort_result, reference_result, self.last_reference);
         if (vort_result == null) self.stats.mutation_rejected += 1;
         if (vort_result != null and reference_result != null) {
             if (!std.mem.eql(u8, vort_result.?, reference_result.?)) {
@@ -1613,6 +1616,10 @@ const Harness = struct {
         } else if (vort_result != null or reference_result != null) {
             self.stats.one_sided_divergence += 1;
         }
+    }
+
+    fn info(self: *const Harness, codec: Codec, pattern: Pattern, wire_case: WireCase) reporting.Info {
+        return .{ .codec_index = @intFromEnum(codec), .codec = @tagName(codec), .pattern = @tagName(pattern), .variant = wire_case.label, .level = self.active_level };
     }
 
     fn levelsFor(self: *Harness, codec: Codec, input_len: usize) []const u4 {
@@ -1694,6 +1701,8 @@ pub fn main(init: std.process.Init) !void {
     var only: ?Codec = null;
     var deep = false;
     var max_size: usize = 8192;
+    var divergence_directory: ?[]const u8 = null;
+    var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "--seed=")) {
             seed = try std.fmt.parseInt(u64, arg["--seed=".len..], 0);
@@ -1708,6 +1717,10 @@ pub fn main(init: std.process.Init) !void {
                 if (std.mem.eql(u8, name, codec.label())) only = codec;
             }
             if (only == null) return error.UnknownCodecFilter;
+        } else if (std.mem.startsWith(u8, arg, "--divergence-dir=")) {
+            divergence_directory = arg["--divergence-dir=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--replay-dir=")) {
+            replay_directory = arg["--replay-dir=".len..];
         } else if (std.mem.eql(u8, arg, "--help")) {
             try printUsage(init);
             return;
@@ -1716,11 +1729,14 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    if (replay_directory != null and divergence_directory != null) return error.ConflictingArtifactModes;
+
     // The C reference libraries allocate through libc; use the same allocator
     // so cross-allocator ownership never enters the comparison.
     const allocator = std.heap.c_allocator;
     var harness = Harness{
         .allocator = allocator,
+        .reporting = try reporting.Reporter.init(allocator, init.io, divergence_directory),
         .rng = .{ .state = seed },
         .failures = .empty,
         .only = only,
@@ -1729,6 +1745,12 @@ pub fn main(init: std.process.Init) !void {
     defer {
         for (harness.failures.items) |failure| allocator.free(failure.detail);
         harness.failures.deinit(allocator);
+        harness.reporting.deinit();
+    }
+
+    if (replay_directory) |directory| {
+        try reporting.replayAll(allocator, init.io, directory, &harness, Codec, WireCase);
+        return;
     }
 
     const input = try allocator.alloc(u8, max_size);
@@ -1758,32 +1780,10 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print(
-        \\codec differential fuzz: seed={d} deep={} only={s}
-        \\  valid wires={d} (variants={d}) vort_roundtrip={d} exact_size={d} reference_interop={d}
-        \\  truncation cuts={d} (both_rejected={d} agreed_accept={d})
-        \\  mutations xor={d} bitflip={d} overwrite={d} double-overwrite={d} insert={d} delete={d} (rejected={d} one_sided_divergence={d})
-        \\
-    , .{
-        seed,
-        deep,
-        if (only) |codec| codec.label() else "all",
-        harness.stats.wires,
-        harness.stats.variant_wires,
-        harness.stats.vort_roundtrip_ok,
-        harness.stats.exact_size_ok,
-        harness.stats.reference_ok,
-        harness.stats.truncation_cuts,
-        harness.stats.truncation_both_rejected,
-        harness.stats.truncation_agreed,
-        harness.stats.mutations_xor,
-        harness.stats.mutations_bitflip,
-        harness.stats.mutations_overwrite,
-        harness.stats.mutations_double_overwrite,
-        harness.stats.mutations_insert,
-        harness.stats.mutations_delete,
-        harness.stats.mutation_rejected,
-        harness.stats.one_sided_divergence,
+    try harness.reporting.finish(stdout, harness.stats, seed, deep, if (only) |codec| codec.label() else "all", .{
+        .zlib = std.mem.span(c.zlibVersion()),
+        .zstd = std.mem.span(c.ZSTD_versionString()),
+        .brotli_decoder_version_encoded = c.BrotliDecoderVersion(),
     });
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
@@ -1814,6 +1814,8 @@ fn printUsage(init: std.process.Init) !void {
     try stdout.print(
         \\Usage: vort-codec-differential-fuzz [--seed=N] [--deep] [--max-size=N]
         \\                                   [--only=raw-deflate|zlib|gzip|zstd|brotli]
+        \\                                   [--divergence-dir=NEW_DIRECTORY]
+        \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\
     , .{});
     try stdout.flush();

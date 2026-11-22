@@ -1,0 +1,18 @@
+{
+  "command": [
+    "zig",
+    "test",
+    "--dep",
+    "br",
+    "-Mroot=/tmp/vort-brotli-acceptance-replay-20261120/replay.zig",
+    "-Mbr=/home/passchaos/project-z/vort/src/br.zig",
+    "--test-filter",
+    "Brotli captured",
+    "--cache-dir",
+    "/tmp/vort-brotli-acceptance-replay-20261120/zig-cache",
+    "--global-cache-dir",
+    "/tmp/vort-brotli-acceptance-replay-20261120/global-cache"
+  ],
+  "captured_utc": "2026-11-20T13:27:19.610776+00:00",
+  "source_br_sha256": "5c43b91dc17262483b9c2a211f224f02e1fce0e0323c708294babde0f432f5cc"
+}

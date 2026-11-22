@@ -1,0 +1,83 @@
+{
+  "zlib_ng_runtime": "1.3.2.zlib-ng",
+  "artifact_sha256": {
+    "/home/passchaos/Work/zlib-ng/build-vort/libz.so.1.3.2.zlib-ng": "3913cfc27a55f2f313df178321626663640ccf5891df36dfac012e666ee50fb4",
+    "/home/passchaos/Work/libdeflate/build-vort/libdeflate.so.0": "e710b9a21f8fab0f23a9dd1ea46958d0e81fae6623577ca55d7ae833bb681e49"
+  },
+  "libdeflate_version_scope": "Loaded artifact identity; no runtime version API asserted.",
+  "capture_manifest_sha256": "c0a3b181a53416652672f98acd5ca58c71bebfae8b160a67c2389db3bf19787f",
+  "samples": [
+    {
+      "sample": 13,
+      "codec": "gzip",
+      "wire_kind": "original_wire",
+      "wire_sha256": "7de11e5ce18938af138af545726eeedf14caa6df830a9e7ea1d1a923e7bfebb3",
+      "capacity": 82021,
+      "zlib_ng": {
+        "result_code": 1,
+        "error_message": null,
+        "input_consumed": 59,
+        "input_remaining": 0,
+        "output_bytes": 20505
+      },
+      "libdeflate": {
+        "result_code": 0,
+        "output_bytes_on_success": 20505
+      }
+    },
+    {
+      "sample": 13,
+      "codec": "gzip",
+      "wire_kind": "mutated_wire",
+      "wire_sha256": "d7fd70975abfe6a278960867051c9a6ff1555889480a25d131a40297fb3bf654",
+      "capacity": 82021,
+      "zlib_ng": {
+        "result_code": -3,
+        "error_message": "invalid distances set",
+        "input_consumed": 30,
+        "input_remaining": 29,
+        "output_bytes": 0
+      },
+      "libdeflate": {
+        "result_code": 1,
+        "output_bytes_on_success": null
+      }
+    },
+    {
+      "sample": 14,
+      "codec": "raw",
+      "wire_kind": "original_wire",
+      "wire_sha256": "56592cf283716f1d26255e8e3c61d11b4626c83f8d2e645ebbc5c2024445bd20",
+      "capacity": 4097,
+      "zlib_ng": {
+        "result_code": 1,
+        "error_message": null,
+        "input_consumed": 124,
+        "input_remaining": 0,
+        "output_bytes": 128
+      },
+      "libdeflate": {
+        "result_code": 0,
+        "output_bytes_on_success": 128
+      }
+    },
+    {
+      "sample": 14,
+      "codec": "raw",
+      "wire_kind": "mutated_wire",
+      "wire_sha256": "d388f3fc1cd2103712c3066a8e584b6bb1296a4a3d613a26fbb832179193c929",
+      "capacity": 4097,
+      "zlib_ng": {
+        "result_code": -3,
+        "error_message": "invalid distances set",
+        "input_consumed": 34,
+        "input_remaining": 90,
+        "output_bytes": 0
+      },
+      "libdeflate": {
+        "result_code": 1,
+        "output_bytes_on_success": null
+      }
+    }
+  ]
+}

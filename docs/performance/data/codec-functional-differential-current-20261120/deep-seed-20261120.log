@@ -1,0 +1,15 @@
+codec differential fuzz: seed=539365664 deep=true only=all
+  valid wires=14684 (variants=9835) vort_roundtrip=14684 exact_size=14684 reference_interop=14684
+  truncation cuts=408571 (both_rejected=401698 agreed_accept=6873)
+  mutations xor=220260 bitflip=73420 overwrite=102618 double-overwrite=33758 insert=34206 delete=34062 (rejected=379933 one_sided_divergence=12108)
+Build Summary: 7/7 steps succeeded
+run-codec-differential-fuzz success
++- run exe vort-codec-differential-fuzz success 25s
+   +- compile exe vort-codec-differential-fuzz ReleaseFast native success 1m MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:40M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)
+

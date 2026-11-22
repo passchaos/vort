@@ -1,0 +1,236 @@
+{
+  "library": "modern",
+  "identity": {
+    "version_encoded": 16785408,
+    "libraries": {
+      "/home/passchaos/Work/brotli/build-vort/libbrotlicommon.so.1.2.0": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "/home/passchaos/Work/brotli/build-vort/libbrotlidec.so.1.2.0": "3acf45976e96498b954bb104b06ef5b8e1cd08b5e0d8d6826c233ed1f07c0469"
+    },
+    "attach_dictionary_available": true
+  },
+  "capture_manifest_sha256": "134187c23bf0acb8c88fee38efa273494c46acdc2b943adfb8331daf5a7918f1",
+  "samples": [
+    {
+      "index": 0,
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "baseline",
+        "level": 0
+      },
+      "captured_direction": "reference_only",
+      "source_bytes": 0,
+      "wire_hex": "06cc",
+      "captured_vort_output_bytes": null,
+      "runs": {
+        "original": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 1,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "strict_full_input_accepts": true,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": true
+        },
+        "mutated": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 1,
+          "remaining_bytes": 1,
+          "unused_suffix_hex": "cc",
+          "output_bytes": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "strict_full_input_accepts": false,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": null
+        }
+      }
+    },
+    {
+      "index": 1,
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "raw-shared-dictionary",
+        "level": 5
+      },
+      "captured_direction": "no_reference_content_changed",
+      "source_bytes": 768,
+      "wire_hex": "e25f003c04400d4658a8e8e8ba00",
+      "captured_vort_output_bytes": 768,
+      "runs": {
+        "original": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 14,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 768,
+          "output_sha256": "310df26187f1179203887b2b93e37975e554b18efab750cd3f8a2c1fe9e44ecf",
+          "strict_full_input_accepts": true,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": true
+        },
+        "mutated": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 14,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 768,
+          "output_sha256": "86d88718a5124c692c610ef77efd78b1ee8ec3c63b07f81cf6da6d479905aaa5",
+          "strict_full_input_accepts": true,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": true
+        }
+      }
+    },
+    {
+      "index": 2,
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "baseline",
+        "level": 0
+      },
+      "captured_direction": "reference_only",
+      "source_bytes": 1,
+      "wire_hex": "00001000034a",
+      "captured_vort_output_bytes": null,
+      "runs": {
+        "original": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 5,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 1,
+          "output_sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+          "strict_full_input_accepts": true,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": true
+        },
+        "mutated": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 5,
+          "remaining_bytes": 1,
+          "unused_suffix_hex": "4a",
+          "output_bytes": 1,
+          "output_sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+          "strict_full_input_accepts": false,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": null
+        }
+      }
+    },
+    {
+      "index": 3,
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "explicit-window",
+        "level": 5
+      },
+      "captured_direction": "vort_only",
+      "source_bytes": 7,
+      "wire_hex": "a13080000f01108c0404",
+      "captured_vort_output_bytes": 4103,
+      "runs": {
+        "original": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 10,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 7,
+          "output_sha256": "837885c8f8091aeaeb9ec3c3f85a6ff470a415e610b8ba3e49f9b33c9cf9d619",
+          "strict_full_input_accepts": true,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": true
+        },
+        "mutated": {
+          "status": "needs_output",
+          "result_code": 3,
+          "capacity": 4097,
+          "calls": 1,
+          "consumed_bytes": 10,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 4097,
+          "output_sha256": "b587fa297299ce9c602e58292b51379402bf7b1074f6b18679c2fb871c917ca8",
+          "strict_full_input_accepts": false,
+          "error_code": null,
+          "error_text": null
+        },
+        "mutated_with_complete_output_capacity": {
+          "status": "success",
+          "result_code": 1,
+          "capacity": 4104,
+          "calls": 1,
+          "consumed_bytes": 10,
+          "remaining_bytes": 0,
+          "unused_suffix_hex": "",
+          "output_bytes": 4103,
+          "output_sha256": "c270b1902f5bfcdb74693d21cce084ec44b1e56fd5454984da1b00c03c05b399",
+          "strict_full_input_accepts": true,
+          "error_code": null,
+          "error_text": null,
+          "matches_captured_output": true
+        }
+      }
+    },
+    {
+      "index": 4,
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "serialized-shared-dictionary",
+        "level": 5
+      },
+      "captured_direction": "no_reference_length_changed",
+      "source_bytes": 140,
+      "wire_hex": "e211003c045909a058500c00",
+      "captured_vort_output_bytes": 144,
+      "runs": {
+        "original": {
+          "status": "dictionary_attachment_rejected",
+          "capacity": 4097
+        },
+        "mutated": {
+          "status": "dictionary_attachment_rejected",
+          "capacity": 4097
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "repo_source_unchanged": true,
+  "source_files_verified": 1929,
+  "patch_sha256": "449137122ef59753aa497e6765a80a4be95203897f5d5c60a9778b8a83465c98",
+  "binary_sha256": "c7236897aac8dae6cc73db25e210c279da0fa45f68754b75554f2826f1d4083a",
+  "zig_version": "0.16.0",
+  "compiler_mode": "ReleaseFast",
+  "target_cpu": "native",
+  "linked_references": [
+    "z",
+    "zstd",
+    "brotlidec",
+    "brotlicommon"
+  ],
+  "generator_and_gate_evidence": "/tmp/vort-codec-differential-reporting-20261120/unchanged-generator-and-gates.json",
+  "default_run": [
+    "codec-differential-fuzz",
+    "--deep",
+    "--seed=0x20261120"
+  ],
+  "artifact_run": [
+    "codec-differential-fuzz",
+    "--deep",
+    "--seed=0x20261120",
+    "--divergence-dir=/tmp/vort-codec-differential-reporting-20261120/deep-artifacts"
+  ],
+  "patch_apply_check_exit_code": 0,
+  "scope": "Only /tmp tool/reporting files modified; copied production src remains frozen.",
+  "compiler_argv": [
+    "zig",
+    "build-exe",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "-lc",
+    "-lz",
+    "-lzstd",
+    "-lbrotlidec",
+    "-lbrotlicommon",
+    "--dep",
+    "vort",
+    "-Mroot=/tmp/vort-codec-differential-reporting-20261120/tools/codec_differential_fuzz.zig",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "--dep",
+    "vail_archive_crypto",
+    "/home/passchaos/project-z/vort/.zig-cache/o/a975e198daf1c08dc02b311878b81563/vort-br-record-optimal.o",
+    "/home/passchaos/project-z/vort/.zig-cache/o/0dcbc6a3812d41e3df4d3915a3c13b6f/vort-zstd-huffman-x2.o",
+    "-Mvort=/tmp/vort-codec-differential-reporting-20261120/src/root.zig",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "-Mvail_archive_crypto=/tmp/vort-codec-differential-reporting-20261120/vail_archive_crypto/src/root.zig",
+    "--cache-dir",
+    "/tmp/vort-codec-differential-reporting-20261120/.zig-cache",
+    "-femit-bin=/tmp/vort-codec-differential-reporting-20261120/codec-differential-fuzz"
+  ],
+  "reused_objects": [
+    {
+      "path": "/home/passchaos/project-z/vort/.zig-cache/o/a975e198daf1c08dc02b311878b81563/vort-br-record-optimal.o",
+      "bytes": 54480,
+      "sha256": "8ef5dbf0a1ef810057bb79cfeb37c693388e1a7e876912ac534bad81e6c4017a"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/.zig-cache/o/0dcbc6a3812d41e3df4d3915a3c13b6f/vort-zstd-huffman-x2.o",
+      "bytes": 159744,
+      "sha256": "07582c16a5ddfa38d1b14255608413e0baa67979507a146370ff5b6fc15d671e"
+    }
+  ],
+  "reference_versions": {
+    "zlib": "1.2.11",
+    "zstd": "1.4.8",
+    "brotli_decoder_version_encoded": 16777225
+  },
+  "replay_exit_code": 0,
+  "default_exit_code": 0,
+  "artifact_exit_code": 0,
+  "report_files": [
+    {
+      "path": "deep-default.log",
+      "bytes": 7134,
+      "sha256": "c75b0ee0ecc88d05d8186255989b8605e23008723c3a189c140283ac8da7f36b"
+    },
+    {
+      "path": "deep-artifacts.log",
+      "bytes": 28690,
+      "sha256": "3c091501c07f1ff0f34fb692c367fe79ab2353fe36704933c1acf22bddbd5566"
+    },
+    {
+      "path": "deep-default.json",
+      "bytes": 8235,
+      "sha256": "236d148e10377f246173f4636512502f868d07cd94d944267e2106100c9f2e48"
+    },
+    {
+      "path": "deep-artifacts.json",
+      "bytes": 37563,
+      "sha256": "6012d5bbf6cd05fabe60a9946a8f99d2080b1836d6e093c034802bf2c4f1a883"
+    },
+    {
+      "path": "deep-verification.json",
+      "bytes": 6392,
+      "sha256": "034b438a2baa99d8c1faaa16622b5af206709103223af751d42f39e60f889791"
+    },
+    {
+      "path": "deep-replay.log",
+      "bytes": 108,
+      "sha256": "5bf1942ed789deec549cef079c5b16fd71cb7ca8ee47fa83d3baecdf304139da"
+    },
+    {
+      "path": "unchanged-generator-and-gates.json",
+      "bytes": 4051,
+      "sha256": "a1d94d9c8ee772dd9fd4694aee85ceb6a7f3421e3497cd5b44abf84f70b57eea"
+    }
+  ]
+}

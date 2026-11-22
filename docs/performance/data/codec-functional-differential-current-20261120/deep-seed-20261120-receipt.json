@@ -1,0 +1,29 @@
+{
+  "recorded_utc": "2026-11-20T13:01:19.679089+00:00",
+  "terminal_exit_code": 0,
+  "build_steps": "7/7",
+  "seed": "0x20261120",
+  "valid_wires": 14684,
+  "variant_wires": 9835,
+  "vort_roundtrip_ok": 14684,
+  "exact_size_ok": 14684,
+  "legacy_decode_contract_counter": 14684,
+  "legacy_counter_scope": "Includes actual external library checks and Vort-only dictionary/magicless contracts; not an external reference wire count.",
+  "truncation_cuts": 408571,
+  "truncation_both_rejected": 401698,
+  "truncation_agreed_accept": 6873,
+  "mutation_operations": {
+    "xor": 220260,
+    "bitflip": 73420,
+    "overwrite": 102618,
+    "double_overwrite": 33758,
+    "insert": 34206,
+    "delete": 34062
+  },
+  "mutation_total": 498324,
+  "mutation_rejected": 379933,
+  "legacy_one_sided_divergence": 12108,
+  "divergence_scope": "Mixed external one-sided acceptance and Vort-only dictionary/magicless content changes; classification remains outstanding.",
+  "log_sha256": "6bed985a0aad396cc1440385821172dbc0570d024cb41168d3ff463ac0a6c619",
+  "claim_scope": "Valid generated wires, exact-size contracts and truncation/output agreement; no complete malformed acceptance parity or performance claim."
+}

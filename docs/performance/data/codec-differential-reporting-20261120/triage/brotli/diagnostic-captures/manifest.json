@@ -1,0 +1,418 @@
+{
+  "schema": "vort.codec-differential.classification.v1",
+  "seed": 539365664,
+  "deep": true,
+  "only": "brotli",
+  "reference_versions": {
+    "zlib": "1.2.11",
+    "zstd": "1.4.8",
+    "brotli_decoder_version_encoded": 16777225
+  },
+  "codec_order": [
+    "raw",
+    "zlib",
+    "gzip",
+    "zstd",
+    "br"
+  ],
+  "stats": {
+    "wires": 1531,
+    "variant_wires": 1075,
+    "vort_roundtrip_ok": 1531,
+    "exact_size_ok": 1531,
+    "reference_ok": 1531,
+    "reference_rejected_valid": 0,
+    "truncation_cuts": 27915,
+    "truncation_both_rejected": 27915,
+    "truncation_agreed": 0,
+    "mutations_xor": 22965,
+    "mutations_bitflip": 7655,
+    "mutations_overwrite": 13779,
+    "mutations_double_overwrite": 4395,
+    "mutations_insert": 4593,
+    "mutations_delete": 4431,
+    "mutation_rejected": 42769,
+    "one_sided_divergence": 1973,
+    "by_codec": [
+      {
+        "external_valid_checks": 0,
+        "external_valid_ok": 0,
+        "vort_only_valid_contracts": 0,
+        "truncation_external_checks": 0,
+        "truncation_external_both_reject": 0,
+        "truncation_external_both_accept": 0,
+        "truncation_external_one_sided": 0,
+        "truncation_no_reference_checks": 0,
+        "truncation_no_reference_accept": 0,
+        "truncation_no_reference_reject": 0,
+        "mutation_external_checks": 0,
+        "mutation_external_both_accept": 0,
+        "mutation_external_both_reject": 0,
+        "mutation_external_reference_only": 0,
+        "mutation_external_vort_only": 0,
+        "mutation_external_output_mismatch": 0,
+        "mutation_no_reference_checks": 0,
+        "mutation_no_reference_reject": 0,
+        "mutation_no_reference_unchanged": 0,
+        "mutation_no_reference_content_changed_same_length": 0,
+        "mutation_no_reference_length_changed": 0
+      },
+      {
+        "external_valid_checks": 0,
+        "external_valid_ok": 0,
+        "vort_only_valid_contracts": 0,
+        "truncation_external_checks": 0,
+        "truncation_external_both_reject": 0,
+        "truncation_external_both_accept": 0,
+        "truncation_external_one_sided": 0,
+        "truncation_no_reference_checks": 0,
+        "truncation_no_reference_accept": 0,
+        "truncation_no_reference_reject": 0,
+        "mutation_external_checks": 0,
+        "mutation_external_both_accept": 0,
+        "mutation_external_both_reject": 0,
+        "mutation_external_reference_only": 0,
+        "mutation_external_vort_only": 0,
+        "mutation_external_output_mismatch": 0,
+        "mutation_no_reference_checks": 0,
+        "mutation_no_reference_reject": 0,
+        "mutation_no_reference_unchanged": 0,
+        "mutation_no_reference_content_changed_same_length": 0,
+        "mutation_no_reference_length_changed": 0
+      },
+      {
+        "external_valid_checks": 0,
+        "external_valid_ok": 0,
+        "vort_only_valid_contracts": 0,
+        "truncation_external_checks": 0,
+        "truncation_external_both_reject": 0,
+        "truncation_external_both_accept": 0,
+        "truncation_external_one_sided": 0,
+        "truncation_no_reference_checks": 0,
+        "truncation_no_reference_accept": 0,
+        "truncation_no_reference_reject": 0,
+        "mutation_external_checks": 0,
+        "mutation_external_both_accept": 0,
+        "mutation_external_both_reject": 0,
+        "mutation_external_reference_only": 0,
+        "mutation_external_vort_only": 0,
+        "mutation_external_output_mismatch": 0,
+        "mutation_no_reference_checks": 0,
+        "mutation_no_reference_reject": 0,
+        "mutation_no_reference_unchanged": 0,
+        "mutation_no_reference_content_changed_same_length": 0,
+        "mutation_no_reference_length_changed": 0
+      },
+      {
+        "external_valid_checks": 0,
+        "external_valid_ok": 0,
+        "vort_only_valid_contracts": 0,
+        "truncation_external_checks": 0,
+        "truncation_external_both_reject": 0,
+        "truncation_external_both_accept": 0,
+        "truncation_external_one_sided": 0,
+        "truncation_no_reference_checks": 0,
+        "truncation_no_reference_accept": 0,
+        "truncation_no_reference_reject": 0,
+        "mutation_external_checks": 0,
+        "mutation_external_both_accept": 0,
+        "mutation_external_both_reject": 0,
+        "mutation_external_reference_only": 0,
+        "mutation_external_vort_only": 0,
+        "mutation_external_output_mismatch": 0,
+        "mutation_no_reference_checks": 0,
+        "mutation_no_reference_reject": 0,
+        "mutation_no_reference_unchanged": 0,
+        "mutation_no_reference_content_changed_same_length": 0,
+        "mutation_no_reference_length_changed": 0
+      },
+      {
+        "external_valid_checks": 1368,
+        "external_valid_ok": 1368,
+        "vort_only_valid_contracts": 163,
+        "truncation_external_checks": 25420,
+        "truncation_external_both_reject": 25420,
+        "truncation_external_both_accept": 0,
+        "truncation_external_one_sided": 0,
+        "truncation_no_reference_checks": 2495,
+        "truncation_no_reference_accept": 0,
+        "truncation_no_reference_reject": 2495,
+        "mutation_external_checks": 51624,
+        "mutation_external_both_accept": 14513,
+        "mutation_external_both_reject": 35442,
+        "mutation_external_reference_only": 1644,
+        "mutation_external_vort_only": 25,
+        "mutation_external_output_mismatch": 0,
+        "mutation_no_reference_checks": 6194,
+        "mutation_no_reference_reject": 5683,
+        "mutation_no_reference_unchanged": 207,
+        "mutation_no_reference_content_changed_same_length": 304,
+        "mutation_no_reference_length_changed": 0
+      }
+    ]
+  },
+  "classified": {
+    "external_valid_checks": 1368,
+    "external_valid_ok": 1368,
+    "vort_only_valid_contracts": 163,
+    "truncation_external_checks": 25420,
+    "truncation_external_both_reject": 25420,
+    "truncation_external_both_accept": 0,
+    "truncation_external_one_sided": 0,
+    "truncation_no_reference_checks": 2495,
+    "truncation_no_reference_accept": 0,
+    "truncation_no_reference_reject": 2495,
+    "mutation_external_checks": 51624,
+    "mutation_external_both_accept": 14513,
+    "mutation_external_both_reject": 35442,
+    "mutation_external_reference_only": 1644,
+    "mutation_external_vort_only": 25,
+    "mutation_external_output_mismatch": 0,
+    "mutation_no_reference_checks": 6194,
+    "mutation_no_reference_reject": 5683,
+    "mutation_no_reference_unchanged": 207,
+    "mutation_no_reference_content_changed_same_length": 304,
+    "mutation_no_reference_length_changed": 0
+  },
+  "generated_wire_digest_sha256": "fb2a6246eaae26449e7dca849e718ff7ff3f6c67461684901cfa5e4631cdb5d6",
+  "mutation_sequence_digest_sha256": "73c7dffbd50743bd9a2f66f05b7dcfc75c66e37e2078fd8809a800b1f25a32a0",
+  "bounds": {
+    "max_samples": 32,
+    "max_samples_per_codec_direction": 2,
+    "max_total_bytes": 8388608,
+    "max_sample_blob_bytes": 1048576,
+    "max_manifest_bytes": 524288
+  },
+  "artifacts": {
+    "eligible": 1973,
+    "saved": 4,
+    "blob_files": 17,
+    "blob_bytes": 34634,
+    "skipped_disabled": 0,
+    "skipped_direction_quota": 0,
+    "skipped_total_quota": 0,
+    "skipped_source_stratum": 1969,
+    "skipped_sample_bytes": 0,
+    "skipped_total_bytes": 0
+  },
+  "samples": [
+    {
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "baseline",
+        "level": 0
+      },
+      "direction": "reference_only",
+      "operator": "insert",
+      "wire_ordinal": 1,
+      "mutation_ordinal": 32,
+      "reference_available": true,
+      "vort_accepted": false,
+      "reference_accepted": true,
+      "first_difference": 1,
+      "flags": {
+        "brotli_large_window": false,
+        "zstd_stream_reference": false,
+        "gzip_multi_member": false,
+        "brotli_shared_dictionary": false,
+        "zstd_magicless": false,
+        "brotli_serialized_dictionary": false
+      },
+      "original_wire": {
+        "path": "sample-000-original-wire.bin",
+        "bytes": 1,
+        "sha256": "67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6"
+      },
+      "mutated_wire": {
+        "path": "sample-000-mutated-wire.bin",
+        "bytes": 2,
+        "sha256": "ae3da26252ff31478ab64ae998e579d20b4f9ab95d61d9793e9c0a448c522f6a"
+      },
+      "source": {
+        "path": "sample-000-source.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "dictionary_raw": null,
+      "dictionary_standard": null,
+      "dictionary_brotli_serialized": null,
+      "vort_output": null,
+      "reference_output": {
+        "path": "sample-000-reference-output.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "reference_output_capacity": 4097,
+      "vort_decoded_bytes": null,
+      "reference_decoded_bytes": 0,
+      "reference_full_input_policy": "one-shot-library-policy: caller has no consumed-input check"
+    },
+    {
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "raw-shared-dictionary",
+        "level": 5
+      },
+      "direction": "no_reference_content_changed",
+      "operator": "bitflip",
+      "wire_ordinal": 6,
+      "mutation_ordinal": 184,
+      "reference_available": false,
+      "vort_accepted": true,
+      "reference_accepted": false,
+      "first_difference": 13,
+      "flags": {
+        "brotli_large_window": false,
+        "zstd_stream_reference": false,
+        "gzip_multi_member": false,
+        "brotli_shared_dictionary": true,
+        "zstd_magicless": false,
+        "brotli_serialized_dictionary": false
+      },
+      "original_wire": {
+        "path": "sample-001-original-wire.bin",
+        "bytes": 14,
+        "sha256": "e8a1f1a30ea7c37af9b82d94530ca879e4597530bf4a2a75a2a5aa366d6215bf"
+      },
+      "mutated_wire": {
+        "path": "sample-001-mutated-wire.bin",
+        "bytes": 14,
+        "sha256": "1c5a9803d3638be0ee116707d441939659cff1484dc43066b1f5fe0d42fb29f3"
+      },
+      "source": {
+        "path": "sample-001-source.bin",
+        "bytes": 768,
+        "sha256": "d513d3062f9fc823ac49811541e95a06893d2ca4860f50284f3f6a42c021d127"
+      },
+      "dictionary_raw": {
+        "path": "sample-001-dictionary-raw.bin",
+        "bytes": 256,
+        "sha256": "1c3bfac087a9185f37257e9a5833b751ac31ba372c016255b8c355d1494f3f5b"
+      },
+      "dictionary_standard": null,
+      "dictionary_brotli_serialized": null,
+      "vort_output": {
+        "path": "sample-001-vort-output.bin",
+        "bytes": 768,
+        "sha256": "c1d94c3063747eb29d82e1ce166a65a08be74d960c1f994057604cb21ce14a7c"
+      },
+      "reference_output": null,
+      "reference_output_capacity": null,
+      "vort_decoded_bytes": 768,
+      "reference_decoded_bytes": null,
+      "reference_full_input_policy": "not-called"
+    },
+    {
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "baseline",
+        "level": 0
+      },
+      "direction": "reference_only",
+      "operator": "double-overwrite",
+      "wire_ordinal": 11,
+      "mutation_ordinal": 370,
+      "reference_available": true,
+      "vort_accepted": false,
+      "reference_accepted": true,
+      "first_difference": 0,
+      "flags": {
+        "brotli_large_window": false,
+        "zstd_stream_reference": false,
+        "gzip_multi_member": false,
+        "brotli_shared_dictionary": false,
+        "zstd_magicless": false,
+        "brotli_serialized_dictionary": false
+      },
+      "original_wire": {
+        "path": "sample-002-original-wire.bin",
+        "bytes": 5,
+        "sha256": "d6edcc757631c388a0f83d543a3cb09a9330d7efcfc7e34c4049b2831c84f4ca"
+      },
+      "mutated_wire": {
+        "path": "sample-002-mutated-wire.bin",
+        "bytes": 5,
+        "sha256": "08e8023bf991de69cb0750d823fec15a117cace3069112e2f62578239ddc02e7"
+      },
+      "source": {
+        "path": "sample-002-source.bin",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      "dictionary_raw": null,
+      "dictionary_standard": null,
+      "dictionary_brotli_serialized": null,
+      "vort_output": null,
+      "reference_output": {
+        "path": "sample-002-reference-output.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "reference_output_capacity": 4097,
+      "vort_decoded_bytes": null,
+      "reference_decoded_bytes": 0,
+      "reference_full_input_policy": "one-shot-library-policy: caller has no consumed-input check"
+    },
+    {
+      "info": {
+        "codec_index": 4,
+        "codec": "br",
+        "pattern": "rle_zero",
+        "variant": "baseline",
+        "level": 5
+      },
+      "direction": "vort_only",
+      "operator": "bitflip",
+      "wire_ordinal": 52,
+      "mutation_ordinal": 1915,
+      "reference_available": true,
+      "vort_accepted": true,
+      "reference_accepted": false,
+      "first_difference": 2,
+      "flags": {
+        "brotli_large_window": false,
+        "zstd_stream_reference": false,
+        "gzip_multi_member": false,
+        "brotli_shared_dictionary": false,
+        "zstd_magicless": false,
+        "brotli_serialized_dictionary": false
+      },
+      "original_wire": {
+        "path": "sample-003-original-wire.bin",
+        "bytes": 9,
+        "sha256": "c84323c80346a8ee3155a8f4d7855a69cca3c219e0d96786e0bd29a296d1c943"
+      },
+      "mutated_wire": {
+        "path": "sample-003-mutated-wire.bin",
+        "bytes": 9,
+        "sha256": "5ac44556f910254ba56300e219ba7f6b5be55396803336795d8ff38e98135e70"
+      },
+      "source": {
+        "path": "sample-003-source.bin",
+        "bytes": 7,
+        "sha256": "837885c8f8091aeaeb9ec3c3f85a6ff470a415e610b8ba3e49f9b33c9cf9d619"
+      },
+      "dictionary_raw": null,
+      "dictionary_standard": null,
+      "dictionary_brotli_serialized": null,
+      "vort_output": {
+        "path": "sample-003-vort-output.bin",
+        "bytes": 32775,
+        "sha256": "32b256e2831cbdf5dfe5af4961f69de6fbaed75f883d5ad5148707af845b5673"
+      },
+      "reference_output": null,
+      "reference_output_capacity": 4097,
+      "vort_decoded_bytes": 32775,
+      "reference_decoded_bytes": null,
+      "reference_full_input_policy": "one-shot-library-policy: caller has no consumed-input check"
+    }
+  ],
+  "counter_scope": "Legacy reference_ok includes Vort-only contracts. External counts require an actual reference decoder call. Mutation one-sided acceptance is a protocol observation, not proof of incompatible valid wire.",
+  "artifact_scope": "First empty-source and first non-empty-source representative per codec/direction in unchanged traversal order. All accepting outputs are complete. Budget reserves max_manifest_bytes from max_total_bytes; no blob is truncated. Capacity/route fields added from the unchanged referenceDecode formula; consumed-input was not recorded by this interim binary."
+}

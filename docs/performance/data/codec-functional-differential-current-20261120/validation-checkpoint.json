@@ -1,0 +1,21 @@
+{
+  "recorded_utc": "2026-11-20T13:46:41.824604+00:00",
+  "goal_status": "active",
+  "current_review": {
+    "large_window_encoding": "Already implemented; no new public format/resource counterexample found",
+    "quality_documentation": "Corrected current format selection, actual history, adaptive override and API boundaries; historical timings retain their epochs"
+  },
+  "remaining_jobs": [],
+  "scope": "Recorded running handles only; do not treat either as a successful completed run.",
+  "completed_deep_campaign": "deep-seed-20261120-receipt.json",
+  "remaining_analysis": "Reporting classifications are complete in the isolated increment. Representative triage found dynamic Huffman admission gaps in raw/gzip; separate fix is in progress.",
+  "isolated_next_work": {
+    "differential_reporting": "/root/zstd_encoder_borrows: split true external-reference counters and capture bounded one-sided samples; current main tool unchanged",
+    "q11_record_prototype": "/root/brotli_encoder_borrows: suppress already inherited identical fixed-record candidate in isolated copy; wire/resource proof before any performance adoption"
+  },
+  "completed_deep_campaigns": {
+    "ReleaseFast": "deep-seed-20261120-receipt.json",
+    "Debug": "deep-debug-seed-20261120-receipt.json"
+  },
+  "full_frozen_validation_receipt": "../deflate-wrapper-transition-options-20261120/full-validation-receipt.json"
+}

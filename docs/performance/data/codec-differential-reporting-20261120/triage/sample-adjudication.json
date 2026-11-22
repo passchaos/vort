@@ -1,0 +1,80 @@
+{
+  "scope": "15 bounded representatives; not an exhaustive adjudication of11370 acceptance differences",
+  "samples": [
+    {
+      "sample_index": 0,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 1,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 2,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 3,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 4,
+      "classification": "checksumless RAW dictionary content change",
+      "evidence": "Modern libbrotli1.2.0 attaches the RAW dictionary and matches both original and mutated Vort output."
+    },
+    {
+      "sample_index": 5,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 6,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 7,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 8,
+      "classification": "reference window-limit difference",
+      "evidence": "Window descriptor255 requests4123168604160 bytes; both libzstd versions reject their supported window ceiling."
+    },
+    {
+      "sample_index": 9,
+      "classification": "input-consumption policy difference",
+      "evidence": "Reference reaches an end marker while bytes remain; Vort strict facade rejects suffix."
+    },
+    {
+      "sample_index": 10,
+      "classification": "Vort enforces frame-specific block maximum",
+      "evidence": "RLE regenerates2050 bytes with window1024; upstream format requires regenerated size<=min(window,131072). Both tested reference one-shot APIs accept this invalid size."
+    },
+    {
+      "sample_index": 11,
+      "classification": "output-capacity difference",
+      "evidence": "Vort outputs4103 bytes; old reference has4097. Modern decode with4104 bytes matches full output."
+    },
+    {
+      "sample_index": 12,
+      "classification": "unavailable serialized reference in normal Brotli build",
+      "evidence": "BROTLI_EXPERIMENTAL absent from build flags; modern normal build rejects serialized attachment before decoding."
+    },
+    {
+      "sample_index": 13,
+      "classification": "confirmed malformed dynamic distance admission gap",
+      "evidence": "Gzip distance lengths{1,3} incomplete; zlib,zlib-ng,libdeflate reject, current Vort accepts."
+    },
+    {
+      "sample_index": 14,
+      "classification": "confirmed malformed dynamic distance admission gap",
+      "evidence": "Raw distance singleton width7; zlib,zlib-ng,libdeflate reject, current Vort accepts."
+    }
+  ]
+}
