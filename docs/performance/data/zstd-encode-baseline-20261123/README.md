@@ -88,9 +88,26 @@ the harness hash) because candidate plans rebuild the Huffman literal-section
 length. That is candidate-cost waste, not required DP work, and it is the
 concrete next target.
 
+## Level policy audit (2026-11-23)
+
+Source inspection of `applySpeedFirstLevelPolicy` (src/zstd.zig:10587) shows
+the nominal levels are already aligned to the industry ladder: level 1 is
+`fast_compressed` with the single-table fast parser, level 2 is `double_fast`
+with budget 512, and level 3 is `greedy` with a 24-candidate budget. Level 3's
+measured 7.7x gap therefore cannot be attributed to an optimal parse; the
+remaining cost is the level-3 adaptive split ladder (full-frame candidates at
+2/4 KiB format blocks) and/or the greedy parser itself. Profile level 3 before
+changing the level-9 lookahead budget: the level-3 row is the larger practical
+gap (7--15x at the most common default level) and its candidates are supposed
+to be cheap.
+
 ## Next
 
-1. Compare at matched strategies or equal ratio before claiming a speed gap:
+1. Profile level 3 on `dickens.64k`/`nci.64k` and attribute time between the
+   primary greedy encode, the adaptive split candidates, and section sizing.
+   Then cut the ladder candidate count or its block-size set, with frame
+   SHA/size checks.
+2. Compare at matched strategies or equal ratio before claiming a speed gap:
    run the reference with `--strategy`/HQ controls and Vort with the same
    search effort, then rank on the ratio/speed frontier rather than nominal
    level numbers.
