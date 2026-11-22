@@ -1792,14 +1792,14 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/deflate_huffman_build_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
     const run_deflate_huffman_build_bench_csv = b.addRunArtifact(deflate_huffman_build_bench_exe);
-    run_deflate_huffman_build_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-deflate-huffman-build-bench.csv" });
+    run_deflate_huffman_build_bench_csv.addArgs(&.{ "--iterations", "16384", "--csv", "zig-out/vort-deflate-huffman-build-bench.csv" });
     const deflate_huffman_build_bench_csv_step = b.step("run-deflate-huffman-build-bench-csv", "Write focused DEFLATE Huffman table build benchmark CSV");
     deflate_huffman_build_bench_csv_step.dependOn(&run_deflate_huffman_build_bench_csv.step);
 

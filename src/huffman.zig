@@ -77,12 +77,16 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 @setEvalBranchQuota(20_000);
                 if (lengths.len > max_symbols) return error.CorruptFrame;
                 var counts: [max_code_bits + 1]u16 = @splat(0);
+                var active_symbols: [max_symbols]u16 = undefined;
+                var active_len: usize = 0;
                 var max_bits_seen: u4 = 0;
-                for (lengths) |code_bits| {
+                for (lengths, 0..) |code_bits, symbol| {
                     if (code_bits > max_code_bits) return error.CorruptFrame;
                     if (code_bits != 0) {
                         counts[code_bits] += 1;
                         max_bits_seen = @max(max_bits_seen, code_bits);
+                        active_symbols[active_len] = @intCast(symbol);
+                        active_len += 1;
                     }
                 }
                 if (max_bits_seen == 0) return .{};
@@ -104,8 +108,8 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 }
 
                 var encoder = Encoder{};
-                for (lengths, 0..) |code_bits, symbol| {
-                    if (code_bits == 0) continue;
+                for (active_symbols[0..active_len]) |symbol| {
+                    const code_bits = lengths[symbol];
                     encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
                     encoder.bits[symbol] = code_bits;
                     next_code[code_bits] += 1;

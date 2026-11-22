@@ -2784,3 +2784,16 @@ Evidence: [data/brotli-ratio-beam-20261122](data/brotli-ratio-beam-20261122/READ
 
 Final validation for the 32-entry beam: the complete Debug suite passes
 5,745/5,747 tests with two skipped and `check-wasm` exits zero.
+
+## Deflate Huffman encoder active-symbol construction (2026-11-22)
+
+`HuffmanTable.Encoder.init` now records active symbols during its length
+histogram pass and fills canonical codes from that list instead of rescanning
+the full alphabet. `run-deflate-huffman-build-bench-gate` (ReleaseFast, 16,384
+iterations) improves the code-length case from ~2.78M to ~3.44M builds/s, and
+the production encoder is consistently faster than the full-table reference
+(3.12--3.51M versus 3.00--3.05M) across three runs. The gate previously ran in
+the caller's optimize mode (Debug by default) with 4,096 iterations, which made
+the encoder-versus-reference ordering flaky; the bench is now pinned to
+ReleaseFast with 16,384 iterations. All four gate cases pass, and the complete
+Debug suite passes 5,745/5,747 tests with two skipped.
