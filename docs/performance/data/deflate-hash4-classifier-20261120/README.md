@@ -103,3 +103,14 @@ speed at level 6 and **0.9593x** at level 7 (`reymont` 0.81x/0.81x,
 dependent next-node load, so inserting a subtract before that load costs more
 latency than the quarter-size predecessor array saves. The absolute `u32`
 chain stays.
+
+## Follow-up hash4 width screen (2026-11-22)
+
+Widening the 4-byte head from 16 to 17 bits shortens the walked chain without
+changing which exact-4-byte candidates exist (a matching word hashes to the
+same bucket at either width), and all 24 level-6/7 rows keep byte-identical
+output. It is not a win: twelve 128 KiB prefixes at 50 iterations x 3 rounds
+measure **0.9854x** geometric-mean speed at level 6 and **0.9912x** at level 7,
+with `reymont` 0.92x/0.97x, `osdb` 0.95x/0.93x and `dickens` 0.97x at level 6.
+The extra 256 KiB head footprint costs more cache traffic than the shorter
+walk saves. The 16-bit head stays.
