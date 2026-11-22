@@ -492,6 +492,7 @@ pub fn build(b: *std.Build) void {
         .filters = if (root_test_filter) |filter| &.{filter} else &.{},
     });
     const run_tests = b.addRunArtifact(tests);
+    b.step("check-library-tests", "Compile the complete library test suite").dependOn(&tests.step);
     const seven_zip_aes_tests = b.addTest(.{
         .name = "vort-seven-zip-aes-tests",
         .root_module = tests_mod,
@@ -811,6 +812,10 @@ pub fn build(b: *std.Build) void {
     wasm_check_step.dependOn(zstd_history_workspace_gates.compile_wasm);
     const zstd_source_reverse_gates = @import("build/zstd_source_reverse.zig").register(b, target, optimize);
     wasm_check_step.dependOn(zstd_source_reverse_gates.compile_wasm);
+    wasm_check_step.dependOn(@import("build/incremental_encode_borrows.zig").register(b, target, optimize));
+    wasm_check_step.dependOn(@import("build/encoder_lifecycle.zig").register(b, target, optimize));
+    wasm_check_step.dependOn(@import("build/deflate_dynamic_admission.zig").register(b, target, optimize));
+    wasm_check_step.dependOn(@import("build/puffin_dynamic_bounds.zig").register(b, target, optimize));
     const zstd_test_filter = b.option(
         []const u8,
         "zstd-test-filter",
