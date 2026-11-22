@@ -2859,3 +2859,17 @@ are byte-identical. A lazy match-coverage classifier separates most safe rows
 is safe at 97.2% coverage, indistinguishable from sensitive `nci` at 97.9%.
 The remaining safe-row speed opportunity is only about 1.8--3% geometric mean,
 so beam 32 stays and the adaptive classifier is not adopted.
+
+## Zstd dense shifting field group (2026-11-23)
+
+The dense split-Huffman sequence executor now extracts grouped extra bits and
+FSE transitions with the destructive `ShiftingGroup`, removing the running
+consumed-position dependency; the group is committed before the copies and the
+ungrouped fallback is unchanged. Twenty-four rows (twelve 64 KiB and 1 MiB
+level-9 prefixes, five alternating pairs each): geometric-mean
+Vort/reference ratio **1.0186x**, bootstrap 95% CI **[1.0119, 1.0254]**;
+weakest row `osdb.1m` 0.9919, above the 0.98 floor. Command-dense text rows
+gain 1.04--1.05 (`dickens.64k` 1.0489, `reymont.64k` 1.0459, `nci.64k`
+1.0432, `webster.64k` 1.0408). The full Debug suite passes 5,745/5,747 tests
+with two skipped and `check-wasm` exits zero. Evidence:
+[data/zstd-dense-shifting-group-20261123](data/zstd-dense-shifting-group-20261123/README.md).

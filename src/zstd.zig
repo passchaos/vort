@@ -16248,22 +16248,22 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
             ll_state_bits + ml_state_bits + of_state_bits;
         const total_bits: u8 = of_additional_bits + ml_additional_bits +
             ll_additional_bits + transition_bits;
-        var field_group = sequence_field_group.Group.init(&reader, total_bits);
-        const fields_are_grouped = field_group != null;
+        const fields_are_grouped = total_bits <= 56 and reader.remaining_bits >= 64;
         if (builtin.is_test and fields_are_grouped) test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
         // Keep the grouped and ungrouped field reads in one branch each. The
-        // previous per-field `if (fields_are_grouped)` chain repeated the same
-        // condition six times per sequence and kept the optional live across
-        // every extraction.
+        // shifting group removes the running consumed-position dependency from
+        // every extraction; the whole group is committed before the copies.
         var offset_extra: usize = undefined;
         var match_extra: usize = undefined;
         var literal_extra: usize = undefined;
-        if (field_group) |*group| {
+        if (fields_are_grouped) {
+            var group = sequence_field_group.ShiftingGroup.initProven(&reader);
+            reader.remaining_bits -= total_bits;
             offset_extra = group.read(of_additional_bits);
             match_extra = group.read(ml_additional_bits);
             literal_extra = group.read(ll_additional_bits);
             if (remaining != 0) {
-                const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
+                const transitions = sequence_transition_group.read(&group, ll_state_bits, ml_state_bits, of_state_bits);
                 ll_state = ll_next_state + transitions[0];
                 ml_state = ml_next_state + transitions[1];
                 of_state = of_next_state + transitions[2];
