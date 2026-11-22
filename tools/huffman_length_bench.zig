@@ -22,15 +22,43 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     var csv_path: ?[]const u8 = null;
     var iterations = iterations_default;
+    var rounds: usize = 3;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingReportPath;
         } else if (std.mem.eql(u8, arg, "--iterations")) {
             iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingReportPath, 10);
             if (iterations == 0) return error.InvalidBlockPlan;
+        } else if (std.mem.eql(u8, arg, "--rounds")) {
+            rounds = try std.fmt.parseInt(usize, args.next() orelse return error.MissingReportPath, 10);
+            if (rounds == 0) return error.InvalidBlockPlan;
         } else return error.UnknownArgument;
     }
 
+    var best: ?[27]Row = null;
+    for (0..rounds) |_| {
+        const measured = try measureAll(init, iterations);
+        if (best) |*current| {
+            for (measured, 0..) |row, index| {
+                if (row.elapsed_ns < current[index].elapsed_ns) current[index] = row;
+            }
+        } else best = measured;
+    }
+    const rows = best.?;
+
+    var csv = std.Io.Writer.Allocating.init(init.gpa);
+    defer csv.deinit();
+    try csv.writer.writeAll("case,mode,symbols,active,max_bits,iterations,elapsed_ns,builds_per_s,checksum,cost_checksum\n");
+    for (rows) |row| try csv.writer.print("{s},{s},{d},{d},{d},{d},{d},{d:.2},{d},{d}\n", .{ row.case, row.mode, row.symbols, row.active, row.max_bits, row.iterations, row.elapsed_ns, row.builds_per_s, row.checksum, row.cost_checksum });
+
+    var stdout_buffer: [2048]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
+    try stdout_writer.interface.writeAll(csv.written());
+    try stdout_writer.interface.flush();
+    if (csv_path) |path| try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+}
+
+fn measureAll(init: std.process.Init, iterations: usize) ![27]Row {
     var rows: [27]Row = undefined;
     rows[0] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, false);
     rows[1] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, true);
@@ -59,17 +87,7 @@ pub fn main(init: std.process.Init) !void {
     rows[24] = try measureZstdSymbolSort(init, "zstd-sort-256", 256, iterations, true);
     rows[25] = try measureZstdFseHeaderLength(init, iterations, false);
     rows[26] = try measureZstdFseHeaderLength(init, iterations, true);
-
-    var csv = std.Io.Writer.Allocating.init(init.gpa);
-    defer csv.deinit();
-    try csv.writer.writeAll("case,mode,symbols,active,max_bits,iterations,elapsed_ns,builds_per_s,checksum,cost_checksum\n");
-    for (rows) |row| try csv.writer.print("{s},{s},{d},{d},{d},{d},{d},{d:.2},{d},{d}\n", .{ row.case, row.mode, row.symbols, row.active, row.max_bits, row.iterations, row.elapsed_ns, row.builds_per_s, row.checksum, row.cost_checksum });
-
-    var stdout_buffer: [2048]u8 = undefined;
-    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
-    try stdout_writer.interface.writeAll(csv.written());
-    try stdout_writer.interface.flush();
-    if (csv_path) |path| try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+    return rows;
 }
 
 fn measure(init: std.process.Init, comptime name: []const u8, comptime n: usize, seed_freqs: [n]u32, comptime max_bits: u4, iterations: usize, comptime reference: bool) !Row {

@@ -2840,3 +2840,10 @@ CLI help expectations (15 new `inspect-*-file` commands), zip diff, native
 allocation/probes/tier-range (no standard corpora discovered), the compat
 benchmark (no standard corpora discovered) and the validation JSON docs
 negative smoke. They need separate ownership.
+
+The bench now runs the full 27-row matrix three times and keeps the best
+elapsed per row. A single preemption previously flipped the known-active ratio
+(ci-smoke measured 0.828 against a 0.98 floor); best-of-three keeps the
+recovery and known-active ratios stable, including under two concurrent CPU
+burners (recovery-dense 1.13, recovery128 1.10, recovery256 1.12,
+known32 1.07, known64 1.02).
