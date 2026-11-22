@@ -108,7 +108,15 @@ concrete next target.
    real lever is a cheaper arbitration estimate (entropy/plan bound) with the
    exact section built only for the winning candidate, or fewer lookahead
    candidates; both change candidate selection and need wire-diff evidence,
-   so they are a dedicated experiment rather than a refactor.
+   so they are a dedicated experiment rather than a refactor. The candidate
+   budget is explicit: `mixed_match_path_search_budget = 512` (public
+   `native_max_match_search_budget`), `mixed_match_min_search_budget = 96` and
+   `adaptive_split_match_search_budget_max = 64` (src/zstd.zig:1579-1644), with
+   the per-call value carried in `options.match_search_budget`. The first
+   experiment should lower the level-9 budget (for example 512 to 256) and
+   check frame sizes/SHA across the twelve 128 KiB Silesia files before a full
+   paired campaign; the 128-to-2 multi-duplicate cap is the precedent for a
+   budget cut with byte-identical output.
 3. Re-run the full paired matrix (twelve files, 64 KiB and 1 MiB, alternating
    pairs, confidence intervals) before and after any change, with wire
    checksum and size checks, per the adoption bar in the performance
