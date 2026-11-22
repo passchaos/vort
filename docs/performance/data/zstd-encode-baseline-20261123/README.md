@@ -94,20 +94,21 @@ concrete next target.
    run the reference with `--strategy`/HQ controls and Vort with the same
    search effort, then rank on the ratio/speed frontier rather than nominal
    level numbers.
-2. Remove repeated candidate costing: compute the literal-section Huffman
-   length once per candidate (or use an entropy estimate for arbitration) and
-   build the exact section only for the winner. This is the largest measured
-   encoder-internal cost after the emitter itself. Call-graph inspection shows
-   the recomputation sites are the candidate estimators
+2. Remove repeated candidate costing. A follow-up call-graph audit shows the
+   intra-candidate threading is already implemented: the estimators
    `bestSequencePayloadLenWithLiteralEnds` (src/zstd.zig:28649),
    `bestTablePlanSequenceWithPreviousTables` (29375),
    `sequencePayloadLenWithTablePlans` (30698),
-   `multiSequencePayloadLenInternal` (31472), and
-   `rleSequencePayloadLenInternal` (31689), which each call
-   `sequenceLiteralsPayloadSectionLen` even though several evaluate the same
-   literal layout with different table plans. The contained first cut is to
-   thread an already-computed literal-section length into the table-plan and
-   RLE estimators; output must stay byte-identical.
+   `multiSequencePayloadLenInternal` (31472) and
+   `rleSequencePayloadLenForValuesWithLiteralEnds` (31616) each compute
+   `sequenceLiteralsPayloadSectionLen` once and pass the value into the
+   existing `...WithLiteralsLen` variants for every table family. The 10.93%
+   share is therefore the intrinsic exact Huffman-plan build for each of the
+   hundreds of mixed-lookahead candidate parses, not a duplicated call. The
+   real lever is a cheaper arbitration estimate (entropy/plan bound) with the
+   exact section built only for the winning candidate, or fewer lookahead
+   candidates; both change candidate selection and need wire-diff evidence,
+   so they are a dedicated experiment rather than a refactor.
 3. Re-run the full paired matrix (twelve files, 64 KiB and 1 MiB, alternating
    pairs, confidence intervals) before and after any change, with wire
    checksum and size checks, per the adoption bar in the performance
