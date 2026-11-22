@@ -1,0 +1,10 @@
+error: SizeMismatch
+/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:379:39: 0x36aeace in huffDeflateAlloc (root.zig)
+    if (writer.bit_pos != total_bits) return error.SizeMismatch;
+                                      ^
+/home/passchaos/project-z/vort/examples/cli/android_ota.zig:559:20: 0x1436610 in huffDeflate (cli.zig)
+    const output = try vort.huffAndroidDeflateAlloc(
+                   ^
+/home/passchaos/project-z/vort/examples/cli.zig:397:9: 0x1729572 in main (cli.zig)
+        try android_ota_cli.huffDeflate(init, &args, stdout);
+        ^

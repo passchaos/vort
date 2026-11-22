@@ -1,0 +1,4 @@
+stored=true FBA1024 error=OutputLimitExceeded allocated=389 freed=389
+stored=true heap error=OutputLimitExceeded allocated=389 freed=389 allocations=3
+stored=false FBA1024 error=OutputLimitExceeded allocated=389 freed=389
+stored=false heap error=OutputLimitExceeded allocated=389 freed=389 allocations=3

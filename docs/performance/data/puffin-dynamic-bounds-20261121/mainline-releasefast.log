@@ -1,0 +1,61 @@
+check-android-puffin-bounds
++- test-android-puffin-bounds-wasm
+   +- install generated to android-puffin-bounds-wasm.json
+      +- run node w
+1/39 android_ota.test_0...OK
+2/39 android_ota.puffin_codec.test.Android OTA Puffin fixed and stored deflates round trip byte exactly...OK
+3/39 android_ota.puffin_codec.test.Android OTA Puffin dynamic Huffman deflate round trips byte exactly...OK
+4/39 android_ota.puffin_codec.test.Android OTA Puffin empty distance and dynamic bounds contracts...OK
+5/39 android_ota.puffin_codec.test.Android OTA Puffin incremental output budget contracts...OK
+6/39 android_ota.puffin.test.Android OTA Puffin applies the pinned AOSP fixed and stored patch...OK
+7/39 android_ota.puffin.test.Android OTA Puffin maps non-byte-aligned deflate extents reversibly...OK
+8/39 android_ota.puffin.test.Android OTA Puffin rejects malformed and over-limit patches...OK
+9/39 br.test_0...OK
+10/39 bzip2.test_0...OK
+11/39 bitstream.test_0...OK
+12/39 br.incremental.stored.encoder.test_0...OK
+13/39 br.incremental.copy_decoder.test_0...OK
+14/39 br.incremental.owned_copy_decoder.test_0...OK
+15/39 br.encoder.distance.test_0...OK
+16/39 br.encoder.code_length_rle.test_0...OK
+17/39 br.encoder.hq_options.test_0...OK
+18/39 br.encoder.hq_types.test_0...OK
+19/39 br.encoder.hq_parser.test_0...OK
+20/39 br.encoder.total_budget.test_0...OK
+21/39 tests.br_total_memory_contracts.test_0...OK
+22/39 br.encoder.stored_memory_owner.test_0...OK
+23/39 br.encoder.stored_memory_reuse.test_0...OK
+24/39 br.encoder.hq_tree_oracle_tests.test_0...OK
+25/39 br.encoder.hq_dictionary.test_0...OK
+26/39 br.encoder.hq_codec.alias.test_0...OK
+27/39 br.encoder.static_dictionary_matcher.test_0...OK
+28/39 br.encoder.stored_bit_bound.test_0...OK
+29/39 br.encoder.total_budget.tests.test_0...OK
+30/39 br.encoder.hq_parser.tests.test_0...OK
+31/39 deflate.test_0...OK
+32/39 io.requested_heap_budget.test_0...OK
+33/39 lz77.test_0...OK
+34/39 lz77.test_1...OK
+35/39 deflate.bt_optimal.test_0...OK
+36/39 deflate.incremental.tests.test_0...OK
+37/39 deflate.incremental.tests.step_borrows.test_0...OK
+38/39 deflate.incremental.tests.dictionary_borrows.test_0...OK
+39/39 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+All 39 tests passed.
+(node:3114817) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed command: node tools/wasi_test_gate.js android-puffin "Android OTA Puffin" ./.zig-cache/o/fbbb06e6f9a304d244309bbec3f758e7/vort-android-puffin-bounds-wasm-tests.wasm
+
+Build Summary: 11/11 steps succeeded; 78/78 tests passed
+check-android-puffin-bounds success
++- test-android-puffin-bounds success
+|  +- run test vort-android-puffin-bounds-tests 39 pass (39 total) 26ms MaxRSS:10M
+|     +- compile test vort-android-puffin-bounds-tests ReleaseFast native success 35s MaxRSS:853M
++- test-android-puffin-bounds-x86 success
+|  +- run test vort-android-puffin-bounds-x86-tests 39 pass (39 total) 31ms MaxRSS:10M
+|     +- compile test vort-android-puffin-bounds-x86-tests ReleaseFast x86-linux-musl success 33s MaxRSS:793M
++- test-android-puffin-bounds-wasm success
+   +- install generated to android-puffin-bounds-wasm.json success
+      +- run node success 149ms
+         +- compile test vort-android-puffin-bounds-wasm-tests ReleaseFast wasm32-wasi success 25s MaxRSS:855M
+

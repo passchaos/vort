@@ -1,0 +1,23 @@
+{
+  "recorded_utc": "2026-11-20T16:40:12.387984+00:00",
+  "command": [
+    "zig",
+    "build",
+    "-j2",
+    "check-android-puffin-bounds",
+    "test-android-ota",
+    "check-library-tests",
+    "--summary",
+    "all"
+  ],
+  "terminal_exit_code": 0,
+  "log": "mainline-gates.log",
+  "log_sha256": "74691b5e982601472e9e75036ef3c4a43554113a9ddb5f3103da272047010b77",
+  "source": "mainline-source-provenance.json",
+  "source_manifest_sha256": "e2a2f1d03a251f335f5743af5596f482c985647c1f60e7cf980e30a5ffdfaf00",
+  "wasi_receipt": "mainline-debug-wasi.json",
+  "build_steps_passed": 20,
+  "build_steps_total": 20,
+  "native_tests_passed": 246,
+  "native_tests_total": 246
+}

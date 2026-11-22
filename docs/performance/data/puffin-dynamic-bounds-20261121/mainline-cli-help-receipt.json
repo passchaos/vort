@@ -1,0 +1,20 @@
+{
+  "recorded_utc": "2026-11-20T16:41:53.022178+00:00",
+  "command": [
+    "zig",
+    "build",
+    "-j2",
+    "run",
+    "--summary",
+    "all",
+    "--",
+    "--help"
+  ],
+  "terminal_exit_code": 0,
+  "log": "mainline-cli-help.log",
+  "log_sha256": "0af1b67632daa464112bd5db49fcba39c956b77954515dbdab0b5253bc7f7a2d",
+  "source": "mainline-source-provenance.json",
+  "source_manifest_sha256": "e2a2f1d03a251f335f5743af5596f482c985647c1f60e7cf980e30a5ffdfaf00",
+  "build_steps_passed": 7,
+  "build_steps_total": 7
+}

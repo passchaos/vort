@@ -1,0 +1,197 @@
+[
+  {
+    "label": "padding-0-puff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "puff-android-deflate",
+      "padding-0.raw",
+      "padding-0.puff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "input_bits=88 consumed_bits=88 puff_bytes=15 path=padding-0.puff\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-0-huff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "padding-0.puff",
+      "padding-0.huff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "puff_bytes=15 deflate_bits=88 output_bytes=11 path=padding-0.huff\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-31-puff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "puff-android-deflate",
+      "padding-31.raw",
+      "padding-31.puff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "input_bits=88 consumed_bits=88 puff_bytes=15 path=padding-31.puff\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-31-huff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "padding-31.puff",
+      "padding-31.huff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "puff_bytes=15 deflate_bits=88 output_bytes=11 path=padding-31.huff\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-32-puff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "puff-android-deflate",
+      "padding-32.raw",
+      "padding-32.puff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "input_bits=88 consumed_bits=88 puff_bytes=15 path=padding-32.puff\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-32-huff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "padding-32.puff",
+      "padding-32.huff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "error: SizeMismatch\n/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:379:39: 0x36aeace in huffDeflateAlloc (root.zig)\n    if (writer.bit_pos != total_bits) return error.SizeMismatch;\n                                      ^\n/home/passchaos/project-z/vort/examples/cli/android_ota.zig:559:20: 0x1436610 in huffDeflate (cli.zig)\n    const output = try vort.huffAndroidDeflateAlloc(\n                   ^\n/home/passchaos/project-z/vort/examples/cli.zig:397:9: 0x1729572 in main (cli.zig)\n        try android_ota_cli.huffDeflate(init, &args, stdout);\n        ^\n"
+  },
+  {
+    "label": "padding-32-huff-as-fixed56",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "padding-32.puff",
+      "padding-32.huff-as-fixed56",
+      "0",
+      "56"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "puff_bytes=15 deflate_bits=56 output_bytes=7 path=padding-32.huff-as-fixed56\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-64-puff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "puff-android-deflate",
+      "padding-64.raw",
+      "padding-64.puff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "input_bits=88 consumed_bits=88 puff_bytes=15 path=padding-64.puff\n",
+    "stderr": ""
+  },
+  {
+    "label": "padding-64-huff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "padding-64.puff",
+      "padding-64.huff",
+      "0",
+      "88"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "error: InvalidPuffinStream\n/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:528:27: 0x36b17c0 in writeDynamicTables (root.zig)\n    if (metadata.len < 3) return error.InvalidPuffinStream;\n                          ^\n/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:352:21: 0x36adeac in huffDeflateAlloc (root.zig)\n                    try writeDynamicTables(metadata[1..], &writer);\n                    ^\n/home/passchaos/project-z/vort/examples/cli/android_ota.zig:559:20: 0x1436610 in huffDeflate (cli.zig)\n    const output = try vort.huffAndroidDeflateAlloc(\n                   ^\n/home/passchaos/project-z/vort/examples/cli.zig:397:9: 0x1729572 in main (cli.zig)\n        try android_ota_cli.huffDeflate(init, &args, stdout);\n        ^\n"
+  },
+  {
+    "label": "sixbit-padding-31-puff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "puff-android-deflate",
+      "sixbit-padding-31.raw",
+      "sixbit-padding-31.puff",
+      "0",
+      "96"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "input_bits=96 consumed_bits=96 puff_bytes=16 path=sixbit-padding-31.puff\n",
+    "stderr": ""
+  },
+  {
+    "label": "sixbit-padding-31-huff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "sixbit-padding-31.puff",
+      "sixbit-padding-31.huff",
+      "0",
+      "96"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "puff_bytes=16 deflate_bits=96 output_bytes=12 path=sixbit-padding-31.huff\n",
+    "stderr": ""
+  },
+  {
+    "label": "sixbit-padding-32-puff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "puff-android-deflate",
+      "sixbit-padding-32.raw",
+      "sixbit-padding-32.puff",
+      "0",
+      "96"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 0,
+    "stdout": "input_bits=96 consumed_bits=96 puff_bytes=16 path=sixbit-padding-32.puff\n",
+    "stderr": ""
+  },
+  {
+    "label": "sixbit-padding-32-huff",
+    "argv": [
+      "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+      "huff-android-deflate",
+      "sixbit-padding-32.puff",
+      "sixbit-padding-32.huff",
+      "0",
+      "96"
+    ],
+    "cwd": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "error: SizeMismatch\n/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:379:39: 0x36aeace in huffDeflateAlloc (root.zig)\n    if (writer.bit_pos != total_bits) return error.SizeMismatch;\n                                      ^\n/home/passchaos/project-z/vort/examples/cli/android_ota.zig:559:20: 0x1436610 in huffDeflate (cli.zig)\n    const output = try vort.huffAndroidDeflateAlloc(\n                   ^\n/home/passchaos/project-z/vort/examples/cli.zig:397:9: 0x1729572 in main (cli.zig)\n        try android_ota_cli.huffDeflate(init, &args, stdout);\n        ^\n"
+  }
+]

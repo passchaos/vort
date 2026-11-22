@@ -1,0 +1,10 @@
+[
+  {
+    "case": "empty",
+    "exit_code": 0
+  },
+  {
+    "case": "counts",
+    "exit_code": 0
+  }
+]

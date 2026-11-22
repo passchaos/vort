@@ -11,6 +11,7 @@ const distance_bases = [_]u16{ 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 
 const distance_extra = [_]u8{ 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
 const max_puff_metadata = 1 + 3 + 286 + 30 + 19;
 const max_literal_run = (1 << 16) + 127;
+const max_dynamic_lengths = 286 + 30;
 
 const Huffman = struct {
     lengths: [288]u8 = @splat(0),
@@ -19,6 +20,14 @@ const Huffman = struct {
     max_bits: u8 = 0,
 
     fn init(lengths: []const u8) Error!Huffman {
+        return initWithEmpty(false, lengths);
+    }
+
+    fn initDistance(lengths: []const u8) Error!Huffman {
+        return initWithEmpty(true, lengths);
+    }
+
+    fn initWithEmpty(comptime allow_empty: bool, lengths: []const u8) Error!Huffman {
         if (lengths.len > 288) return error.InvalidPuffinStream;
         var result = Huffman{ .symbol_count = lengths.len };
         @memcpy(result.lengths[0..lengths.len], lengths);
@@ -28,7 +37,13 @@ const Huffman = struct {
             counts[length] += 1;
             result.max_bits = @max(result.max_bits, length);
         }
-        if (result.max_bits == 0) return error.InvalidPuffinStream;
+        if (result.max_bits == 0) {
+            // Literal-only dynamic blocks have no distance codes. Keeping
+            // this error-marker tree lets unused DIST survive metadata
+            // conversion, while actual encode/decode still rejects it.
+            if (allow_empty) return result;
+            return error.InvalidPuffinStream;
+        }
         var next: [16]u16 = @splat(0);
         var code: u32 = 0;
         counts[0] = 0;
@@ -129,6 +144,7 @@ const BitWriter = struct {
 
 const PuffBuilder = struct {
     allocator: std.mem.Allocator,
+    max_output_len: usize,
     output: std.ArrayList(u8) = .empty,
     literals: std.ArrayList(u8) = .empty,
 
@@ -137,10 +153,29 @@ const PuffBuilder = struct {
         self.literals.deinit(self.allocator);
     }
 
+    fn literalWireSize(length: usize) Error!usize {
+        if (length == 0) return 0;
+        return std.math.add(usize, length, if (length <= 127) 1 else 3) catch
+            error.IntegerOverflow;
+    }
+
+    fn checkOutput(self: *const PuffBuilder, additional: usize) Error!void {
+        if (additional > self.max_output_len -| self.output.items.len)
+            return error.OutputLimitExceeded;
+    }
+
+    fn checkAppend(self: *const PuffBuilder, additional: usize) Error!void {
+        const pending = try literalWireSize(self.literals.items.len);
+        const remaining = self.max_output_len -| self.output.items.len;
+        if (pending > remaining or additional > remaining - pending)
+            return error.OutputLimitExceeded;
+    }
+
     fn addMetadata(self: *PuffBuilder, metadata: []const u8) Error!void {
-        try self.flushLiterals();
         if (metadata.len == 0 or metadata.len > max_puff_metadata)
             return error.InvalidPuffinStream;
+        try self.checkAppend(metadata.len + 2);
+        try self.flushLiterals();
         var length: [2]u8 = undefined;
         std.mem.writeInt(u16, &length, @intCast(metadata.len - 1), .big);
         try self.output.appendSlice(self.allocator, &length);
@@ -148,6 +183,9 @@ const PuffBuilder = struct {
     }
 
     fn addLiteral(self: *PuffBuilder, value: u8) Error!void {
+        const next_length = std.math.add(usize, self.literals.items.len, 1) catch
+            return error.IntegerOverflow;
+        try self.checkOutput(try literalWireSize(next_length));
         try self.literals.append(self.allocator, value);
         if (self.literals.items.len == max_literal_run)
             try self.flushLiterals();
@@ -162,9 +200,10 @@ const PuffBuilder = struct {
         length: u16,
         distance: u16,
     ) Error!void {
-        try self.flushLiterals();
         if (length < 3 or length > 258 or distance == 0 or distance > 32768)
             return error.InvalidPuffinStream;
+        try self.checkAppend(if (length < 130) 3 else 4);
+        try self.flushLiterals();
         if (length < 130) {
             try self.output.append(self.allocator, 0x80 | @as(u8, @intCast(length - 3)));
         } else {
@@ -177,6 +216,7 @@ const PuffBuilder = struct {
     }
 
     fn addEnd(self: *PuffBuilder) Error!void {
+        try self.checkAppend(2);
         try self.flushLiterals();
         try self.output.appendSlice(self.allocator, &.{ 0xff, 0x81 });
     }
@@ -184,6 +224,7 @@ const PuffBuilder = struct {
     fn flushLiterals(self: *PuffBuilder) Error!void {
         if (self.literals.items.len == 0) return;
         const length = self.literals.items.len;
+        try self.checkOutput(try literalWireSize(length));
         if (length <= 127) {
             try self.output.append(self.allocator, @intCast(length - 1));
         } else {
@@ -231,7 +272,7 @@ pub fn puffDeflatePaddedAlloc(
     max_output_len: usize,
 ) Error!PuffResult {
     var reader = try BitReader.init(input, bit_offset, bit_length);
-    var builder = PuffBuilder{ .allocator = allocator };
+    var builder = PuffBuilder{ .allocator = allocator, .max_output_len = max_output_len };
     defer builder.deinit();
     var final_seen = false;
     while (!final_seen) {
@@ -243,7 +284,12 @@ pub fn puffDeflatePaddedAlloc(
             (@as(u8, @intCast(kind)) << 5));
         switch (kind) {
             0 => {
-                metadata.items[0] |= try reader.alignByte();
+                const skipped = try reader.alignByte();
+                // Puffin's stored header has only five padding bits. Larger
+                // values would overwrite TYPE and change the reconstructed
+                // Deflate block, even when the source Deflate is valid.
+                if (skipped > 0x1f) return error.InvalidPuffinStream;
+                metadata.items[0] |= skipped;
                 const length: u16 = @intCast(try reader.readBits(16));
                 const inverse: u16 = @intCast(try reader.readBits(16));
                 if (length ^ inverse != 0xffff) return error.InvalidPuffinStream;
@@ -308,7 +354,9 @@ pub fn huffDeflateAlloc(
 ) Error![]u8 {
     const total_bits = std.math.add(u64, start_bit_offset, expected_bit_length) catch
         return error.IntegerOverflow;
-    const byte_length_u64 = (total_bits + 7) / 8;
+    const rounded_bits = std.math.add(u64, total_bits, 7) catch
+        return error.IntegerOverflow;
+    const byte_length_u64 = rounded_bits / 8;
     const byte_length = std.math.cast(usize, byte_length_u64) orelse
         return error.OutputLimitExceeded;
     const output = try allocator.alloc(u8, byte_length);
@@ -434,9 +482,10 @@ const PuffReader = struct {
         if (length == 259) return .end;
         if (self.remaining() < 2 or length > 258)
             return error.InvalidPuffinStream;
-        const distance = std.mem.readInt(u16, self.bytes[self.offset..][0..2], .big) + 1;
+        const encoded_distance = std.mem.readInt(u16, self.bytes[self.offset..][0..2], .big);
+        if (encoded_distance >= 32768) return error.InvalidPuffinStream;
+        const distance = encoded_distance + 1;
         self.offset += 2;
-        if (distance > 32768) return error.InvalidPuffinStream;
         return .{ .length_distance = .{ .length = length, .distance = distance } };
     }
 };
@@ -454,6 +503,30 @@ fn fixedTables() Error!Tables {
     };
 }
 
+const DynamicCounts = struct {
+    literals: usize,
+    distances: usize,
+    codes: usize,
+    total: usize,
+
+    fn init(hlit_raw: u8, hdist_raw: u8, hclen_raw: u8) Error!DynamicCounts {
+        // Match the supported field range in both conversion directions.
+        // This is a metadata bound, not ordinary inflate-tree completeness.
+        if (hlit_raw > 29 or hdist_raw > 29 or hclen_raw > 15)
+            return error.InvalidPuffinStream;
+        const literals = @as(usize, hlit_raw) + 257;
+        const distances = @as(usize, hdist_raw) + 1;
+        const total = literals + distances;
+        if (total > max_dynamic_lengths) return error.InvalidPuffinStream;
+        return .{ .literals = literals, .distances = distances, .codes = @as(usize, hclen_raw) + 4, .total = total };
+    }
+};
+
+fn checkLengthSpan(index: usize, count: usize, total: usize) Error!void {
+    if (total > max_dynamic_lengths or index > total or count > total - index)
+        return error.InvalidPuffinStream;
+}
+
 fn parseDynamicTables(
     allocator: std.mem.Allocator,
     reader: *BitReader,
@@ -462,12 +535,12 @@ fn parseDynamicTables(
     const hlit_raw: u8 = @intCast(try reader.readBits(5));
     const hdist_raw: u8 = @intCast(try reader.readBits(5));
     const hclen_raw: u8 = @intCast(try reader.readBits(4));
+    const counts = try DynamicCounts.init(hlit_raw, hdist_raw, hclen_raw);
     try metadata.append(allocator, hlit_raw);
     try metadata.append(allocator, hdist_raw);
     try metadata.append(allocator, hclen_raw);
-    const lit_count: usize = @as(usize, hlit_raw) + 257;
-    const distance_count: usize = @as(usize, hdist_raw) + 1;
-    const code_count: usize = @as(usize, hclen_raw) + 4;
+    const lit_count = counts.literals;
+    const code_count = counts.codes;
     var code_lengths: [19]u8 = @splat(0);
     var packed_value: u8 = 0;
     for (0..code_count) |index| {
@@ -482,12 +555,13 @@ fn parseDynamicTables(
         }
     }
     const code_table = try Huffman.init(&code_lengths);
-    var all_lengths: [316]u8 = @splat(0);
+    var all_lengths: [max_dynamic_lengths]u8 = @splat(0);
     var index: usize = 0;
-    const total = lit_count + distance_count;
+    const total = counts.total;
     while (index < total) {
         const symbol = try code_table.decode(reader);
         if (symbol < 16) {
+            try checkLengthSpan(index, 1, total);
             all_lengths[index] = @intCast(symbol);
             try metadata.append(allocator, @intCast(symbol));
             index += 1;
@@ -506,8 +580,8 @@ fn parseDynamicTables(
             18 => 11 + extra,
             else => unreachable,
         };
-        if (index + count > total or (symbol == 16 and index == 0))
-            return error.InvalidPuffinStream;
+        try checkLengthSpan(index, count, total);
+        if (symbol == 16 and index == 0) return error.InvalidPuffinStream;
         const value: u8 = if (symbol == 16) all_lengths[index - 1] else 0;
         @memset(all_lengths[index..][0..count], value);
         try metadata.append(allocator, switch (symbol) {
@@ -520,7 +594,7 @@ fn parseDynamicTables(
     }
     return .{
         .literal_length = try Huffman.init(all_lengths[0..lit_count]),
-        .distance = try Huffman.init(all_lengths[lit_count..total]),
+        .distance = try Huffman.initDistance(all_lengths[lit_count..total]),
     };
 }
 
@@ -533,14 +607,12 @@ fn writeDynamicTables(metadata: []const u8, writer: *BitWriter) Error!Tables {
     index += 1;
     const hclen_raw = metadata[index];
     index += 1;
-    if (hlit_raw > 29 or hdist_raw > 29 or hclen_raw > 15)
-        return error.InvalidPuffinStream;
+    const counts = try DynamicCounts.init(hlit_raw, hdist_raw, hclen_raw);
     try writer.writeBits(5, hlit_raw);
     try writer.writeBits(5, hdist_raw);
     try writer.writeBits(4, hclen_raw);
-    const lit_count: usize = @as(usize, hlit_raw) + 257;
-    const distance_count: usize = @as(usize, hdist_raw) + 1;
-    const code_count: usize = @as(usize, hclen_raw) + 4;
+    const lit_count = counts.literals;
+    const code_count = counts.codes;
     const packed_count = (code_count + 1) / 2;
     if (packed_count > metadata.len - index) return error.TruncatedFrame;
     var code_lengths: [19]u8 = @splat(0);
@@ -553,9 +625,9 @@ fn writeDynamicTables(metadata: []const u8, writer: *BitWriter) Error!Tables {
     }
     index += packed_count;
     const code_table = try Huffman.init(&code_lengths);
-    var all_lengths: [316]u8 = @splat(0);
+    var all_lengths: [max_dynamic_lengths]u8 = @splat(0);
     var length_index: usize = 0;
-    const total = lit_count + distance_count;
+    const total = counts.total;
     while (length_index < total) {
         if (index >= metadata.len) return error.TruncatedFrame;
         const pcode = metadata[index];
@@ -564,6 +636,7 @@ fn writeDynamicTables(metadata: []const u8, writer: *BitWriter) Error!Tables {
         const symbol: usize = if (pcode < 16) pcode else if (pcode < 20) 16 else if (pcode < 28) 17 else 18;
         try code_table.encode(writer, symbol);
         if (symbol < 16) {
+            try checkLengthSpan(length_index, 1, total);
             all_lengths[length_index] = @intCast(symbol);
             length_index += 1;
             continue;
@@ -579,8 +652,8 @@ fn writeDynamicTables(metadata: []const u8, writer: *BitWriter) Error!Tables {
             18 => 11 + extra,
             else => unreachable,
         };
-        if (length_index + count > total or (symbol == 16 and length_index == 0))
-            return error.InvalidPuffinStream;
+        try checkLengthSpan(length_index, count, total);
+        if (symbol == 16 and length_index == 0) return error.InvalidPuffinStream;
         try writer.writeBits(switch (symbol) {
             16 => 2,
             17 => 3,
@@ -594,7 +667,7 @@ fn writeDynamicTables(metadata: []const u8, writer: *BitWriter) Error!Tables {
     if (index != metadata.len) return error.TrailingData;
     return .{
         .literal_length = try Huffman.init(all_lengths[0..lit_count]),
-        .distance = try Huffman.init(all_lengths[lit_count..total]),
+        .distance = try Huffman.initDistance(all_lengths[lit_count..total]),
     };
 }
 
@@ -668,4 +741,12 @@ test "Android OTA Puffin dynamic Huffman deflate round trips byte exactly" {
     );
     defer allocator.free(restored);
     try std.testing.expectEqualSlices(u8, encoded, restored);
+}
+
+test "Android OTA Puffin empty distance and dynamic bounds contracts" {
+    try @import("puffin_codec_tests.zig").contracts(@This());
+}
+
+test "Android OTA Puffin incremental output budget contracts" {
+    try @import("puffin_output_budget_tests.zig").contracts(@This());
 }

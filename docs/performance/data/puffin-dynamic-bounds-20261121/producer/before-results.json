@@ -1,0 +1,14 @@
+[
+  {
+    "case": "empty",
+    "exit_code": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "f77fa44b2786480d6690aa5b21730068d08040bddf718ee6e48f865f00030204"
+  },
+  {
+    "case": "counts",
+    "exit_code": -6,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "72b766043be00a07d54ff899b03a0e2bc8240593c3fd82352df95a8b4869dee8"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "recorded_utc": "2026-11-20T16:47:51.458480+00:00",
+  "goal_status": "active",
+  "source": "mainline-source-provenance.json",
+  "source_manifest_sha256": "e2a2f1d03a251f335f5743af5596f482c985647c1f60e7cf980e30a5ffdfaf00",
+  "validated": [
+    "Debug20/20 steps;246/246 native tests;39/39 actual WASI;complete library compilation",
+    "ReleaseFast11/11 steps;78/78 native/x86;39/39 actual WASI",
+    "CLIhelp7/7 steps;exit0",
+    "Zigfmt70 files;Python syntax1 modified tool;source freeze hashes verified"
+  ],
+  "full_execution_scope": "Pre-Puffin408/408 steps;5827 pass/2 skipped;root5734 pass/2 skipped",
+  "git_pull_rebase_result": "Already up to date;local/upstream0/0",
+  "commit_status": "Uncommitted per AGENTS.md because original unrelated src/lz77.zig experiment remains; task-related code/docs/evidence staged separately",
+  "preserved_lz77_diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a",
+  "record_optimization_integrated": false,
+  "physical_heap_scope": "Serialized output quota, with metadata scratch and allocator capacity separate;389B/3alloc is the frozen isolated producer measurement"
+}

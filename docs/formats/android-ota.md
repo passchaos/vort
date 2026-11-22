@@ -104,6 +104,27 @@ non-byte-aligned extents, exact dynamic-table recreation, and raw bytes between
 multiple deflates. Header, extent count, puff-stream size, nested patch control,
 operation output, and final partition output all have independent bounds.
 
+Dynamic Puffin metadata supports at most 286 literal/length symbols, 30
+distance symbols and 19 code-length symbols. Literal-only blocks may carry
+an unused empty distance tree; using that tree still reports
+`InvalidPuffinStream`. Conversion preserves assigned canonical codes without
+executing inflate history copies or imposing ordinary inflate completeness.
+
+Stored-block alignment padding must fit Puffin's five-bit SKIP field.
+Values 0 through 31 are preserved even when alignment needs six or seven
+bits; larger values report `InvalidPuffinStream` because they would overwrite
+the block type. Such a source can be valid Deflate while remaining
+unrepresentable in this Puffin metadata layout.
+
+`max_output_len` limits serialized Puffin output, including pending literals
+and their run header, before token emission or further literal buffering.
+Once the next known output exceeds that quota, conversion reports
+`OutputLimitExceeded` before parsing subsequent data. Format errors already
+reached retain their existing results. Metadata scratch and allocator capacity
+remain separate from this logical output bound. The
+[functional evidence](../performance/puffin-dynamic-bounds-20261121.md) records
+exact bits, quota/error boundaries and current native/x86/WASI validation.
+
 ```zig
 var payload = try vort.parseAndroidOtaAlloc(allocator, payload_bytes, .{
     .max_manifest_size = 64 * 1024 * 1024,

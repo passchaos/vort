@@ -1,0 +1,12 @@
+[
+  {
+    "case": "empty",
+    "exit_code": 0,
+    "stderr": "puff accepted exact_bits=991 puff_bytes=218\nhuff accepted bytes=124 bit_exact=true\n"
+  },
+  {
+    "case": "counts",
+    "exit_code": 0,
+    "stderr": "counts rejected InvalidPuffinStream\n"
+  }
+]

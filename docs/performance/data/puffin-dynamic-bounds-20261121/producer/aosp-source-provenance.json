@@ -1,0 +1,30 @@
+{
+  "commit": "56246e65146cbf7b736343c95a3e8ed970b9d106",
+  "scope": "pinned source audit only; no AOSP binary interoperability run",
+  "files": [
+    {
+      "path": "reference/aosp/src/huffman_table.cc",
+      "url": "https://android.googlesource.com/platform/external/puffin/+/56246e65146cbf7b736343c95a3e8ed970b9d106/src/huffman_table.cc?format=TEXT",
+      "sha256": "e45ea27411c1d49aa5eb5e445fa0b18705d3e7780bcd3820c46efe561b185009",
+      "bytes": 17254
+    },
+    {
+      "path": "reference/aosp/src/huffman_table.h",
+      "url": "https://android.googlesource.com/platform/external/puffin/+/56246e65146cbf7b736343c95a3e8ed970b9d106/src/huffman_table.h?format=TEXT",
+      "sha256": "275879d283c0745f1544f81ed41f15cfb00021dd99b121697e5281de8667d498",
+      "bytes": 12190
+    },
+    {
+      "path": "reference/aosp/src/puffer.cc",
+      "url": "https://android.googlesource.com/platform/external/puffin/+/56246e65146cbf7b736343c95a3e8ed970b9d106/src/puffer.cc?format=TEXT",
+      "sha256": "55588c4418262f441b970ae087b33963c547620952bd2cd846d606c41bbc85d1",
+      "bytes": 7971
+    },
+    {
+      "path": "reference/aosp/src/huffer.cc",
+      "url": "https://android.googlesource.com/platform/external/puffin/+/56246e65146cbf7b736343c95a3e8ed970b9d106/src/huffer.cc?format=TEXT",
+      "sha256": "f1b868362e12f0c4910ad1f954f6819bb6cd18eb47d73b0afe619772f073046d",
+      "bytes": 6278
+    }
+  ]
+}
