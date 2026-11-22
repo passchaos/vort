@@ -154,6 +154,13 @@ fast primary is dominated by rep-reuse planning plus match storage, not by
 emission. The same `planReuse` is 8.47% of the controlled-search path, so it
 is the single shared target across levels 1--3.
 
+A follow-up source screen of `planReuse` (src/zstd/match/double_fast.zig:41)
+found the anchor rep0 probe evaluated up to three times with identical inputs.
+Caching it explicitly measured level-2 `dickens.64k` at 2.549/2.521 ms versus
+2.477/2.530 ms for the unmodified binary with identical 31,694-byte output,
+i.e. neutral: LLVM already common-subexpression-eliminates the pure call.
+Reverted.
+
 ## Next
 
 1. Reduce the level-3 per-candidate cost in `controlled_search` (candidate
