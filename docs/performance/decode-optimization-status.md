@@ -2718,3 +2718,18 @@ position of a 100 KiB sliding input. Positions exactly 32768 back saturate to
 the sentinel and are not searched; no benchmark row used such a match. The full
 Debug suite passes 5,737/5,739 tests with two skipped. Evidence:
 [data/deflate-hash4-windowed-20261122](data/deflate-hash4-windowed-20261122/README.md).
+
+## Persistent incremental DEFLATE ratio repair (2026-11-22)
+
+The persistent rolling-hash encoder's sparse match-tail insertion skipped the
+positions holding the nearest same-anchor candidate. On periodic input the
+chain then returned equal-length matches at ~7,385-byte average distance instead
+of ~125, making `source` 1,899 bytes versus 1,142 for a fresh 32 KiB rebuild
+and failing the incremental encode gate (also on the parent commit). The
+matcher now tests the previous match distance before the chain and returns
+immediately when that hint reaches the maximum length; sparse insertion stays.
+Gate results: persistent 1,122 / 1,135 / 271 / 262,184 / 34,565 bytes for
+json-log / source / repetitive / binary / cross-window, no larger than rebuild
+on every case, `nonbinary_geomean_over_rebuild=7.796`, and every competitor
+throughput check passes. Evidence:
+[data/deflate-incremental-persistent-ratio-20261122](data/deflate-incremental-persistent-ratio-20261122/README.md).
