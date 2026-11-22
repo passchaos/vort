@@ -101,12 +101,27 @@ changing the level-9 lookahead budget: the level-3 row is the larger practical
 gap (7--15x at the most common default level) and its candidates are supposed
 to be cheap.
 
+## Level-3 profile (2026-11-23)
+
+`perf record -F 8000` over `dickens.64k` level 3, twenty iterations (829
+samples): after excluding the 26.92% harness SHA-256, the encode is dominated
+by the controlled-search match finder — `zstd.match.controlled_search.findBest`
+18.17%, `matchAt` 13.08% and `planReuse` 8.47% (about 54% of encoder samples
+together). `emitLargeSequenceCompressedBlockWithStatePolicy` is 3.03%,
+memset 3.16%, `emitLongHuffmanStream` 2.07%, and the reference's
+`ZSTD_compressBlock_doubleFast` is 6.09%. The adaptive split ladder does not
+appear as a separate hotspot; the cost is per-position candidate search with
+the level-3 budget of 24 against the reference's two-hash double-fast matcher.
+That matches the 7.7x gap without implicating emission or section sizing.
+
 ## Next
 
-1. Profile level 3 on `dickens.64k`/`nci.64k` and attribute time between the
-   primary greedy encode, the adaptive split candidates, and section sizing.
-   Then cut the ladder candidate count or its block-size set, with frame
-   SHA/size checks.
+1. Cut the level-3 controlled-search budget (24 toward 8--12) or reduce the
+   per-candidate cost, and measure the size/speed knee against libzstd
+   double-fast. The existing knee sweep only compared Vort budgets (32/24/16);
+   it never compared against the reference's per-position work, so the current
+   default may sit far off the frontier. Keep frame SHA/size checks and the
+   full paired matrix.
 2. Compare at matched strategies or equal ratio before claiming a speed gap:
    run the reference with `--strategy`/HQ controls and Vort with the same
    search effort, then rank on the ratio/speed frontier rather than nominal
