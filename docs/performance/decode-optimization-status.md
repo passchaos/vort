@@ -2688,3 +2688,16 @@ library suite compiles. ReleaseFast passes 11/11 steps, 78/78 native/x86 and
 39/39 actual WASI. Full 408-step execution binds the pre-Puffin snapshot;
 current source-specific logs and mode/artifact receipts keep that scope
 explicit. The broader industry-leading objective remains active.
+
+## Deflate level-7 hash4-chain routing (2026-11-22)
+
+Level 7 (`zlib`, `gzip` and raw) now enables the level-6 lazy parser's
+chainless 3-byte slot plus 4-byte hash chain under the same middle-window
+classifier; Brotli, levels 1--6 and levels 8--9 are unchanged. Twelve 128 KiB
+level-7 prefixes (`--iterations 100 --rounds 5`): **1.1336x** geometric-mean
+encode speed with total size 568,495 -> 568,400 (-0.017%). The five routed
+rows gain 1.24--1.47x at -0.27...+0.09% size; the other seven stay
+byte-identical, and a level-6 control on the same binaries spans
+0.9665--1.0321x with a 0.9919x geometric mean. Levels 4 and 5 were rejected:
+0.9845x and 1.0146x with `osdb` 0.8879x/0.9211x below the control floor.
+Evidence: [data/deflate-hash4-level7-20261122](data/deflate-hash4-level7-20261122/README.md).
