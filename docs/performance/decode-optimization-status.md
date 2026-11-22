@@ -2821,3 +2821,22 @@ share. The gate now requires equivalence only for `literal-dense`, keeps the
 cases. Three ReleaseFast runs pass: recovery-dense 1.00--1.01, recovery128
 1.11--1.23 and recovery256 1.14--1.20, with sparse 2.75--3.60x and dense 2.8x
 equivalence intact.
+
+## CI smoke audit (2026-11-23)
+
+A full `ci-smoke` run (868 steps) found 16 failing steps. In-scope repairs:
+the Deflate wrapper corpus now matches one-shot tree admission (69 cases,
+15 accepted / 54 rejected); the progressive Huffman and copy benches are
+pinned to ReleaseFast (they ran in Debug and missed throughput floors); the
+stored-corpus three-byte compressed header returns `TruncatedFrame`; the q1
+text wire golden is refreshed 95 -> 97 (the pre-session source also emits 97);
+the prepared-command WASM baseline is refreshed because the current q8 wire is
+13,945 bytes versus the frozen 14,362 (-2.9%) and passes the gate's node decode
+and counters; and the Zstd native encode stage bench schema smoke now requires
+the stable summary/provenance columns as a subset of the emitted diagnostics.
+
+Remaining failures are outside the Deflate/Zstd/Brotli target: header-inspect
+CLI help expectations (15 new `inspect-*-file` commands), zip diff, native
+allocation/probes/tier-range (no standard corpora discovered), the compat
+benchmark (no standard corpora discovered) and the validation JSON docs
+negative smoke. They need separate ownership.
