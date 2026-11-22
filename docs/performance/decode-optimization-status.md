@@ -2797,3 +2797,16 @@ the caller's optimize mode (Debug by default) with 4,096 iterations, which made
 the encoder-versus-reference ordering flaky; the bench is now pinned to
 ReleaseFast with 16,384 iterations. All four gate cases pass, and the complete
 Debug suite passes 5,745/5,747 tests with two skipped.
+
+## Huffman length bench gate audit (2026-11-22)
+
+`run-huffman-length-bench-gate` previously ran in the caller's optimize mode
+(Debug by default) and was red there (`literal-dense` linear-recovery ratio
+1.079 against a 1.10 threshold). The bench is now pinned to ReleaseFast with
+the ReleaseFast codec module, which makes the measurement meaningful but keeps
+the gate red for a real reason: `literal-dense` production/root-traversal is
+**1.0445** while `zstd-known-128/256` are 1.1236/1.2007, and the three-case
+geometric mean is **1.121** against a 1.20 threshold. The sparse cases
+(3.86x/4.55x) and all known-active checks pass. This records a dense
+literal code-length recovery shortfall, not a functional failure; the gate
+stays red until that path improves.
