@@ -2733,3 +2733,15 @@ json-log / source / repetitive / binary / cross-window, no larger than rebuild
 on every case, `nonbinary_geomean_over_rebuild=7.796`, and every competitor
 throughput check passes. Evidence:
 [data/deflate-incremental-persistent-ratio-20261122](data/deflate-incremental-persistent-ratio-20261122/README.md).
+
+## Zstd decode current profile boundary (2026-11-22)
+
+Re-profiled the 128 KiB `dickens` level-9 wire on current source (Vort
+889.33 MiB/s versus libzstd 1.4.8 at 1,169.96, **0.7601x**).
+`tryDecodeAllFseSplitDenseHuffmanSequencesNative` is **64.1%** of the
+interleaved run. Inside it the 16-byte match-source load is the hottest
+instruction (5.4% of the whole run, about 8.5% of Vort time) followed by its
+store (2.3%); the remaining cost is spread across grouped field decoding. The
+earlier prefetch (+0.7% geomean) and match-first reorder screens stay closed,
+so the next lever is a fused state machine or a different table/token layout,
+not another local copy edit.
