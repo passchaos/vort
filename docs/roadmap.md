@@ -54,6 +54,49 @@ routes. `test-codec-member-boundaries`, its `-x86` variant, and its `-wasm`
 variant exercise these zero-output boundaries alongside exact-length,
 checksum, truncation, and trailing-input controls.
 
+The [incremental encoder borrow contracts](formats/incremental-encode-borrows.md)
+close header-before-input and pending-drain corruption across Deflate, Brotli
+and serial/parallel Zstd. Active calls reject conflicting caller buffers,
+objects, retained capacities, dictionaries and metadata before state changes,
+and permit disjoint retries. Native, x86 and actual WASI regressions plus
+reference interoperability are recorded in the
+[functional increment](performance/incremental-encode-borrows-20261120.md).
+The Zstd large-sequence fixture now exercises 1,330 sequences while retaining
+its 1,248-sequence gate; the previous fixture's 1,116 count was reproduced with
+identical wires on the pre-change source. Continue auditing mutable lifecycle
+entry points and measuring whole streaming operations before further tuning.
+
+The [encoder lifecycle contracts](formats/encoder-lifecycle.md) preserve
+accepted Brotli metadata when finish is requested before its drain, and protect
+prospective Zstd prefix/dictionary reads from next-frame observer publication.
+Ended prefix and observer storage can change roles without corrupting the new
+borrow. Native/x86/WASI contracts, reference interoperability and the distinct
+before/after library validation scopes are recorded in the
+[lifecycle evidence](performance/incremental-encoder-lifecycle-20261120.md).
+
+Deflate wrapper transitions now reject invalid gzip header fields and exact
+input pledges above the applicable raw input cap before resetting the completed
+stream. Atomic refusal and corrected-member retry are covered for Fixed/Best
+encoders, all four gzip transition variants and zlib exact-size transitions.
+The [wrapper transition evidence](performance/deflate-wrapper-transition-options-20261120.md)
+records the current-source portability and library verification scope.
+
+The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
+malformed trees before ordinary, compact incremental and Deflate64 decoding.
+It preserves legal one-bit singleton/empty-distance controls and the generic
+Huffman builder. Current native/x86/WASI contracts and full deep differential
+evidence remove eight raw and two gzip invalid-tree acceptances at unchanged
+valid wires and traversal digests; [source-specific evidence](performance/deflate-dynamic-admission-20261120.md)
+records the repaired synthetic fixtures and complete 408-step terminal gate.
+
+The [Puffin structural follow-up](performance/puffin-dynamic-bounds-20261121.md)
+preserves unused empty distance tables, checks dynamic metadata counts and
+token arithmetic, and refuses stored padding values that cannot fit its
+five-bit SKIP field. Serialized output quotas now include pending literal
+headers before buffering or emission. Exact bits, maximum distance 32768,
+error precedence, allocation cleanup and current Debug/ReleaseFast
+native/x86/WASI behavior are covered separately from ordinary inflate rules.
+
 The [codec state and dictionary controls](formats/codec-state-controls.md)
 add independent Deflate stream copies with caller-owned decoder storage,
 Brotli's explicit literal context policy and Zstd's optional frame dictionary

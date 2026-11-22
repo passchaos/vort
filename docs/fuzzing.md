@@ -81,6 +81,20 @@ that raw Deflate already had. Verified gates:
 
 ## 2026-11-12: structure-aware codec differential fuzzing
 
+The [2026-11-20 current-source campaign](performance/codec-functional-differential-current-20261120.md)
+records the latest deep-run results after encoder lifecycle admission. Its
+14,684 valid-stream checks and 498,324 mutations retain explicit external
+reference versus Vort-only scope; the historical reporting counters now have
+classified observations and representative adjudication.
+
+The [classified reporting tool](performance/codec-differential-reporting-20261120.md)
+now separates actual external references, Vort-only contracts and mutation
+acceptance directions, with bounded complete-output captures and replay.
+Representative triage exposed malformed Deflate distance-tree acceptance;
+the [dynamic admission fix](performance/deflate-dynamic-admission-20261120.md)
+removes eight raw and two gzip observations at unchanged generated-wire and
+mutation-sequence digests in the current seed.
+
 `tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
 complements the raw-byte target with generated valid wires. A deterministic
 SplitMix64 generator feeds eight content patterns (RLE, periodic, random,
@@ -463,3 +477,19 @@ holds for the other wired formats: no zero-test non-wrapper entry point was
 found that would justify a new driver. New drivers should only be added where a
 format has an uncovered incremental scheduling state machine, not merely because
 it is absent from this driver's file list.
+
+## Incremental encoder memory borrows (2026-11-20)
+
+The scheduling fuzz above uses independent input and output storage. Its API
+and error inventory does not establish safety for overlapping memory. A later
+source audit found that Deflate, Brotli and Zstd incremental encoders could
+publish a header or pending bytes before reading new input in the same call.
+Overlapping buffers could therefore replace unread plaintext.
+
+Dedicated public regressions now exercise those memory layouts, including
+receiver and retained-capacity overlap, dictionaries and metadata, pending
+drains, refusal without state or output changes, and successful disjoint retry.
+They run through `check-incremental-encode-borrows` on native, Linux x86 and
+actual WASI; the parallel Zstd path uses synchronous fallback on WASI.
+See the [buffer contract](formats/incremental-encode-borrows.md) and
+[before/after evidence](performance/incremental-encode-borrows-20261120.md).

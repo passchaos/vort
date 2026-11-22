@@ -2597,3 +2597,94 @@ lz77 u32/isize differential on the historical parser, and the full
 `test check check-wasm` matrix is green (389/389 steps, 5775/5777 tests).
 Evidence:
 [data/deflate-hash4-classifier-20261120](data/deflate-hash4-classifier-20261120/README.md).
+
+## Incremental encoder borrow admission (2026-11-20)
+
+A functional audit found that gzip, Brotli and Zstd could publish headers or
+pending output before reading overlapping caller input. The seven Deflate,
+three Brotli and two serial/parallel Zstd incremental encoder facades now
+validate I/O, receiver, retained capacity and immutable dictionary/metadata
+borrows before mutable work. `InvalidBlockPlan` refusals preserve caller bytes
+and state, and disjoint retry succeeds without adding snapshots or allocations.
+The checks live in separate codec-owned modules; focused public matrices cover
+pending drains, live/reset capacity tails, profiles and normal dictionary/HQ
+continuation.
+
+Native, x86 and actual WASI pass the same three contract groups. Reference
+interoperability passes libzstd 1.6.0's complete 171-case incremental campaign
+and libbrotli 1.0.9's 98 main cases plus 7,056 generated fixtures and progressive
+replays. The original Zstd sequence fixture failed its historical 1,248 gate
+with 1,116 sequences on both pre-change and current source, with identical
+wires. A denser incremental-only fixture now yields 1,330 and keeps the
+original gate unchanged. Full-library verification status and raw evidence are
+recorded in the [functional increment](incremental-encode-borrows-20261120.md).
+This slice establishes memory contracts and compatibility; whole-stream
+performance and the broader industry-leading objective remain ongoing work.
+
+## Deflate wrapper transition option admission (2026-11-20)
+
+Gzip Fixed/Best member transitions now reject invalid header fields before
+reset, and zlib/gzip exact-size transitions reject pledges above the applicable
+raw input cap. Independent before cases observed success for a NUL filename
+and for zlib cap zero with pledge one. Rejected transitions preserve receiver,
+complete retained storage, caller bytes and allocator counters; corrected
+transitions preserve clone wire, concatenated decode and member accounting.
+
+The current combined lifecycle gate passes 33/33 build steps, 192/192 native/x86
+runner tests and actual WASI execution of all three families. Full library
+test compilation passes 14/14 steps; parameter interoperability passes against
+runtime zlib 1.2.11. The complete frozen `test check check-wasm` passed 406/406
+steps and 5,825 tests with two skipped (5,732 root-library passes). This source
+precedes the later differential-reporting and dynamic Huffman admission work.
+Source-specific results and the terminal receipt are recorded in the
+[wrapper transition evidence](deflate-wrapper-transition-options-20261120.md).
+
+## Deflate dynamic Huffman validity (2026-11-20)
+
+Classified full-seed differential evidence exposed a width-seven distance
+singleton and an incomplete `{1, 3}` distance tree accepted by Vort. Three
+independent references reject the malformed streams. Shared Deflate-owned
+admission now validates CODES/LENS/DISTS at the ordinary, compact incremental
+and Deflate64 parser boundaries; the generic Huffman builder remains unchanged.
+Legal one-bit singleton and unused empty-distance controls, existing errors,
+committed-prefix semantics and kernel-hole oracles remain covered.
+
+Current mainline passes 17/17 build steps, 24/24 native/x86 runner tests, actual
+WASI execution and complete-library compilation. The complete ReleaseFast
+deep campaign keeps 14,684 valid streams, 408,571 cuts, 498,324 mutations and
+the same ordered wire/mutation digests. Exactly eight raw and two gzip invalid
+acceptances become rejections, with all other legacy counters unchanged. The
+prior 406/406 full build and 5,825 passed/two skipped tests bind the pre-admission
+snapshot. The later admission/reporting full snapshot passes 408/408 steps,
+5,827 tests with two skipped and 5,734 root-library passes; its terminal
+source hashes all match. It precedes the subsequent Puffin changes.
+
+[Functional evidence](deflate-dynamic-admission-20261120.md) records current
+source identity and repaired synthetic fixtures. The
+[q11 inherited-record prototype](brotli-q11-record-covered-20261120.md) separately
+removes duplicated record planning/materialization with unchanged wires and
+peaks. Its paired whole-operation screen stopped without a complete acceptance
+epoch; the patch remains unadopted and no throughput gate was evaluated.
+
+## Puffin structural conversion and early output quota (2026-11-21)
+
+The [Puffin follow-up](puffin-dynamic-bounds-20261121.md) supports unused empty
+distance alphabets, shares checked metadata counts and bounds bit rounding
+and encoded distances. It retains canonical incomplete trees and structural
+match tokens. Stored padding above31 now refuses conversion because the
+SKIP5 field cannot represent it without changing block type; six/seven-bit
+alignment values 0..31 remain bit-exact. Full zlib-valid controls establish
+this representation boundary separately from ordinary inflate validation.
+
+Output quotas now account for pending literals and run headers before
+emission. For 65,535-byte stored/fixed literals at cap 16, a 1 KiB fixed heap now
+returns `OutputLimitExceeded` rather than `OutOfMemory`; cumulative growing
+heap requests fall from 320,654 B/17 allocations to 389 B/3, all freed. These are
+resource-contract observations rather than throughput acceptance samples.
+
+Integrated Debug validation passes 20/20 steps and 246/246 native tests,
+including 168 Android OTA regressions; actual WASI passes 39/39 and the whole
+library suite compiles. ReleaseFast passes 11/11 steps, 78/78 native/x86 and
+39/39 actual WASI. Full 408-step execution binds the pre-Puffin snapshot;
+current source-specific logs and mode/artifact receipts keep that scope
+explicit. The broader industry-leading objective remains active.
