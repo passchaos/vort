@@ -1,0 +1,67 @@
+1/27 zstd.test.Zstd incremental next-frame borrow serial...serial transition profile changed=true
+expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x163b69b in expectError__anon_387912 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-zstd-next-frame-borrows-isolated-20261120/src/zstd/incremental/encoder/transition_borrow_tests.zig:22:5: 0x163be8c in serial__anon_387815 (zstd.zig)
+    try std.testing.expectError(error.InvalidBlockPlan, result);
+    ^
+/tmp/vort-zstd-next-frame-borrows-isolated-20261120/src/zstd.zig:4:5: 0x163c817 in test.Zstd incremental next-frame borrow serial (zstd.zig)
+    try @import("zstd/incremental/encoder/transition_borrow_tests.zig").serial(@This());
+    ^
+2/27 zstd.test.Zstd incremental next-frame borrow parallel...parallel transition old profile changed=true limit=68157440
+slices differ. first difference occurs at index 18 (0x12)
+
+============ expected this output: =============  len: 40 (0x28)
+
+AB 58 00 00 00 00 00 00  AB 58 00 00 00 00 00 00  .X.......X......
+00 00 00 04 00 00 00 00  01 00 00 00 00 00 00 00  ................
+01 00 00 00 00 00 00 00                           ........
+
+============= instead found this: ==============  len: 40 (0x28)
+
+AB 58 00 00 00 00 00 00  AB 58 00 00 00 00 00 00  .X.......X......
+00 00 10 04 00 00 00 00  01 AA AA AA AA AA AA AA  ................
+01 00 00 00 00 00 00 00                           ........
+
+================================================
+
+FAIL (TestExpectedEqual)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:379:5: 0x129b34d in expectEqualSlices__anon_43553 (std.zig)
+    return error.TestExpectedEqual;
+    ^
+/tmp/vort-zstd-next-frame-borrows-isolated-20261120/src/zstd/incremental/encoder/transition_borrow_tests.zig:45:5: 0x129c9ac in parallel__anon_43356 (zstd.zig)
+    try std.testing.expectEqualSlices(u8, before, std.mem.asBytes(&profile));
+    ^
+/tmp/vort-zstd-next-frame-borrows-isolated-20261120/src/zstd.zig:8:5: 0x129cff7 in test.Zstd incremental next-frame borrow parallel (zstd.zig)
+    try @import("zstd/incremental/encoder/transition_borrow_tests.zig").parallel(@This());
+    ^
+3/27 zstd.test_0...OK
+4/27 zstd.decode.budget.test_0...OK
+5/27 io.requested_heap_budget.test_0...OK
+6/27 tests.zstd_stream_counter_contracts.test_0...OK
+7/27 tests.zstd_large_history_contracts.test_0...OK
+8/27 zstd.incremental.encoder.frame.test_0...OK
+9/27 tests.zstd_hq_search_contracts.test_0...OK
+10/27 zstd.match.hq_tree.test_0...OK
+11/27 zstd.match.hq_parser.test_0...OK
+12/27 zstd.match.lazy2.test_0...OK
+13/27 zstd.match.hq_parser.tests.test_0...OK
+14/27 zstd.match.hq_parser.frontier_parser.test_0...OK
+15/27 zstd.encode.total_budget.test_0...OK
+16/27 zstd.encode.controls.test_0...OK
+17/27 checksum.xxh64_stream.test_0...OK
+18/27 zstd.match.controlled_source.test_0...OK
+19/27 lz77.test_0...OK
+20/27 lz77.test_1...OK
+21/27 zstd.encode.repeated_pattern.test_0...OK
+22/27 zstd.literals.cut_histogram.test_0...OK
+23/27 zstd.match.controlled_fast.test_0...OK
+24/27 zstd.match.adaptive_tree.test_0...OK
+25/27 zstd.match.hq_parser.row_tags.test_0...OK
+26/27 zstd.match.hq_parser.search_edges.test_0...OK
+27/27 zstd.match.hq_parser.prepared_price.test_0...OK
+25 passed; 0 skipped; 2 failed.
+error: the following test command failed with exit code 1:
+/tmp/vort-zstd-next-frame-borrows-isolated-20261120/.zig-cache/o/95076b235e3af269f6e72b1672dde720/root --seed=0xfef0b3f1

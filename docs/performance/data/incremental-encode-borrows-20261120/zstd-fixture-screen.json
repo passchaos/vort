@@ -1,0 +1,92 @@
+[
+  {
+    "name": "seed-37102626-mult-977",
+    "sequence_counts": [
+      0,
+      1,
+      1330
+    ],
+    "wire": {
+      "path": "/tmp/vort-zstd-large-sequence-fixture-screen-20261120/seed-37102626-mult-977.zst",
+      "bytes": 13580,
+      "sha256": "52b883b187e23f501f2886fc962a9bfaad385e6b0e9e81ecddb5b0f850f133c8"
+    },
+    "probe_error": null,
+    "self_decode_verified": true
+  },
+  {
+    "name": "seed-37102626-mult-179",
+    "sequence_counts": [
+      0,
+      1,
+      1330
+    ],
+    "wire": {
+      "path": "/tmp/vort-zstd-large-sequence-fixture-screen-20261120/seed-37102626-mult-179.zst",
+      "bytes": 13571,
+      "sha256": "98c6179cd9b820f9568a8f9a4977831970d2c478b90df918aef909d3380f0462"
+    },
+    "probe_error": null,
+    "self_decode_verified": true
+  },
+  {
+    "name": "seed-37102626-mult-1543",
+    "sequence_counts": [
+      0,
+      1,
+      1337
+    ],
+    "wire": {
+      "path": "/tmp/vort-zstd-large-sequence-fixture-screen-20261120/seed-37102626-mult-1543.zst",
+      "bytes": 13559,
+      "sha256": "2a52d1ca5a23dc41d870baf915c2516b7ad2f80408597efcfe0f36aef9147f0e"
+    },
+    "probe_error": null,
+    "self_decode_verified": true
+  },
+  {
+    "name": "seed-37102627-mult-977",
+    "sequence_counts": [
+      0,
+      1,
+      1308
+    ],
+    "wire": {
+      "path": "/tmp/vort-zstd-large-sequence-fixture-screen-20261120/seed-37102627-mult-977.zst",
+      "bytes": 13640,
+      "sha256": "f991d2f2adccb11828c282cba4bbac22de74ad4e6877e678bbe611447956c50d"
+    },
+    "probe_error": null,
+    "self_decode_verified": true
+  },
+  {
+    "name": "seed-37102627-mult-179",
+    "sequence_counts": [
+      0,
+      1,
+      1303
+    ],
+    "wire": {
+      "path": "/tmp/vort-zstd-large-sequence-fixture-screen-20261120/seed-37102627-mult-179.zst",
+      "bytes": 13648,
+      "sha256": "8070e8a4cf53df912225e30602b289592450061096ed7851a71089cb9f01384f"
+    },
+    "probe_error": null,
+    "self_decode_verified": true
+  },
+  {
+    "name": "seed-37102627-mult-1543",
+    "sequence_counts": [
+      0,
+      1,
+      1318
+    ],
+    "wire": {
+      "path": "/tmp/vort-zstd-large-sequence-fixture-screen-20261120/seed-37102627-mult-1543.zst",
+      "bytes": 13607,
+      "sha256": "0a8db30552a10a867066bd62c3c6b4bbbd787a9e9ff19aa477d020889ca8b672"
+    },
+    "probe_error": null,
+    "self_decode_verified": true
+  }
+]

@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded; 26/26 tests passed
+test-zstd success
++- run test vort-zstd-tests 26 pass (26 total) 31ms MaxRSS:10M
+   +- compile test vort-zstd-tests Debug native success 3s MaxRSS:309M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:40M
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+

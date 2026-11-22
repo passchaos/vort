@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const rolling_hash = @import("match_finder/rolling_hash.zig");
+const step_borrows = @import("step_borrows.zig");
 
 /// Incremental block-planned raw-DEFLATE encoder. Blocks share up to 32 KiB of
 /// history and hash-parser levels additionally share a persistent match index;
@@ -139,6 +140,12 @@ pub fn Encoder(comptime Codec: type) type {
                 options.compression.memory_profile != null) return error.InvalidBlockPlan;
             _ = try baseBlockTarget(options);
             _ = try maxBufferedInput(options);
+        }
+
+        /// A new independently pledged stream must fit its logical input cap.
+        pub fn validateExactSizeOptions(options: Options, expected_input_len: core.StreamCount) Error!void {
+            try validateOptions(options);
+            if (expected_input_len > options.max_input_len) return error.OutputLimitExceeded;
         }
 
         /// Maximum caller input retained for one planned block, excluding the
@@ -379,6 +386,7 @@ pub fn Encoder(comptime Codec: type) type {
             const base_block_target = try self.blockTarget();
             try self.validateOutput(input.len, output.len);
             const output_limit = core.stream_count.bounded(std.math.maxInt(core.StreamCount) - self.total_output, output.len);
+            try step_borrows.validate(self, input, output[0..output_limit]);
             self.syncExternallyModifiedCompression();
             self.trimHistoryToWindowLimit();
 

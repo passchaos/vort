@@ -1,0 +1,47 @@
+{
+  "goal_status": "active",
+  "recorded_utc": "2026-11-20T12:36:03.149872+00:00",
+  "repo_applied": true,
+  "base_revision": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "files": [
+    {
+      "path": "src/zstd.zig",
+      "bytes": 2479170,
+      "sha256": "b15e9e8fddaac090983eecdb98ce17f4f5de964c3e1e0edecbba0f4a02329621"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/frame.zig",
+      "bytes": 33530,
+      "sha256": "17f971c0dc250eab1718cae09ce6699bc099615fffde8df8a71e4fda470ccf35"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/skippable_borrow_tests.zig",
+      "bytes": 15001,
+      "sha256": "1f76b218b9a163ddb57b3b564c269941775ff53bdae79434c01c9abef9b0b713"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/encoder.zig",
+      "bytes": 11890,
+      "sha256": "c3c337bf0a8b856faac8e9a967128513ff82d7719ac91ff8414a47fdee93f2f4"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/owner.zig",
+      "bytes": 34542,
+      "sha256": "d84322a2c6df4918b09cdea96b90a553b4e666d4cf31e56f2a79dab05067f18d"
+    },
+    {
+      "path": "build/encoder_lifecycle.zig",
+      "bytes": 2663,
+      "sha256": "51f7d25f9a925224404e13733f095ea8bed1c044e77a1b02878bc3c1b83d8d1b"
+    }
+  ],
+  "validated": {
+    "skippable": "30/30",
+    "prefix_neighbor": "27/27",
+    "step_neighbor": "26/26",
+    "cross_architecture": "33/33 steps;190/190 native/x86;actual WASI3 families pass",
+    "full_current_test_compilation": "14/14 steps",
+    "current_zstd_reference": "171/171"
+  },
+  "git_state": "Controlled source/docs staged;original src/lz77.zig unstaged and unchanged;uncommitted per AGENTS.md."
+}

@@ -10,6 +10,8 @@ const total_budget = @import("../../encode/total_budget.zig");
 const controls = @import("../../encode/controls.zig");
 const prefix = @import("../../prefix/binding.zig");
 const prefix_errors = @import("prefix_errors.zig");
+const step_borrows = @import("step_borrows.zig");
+const skippable_wire = @import("../../frame/skippable.zig");
 
 /// Build an incremental Zstd frame encoder. One bounded block is retained;
 /// completed raw, RLE, or entropy-coded blocks drain through arbitrary caller
@@ -136,26 +138,31 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         }
         pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
             if (!self.setterEligible()) return error.InvalidStreamState;
+            const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateSetterBorrows(selected);
             self.clearBinding();
-            self.dictionary = if (prefix.hasBytes(dictionary)) dictionary else null;
+            self.dictionary = selected;
             self.dictionary_id = if (self.dictionary) |dict| dict.id else null;
             self.options = withPrefix(self.options, self.dictionary_id orelse 0);
             self.prefix_state.install(dictionary);
         }
         pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
             if (!self.setterEligible()) return error.InvalidStreamState;
+            const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateSetterBorrows(selected);
             if (prefix.hasBytes(dictionary)) {
                 if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
                 if (@hasDecl(Codec, "validatePrefixMetadata")) try Codec.validatePrefixMetadata(dictionary);
             }
             self.clearBinding();
-            self.dictionary = if (prefix.hasBytes(dictionary)) dictionary else null;
+            self.dictionary = selected;
             self.dictionary_id = if (self.dictionary) |dict| dict.id else null;
             if (@hasField(Codec.Options, "dictionary_id")) self.options.dictionary_id = self.dictionary_id orelse 0;
             if (@hasField(Codec.Options, "dictionary_usage")) self.options.dictionary_usage = .persistent;
         }
         pub fn clearDictionary(self: *Self) Error!void {
             if (!self.setterEligible()) return error.InvalidStreamState;
+            try self.validateSetterBorrows(null);
             self.clearBinding();
         }
         fn clearCodingState(self: *Self) void {
@@ -276,6 +283,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             const id = if (retained) self.dictionary_id else null;
             const dictionary = if (retained) self.dictionary else null;
             const configured = if (retained) withPrefix(options, id orelse 0) else options;
+            try self.validateNextFrameBorrows(configured, dictionary);
             try Codec.validate(configured, expected, id);
             try self.bindAllocator(configured);
             self.resetFrame(configured, expected, id, dictionary);
@@ -293,6 +301,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
                 const id: ?u32 = if (selected) |dict| dict.id else null;
                 const configured = withPrefix(options, id orelse 0);
+                try self.validateNextFrameBorrows(configured, selected);
                 try Codec.validate(configured, expected_input_len, id);
                 try self.bindAllocator(configured);
                 self.resetFrame(configured, expected_input_len, id, selected);
@@ -300,6 +309,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 return;
             }
             if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
+            try self.validateNextFrameBorrows(options, dictionary);
             try Codec.validate(options, expected_input_len, dictionary.id);
             try self.bindAllocator(options);
             self.resetFrame(options, expected_input_len, dictionary.id, dictionary);
@@ -338,6 +348,8 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             }
             if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
             if ((!self.done and !prefixUsage(self.options)) or !self.setterEligible()) return error.InvalidBlockPlan;
+            _ = std.math.add(usize, skippable_wire.encoded_len, payload.len) catch return error.IntegerOverflow;
+            try self.validateSkippableBorrows(payload);
             _ = self.prefix_state.activate(.skippable);
             self.prefix_state.busy = true;
             errdefer self.completePrefix();
@@ -363,6 +375,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             return self.stepCommon(input, output, directive);
         }
         fn stepCommon(self: *Self, input: []const u8, output: []u8, directive: ?prefix.Directive) Error!core.StepResult {
+            if (!self.done or input.len != 0) try self.validateStepBorrows(input, output);
             if (self.prefix_failure) |err| return err;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
@@ -381,6 +394,52 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             _ = count.addLocal(self.stream_input, input.len) catch |err| return self.failedPrefix(err);
             self.bindAllocator(self.options) catch |err| return self.failedPrefix(err);
             return self.stepImpl(input, output, directive) catch |err| return self.failedPrefix(@errorCast(self.allocation.mapError(err)));
+        }
+        fn validateStepBorrows(self: *const Self, input: []const u8, output: []u8) Error!void {
+            var admission = try step_borrows.Admission.init(input, output, self.options);
+            if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            if (self.dictionary) |dictionary| try admission.dictionary(dictionary);
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateNextFrameBorrows(self: *const Self, options: Codec.Options, dictionary: ?Codec.Dictionary) Error!void {
+            var admission = try step_borrows.Admission.init("", &.{}, options);
+            // An exclusive lease replaces its profile before configure reports.
+            // A shared lease retains its external owner's profile binding.
+            if (self.allocation.shared) if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            if (dictionary) |selected| try admission.dictionary(selected);
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateSetterBorrows(self: *const Self, dictionary: ?Codec.Dictionary) Error!void {
+            var admission = try step_borrows.Admission.init("", &.{}, self.options);
+            // Setters keep the current allocator/profile binding, including an
+            // exclusive lease whose next step may select another profile.
+            if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            if (dictionary) |selected| try admission.dictionary(selected);
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateSkippableBorrows(self: *const Self, payload: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init(payload, &.{}, self.options);
+            if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            // The payload is copied by this call. Skippable emission does not
+            // read dictionary contents or prepared entropy state.
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateOwnedBorrows(self: *const Self, admission: *const step_borrows.Admission) Error!void {
+            try admission.owned(std.mem.asBytes(self));
+            try admission.list(self.block);
+            try admission.list(self.pending);
+            try admission.list(self.history.bytes);
+            try admission.list(self.history.index.recent_entries);
+            try admission.list(self.history.index.long_entries);
+            if (self.allocation.lease) |lease| if (lease.state) |state| try admission.owned(std.mem.asBytes(state));
         }
         fn stepImpl(self: *Self, input: []const u8, output: []u8, directive: ?prefix.Directive) Error!core.StepResult {
             // Final completion must remain representable before any of this

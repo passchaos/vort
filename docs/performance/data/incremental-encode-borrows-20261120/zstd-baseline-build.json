@@ -1,0 +1,50 @@
+{
+  "zig_version": "0.16.0",
+  "object": {
+    "path": "/home/passchaos/project-z/vort/.zig-cache/o/0dcbc6a3812d41e3df4d3915a3c13b6f/vort-zstd-huffman-x2.o",
+    "bytes": 159744,
+    "sha256": "07582c16a5ddfa38d1b14255608413e0baa67979507a146370ff5b6fc15d671e"
+  },
+  "builds": [
+    {
+      "argv": [
+        "zig",
+        "build-exe",
+        "-OReleaseFast",
+        "-mcpu=native",
+        "--dep",
+        "zstd",
+        "-Mroot=/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/tools/zstd/incremental_parallel_probe.zig",
+        "-OReleaseFast",
+        "-mcpu=native",
+        "/home/passchaos/project-z/vort/.zig-cache/o/0dcbc6a3812d41e3df4d3915a3c13b6f/vort-zstd-huffman-x2.o",
+        "-Mzstd=/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/src/zstd.zig",
+        "--cache-dir",
+        "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/.zig-cache",
+        "-femit-bin=/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/head-probe"
+      ],
+      "stderr_stdout": "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/build.log",
+      "source_scope": "git archive HEAD src tools"
+    },
+    {
+      "argv": [
+        "zig",
+        "build-exe",
+        "-OReleaseFast",
+        "-mcpu=native",
+        "--dep",
+        "zstd",
+        "-Mroot=/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/tools/zstd/incremental_parallel_probe.zig",
+        "-OReleaseFast",
+        "-mcpu=native",
+        "/home/passchaos/project-z/vort/.zig-cache/o/0dcbc6a3812d41e3df4d3915a3c13b6f/vort-zstd-huffman-x2.o",
+        "-Mzstd=/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/src/zstd.zig",
+        "--cache-dir",
+        "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/.zig-cache",
+        "-femit-bin=/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/head-turn-start-probe"
+      ],
+      "stderr_stdout": "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/build-turn-start.log",
+      "source_scope": "git archive HEAD src tools plus original dirty src/lz77.zig"
+    }
+  ]
+}

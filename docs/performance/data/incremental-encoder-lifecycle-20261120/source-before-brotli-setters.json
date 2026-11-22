@@ -1,0 +1,167 @@
+{
+  "schema": "vort.encoder-lifecycle-source.v1",
+  "created_utc": "2026-11-20T09:47:33.658528+00:00",
+  "base_revision": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "zig_version": "0.16.0",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "changed_sources": [
+    {
+      "path": "build.zig",
+      "bytes": 487535,
+      "sha256": "53b9aa1fb7618e0101eb50cbf52ba410eb49368118d176f4190e3528a481ded1"
+    },
+    {
+      "path": "build/encoder_lifecycle.zig",
+      "bytes": 2237,
+      "sha256": "8f970173cc9e63f6a271667e128f953f9fdb34b4c193eba915b2aa55dc969042"
+    },
+    {
+      "path": "build/incremental_encode_borrows.zig",
+      "bytes": 3385,
+      "sha256": "0f48db27cec474c95820a85e466f0b8c9ac69da629c5e9a922a629387ed527fa"
+    },
+    {
+      "path": "src/br/incremental/stored/encoder.zig",
+      "bytes": 18001,
+      "sha256": "8b64f422089b4e1286b05eeb14f0fd15a93255bacf13d7b986086efa5378687f"
+    },
+    {
+      "path": "src/br/incremental/stored/finish_metadata_tests.zig",
+      "bytes": 7918,
+      "sha256": "089f7db275dd805a864086056e4c22d98617af132310b55785a505a9c16c1713"
+    },
+    {
+      "path": "src/br/incremental/stored/step_borrows.zig",
+      "bytes": 11073,
+      "sha256": "701713b7de8b2e40409d069fbb0d2c51424d2636682de8f33f420374f97d9b36"
+    },
+    {
+      "path": "src/br/incremental/stored/step_borrows_tests.zig",
+      "bytes": 26287,
+      "sha256": "00eb5673445dafe423d5957fc5c1d4557221290069cc0e2257b03bb31be1cd31"
+    },
+    {
+      "path": "src/deflate.zig",
+      "bytes": 1202596,
+      "sha256": "28d7422edf6096938c4f91ac945e8fba02f08c07af1b214ffe7f989d1e3e0575"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/fixed.zig",
+      "bytes": 38047,
+      "sha256": "553878b725efc55291de56bde496289f5f70d9a1f8e7be31d8df9e2ddca4a462"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/gzip_fixed.zig",
+      "bytes": 14543,
+      "sha256": "3b2f40057edd3263e4d45a038653a5946f5c5e2ba65d4657da2d490e1dd4fa67"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/step_borrows.zig",
+      "bytes": 3022,
+      "sha256": "bd85830707b2801c412b90b8c1be91d304707ef250cb7bb8bf84fe4b35bf4585"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/stored.zig",
+      "bytes": 11620,
+      "sha256": "540e2b93c07cc701f6c1b02095436442b27c1a053e4155c03f9b363409ebc2d8"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/zlib_fixed.zig",
+      "bytes": 15297,
+      "sha256": "2232bd72935a6c69e43c12f94d502da3f905cf2903fcb8ac8db6f1b9d2203ba4"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows.zig",
+      "bytes": 1936,
+      "sha256": "3d156dc8e14a9ec6501de8bd691905e69a8cb95b60b6bb793807fd298cd8036a"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/caller.zig",
+      "bytes": 5262,
+      "sha256": "168543d868207db1e2a62e04a558bc8bb0ae8faabb1e37f6a52f69df32d5cfa8"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/helpers.zig",
+      "bytes": 7783,
+      "sha256": "72317566bc7bae8210ef163319ece24cfc7c97e9a5ea055ca7bd71f452ca4186"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/immutable.zig",
+      "bytes": 5167,
+      "sha256": "cf82ec208ca9431fb42551b96e7cec45510d160e731a8763ab5688d84f86248f"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/owned.zig",
+      "bytes": 2626,
+      "sha256": "42d39fbdee3c1ffc160526a3128dd9cb3a7d51791b725230c6362b08287b48a1"
+    },
+    {
+      "path": "src/deflate64/incremental_encoder_tests.zig",
+      "bytes": 14221,
+      "sha256": "4c8b9f98a88d30e2769b91de2caf8ca1929eff8340eff5c5a0158cfe37ccfe31"
+    },
+    {
+      "path": "src/zstd.zig",
+      "bytes": 2477721,
+      "sha256": "9bd9cd847c186936acc27686ae836749898d5bef52ed9503f87141cb465d0e81"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/frame.zig",
+      "bytes": 31782,
+      "sha256": "0e122d4b83d160ed2800f69cad67d22df32a84da62eff7b4964d629f404a20f8"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/step_borrow_helpers.zig",
+      "bytes": 3158,
+      "sha256": "596a9d544e4a767e50af447ddf75a405b6c5dd7a7e5e13a20a95f3889ed7de74"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/step_borrow_tests.zig",
+      "bytes": 5565,
+      "sha256": "606399d2329b8fc6023301a16f9153fa6a95a82991b9196aa3d77778de4b1301"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/step_borrows.zig",
+      "bytes": 4341,
+      "sha256": "8b11956229ca37393f5463103e730b81bd3e94dbfc3817a8727a44421a36b8c6"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/transition_borrow_tests.zig",
+      "bytes": 5909,
+      "sha256": "c080fae8e11d64fa77908aac4887f5ea186c39d3f80886477fb9ebf481cb5faa"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/encoder.zig",
+      "bytes": 11661,
+      "sha256": "432eefec82d615f437a993a6f807d2276ea036875571aace91f6121679c703dd"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/owner.zig",
+      "bytes": 32616,
+      "sha256": "522a9de05a601ff3727e12c8efa9a01ae7590f0774bd8a63169e2d725afaf320"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/queue.zig",
+      "bytes": 27177,
+      "sha256": "84b0cb8eec968fdf8adb99755fbbee57623108ba953e9990aa110228c35d823e"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/tests/step_borrows.zig",
+      "bytes": 9233,
+      "sha256": "df67963ba582f84f7667e1b2ac685537a551c54dfaf70e47a8961443309b7159"
+    },
+    {
+      "path": "tools/zstd/incremental_parallel_diff.py",
+      "bytes": 34365,
+      "sha256": "c3589ea1ac6ac7782ffe3c975dda8c577942a9629ad58c167eea399c967c5e4a"
+    }
+  ],
+  "protected_preexisting_change": {
+    "path": "src/lz77.zig",
+    "bytes": 250845,
+    "sha256": "64e693b08ae68bc5e4d3c759e24296c1369f30b86ca6782597e3ce09119a87be",
+    "diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a"
+  },
+  "full_validation_status": "current ReleaseSafe test and current Debug check/check-wasm running",
+  "scope": "Current source identity; prior full Debug suite is separately bound to source-before-lifecycle.json."
+}

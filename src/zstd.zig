@@ -1,5 +1,46 @@
 const std = @import("std");
 
+test "Zstd incremental encoder skippable borrows serial receiver" {
+    try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").serialReceiver(@This());
+}
+test "Zstd incremental encoder skippable borrows parallel receiver" {
+    try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelReceiver(@This());
+}
+test "Zstd incremental encoder skippable borrows serial profile" {
+    try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").serialProfile(@This());
+}
+test "Zstd incremental encoder skippable borrows parallel profile" {
+    try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelProfile(@This());
+}
+test "Zstd incremental encoder skippable borrows pending preflight" {
+    try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelPending(@This());
+}
+
+test "Zstd incremental encoder setter borrows serial" {
+    try @import("zstd/incremental/encoder/setter_borrow_tests.zig").serial(@This());
+}
+test "Zstd incremental encoder setter borrows parallel" {
+    try @import("zstd/incremental/encoder/setter_borrow_tests.zig").parallel(@This());
+}
+test "Zstd incremental encoder setter borrows serial profile" {
+    try @import("zstd/incremental/encoder/setter_borrow_tests.zig").serialProfile(@This());
+}
+test "Zstd incremental encoder setter borrows parallel profile" {
+    try @import("zstd/incremental/encoder/setter_borrow_tests.zig").parallelProfile(@This());
+}
+
+test "Zstd incremental next-frame borrow serial" {
+    try @import("zstd/incremental/encoder/transition_borrow_tests.zig").serial(@This());
+}
+
+test "Zstd incremental next-frame borrow parallel" {
+    try @import("zstd/incremental/encoder/transition_borrow_tests.zig").parallel(@This());
+}
+
+test "Zstd incremental encoder step borrows" {
+    try @import("zstd/incremental/encoder/step_borrow_tests.zig").contracts(@This());
+}
+
 test "zstd ordinal retained capacity adoption" {
     try @import("zstd/encode/total_budget/ordinal_retained_tests.zig").check(@This());
 }

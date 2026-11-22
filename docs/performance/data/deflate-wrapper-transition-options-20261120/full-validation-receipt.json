@@ -1,0 +1,15 @@
+{
+  "recorded_utc": "2026-11-20T13:46:41.824604+00:00",
+  "terminal_exit_code": 0,
+  "command": "zig build -j2 test check check-wasm --summary all",
+  "build_steps": "406/406",
+  "total_passed": 5825,
+  "total_skipped": 2,
+  "root_library_passed": 5732,
+  "root_library_skipped": 2,
+  "root_run_time": "56 minutes",
+  "root_test_max_rss": "344 MiB",
+  "scope": "Frozen encoder borrows/lifecycle/wrapper-option source before differential reporting and dynamic Huffman admission increments",
+  "source": "source-provenance.json",
+  "log_sha256": "221c336376c957e3ecef14d350340199d03d1487fec4d05a5b234e35d623de29"
+}

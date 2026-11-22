@@ -1,0 +1,44 @@
+1/43 br.test_0...OK
+2/43 br.incremental.stored.encoder.test_0...OK
+3/43 br.incremental.copy_decoder.test_0...OK
+4/43 br.incremental.owned_copy_decoder.test_0...OK
+5/43 br.encoder.distance.test_0...OK
+6/43 br.encoder.code_length_rle.test_0...OK
+7/43 br.encoder.hq_options.test_0...OK
+8/43 br.encoder.hq_types.test_0...OK
+9/43 br.encoder.hq_parser.test_0...OK
+10/43 br.encoder.total_budget.test_0...OK
+11/43 tests.br_total_memory_contracts.test_0...OK
+12/43 br.encoder.stored_memory_owner.test_0...OK
+13/43 br.encoder.stored_memory_reuse.test_0...OK
+14/43 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/43 br.encoder.hq_dictionary.test_0...OK
+16/43 br.encoder.hq_codec.alias.test_0...OK
+17/43 br.encoder.static_dictionary_matcher.test_0...OK
+18/43 br.encoder.stored_bit_bound.test_0...OK
+19/43 br.encoder.total_budget.tests.test_0...OK
+20/43 br.encoder.hq_parser.tests.test_0...OK
+21/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows stored rejects metadata before publishing...OK
+22/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows planned rejects metadata before publishing...OK
+23/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows static dictionary rejects metadata before publishing...OK
+24/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows stored rejects next stream before reset...OK
+25/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows planned rejects next stream before reset...OK
+26/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows static dictionary rejects next stream before reset...OK
+27/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows protect planned and static spare command storage...OK
+28/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows allow immutable source metadata and completed stream storage reuse...OK
+29/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows reject new observer overlap and preserve old observer before handoff...OK
+30/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows protect tracked allocator observers across all facades...OK
+31/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows allow explicitly detached old memory profile storage...OK
+32/43 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows validate prospective dictionary and HQ profile readers...OK
+33/43 bitstream.test_0...OK
+34/43 io.requested_heap_budget.test_0...OK
+35/43 lz77.test_0...OK
+36/43 lz77.test_1...OK
+37/43 br.encoder.hq_tree.test_0...OK
+38/43 br.encoder.literal_context_policy.test_0...OK
+39/43 br.encoder.scoped_static_dictionary.test_0...OK
+40/43 br.encoder.histogram_model.log_q8.test_0...OK
+41/43 br.encoder.joint_context.kernels.test_0...OK
+42/43 br.encoder.hq_parser.command_storage.test_0...OK
+43/43 br.encoder.joint_context.kernels_tests.test_0...OK
+All 43 tests passed.

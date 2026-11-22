@@ -1,0 +1,47 @@
+1/46 br.test_0...OK
+2/46 br.incremental.stored.encoder.test_0...OK
+3/46 br.incremental.copy_decoder.test_0...OK
+4/46 br.incremental.owned_copy_decoder.test_0...OK
+5/46 br.encoder.distance.test_0...OK
+6/46 br.encoder.code_length_rle.test_0...OK
+7/46 br.encoder.hq_options.test_0...OK
+8/46 br.encoder.hq_types.test_0...OK
+9/46 br.encoder.hq_parser.test_0...OK
+10/46 br.encoder.total_budget.test_0...OK
+11/46 tests.br_total_memory_contracts.test_0...OK
+12/46 br.encoder.stored_memory_owner.test_0...OK
+13/46 br.encoder.stored_memory_reuse.test_0...OK
+14/46 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/46 br.encoder.hq_dictionary.test_0...OK
+16/46 br.encoder.hq_codec.alias.test_0...OK
+17/46 br.encoder.static_dictionary_matcher.test_0...OK
+18/46 br.encoder.stored_bit_bound.test_0...OK
+19/46 br.encoder.total_budget.tests.test_0...OK
+20/46 br.encoder.hq_parser.tests.test_0...OK
+21/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows stored rejects fresh prefix overlap...OK
+22/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows planned rejects fresh prefix overlap...OK
+23/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows static dictionary rejects fresh prefix overlap...OK
+24/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows all facades protect receiver and full owned capacities...OK
+25/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows pending drain rejects before progress and retries...OK
+26/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows metadata readers remain disjoint from every writer...OK
+27/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows accept adjacent ranges and empty borrowed slices...OK
+28/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect planned and static retained scratch after reset...OK
+29/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect raw dictionary descriptors and cached bytes...OK
+30/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows bound RAW descriptor counts before visiting storage...OK
+31/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect memory profiles before activation and retained lease control...OK
+32/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect serialized dictionary view and backing...OK
+33/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect nested matcher and HQ allocations...OK
+34/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect HQ profile and owned alias snapshots...OK
+35/46 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows preserve multiblock quality dictionary metadata continuation...OK
+36/46 lz77.test_0...OK
+37/46 lz77.test_1...OK
+38/46 br.encoder.hq_tree.test_0...OK
+39/46 io.requested_heap_budget.test_0...OK
+40/46 bitstream.test_0...OK
+41/46 br.encoder.literal_context_policy.test_0...OK
+42/46 br.encoder.scoped_static_dictionary.test_0...OK
+43/46 br.encoder.histogram_model.log_q8.test_0...OK
+44/46 br.encoder.joint_context.kernels.test_0...OK
+45/46 br.encoder.hq_parser.command_storage.test_0...OK
+46/46 br.encoder.joint_context.kernels_tests.test_0...OK
+All 46 tests passed.

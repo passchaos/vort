@@ -1,0 +1,28 @@
+1/12 deflate.test.Deflate incremental encode borrow contracts...expected error.InvalidBlockPlan, found .{ .progress = .{ .input_read = 49, .output_written = 10 }, .status = .need_input, .block_boundary = false }
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x123da10 in expectError__anon_43247 (std.zig)
+        return error.TestExpectedError;
+        ^
+/home/passchaos/project-z/vort/src/deflate/incremental/tests/encode_borrows.zig:16:9: 0x1241a73 in headerOverwrite__anon_43036 (deflate.zig)
+        try t.expectError(error.InvalidBlockPlan, encoder.step(caller[16..][0..plain.len], caller[16..]));
+        ^
+/home/passchaos/project-z/vort/src/deflate/incremental/tests/encode_borrows.zig:23:5: 0x12428e7 in contracts__anon_43026 (deflate.zig)
+    try headerOverwrite(D);
+    ^
+/home/passchaos/project-z/vort/src/deflate.zig:538:5: 0x1242967 in test.Deflate incremental encode borrow contracts (deflate.zig)
+    try @import("deflate/incremental/tests/encode_borrows.zig").contracts(@This());
+    ^
+2/12 deflate.test_0...OK
+3/12 deflate.bt_optimal.test_0...OK
+4/12 deflate.incremental.tests.test_0...OK
+5/12 deflate.incremental.tests.step_borrows.test_0...OK
+6/12 deflate.incremental.tests.dictionary_borrows.test_0...OK
+7/12 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+8/12 io.requested_heap_budget.test_0...OK
+9/12 lz77.test_0...OK
+10/12 lz77.test_1...OK
+11/12 bitstream.test_0...OK
+12/12 deflate.incremental.encoder.match_finder.rolling_hash.test_0...OK
+11 passed; 0 skipped; 1 failed.
+error: the following test command failed with exit code 1:
+.zig-cache/o/5e8aa05c26e06100e6c4140728092609/test --seed=0x94787f15

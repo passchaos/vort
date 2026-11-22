@@ -1,0 +1,208 @@
+{
+  "schema": "vort.incremental-encode-borrow-source.v1",
+  "created_utc": "2026-11-20T08:23:22.275118+00:00",
+  "base_revision": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "upstream_revision": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "branch": "test/zstd-trailing-data",
+  "zig_version": "0.16.0",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "owned_changed_sources": [
+    {
+      "path": "build.zig",
+      "bytes": 487335,
+      "sha256": "481faa24850c58f61c14c4a0b9181b4efea378edbdff3065fa092bc7ab1d9cf5"
+    },
+    {
+      "path": "build/incremental_encode_borrows.zig",
+      "bytes": 3381,
+      "sha256": "c4974f00817c6f82efa1d5ffa0f4f5c09eac7f8cd62066575167adc9e37e5c0c"
+    },
+    {
+      "path": "src/br/incremental/stored/encoder.zig",
+      "bytes": 17674,
+      "sha256": "0b4f17835c6422d039966d87c22bab78c4b214c2fe424765835be44a0895dcf9"
+    },
+    {
+      "path": "src/br/incremental/stored/step_borrows.zig",
+      "bytes": 11073,
+      "sha256": "701713b7de8b2e40409d069fbb0d2c51424d2636682de8f33f420374f97d9b36"
+    },
+    {
+      "path": "src/br/incremental/stored/step_borrows_tests.zig",
+      "bytes": 26287,
+      "sha256": "00eb5673445dafe423d5957fc5c1d4557221290069cc0e2257b03bb31be1cd31"
+    },
+    {
+      "path": "src/deflate.zig",
+      "bytes": 1202596,
+      "sha256": "28d7422edf6096938c4f91ac945e8fba02f08c07af1b214ffe7f989d1e3e0575"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/fixed.zig",
+      "bytes": 38047,
+      "sha256": "553878b725efc55291de56bde496289f5f70d9a1f8e7be31d8df9e2ddca4a462"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/gzip_fixed.zig",
+      "bytes": 14543,
+      "sha256": "3b2f40057edd3263e4d45a038653a5946f5c5e2ba65d4657da2d490e1dd4fa67"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/step_borrows.zig",
+      "bytes": 3022,
+      "sha256": "bd85830707b2801c412b90b8c1be91d304707ef250cb7bb8bf84fe4b35bf4585"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/stored.zig",
+      "bytes": 11620,
+      "sha256": "540e2b93c07cc701f6c1b02095436442b27c1a053e4155c03f9b363409ebc2d8"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/zlib_fixed.zig",
+      "bytes": 15297,
+      "sha256": "2232bd72935a6c69e43c12f94d502da3f905cf2903fcb8ac8db6f1b9d2203ba4"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows.zig",
+      "bytes": 1936,
+      "sha256": "3d156dc8e14a9ec6501de8bd691905e69a8cb95b60b6bb793807fd298cd8036a"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/caller.zig",
+      "bytes": 5262,
+      "sha256": "168543d868207db1e2a62e04a558bc8bb0ae8faabb1e37f6a52f69df32d5cfa8"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/helpers.zig",
+      "bytes": 7783,
+      "sha256": "72317566bc7bae8210ef163319ece24cfc7c97e9a5ea055ca7bd71f452ca4186"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/immutable.zig",
+      "bytes": 5167,
+      "sha256": "cf82ec208ca9431fb42551b96e7cec45510d160e731a8763ab5688d84f86248f"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encode_borrows/owned.zig",
+      "bytes": 2626,
+      "sha256": "42d39fbdee3c1ffc160526a3128dd9cb3a7d51791b725230c6362b08287b48a1"
+    },
+    {
+      "path": "src/deflate64/incremental_encoder_tests.zig",
+      "bytes": 14221,
+      "sha256": "4c8b9f98a88d30e2769b91de2caf8ca1929eff8340eff5c5a0158cfe37ccfe31"
+    },
+    {
+      "path": "src/zstd.zig",
+      "bytes": 2477431,
+      "sha256": "84913488aab6ca2708030c4158e652ff35912572bd0b735e1a75b6a77244ddb7"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/frame.zig",
+      "bytes": 30687,
+      "sha256": "24286f82cdd4834d383d90652acae1bd518d7b6fcd5fbffeb6d329dd9c3ee456"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/step_borrow_helpers.zig",
+      "bytes": 3158,
+      "sha256": "596a9d544e4a767e50af447ddf75a405b6c5dd7a7e5e13a20a95f3889ed7de74"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/step_borrow_tests.zig",
+      "bytes": 5565,
+      "sha256": "606399d2329b8fc6023301a16f9153fa6a95a82991b9196aa3d77778de4b1301"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/step_borrows.zig",
+      "bytes": 4341,
+      "sha256": "8b11956229ca37393f5463103e730b81bd3e94dbfc3817a8727a44421a36b8c6"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/encoder.zig",
+      "bytes": 11615,
+      "sha256": "7dbf74c0816ce578cd9fef4f743c7a39d79f92a36caf420452a07056f8698815"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/owner.zig",
+      "bytes": 31698,
+      "sha256": "c21393096a37c43673a1673b77b750ffe8db239719754114032a20a2e0c9a4f5"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/queue.zig",
+      "bytes": 26850,
+      "sha256": "19568944942e8cddc2693e282cf24e62ffc463fb1cbc0a6f85b798bfee1aa1af"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/tests/step_borrows.zig",
+      "bytes": 9233,
+      "sha256": "df67963ba582f84f7667e1b2ac685537a551c54dfaf70e47a8961443309b7159"
+    },
+    {
+      "path": "tools/zstd/incremental_parallel_diff.py",
+      "bytes": 34365,
+      "sha256": "c3589ea1ac6ac7782ffe3c975dda8c577942a9629ad58c167eea399c967c5e4a"
+    }
+  ],
+  "shared_sources": [
+    {
+      "path": "src/core.zig",
+      "bytes": 4800,
+      "sha256": "7d30cbdb0582ab5eaa52fd704a6a2e19b996dbb78a88c656067cefc7b5dacabc"
+    },
+    {
+      "path": "src/bitstream.zig",
+      "bytes": 51992,
+      "sha256": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e"
+    },
+    {
+      "path": "src/huffman.zig",
+      "bytes": 136858,
+      "sha256": "6d79eeb354d47ad67c2592236902fc7f55a2f1486d071866cfde3d9ed4e762a3"
+    },
+    {
+      "path": "src/checksum.zig",
+      "bytes": 50434,
+      "sha256": "60fa784e3990a9b4c008be837cc63da42020203909a9e32afb720cc6ee20ad1b"
+    },
+    {
+      "path": "src/dictionary.zig",
+      "bytes": 93290,
+      "sha256": "cd230e340b39b5c2f0740ebb764f9d6af7b60f635bb0fda7843d04f23608ddcf"
+    },
+    {
+      "path": "src/lz77.zig",
+      "bytes": 250845,
+      "sha256": "64e693b08ae68bc5e4d3c759e24296c1369f30b86ca6782597e3ce09119a87be"
+    },
+    {
+      "path": "src/zstd_huffman_x2_object.zig",
+      "bytes": 461,
+      "sha256": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f"
+    },
+    {
+      "path": "src/br/encoder/record_optimal_object.zig",
+      "bytes": 12916,
+      "sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+    }
+  ],
+  "protected_preexisting_change": {
+    "path": "src/lz77.zig",
+    "bytes": 250845,
+    "sha256": "64e693b08ae68bc5e4d3c759e24296c1369f30b86ca6782597e3ce09119a87be",
+    "diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a"
+  },
+  "verification_commands": [
+    "zig build -j2 check-incremental-encode-borrows --summary all",
+    "zig build -j2 test check check-wasm --summary all",
+    "zig build -j2 run-zstd-incremental-parallel-diff -Doptimize=ReleaseFast --summary all -- --directory /tmp/vort-incremental-encode-borrows-zstd-final-20261120 --source-epoch 22e5ca24-plus-encoder-borrow-admission",
+    "zig build -j2 run-br-upstream-multiblock-diff -Doptimize=ReleaseFast --summary all"
+  ],
+  "scope": "File identities for this functional increment; no performance ranking or compiler-extracted dependency closure.",
+  "coverage_families": [
+    "deflate",
+    "deflate64-stored",
+    "brotli",
+    "zstd-serial-and-parallel"
+  ]
+}

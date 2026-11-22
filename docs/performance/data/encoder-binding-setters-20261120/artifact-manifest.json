@@ -1,0 +1,69 @@
+{
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 106,
+      "sha256": "d443fccf47b94220bb89b7763938544094ba45830a9829f3ec86307c519f5f0a"
+    },
+    {
+      "path": "cross-architecture.log",
+      "bytes": 10180,
+      "sha256": "2f482ef48e3bf77571bd608c5e993f032b7a1a0467c1c4c8355fc9e979d9dfd9"
+    },
+    {
+      "path": "deflate-after.log",
+      "bytes": 561,
+      "sha256": "61e7c02e2960e2e02f53ab013344e954894dc60eca0a77ba4e0ee56948d35ad9"
+    },
+    {
+      "path": "deflate-before.log",
+      "bytes": 1613,
+      "sha256": "f7725571e8852f6aeff12111c1240524c02b2b2a4fde4052183f57355c73be41"
+    },
+    {
+      "path": "library-compile.log",
+      "bytes": 1144,
+      "sha256": "a06e4c98940d500fc12be0db78a73975b20c94e49c70db5047cb7a78f14c053e"
+    },
+    {
+      "path": "source-provenance.json",
+      "bytes": 3378,
+      "sha256": "c75d5e3e1e59fee7e5e411c18597a75317875443635261b6b2227671104788e6"
+    },
+    {
+      "path": "validation-checkpoint.json",
+      "bytes": 836,
+      "sha256": "e24a0b883cea08a1938a89c52b6f0ca9668aa6542eb9eae0c0a3215cbbe9970e"
+    },
+    {
+      "path": "wasi-receipt.json",
+      "bytes": 13178,
+      "sha256": "3fcc147b21aac241800996ed705bee476b4887db2bfe32278a76781c6dfea696"
+    },
+    {
+      "path": "zstd-after.log",
+      "bytes": 375,
+      "sha256": "941767e0e8acb98d8be148bcaa1884e5e380a226a4afb2e5f9bb1d3de5c2d513"
+    },
+    {
+      "path": "zstd-before.log",
+      "bytes": 4424,
+      "sha256": "9f78200334f02303b983960e156cd33ea53afaa028888fd5acd2336b63e38de4"
+    },
+    {
+      "path": "zstd-interop.log",
+      "bytes": 8181,
+      "sha256": "5c8951e2b4939ffc78b1636d326977290383e0f9f458e535bb5e942352ccd763"
+    },
+    {
+      "path": "zstd-prefix.log",
+      "bytes": 374,
+      "sha256": "f107f1f3112e98625961c5edcf48f6b60269c9e1365f5d9f8f7d889578809360"
+    },
+    {
+      "path": "zstd-step.log",
+      "bytes": 375,
+      "sha256": "ce65187631fd1d4ed6059bb2b06082d37111a5a2dae936317bd1725611d43c61"
+    }
+  ]
+}

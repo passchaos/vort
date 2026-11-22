@@ -1,0 +1,72 @@
+{
+  "source_repository": "/home/passchaos/project-z/vort",
+  "source_head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "index_capture_utc": "2026-11-20 12:48:37 UTC",
+  "created_utc": "2026-11-20T12:50:04.068409+00:00",
+  "baseline_source": "Git index blob ids captured at index_capture_utc; extracted with git cat-file blob, not HEAD",
+  "baseline_files": [
+    {
+      "path": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/baseline/fixed.zig",
+      "repository_path": "src/deflate/incremental/encoder/fixed.zig",
+      "index_blob_id": "53801158923d1e910b90f861daa0db78ed96ab1d",
+      "sha256": "553878b725efc55291de56bde496289f5f70d9a1f8e7be31d8df9e2ddca4a462"
+    },
+    {
+      "path": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/baseline/gzip_fixed.zig",
+      "repository_path": "src/deflate/incremental/encoder/gzip_fixed.zig",
+      "index_blob_id": "05b291d2c108efb883c6e0818a4986df1ce9798a",
+      "sha256": "bc2de4672dda48b92c704495922e83bf36813b1207af06f8aaafd9e3f97fd6fd"
+    },
+    {
+      "path": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/baseline/zlib_fixed.zig",
+      "repository_path": "src/deflate/incremental/encoder/zlib_fixed.zig",
+      "index_blob_id": "0f71015d4dd6f98e74a2e4abf6afc3925bd9f7d6",
+      "sha256": "c33398e8f3d8c67f1e17918b74e00c31ae65468ceb8ec0e76729f165faea41e3"
+    }
+  ],
+  "current_complete_test_files": [
+    {
+      "repository_path": "src/deflate/incremental/tests/wrapper_transition_options.zig",
+      "sha256": "92c92d00bd47b80bb0fbe661cb5c1d27093917987e17964debff22c8bdf108ed",
+      "matches_current_worktree": true
+    },
+    {
+      "repository_path": "src/deflate/incremental/tests/wrapper_transition_options/headers.zig",
+      "sha256": "b7723cce3763bd74d1126cba455eb882dc1fd2c98c8c7f28b9414269bb8fa6b0",
+      "matches_current_worktree": true
+    },
+    {
+      "repository_path": "src/deflate/incremental/tests/wrapper_transition_options/pledges.zig",
+      "sha256": "630727823316394b402e0a14863876d8980b9ea810d582005350ac3b5b02c703",
+      "matches_current_worktree": true
+    },
+    {
+      "repository_path": "src/deflate/incremental/tests/wrapper_transition_options/helpers.zig",
+      "sha256": "7b115b9fdc842ecf7a5419972029a05053abe98362d352a084e94673069ce402",
+      "matches_current_worktree": true
+    },
+    {
+      "repository_path": "src/deflate/incremental/tests/encode_borrows/helpers.zig",
+      "sha256": "72317566bc7bae8210ef163319ece24cfc7c97e9a5ea055ca7bd71f452ca4186",
+      "matches_current_worktree": true
+    },
+    {
+      "repository_path": "src/deflate/incremental/tests/encoder_transition_borrows/helpers.zig",
+      "sha256": "0ddb5c4d7b8d324f2b379d0fa97257a6cc0e0a5f478a15204f25626be5f12ae5",
+      "matches_current_worktree": true
+    }
+  ],
+  "original_deflate_root_sha256": "ceefdf6e03318687a0a8592c02ee47b5b72369574126162d06e96983e6b4ada1",
+  "isolated_deflate_runner_sha256": "60014aa7da7f5eeac0212a6bd07151471480fc0f1142fc4a4c868b3346ff0651",
+  "appended_filter_fragment_sha256": "01f2394fc6c138bbe5f4529c1b2f30675496f7c9c994c2c197dd6806bb680ca8",
+  "python_runner_sha256": "5d80e2d15ee42701b50d94ee314f662e30d3c53ae6f6ccfaae98e7d568d6f3d0",
+  "zig_exe": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+  "zig_version": "0.16.0",
+  "target": "x86_64-linux native default",
+  "optimize": "Debug default zig test",
+  "workspace_mutations": "none; sources copied into this temporary directory; cache paths are also isolated",
+  "cases": {
+    "headers": "Deflate isolated before header option admission",
+    "pledges": "Deflate isolated before impossible exact pledge"
+  }
+}

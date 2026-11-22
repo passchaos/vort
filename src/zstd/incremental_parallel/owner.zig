@@ -11,6 +11,8 @@ const queue_mod = @import("queue.zig");
 const one_shot = @import("../parallel/types.zig");
 const prefix = @import("../prefix/binding.zig");
 const prefix_errors = @import("../incremental/encoder/prefix_errors.zig");
+const step_borrows = @import("../incremental/encoder/step_borrows.zig");
+const skippable_wire = @import("../frame/skippable.zig");
 
 pub fn Owner(comptime Codec: type) type {
     return struct {
@@ -85,10 +87,13 @@ pub fn Owner(comptime Codec: type) type {
             return if (@hasField(Codec.Options, "dictionary_usage")) options.frame.dictionary_usage == .prefix else false;
         }
 
-        fn setterEligible(self: *const Self) bool {
+        fn setterStageEligible(self: *const Self) bool {
             return self.failure == null and !self.prefix_state.busy and self.state.unit == .none and
-                self.queue.snapshot().inflight_jobs == 0 and
                 (self.state.done or (!self.state.header_written and !self.state.finishing and !self.state.flushing and self.state.frame_input == 0));
+        }
+
+        fn setterEligible(self: *const Self) bool {
+            return self.setterStageEligible() and self.queue.snapshot().inflight_jobs == 0;
         }
 
         pub fn prefixSnapshot(self: *const Self) prefix.Snapshot {
@@ -97,13 +102,15 @@ pub fn Owner(comptime Codec: type) type {
             return observed;
         }
 
-        pub fn setPrefix(self: *Self, bytes: []const u8) Error!void {
-            try self.setPrefixWithDictionary(Codec.rawPrefix(bytes));
+        pub fn setPrefix(self: *Self, bytes: []const u8, receiver: []const u8) Error!void {
+            try self.setPrefixWithDictionary(Codec.rawPrefix(bytes), receiver);
         }
 
-        pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
-            if (!self.setterEligible()) return error.InvalidStreamState;
+        pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary, receiver: []const u8) Error!void {
+            if (!self.setterStageEligible()) return error.InvalidStreamState;
             const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateNextFrameBorrows(self.options, selected, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidStreamState;
             const id: ?u32 = if (selected) |dict| dict.id else null;
             Codec.resetStateRetainingCapacity(&self.actual_state, null) catch unreachable;
             self.config.dictionary = selected;
@@ -116,9 +123,11 @@ pub fn Owner(comptime Codec: type) type {
             self.prefix_state.install(dictionary);
         }
 
-        pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
-            if (!self.setterEligible()) return error.InvalidStreamState;
+        pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary, receiver: []const u8) Error!void {
+            if (!self.setterStageEligible()) return error.InvalidStreamState;
             const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateNextFrameBorrows(self.options, selected, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidStreamState;
             try Codec.validateDictionaryMetadata(selected);
             Codec.resetStateRetainingCapacity(&self.actual_state, selected) catch unreachable;
             self.prefix_state = .{};
@@ -131,8 +140,10 @@ pub fn Owner(comptime Codec: type) type {
             self.queue.replaceDictionaryBinding(self.config.frame_options, selected, self.config.dictionary_id);
         }
 
-        pub fn clearDictionary(self: *Self) Error!void {
-            if (!self.setterEligible()) return error.InvalidStreamState;
+        pub fn clearDictionary(self: *Self, receiver: []const u8) Error!void {
+            if (!self.setterStageEligible()) return error.InvalidStreamState;
+            try self.validateNextFrameBorrows(self.options, null, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidStreamState;
             self.clearBinding();
         }
 
@@ -200,22 +211,29 @@ pub fn Owner(comptime Codec: type) type {
             profiles.publish(Codec, self);
         }
 
-        pub fn step(self: *Self, input: []const u8, output: []u8, current: Limits) Error!core.StepResult {
-            return self.stepCommon(input, output, current, null);
+        pub fn step(self: *Self, input: []const u8, output: []u8, current: Limits, receiver: []const u8) Error!core.StepResult {
+            return self.stepCommon(input, output, current, null, receiver);
         }
 
         /// Completed frames use an explicit nextFrame boundary. Validate the
         /// directive and current stage before modifying prefix bookkeeping.
-        pub fn stepWithDirective(self: *Self, input: []const u8, output: []u8, current: Limits, directive: prefix.Directive) Error!core.StepResult {
+        pub fn stepWithDirective(self: *Self, input: []const u8, output: []u8, current: Limits, directive: prefix.Directive, receiver: []const u8) Error!core.StepResult {
             switch (directive) {
                 .@"continue", .flush, .end => {},
                 _ => return error.InvalidStreamState,
             }
             if ((self.state.done and input.len != 0) or ((self.state.finishing or self.state.flushing or self.state.skippable_only) and input.len != 0) or (self.state.finishing and directive == .flush)) return error.InvalidStreamState;
-            return self.stepCommon(input, output, current, directive);
+            return self.stepCommon(input, output, current, directive, receiver);
         }
 
-        fn stepCommon(self: *Self, input: []const u8, output: []u8, current: Limits, directive: ?prefix.Directive) Error!core.StepResult {
+        fn stepCommon(self: *Self, input: []const u8, output: []u8, current: Limits, directive: ?prefix.Directive, receiver: []const u8) Error!core.StepResult {
+            self.validateStepBorrows(input, output, receiver) catch |err| {
+                // A completed empty poll has no wire writes. If its output
+                // aliases state or profiles, preserve those bytes by keeping
+                // the previous observations; ordinary polls still refresh them.
+                if (self.state.done and input.len == 0 and self.failure == null) return .{ .status = .done };
+                return err;
+            };
             var progress: core.Progress = .{};
             self.last_call_error = null;
             defer {
@@ -232,6 +250,17 @@ pub fn Owner(comptime Codec: type) type {
                 if (!prefix_errors.retryable(err) and self.prefix_state.phase == .active) return self.poison(err);
                 return err;
             };
+        }
+
+        fn validateStepBorrows(self: *Self, input: []const u8, output: []u8, receiver: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init(input, output, self.options);
+            if (self.config.dictionary) |dictionary| try admission.dictionary(dictionary);
+            try admission.owned(receiver);
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.asBytes(self.control));
+            try admission.list(self.state.front);
+            try admission.parallelState(&self.actual_state);
+            try self.queue.validateStepBorrows(&admission);
         }
 
         fn validateOffer(self: *Self, input_len: usize, current: Limits) Error!void {
@@ -486,9 +515,7 @@ pub fn Owner(comptime Codec: type) type {
             self.clearBinding();
         }
 
-        pub fn nextFrame(self: *Self, options: Options, expected: ?types.Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32, replace_binding: bool) Error!void {
-            defer profiles.publish(Codec, self);
-            if (self.failure != null or !self.state.done or self.state.unit != .none or self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
+        pub fn nextFrame(self: *Self, options: Options, expected: ?types.Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32, replace_binding: bool, receiver: []const u8) Error!void {
             const retained = !replace_binding and self.prefix_state.phase == .pending;
             const selected = if (retained) self.config.dictionary else dictionary;
             var configured = options;
@@ -496,6 +523,8 @@ pub fn Owner(comptime Codec: type) type {
                 configured.frame.dictionary_usage = .prefix;
                 configured.frame.dictionary_id = self.config.dictionary_id orelse 0;
             }
+            try self.validateNextFrameBorrows(configured, selected, receiver);
+            if (self.failure != null or !self.state.done or self.state.unit != .none or self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
             try validate(configured, expected, selected, metadata_id);
             const prepared = try settings.prepare(Codec, configured, expected, selected, metadata_id);
             const previous_limit = self.control.snapshot().limit;
@@ -503,7 +532,6 @@ pub fn Owner(comptime Codec: type) type {
             try self.control.checkNewLimit(next_limit);
             try self.control.changeLimit(next_limit);
             errdefer self.control.changeLimit(previous_limit) catch unreachable;
-            profiles.publish(Codec, self);
             try self.queue.resetRetainingCapacity(prepared.config);
             Codec.resetStateRetainingCapacity(&self.actual_state, if (prefixUsage(prepared.options)) null else prepared.config.dictionary) catch unreachable;
             self.options = prepared.options;
@@ -522,13 +550,33 @@ pub fn Owner(comptime Codec: type) type {
             self.last_step_progress = .{};
             profiles.capture(Codec, self);
             self.control.resetPeak();
+            // The ended frame already published its final observations on done.
+            // Publish only the committed next bindings: old observer bytes may
+            // now be the next frame's immutable prefix or dictionary.
+            profiles.publish(Codec, self);
         }
 
-        pub fn writeSkippable(self: *Self, id: u4, payload: []const u8, current: Limits) Error!void {
-            defer profiles.publish(Codec, self);
+        fn validateNextFrameBorrows(self: *Self, options: Options, dictionary: ?Codec.Dictionary, receiver: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init("", &.{}, options);
+            if (dictionary) |selected| try admission.dictionary(selected);
+            try admission.owned(receiver);
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.asBytes(self.control));
+            try admission.list(self.state.front);
+            try admission.parallelState(&self.actual_state);
+            try self.queue.validateOwnedBorrows(&admission);
+        }
+
+        pub fn writeSkippable(self: *Self, id: u4, payload: []const u8, current: Limits, receiver: []const u8, mutation_started: *bool) Error!void {
             if (self.failure) |err| return err;
-            if (self.config.frame_options.format != .standard or (!self.state.done and !prefixUsage(self.options)) or !self.setterEligible()) return error.InvalidBlockPlan;
+            if (self.config.frame_options.format != .standard or (!self.state.done and !prefixUsage(self.options)) or !self.setterStageEligible()) return error.InvalidBlockPlan;
             if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
+            const wire_len = std.math.add(usize, skippable_wire.encoded_len, payload.len) catch return error.IntegerOverflow;
+            try self.validateSkippableBorrows(payload, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
+            if (wire_len > current.max_pending_output_len) return error.OutputLimitExceeded;
+            mutation_started.* = true;
+            defer profiles.publish(Codec, self);
             _ = self.prefix_state.activate(.skippable);
             self.prefix_state.busy = true;
             self.control.coordinator.clearFailure();
@@ -541,6 +589,18 @@ pub fn Owner(comptime Codec: type) type {
             self.state.skippable_only = true;
             self.state.done = false;
             try self.state.checkPending(current.max_pending_output_len);
+        }
+
+        fn validateSkippableBorrows(self: *Self, payload: []const u8, receiver: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init(payload, &.{}, self.options);
+            // Only the offered payload is read; no previous dictionary borrow
+            // is needed while emitting a skippable frame.
+            try admission.owned(receiver);
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.asBytes(self.control));
+            try admission.list(self.state.front);
+            try admission.parallelState(&self.actual_state);
+            try self.queue.validateOwnedBorrows(&admission);
         }
 
         pub fn deinit(self: *Self) void {

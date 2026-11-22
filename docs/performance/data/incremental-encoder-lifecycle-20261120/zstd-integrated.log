@@ -1,0 +1,14 @@
+test-zstd
++- run test vort-zstd-tests w
+serial transition profile changed=false
+parallel transition old profile changed=false limit=67108864
+failed command: ./.zig-cache/o/70f43ede26832285ca8017dc543052ac/vort-zstd-tests --cache-dir=./.zig-cache --seed=0x38765ea9 --listen=-
+
+Build Summary: 5/5 steps succeeded; 27/27 tests passed
+test-zstd success
++- run test vort-zstd-tests 27 pass (27 total) 10ms MaxRSS:10M
+   +- compile test vort-zstd-tests Debug native success 3s MaxRSS:316M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 4ms MaxRSS:40M
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+

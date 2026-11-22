@@ -210,6 +210,22 @@ def legacy_gate(campaign):
                            "scope": "Current build of unchanged old public probe against saved configs/input/wire; no rerun of the old executable."})
 
 
+def large_sequence_fixture():
+    """Keep the final 8 KiB Job dense in short independent history matches."""
+    block_size = 8192
+    prefix = deterministic(block_size, 0x37102626)
+    payload = bytearray(prefix + prefix)
+    for index in range(block_size // 5):
+        offset = ((index * 977 + 13) % (block_size // 4)) * 4
+        payload.extend(prefix[offset:offset + 4])
+        # One literal per four-byte match leaves room for parser misses. The
+        # delimiter differs from the following prefix byte to discourage an
+        # extended match from consuming the next intended short sequence.
+        payload.append((prefix[(offset + 4) % block_size] + 1) & 0xFF)
+    payload.extend(deterministic(3 * block_size - len(payload), 0x4135))
+    return bytes(payload)
+
+
 def fixtures(reference):
     previous = previous_fixtures()
     unit = deterministic(8192, 0x19562626)
@@ -221,7 +237,7 @@ def fixtures(reference):
     dictionaries = {"raw": deterministic(8192, 0xD1C71026), "full": bytes(full), "metadata": bytes(full)}
     payloads = {"empty": b"", "tiny": b"incremental\x00\xff", "structured": previous["structured"], "mixed": previous["mixed"],
                 "seal": unit, "credit": unit + unit + b"!", "partial": deterministic(1555),
-                "history": previous["far-history"], "large-sequences": previous["large-sequences"],
+                "history": previous["far-history"], "large-sequences": large_sequence_fixture(),
                 "dict-raw": dictionaries["raw"][-1024:] * 12,
                 "dict-raw-short": dictionaries["raw"][-64:],
                 "dict-full": b'{"id":7,"service":"magicless","message":"dictionary format interoperability"}\n' * 120}

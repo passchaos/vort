@@ -1,0 +1,94 @@
+1/91 zstd.test.Zstd incremental next-frame borrow serial...serial transition profile changed=false
+OK
+2/91 zstd.test.Zstd incremental next-frame borrow parallel...parallel transition old profile changed=false limit=67108864
+OK
+3/91 zstd.test.Zstd incremental encoder step borrows...OK
+4/91 zstd.test_0...OK
+5/91 zstd.test.Zstd incremental finish is recoverable until tiny output drains...OK
+6/91 checksum.xxh64_stream.test_0...OK
+7/91 zstd.decode.budget.test_0...OK
+8/91 io.requested_heap_budget.test_0...OK
+9/91 tests.zstd_stream_counter_contracts.test_0...OK
+10/91 tests.zstd_large_history_contracts.test_0...OK
+11/91 zstd.incremental.encoder.frame.test_0...OK
+12/91 tests.zstd_hq_search_contracts.test_0...OK
+13/91 zstd.incremental.hq_search_tests.test.Zstd incremental HQ search zero cap preserves warm block transaction and empty-input retry...OK
+14/91 zstd.incremental.hq_search_tests.test.Zstd incremental HQ search null profile enforces cap across nextFrame and reset...OK
+15/91 zstd.incremental.tests.test.Zstd incremental frame encoder round trips split raw RLE input...OK
+16/91 zstd.incremental.tests.test.Zstd incremental frame encoder requires raw no-size mode...OK
+17/91 zstd.incremental.tests.test.Zstd incremental frame encoder supports pledged content size...OK
+18/91 zstd.incremental.tests.test.Zstd incremental frame encoder emits Dictionary ID metadata...OK
+19/91 zstd.incremental.tests.test.Zstd incremental frame encoder resolves dictionary set...OK
+20/91 zstd.incremental.tests.test.Zstd incremental frame encoder emits entropy-coded blocks...OK
+21/91 zstd.incremental.tests.test.Zstd incremental frame encoder clears repeat tables on reset...OK
+22/91 zstd.incremental.tests.test.Zstd incremental frame encoder references preset dictionary history...OK
+23/91 zstd.incremental.tests.test.Zstd incremental frame encoder supports raw-content dictionary without id...OK
+24/91 zstd.incremental.tests.test.Zstd incremental frame encoder matches previous blocks...OK
+25/91 zstd.incremental.tests.test.Zstd incremental frame encoder emits multiple non-prefix history matches...OK
+26/91 zstd.incremental.tests.test.Zstd incremental frame encoder flushes and resumes through tiny output...OK
+27/91 zstd.incremental.tests.test.Zstd incremental encoder continues mixed dictionary frames...OK
+28/91 zstd.incremental.tests.test.Zstd incremental fast compressed mode matches one-shot bytes...OK
+29/91 zstd.incremental.tests.test.Zstd incremental fast compressed large sequence block matches one-shot bytes...OK
+30/91 zstd.incremental.tests.test.Zstd incremental encoder emits skippable frames between data frames...OK
+31/91 zstd.incremental.decoder_counter_tests.test.Zstd incremental decoder counters prevalidate wide real RLE frames with one byte output...OK
+32/91 zstd.incremental.decoder_counter_tests.test.Zstd incremental decoder counters wide preflight preserves absent sizes limits and mismatches...OK
+33/91 zstd.incremental.decoder_counter_tests.test.Zstd incremental decoder counters zero output pledge permits split metadata after done...OK
+34/91 zstd.incremental.decoder_counter_tests.test.Zstd incremental decoder counters fulfilled pledge rejects later data before output with sticky progress...OK
+35/91 zstd.incremental.decoder_counter_tests.test.Zstd incremental decoder counters stopped empty member keeps explicit done behavior...OK
+36/91 zstd.incremental.limits_tests.test.Zstd incremental limits output exact below zero and no content size...OK
+37/91 zstd.incremental.limits_tests.test.Zstd incremental zero-sequence compressed block respects frame block maximum...OK
+38/91 zstd.incremental.limits_tests.test.Zstd incremental compressed block requires exact preflight output...OK
+39/91 zstd.incremental.limits_tests.test.Zstd incremental limits cumulative concatenation preserves per-frame cap...OK
+40/91 zstd.incremental.limits_tests.test.Zstd incremental limits stopped members nextStream retains quota pledge and suffix...OK
+41/91 zstd.incremental.limits_tests.test.Zstd incremental limits exact quota still accepts checksums metadata and empty members...OK
+42/91 zstd.incremental.limits_tests.test.Zstd incremental limits persistent allocation budget exact below reset and reconfigure...OK
+43/91 zstd.incremental.limits_tests.test.Zstd incremental limits compressed dictionaries share persistent working and output budgets...OK
+44/91 zstd.incremental.limits_tests.test.Zstd incremental limits Huffman tail corruption records partial output before error...OK
+45/91 zstd.incremental.limits_tests.test.Zstd incremental limits backing OutOfMemory differs from budget refusal and init allocates nothing...OK
+46/91 zstd.incremental.limits_tests.test.Zstd incremental limits compressed dictionary allocation failures preserve progress and reset retry...OK
+47/91 zstd.incremental.limits_tests.test.Zstd incremental limits late checksum reports final step progress and is sticky...OK
+48/91 zstd.incremental.encoder.history.test.Zstd incremental rolling history retains only the newest window...OK
+49/91 zstd.incremental.encoder.history.test.Zstd incremental encoder counters retain history across 32-bit positions...OK
+50/91 zstd.incremental.encoder.history.test.Zstd incremental encoder counters refuse history overflow before allocation...OK
+51/91 zstd.incremental.encoder.history_index.test.Zstd incremental history index keeps recent same-hash candidates...OK
+52/91 zstd.incremental.encoder.history_index.test.Zstd incremental history index isolates sparse long candidates...OK
+53/91 zstd.incremental.encoder.history_index.test.Zstd incremental history long index releases allocation failures...OK
+54/91 zstd.incremental.encoder.history_match.test.Zstd incremental history matcher finds multiple non-prefix matches...OK
+55/91 zstd.incremental.encoder.history_match.test.Zstd incremental history matcher skips an empty history...OK
+56/91 zstd.incremental.encoder.history_match.test.Zstd incremental encoder counters bound wide history candidates before indexing...OK
+57/91 zstd.match.hq_tree.test_0...OK
+58/91 zstd.match.hq_parser.test_0...OK
+59/91 zstd.match.lazy2.test_0...OK
+60/91 zstd.match.hq_parser.tests.test_0...OK
+61/91 zstd.match.hq_parser.frontier_parser.test_0...OK
+62/91 zstd.encode.total_budget.test_0...OK
+63/91 zstd.encode.controls.test_0...OK
+64/91 lz77.test_0...OK
+65/91 lz77.test_1...OK
+66/91 zstd.match.controlled_source.test_0...OK
+67/91 zstd.encode.repeated_pattern.test_0...OK
+68/91 zstd.literals.cut_histogram.test_0...OK
+69/91 zstd.match.controlled_fast.test_0...OK
+70/91 zstd.match.adaptive_tree.test_0...OK
+71/91 zstd.match.hq_parser.row_tags.test_0...OK
+72/91 zstd.match.hq_parser.search_edges.test_0...OK
+73/91 zstd.match.hq_parser.prepared_price.test_0...OK
+74/91 zstd.incremental.encoder.budget_tests.test.Zstd incremental total budget default zero and physical control OOM...OK
+75/91 zstd.incremental.encoder.budget_tests.test.Zstd incremental total budget header refusal rolls back before input and retries...OK
+76/91 zstd.incremental.encoder.budget_tests.test.Zstd incremental total budget retains tiny storage for large advertised windows...OK
+77/91 zstd.incremental.encoder.budget_tests.test.Zstd incremental total budget next frame checks retained capacity before resetting...OK
+78/91 zstd.incremental.encoder.budget_tests.test.Zstd incremental total budget nonfinal history refusal keeps accepted block retryable...OK
+79/91 zstd.incremental.encoder.budget_tests.test.Zstd incremental total budget final output refusal preserves block and checksum transaction...OK
+80/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters preserve cumulative and local public types...OK
+81/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters cross 32-bit block input output and frame positions...OK
+82/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters refuse input overflow before allocation and hash commit...OK
+83/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters preflight all offered blocks before a fresh header...OK
+84/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters preflight preserves actual partial input progress...OK
+85/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters refuse output overflow before caller writes and retry...OK
+86/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters refuse frame overflow before draining final output...OK
+87/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters accept wide pledges and retain them through reset...OK
+88/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters reject wide pledge mismatches before input commit...OK
+89/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters preserve final checksum transaction on retry...OK
+90/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder rejects trailing input after a completed frame...OK
+91/91 zstd.incremental.encoder.counter_tests.test.Zstd incremental encoder counters account for retained wide history index entries...OK
+All 91 tests passed.

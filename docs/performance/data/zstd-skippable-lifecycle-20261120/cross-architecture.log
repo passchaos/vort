@@ -1,0 +1,163 @@
+check-encoder-lifecycle
++- test-encoder-lifecycle-x86
+   +- run test vort-zstd-encoder-lifecycle-x86-tests w
+serial transition profile changed=false
+parallel transition old profile changed=false limit=67108864
+failed command: ./.zig-cache/o/41a95ac5a876d52c9cfad69a91de5b1c/vort-zstd-encoder-lifecycle-x86-tests --cache-dir=./.zig-cache --seed=0x68e9b68 --listen=-
+
+check-encoder-lifecycle
++- test-encoder-lifecycle-wasm
+   +- install generated to encoder-lifecycle-wasm.json
+      +- run node w
+1/12 deflate.test.Deflate encoder transition borrow contracts...OK
+2/12 deflate.test_0...OK
+3/12 deflate.bt_optimal.test_0...OK
+4/12 deflate.incremental.tests.test_0...OK
+5/12 deflate.incremental.tests.step_borrows.test_0...OK
+6/12 deflate.incremental.tests.dictionary_borrows.test_0...OK
+7/12 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+8/12 io.requested_heap_budget.test_0...OK
+9/12 lz77.test_0...OK
+10/12 lz77.test_1...OK
+11/12 bitstream.test_0...OK
+12/12 deflate.incremental.encoder.match_finder.rolling_hash.test_0...OK
+All 12 tests passed.
+1/47 br.test_0...OK
+2/47 br.incremental.stored.encoder.test_0...OK
+3/47 br.incremental.copy_decoder.test_0...OK
+4/47 br.incremental.owned_copy_decoder.test_0...OK
+5/47 br.encoder.distance.test_0...OK
+6/47 br.encoder.code_length_rle.test_0...OK
+7/47 br.encoder.hq_options.test_0...OK
+8/47 br.encoder.hq_types.test_0...OK
+9/47 br.encoder.hq_parser.test_0...OK
+10/47 br.encoder.total_budget.test_0...OK
+11/47 tests.br_total_memory_contracts.test_0...OK
+12/47 br.encoder.stored_memory_owner.test_0...OK
+13/47 br.encoder.stored_memory_reuse.test_0...OK
+14/47 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/47 br.encoder.hq_dictionary.test_0...OK
+16/47 br.encoder.hq_codec.alias.test_0...OK
+17/47 br.encoder.static_dictionary_matcher.test_0...OK
+18/47 br.encoder.stored_bit_bound.test_0...OK
+19/47 br.encoder.total_budget.tests.test_0...OK
+20/47 br.encoder.hq_parser.tests.test_0...OK
+21/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows stored rejects metadata before publishing...OK
+22/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows planned rejects metadata before publishing...OK
+23/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows static dictionary rejects metadata before publishing...OK
+24/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows stored rejects next stream before reset...OK
+25/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows planned rejects next stream before reset...OK
+26/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows static dictionary rejects next stream before reset...OK
+27/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows protect planned and static spare command storage...OK
+28/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows allow immutable source metadata and completed stream storage reuse...OK
+29/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows reject new observer overlap and preserve old observer before handoff...OK
+30/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows protect tracked allocator observers across all facades...OK
+31/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows allow explicitly detached old memory profile storage...OK
+32/47 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows validate prospective dictionary and HQ profile readers...OK
+33/47 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata stored keeps accepted metadata...OK
+34/47 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata planned keeps accepted metadata...OK
+35/47 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata static dictionary keeps accepted metadata...OK
+36/47 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata preserves frozen no metadata wire controls...OK
+37/47 bitstream.test_0...OK
+38/47 io.requested_heap_budget.test_0...OK
+39/47 lz77.test_0...OK
+40/47 lz77.test_1...OK
+41/47 br.encoder.hq_tree.test_0...OK
+42/47 br.encoder.scoped_static_dictionary.test_0...OK
+43/47 br.encoder.literal_context_policy.test_0...OK
+44/47 br.encoder.histogram_model.log_q8.test_0...OK
+45/47 br.encoder.joint_context.kernels.test_0...OK
+46/47 br.encoder.hq_parser.command_storage.test_0...OK
+47/47 br.encoder.joint_context.kernels_tests.test_0...OK
+All 47 tests passed.
+1/36 zstd.test.Zstd incremental encoder skippable borrows serial receiver...OK
+2/36 zstd.test.Zstd incremental encoder skippable borrows parallel receiver...OK
+3/36 zstd.test.Zstd incremental encoder skippable borrows serial profile...OK
+4/36 zstd.test.Zstd incremental encoder skippable borrows parallel profile...OK
+5/36 zstd.test.Zstd incremental encoder skippable borrows pending preflight...OK
+6/36 zstd.test.Zstd incremental encoder setter borrows serial...OK
+7/36 zstd.test.Zstd incremental encoder setter borrows parallel...OK
+8/36 zstd.test.Zstd incremental encoder setter borrows serial profile...OK
+9/36 zstd.test.Zstd incremental encoder setter borrows parallel profile...OK
+10/36 zstd.test.Zstd incremental next-frame borrow serial...serial transition profile changed=false
+OK
+11/36 zstd.test.Zstd incremental next-frame borrow parallel...parallel transition old profile changed=false limit=67108864
+OK
+12/36 zstd.test_0...OK
+13/36 zstd.decode.budget.test_0...OK
+14/36 io.requested_heap_budget.test_0...OK
+15/36 tests.zstd_stream_counter_contracts.test_0...OK
+16/36 tests.zstd_large_history_contracts.test_0...OK
+17/36 zstd.incremental.encoder.frame.test_0...OK
+18/36 tests.zstd_hq_search_contracts.test_0...OK
+19/36 zstd.match.hq_tree.test_0...OK
+20/36 zstd.match.hq_parser.test_0...OK
+21/36 zstd.match.lazy2.test_0...OK
+22/36 zstd.match.hq_parser.tests.test_0...OK
+23/36 zstd.match.hq_parser.frontier_parser.test_0...OK
+24/36 zstd.encode.total_budget.test_0...OK
+25/36 zstd.encode.controls.test_0...OK
+26/36 checksum.xxh64_stream.test_0...OK
+27/36 zstd.match.controlled_source.test_0...OK
+28/36 lz77.test_0...OK
+29/36 lz77.test_1...OK
+30/36 zstd.encode.repeated_pattern.test_0...OK
+31/36 zstd.literals.cut_histogram.test_0...OK
+32/36 zstd.match.controlled_fast.test_0...OK
+33/36 zstd.match.adaptive_tree.test_0...OK
+34/36 zstd.match.hq_parser.row_tags.test_0...OK
+35/36 zstd.match.hq_parser.search_edges.test_0...OK
+36/36 zstd.match.hq_parser.prepared_price.test_0...OK
+All 36 tests passed.
+(node:3033013) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed command: node tools/wasi_test_gate.js deflate "Deflate encoder transition borrow contracts" ./.zig-cache/o/6fd66c4df00488db63935abfcb4c46ad/vort-deflate-encoder-lifecycle-wasm-tests.wasm br "Brotli metadata finish and lifecycle borrows" ./.zig-cache/o/9c9168ccb40f01e2ef73a483cbefd99b/vort-br-encoder-lifecycle-wasm-tests.wasm zstd "Zstd next-frame, setter and skippable borrows" ./.zig-cache/o/ecc4f296b7f8d9e219b0c760085707d1/vort-zstd-encoder-lifecycle-wasm-tests.wasm
+
+check-encoder-lifecycle
++- test-encoder-lifecycle
+   +- run test vort-zstd-encoder-lifecycle-tests w
+serial transition profile changed=false
+parallel transition old profile changed=false limit=67108864
+failed command: ./.zig-cache/o/a8655dc32ee8ebb415386c7a4526b8c5/vort-zstd-encoder-lifecycle-tests --cache-dir=./.zig-cache --seed=0x68e9b68 --listen=-
+
+Build Summary: 33/33 steps succeeded; 190/190 tests passed
+check-encoder-lifecycle success
++- test-encoder-lifecycle success
+|  +- run test vort-deflate-encoder-lifecycle-tests 12 pass (12 total) 5s MaxRSS:11M
+|  |  +- compile test vort-deflate-encoder-lifecycle-tests Debug native cached 7ms MaxRSS:41M
+|  +- run test vort-br-encoder-lifecycle-tests 47 pass (47 total) 560ms MaxRSS:23M
+|  |  +- compile test vort-br-encoder-lifecycle-tests Debug native cached 9ms MaxRSS:41M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-encode-borrows-br-x86_64 Debug native cached 4ms MaxRSS:40M
+|  |     +- compile obj vort-encode-borrows-br-x86_64 Debug native (reused)
+|  +- run test vort-zstd-encoder-lifecycle-tests 36 pass (36 total) 67ms MaxRSS:12M
+|     +- compile test vort-zstd-encoder-lifecycle-tests Debug native success 3s MaxRSS:311M
+|        +- WriteFile cached
+|        +- compile obj vort-encode-borrows-zstd-x86_64 Debug native cached 5ms MaxRSS:41M
+|        +- compile obj vort-encode-borrows-zstd-x86_64 Debug native (reused)
++- test-encoder-lifecycle-x86 success
+|  +- run test vort-deflate-encoder-lifecycle-x86-tests 12 pass (12 total) 5s MaxRSS:10M
+|  |  +- compile test vort-deflate-encoder-lifecycle-x86-tests Debug x86-linux-musl cached 7ms MaxRSS:41M
+|  +- run test vort-br-encoder-lifecycle-x86-tests 47 pass (47 total) 582ms MaxRSS:21M
+|  |  +- compile test vort-br-encoder-lifecycle-x86-tests Debug x86-linux-musl cached 7ms MaxRSS:41M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-encode-borrows-br-x86 Debug x86-linux-musl cached 4ms MaxRSS:41M
+|  |     +- compile obj vort-encode-borrows-br-x86 Debug x86-linux-musl (reused)
+|  +- run test vort-zstd-encoder-lifecycle-x86-tests 36 pass (36 total) 78ms MaxRSS:11M
+|     +- compile test vort-zstd-encoder-lifecycle-x86-tests Debug x86-linux-musl success 10s MaxRSS:821M
+|        +- WriteFile cached
+|        +- compile obj vort-encode-borrows-zstd-x86 Debug x86-linux-musl cached 5ms MaxRSS:41M
+|        +- compile obj vort-encode-borrows-zstd-x86 Debug x86-linux-musl (reused)
++- test-encoder-lifecycle-wasm success
+   +- install generated to encoder-lifecycle-wasm.json success
+      +- run node success 5s
+         +- compile test vort-deflate-encoder-lifecycle-wasm-tests Debug wasm32-wasi cached 6ms MaxRSS:41M
+         +- compile test vort-br-encoder-lifecycle-wasm-tests Debug wasm32-wasi cached 9ms MaxRSS:41M
+         |  +- WriteFile cached
+         |  +- compile obj vort-encode-borrows-br-wasm32 Debug wasm32-wasi cached 4ms MaxRSS:41M
+         |  +- compile obj vort-encode-borrows-br-wasm32 Debug wasm32-wasi (reused)
+         +- compile test vort-zstd-encoder-lifecycle-wasm-tests Debug wasm32-wasi cached 1s MaxRSS:41M
+            +- WriteFile cached
+            +- compile obj vort-encode-borrows-zstd-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:41M
+            +- compile obj vort-encode-borrows-zstd-wasm32 Debug wasm32-wasi (reused)
+

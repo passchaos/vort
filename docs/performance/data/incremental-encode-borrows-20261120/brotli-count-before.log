@@ -1,0 +1,28 @@
+test-br
++- run test vort-br-tests 29 pass, 1 fail (30 total)
+error: 'br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows bound RAW descriptor counts before visiting storage' failed:
+       expected error.InvalidBlockPlan, found .{ .progress = .{ .input_read = 0, .output_written = 0 }, .status = .need_input, .block_boundary = false }
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1296af0 in expectError__anon_45300 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:13:5: 0x129aaf2 in reject__anon_45240 (br.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, encoder.step(input, output));
+           ^
+       /home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:259:5: 0x129b64e in rejectDictionaryCount__anon_45214 (br.zig)
+           try reject(encoder, "", &output);
+           ^
+       /home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:300:9: 0x129d691 in test.Brotli encoder step borrows bound RAW descriptor counts before visiting storage (br.zig)
+               try rejectDictionaryCount(&encoder, &ledger, &profile);
+               ^
+failed command: ./.zig-cache/o/91cfd8574af369fb7b0040db8e63424c/vort-br-tests --cache-dir=./.zig-cache --seed=0xc98350c9 --listen=-
+
+Build Summary: 3/5 steps succeeded (1 failed); 29/30 tests passed (1 failed)
+test-br transitive failure
++- run test vort-br-tests 29 pass, 1 fail (30 total)
+   +- compile test vort-br-tests Debug native success 3s MaxRSS:263M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 4ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/3c63719b1754bbcffc98c8ee5942cf01/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort .zig-cache /home/passchaos/.cache/zig --seed 0xc98350c9 -Z556c29467d834d69 -j2 test-br -Dbr-test-filter=Brotli encoder step borrows bound RAW descriptor counts --summary all

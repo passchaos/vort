@@ -1,0 +1,20 @@
+{
+  "goal_status": "active",
+  "recorded_utc": "2026-11-20T11:59:13.222863+00:00",
+  "current_setter_validation": {
+    "deflate_transition": "12/12 full matrix runner",
+    "zstd_setter": "29/29",
+    "prefix_neighbor": "27/27",
+    "step_neighbor": "26/26",
+    "cross_architecture": "33/33 steps;180/180 native/x86;actual WASI3families ok",
+    "whole_current_test_compilation": "14/14 steps",
+    "zstd_complete_reference": "171/171"
+  },
+  "prior_snapshot_full_release_safe": {
+    "source": "../incremental-encoder-lifecycle-20261120/source-before-brotli-setters.json",
+    "exit_code": 0,
+    "result": "5716 passed,2 skipped",
+    "log": "../incremental-encoder-lifecycle-20261120/library-tests-releasesafe.log"
+  },
+  "git_state": "Controlled changes staged; originalLZ77 unstaged and unchanged;not committed per AGENTS.md."
+}

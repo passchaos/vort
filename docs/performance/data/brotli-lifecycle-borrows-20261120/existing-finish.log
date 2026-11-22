@@ -1,0 +1,36 @@
+1/35 br.test_0...OK
+2/35 br.incremental.stored.encoder.test_0...OK
+3/35 br.incremental.copy_decoder.test_0...OK
+4/35 br.incremental.owned_copy_decoder.test_0...OK
+5/35 br.encoder.distance.test_0...OK
+6/35 br.encoder.code_length_rle.test_0...OK
+7/35 br.encoder.hq_options.test_0...OK
+8/35 br.encoder.hq_types.test_0...OK
+9/35 br.encoder.hq_parser.test_0...OK
+10/35 br.encoder.total_budget.test_0...OK
+11/35 tests.br_total_memory_contracts.test_0...OK
+12/35 br.encoder.stored_memory_owner.test_0...OK
+13/35 br.encoder.stored_memory_reuse.test_0...OK
+14/35 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/35 br.encoder.hq_dictionary.test_0...OK
+16/35 br.encoder.hq_codec.alias.test_0...OK
+17/35 br.encoder.static_dictionary_matcher.test_0...OK
+18/35 br.encoder.stored_bit_bound.test_0...OK
+19/35 br.encoder.total_budget.tests.test_0...OK
+20/35 br.encoder.hq_parser.tests.test_0...OK
+21/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata stored keeps accepted metadata...OK
+22/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata planned keeps accepted metadata...OK
+23/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata static dictionary keeps accepted metadata...OK
+24/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata preserves frozen no metadata wire controls...OK
+25/35 io.requested_heap_budget.test_0...OK
+26/35 bitstream.test_0...OK
+27/35 lz77.test_0...OK
+28/35 lz77.test_1...OK
+29/35 br.encoder.hq_tree.test_0...OK
+30/35 br.encoder.scoped_static_dictionary.test_0...OK
+31/35 br.encoder.literal_context_policy.test_0...OK
+32/35 br.encoder.histogram_model.log_q8.test_0...OK
+33/35 br.encoder.joint_context.kernels.test_0...OK
+34/35 br.encoder.hq_parser.command_storage.test_0...OK
+35/35 br.encoder.joint_context.kernels_tests.test_0...OK
+All 35 tests passed.

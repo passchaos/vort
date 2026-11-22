@@ -1,0 +1,27 @@
+1/26 br.test_0...OK
+2/26 br.incremental.stored.encoder.test_0...OK
+3/26 br.incremental.copy_decoder.test_0...OK
+4/26 br.incremental.owned_copy_decoder.test_0...OK
+5/26 br.encoder.distance.test_0...OK
+6/26 br.encoder.code_length_rle.test_0...OK
+7/26 br.encoder.hq_options.test_0...OK
+8/26 br.encoder.hq_types.test_0...OK
+9/26 br.encoder.hq_parser.test_0...OK
+10/26 br.encoder.total_budget.test_0...OK
+11/26 tests.br_total_memory_contracts.test_0...OK
+12/26 br.encoder.stored_memory_owner.test_0...OK
+13/26 br.encoder.stored_memory_reuse.test_0...OK
+14/26 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/26 br.encoder.hq_dictionary.test_0...OK
+16/26 br.encoder.hq_codec.alias.test_0...OK
+17/26 br.encoder.static_dictionary_matcher.test_0...OK
+18/26 br.encoder.stored_bit_bound.test_0...OK
+19/26 br.encoder.total_budget.tests.test_0...OK
+20/26 br.encoder.hq_parser.tests.test_0...OK
+21/26 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge preserves legacy static deferral and empty-final wire...OK
+22/26 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge delays only opted-in full blocks...OK
+23/26 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge chooses non-final blocks before more input and metadata...OK
+24/26 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge final publication failure retains buffered input and reservoir...OK
+25/26 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge failed flush retries one non-final publication...OK
+26/26 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge retains progress when metadata fails after draining output...OK
+All 26 tests passed.

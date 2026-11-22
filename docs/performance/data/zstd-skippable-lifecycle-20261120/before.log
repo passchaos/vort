@@ -1,0 +1,89 @@
+test-zstd
++- run test vort-zstd-tests 15 pass, 5 fail (20 total)
+error: 'zstd.test.Zstd incremental encoder skippable borrows serial receiver' failed:
+       skippable payload changed=true
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12c2a2b in expectError__anon_48121 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:13:5: 0x12c2d0b in refused__anon_48111 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, result);
+           ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:20:5: 0x12ca678 in serialReceiver__anon_48458 (zstd.zig)
+           try refused(&encoder, std.mem.asBytes(&encoder.prefix_state));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:4:5: 0x12ca797 in test.Zstd incremental encoder skippable borrows serial receiver (zstd.zig)
+           try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").serialReceiver(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder skippable borrows parallel receiver' failed:
+       skippable payload changed=true
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1254a0b in expectError__anon_43481 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:13:5: 0x12bee9b in refused__anon_46985 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, result);
+           ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:26:5: 0x12c9137 in parallelReceiver__anon_48420 (zstd.zig)
+           try refused(&encoder, std.mem.asBytes(&encoder.owner.prefix_state));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:7:5: 0x12c9287 in test.Zstd incremental encoder skippable borrows parallel receiver (zstd.zig)
+           try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelReceiver(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder skippable borrows serial profile' failed:
+       skippable payload changed=true
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12c2a2b in expectError__anon_48121 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:13:5: 0x12c2d0b in refused__anon_48111 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, result);
+           ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:35:5: 0x12c31d8 in serialProfile__anon_48047 (zstd.zig)
+           try refused(&encoder, std.mem.asBytes(&profile));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:10:5: 0x12c3347 in test.Zstd incremental encoder skippable borrows serial profile (zstd.zig)
+           try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").serialProfile(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder skippable borrows parallel profile' failed:
+       skippable payload changed=true
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1254a0b in expectError__anon_43481 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:13:5: 0x12bee9b in refused__anon_46985 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, result);
+           ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:44:5: 0x12bf450 in parallelProfile__anon_46964 (zstd.zig)
+           try refused(&encoder, std.mem.asBytes(&profile));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:13:5: 0x12bf607 in test.Zstd incremental encoder skippable borrows parallel profile (zstd.zig)
+           try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelProfile(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder skippable borrows pending preflight' failed:
+       skippable pending refusal queued=true
+       expected .none, found .skippable
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:118:17: 0x1254b34 in expectEqualInner__anon_43667 (std.zig)
+                       return error.TestExpectedEqual;
+                       ^
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:83:5: 0x1254fb7 in expectEqual (zstd.zig)
+           return expectEqualInner(T, expected, actual);
+           ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/skippable_borrow_tests.zig:54:5: 0x125502d in parallelPending__anon_43354 (zstd.zig)
+           try std.testing.expectEqual(.none, encoder.owner.state.unit);
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:16:5: 0x1255317 in test.Zstd incremental encoder skippable borrows pending preflight (zstd.zig)
+           try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelPending(@This());
+           ^
+failed command: ./.zig-cache/o/1ce3cf7938dcabd81668ec8784249c3a/vort-zstd-tests --cache-dir=./.zig-cache --seed=0x12b40cee --listen=-
+
+Build Summary: 3/5 steps succeeded (1 failed); 15/20 tests passed (5 failed)
+test-zstd transitive failure
++- run test vort-zstd-tests 15 pass, 5 fail (20 total)
+   +- compile test vort-zstd-tests Debug native success 580ms MaxRSS:245M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 4ms MaxRSS:40M
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/4aa9d219e2df64b1f16070c96a99fa09/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort .zig-cache /home/passchaos/.cache/zig --seed 0x12b40cee -Zf729dbc6ebe6a68f -j2 test-zstd -Dzstd-test-filter=Zstd incremental encoder skippable borrows --summary all

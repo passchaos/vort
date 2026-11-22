@@ -1,0 +1,39 @@
+{
+  "schema": "vort.zstd.next-frame-borrow-prototype.v1",
+  "frozen_head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "repo_src_unchanged": true,
+  "files": [
+    {
+      "path": "src/zstd.zig",
+      "bytes": 2477721,
+      "sha256": "9bd9cd847c186936acc27686ae836749898d5bef52ed9503f87141cb465d0e81"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/frame.zig",
+      "bytes": 31782,
+      "sha256": "0e122d4b83d160ed2800f69cad67d22df32a84da62eff7b4964d629f404a20f8"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/encoder.zig",
+      "bytes": 11661,
+      "sha256": "432eefec82d615f437a993a6f807d2276ea036875571aace91f6121679c703dd"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/owner.zig",
+      "bytes": 32616,
+      "sha256": "522a9de05a601ff3727e12c8efa9a01ae7590f0774bd8a63169e2d725afaf320"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/queue.zig",
+      "bytes": 27177,
+      "sha256": "84b0cb8eec968fdf8adb99755fbbee57623108ba953e9990aa110228c35d823e"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/transition_borrow_tests.zig",
+      "bytes": 5909,
+      "sha256": "c080fae8e11d64fa77908aac4887f5ea186c39d3f80886477fb9ebf481cb5faa"
+    }
+  ],
+  "patch_sha256": "052a5fe9faa6f0dfa3dfab78ef36695982e672767f438014019f27f88ee85b84",
+  "scope": "Temporary prototype only; no repository production, tests, build, or docs changed"
+}

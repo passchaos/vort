@@ -1,0 +1,14 @@
+deflate_params_interop_reference zlib_version=1.2.11
+deflate_params_interop_ok cases=6 wrappers=3 params_changes=84 same_family_changes=24 vort_to_libz=3 libz_to_vort=3 partial_flush_cases=6 partial_vort_to_libz=3 partial_libz_to_vort=3 sync_recovery_cases=2 sync_vort_to_libz=1 sync_libz_to_vort=1 vort_observed_changes=45 vort_boundary_requests=30 tiny_output_bytes=3 vort_tiny_steps=9014 libz_tiny_calls=42794 z_buf_errors=3 input_bytes_per_case=30735 compressed_bytes=53604
+Build Summary: 8/8 steps succeeded
+run-deflate-params-interop success
++- run exe vort-deflate-params-interop success 69ms
+   +- compile exe vort-deflate-params-interop Debug native success 4s MaxRSS:325M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:38M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:37M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+      +- translate-c cached 12ms MaxRSS:40M
+

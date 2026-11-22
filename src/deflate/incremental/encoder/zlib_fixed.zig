@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const counts = core.stream_count;
 const Count = core.StreamCount;
+const step_borrows = @import("step_borrows.zig");
 const window = @import("../../zlib/window.zig");
 
 /// Incremental zlib wrapper around the fixed-Huffman raw-DEFLATE stream core.
@@ -122,6 +123,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.stream_count, 1);
             try Codec.RawEncoder.validateOptions(options.raw);
+            try step_borrows.validateDictionaryTransition(self, dictionary);
             self.options = options;
             self.dictionary = dictionary;
             self.raw.resetWithOptions(options.raw);
@@ -133,7 +135,8 @@ pub fn Encoder(comptime Codec: type) type {
             const limit = try window.windowLen(options.window_bits);
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.stream_count, 1);
-            try Codec.RawEncoder.validateOptions(options.raw);
+            try Codec.RawEncoder.validateExactSizeOptions(options.raw, expected_input_len);
+            try step_borrows.validateDictionaryTransition(self, dictionary);
             self.options = options;
             self.dictionary = dictionary;
             self.raw.resetWithOptions(options.raw);
@@ -217,6 +220,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (caller_output.len != 0 and output.len == 0 and
                 (self.pending_offset != self.pending.items.len or !self.header_written or !self.footer_written))
                 return error.IntegerOverflow;
+            try step_borrows.validate(self, input, output);
             self.raw.bindWindowLimit(limit);
             var input_read: usize = 0;
             var output_written: usize = 0;

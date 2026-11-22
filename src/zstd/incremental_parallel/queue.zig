@@ -11,6 +11,7 @@ const workers_mod = @import("worker.zig");
 const history_mod = @import("history.zig");
 const configuration = @import("configuration.zig");
 const observations = @import("observations.zig");
+const step_borrows = @import("../incremental/encoder/step_borrows.zig");
 
 pub const SealReason = enum { more_input, flush, finish, rsync };
 
@@ -78,6 +79,30 @@ pub fn Queue(comptime Codec: type) type {
         }
         fn unlock(self: *Self) void {
             if (self.config.geometry.worker_count != 0) self.mutex.unlock(self.config.parallel.io);
+        }
+
+        /// Admit stable objects before locking, including the mutex itself.
+        /// Read mutable Job capacity descriptors under the queue lock. Active
+        /// workers own their local output until completion; that temporary
+        /// storage has no caller borrow.
+        pub fn validateStepBorrows(self: *Self, admission: *step_borrows.Admission) Error!void {
+            if (self.config.dictionary) |dictionary| try admission.dictionary(dictionary);
+            try self.validateOwnedBorrows(admission);
+        }
+
+        /// Prospective transitions supply the next dictionary themselves; the
+        /// ended frame's external dictionary is no longer a live read borrow.
+        pub fn validateOwnedBorrows(self: *Self, admission: *const step_borrows.Admission) Error!void {
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.sliceAsBytes(self.jobs));
+            try admission.owned(std.mem.sliceAsBytes(self.workers));
+            self.lock();
+            defer self.unlock();
+            try admission.list(self.history.bytes);
+            for (self.jobs) |job| {
+                try admission.list(job.bytes);
+                try admission.list(job.output);
+            }
         }
 
         pub fn start(self: *Self) Error!void {

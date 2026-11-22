@@ -453,6 +453,10 @@ const IncrementalGzipFixedEncoderCodec = struct {
 
     pub const resolveParams = deflate.resolveDeflateParams;
 
+    pub fn validateHeader(options: HeaderOptions) deflate.Error!void {
+        _ = try gzipHeaderEncodedSize(options);
+    }
+
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: HeaderOptions) IncrementalGzipFixedEncoderCodec.Error!void {
         const header_len = try gzipHeaderEncodedSize(options);
         const header = try out.addManyAsSlice(allocator, header_len);
@@ -477,6 +481,7 @@ const IncrementalGzipBestEncoderCodec = struct {
     pub const HeaderOptions = deflate.GzipHeaderOptions;
     pub const Crc32 = checksum.Crc32Best;
     pub const resolveParams = IncrementalGzipFixedEncoderCodec.resolveParams;
+    pub const validateHeader = IncrementalGzipFixedEncoderCodec.validateHeader;
     pub const writeHeader = IncrementalGzipFixedEncoderCodec.writeHeader;
     pub const writeFooter = IncrementalGzipFixedEncoderCodec.writeFooter;
 };
@@ -532,6 +537,18 @@ test "relaxed concatenated wrapper commitment and tail probe contracts" {
 
 test "Deflate wide encode stream counters and overflow transactions" {
     try @import("deflate/incremental/tests/wide_encode/main.zig").contracts(@This());
+}
+
+test "Deflate incremental encode borrow contracts" {
+    try @import("deflate/incremental/tests/encode_borrows.zig").contracts(@This());
+}
+
+test "Deflate encoder transition borrow contracts" {
+    try @import("deflate/incremental/tests/encoder_transition_borrows.zig").contracts(@This());
+}
+
+test "Deflate wrapper transition options" {
+    try @import("deflate/incremental/tests/wrapper_transition_options.zig").contracts(@This());
 }
 
 test "Deflate wide decode stream counters and overflow transactions" {

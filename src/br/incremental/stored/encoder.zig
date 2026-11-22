@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const memory = @import("allocator_adapter.zig");
 const PendingCheckpoint = @import("pending_checkpoint.zig").Checkpoint;
+const step_borrows = @import("step_borrows.zig");
 
 /// Build an incremental encoder for Brotli stored/uncompressed streams. Input
 /// is bounded to one format meta-block, while encoded bytes are drained through
@@ -105,6 +106,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextStream(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try resolveBlockLen(options);
+            try step_borrows.validateNextStream(self, options);
             _ = self.memory_binding.activate(Codec, self.allocator, &self.codec_state, options.stream, self.plain.capacity, self.pending.capacity) catch |err|
                 return @errorCast(self.memory_binding.mapError(err));
             self.resetStream(options);
@@ -150,7 +152,9 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) Error!void {
             self.finishing = true;
-            self.flush_requested = false;
+            // Accepted metadata follows any buffered plaintext before the
+            // final marker. A plain flush alone still uses the final block.
+            self.flush_requested = self.metadata_requested;
         }
         /// Publish buffered bytes as a non-final meta-block. The
         /// bit-level writer state is retained so later input continues the same
@@ -160,10 +164,12 @@ pub fn Encoder(comptime Codec: type) type {
         }
         /// Insert a metadata meta-block after all previously accepted content.
         /// The caller must keep `metadata` alive until the encoder returns
-        /// `need_input`; content can then continue in the same Brotli stream.
+        /// `need_input`, or `done` when finish follows this request; content can
+        /// otherwise continue in the same Brotli stream.
         pub fn writeMetadata(self: *Self, metadata: []const u8) Error!void {
             if (self.finishing or self.done or self.metadata_requested) return error.InvalidBlockPlan;
             if (@hasDecl(Codec, "validateMetadata")) try Codec.validateMetadata(metadata.len);
+            try step_borrows.validateMetadata(self, metadata);
             self.pending_metadata = metadata;
             self.metadata_requested = true;
             self.flush_requested = true;
@@ -181,6 +187,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
+            try step_borrows.validate(self, input, output);
             if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
             // Validate the whole offered slice before draining prefix/pending
             // output. Otherwise an empty output buffer can hide a deterministic
@@ -240,7 +247,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (full_block_ready or
                     ((self.finishing or self.flush_requested) and self.plain.items.len != 0))
                 {
-                    if (self.finishing) {
+                    if (self.finishing and !self.metadata_requested) {
                         if (comptime @hasDecl(Codec, "writeFinalBlock")) {
                             try self.writeFinalBlock(allocator);
                             self.plain.clearRetainingCapacity();
@@ -259,7 +266,7 @@ pub fn Encoder(comptime Codec: type) type {
                         continue;
                     }
                     self.flush_requested = false;
-                    return result(input_read, output_written, .need_input);
+                    if (!self.finishing) return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
                     try self.writeFinal(allocator);
@@ -327,6 +334,9 @@ pub fn Encoder(comptime Codec: type) type {
 }
 
 test {
+    _ = @import("lifecycle_borrows_tests.zig");
+    _ = @import("finish_metadata_tests.zig");
+    _ = @import("step_borrows_tests.zig");
     _ = @import("encoder_tests.zig");
     _ = @import("encoder_counter_tests.zig");
     _ = @import("encoder_block_options_tests.zig");

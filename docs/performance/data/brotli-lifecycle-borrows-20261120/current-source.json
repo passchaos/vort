@@ -1,0 +1,41 @@
+{
+  "schema": "vort.brotli-lifecycle-source.v1",
+  "created_utc": "2026-11-20T11:16:10.627100+00:00",
+  "base_revision": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "repo_applied": true,
+  "files": [
+    {
+      "path": "build/encoder_lifecycle.zig",
+      "bytes": 2405,
+      "sha256": "6af91d80e668078b191546798fdd8241a19dd8ae3c9d6aed02318911597c4ffd"
+    },
+    {
+      "path": "src/br/incremental/stored/encoder.zig",
+      "bytes": 18176,
+      "sha256": "ec14ff2a8c4ca7c5e89d61c800a97c84e8321e0f347b954797cfe8587a608277"
+    },
+    {
+      "path": "src/br/incremental/stored/step_borrows.zig",
+      "bytes": 13582,
+      "sha256": "e8726a8da74055b927894408dd2b006e9fdcd11e0e6ce54f73c6742e77397b58"
+    },
+    {
+      "path": "src/br/incremental/stored/step_borrows_tests.zig",
+      "bytes": 26297,
+      "sha256": "57059c0fbe76e92eb3f1a1b26c88d967aaaef0ad3e96d9aa47f3666a256d85d5"
+    },
+    {
+      "path": "src/br/incremental/stored/lifecycle_borrows_tests.zig",
+      "bytes": 16732,
+      "sha256": "a521a46732216a64d62eb3dfeffcd14e8d02646eeeab15ef30df0ad044905922"
+    }
+  ],
+  "original_lz77_diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a",
+  "validated": {
+    "lifecycle": "43/43",
+    "step": "46/46",
+    "finish": "35/35",
+    "cross": "28/28 steps,148/148 native/x86,actual WASI ok",
+    "full_test_compilation": "13/13 steps"
+  }
+}

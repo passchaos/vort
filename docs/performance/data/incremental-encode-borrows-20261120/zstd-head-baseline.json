@@ -1,0 +1,261 @@
+{
+  "schema": "vort.zstd.incremental-fixture-head-baseline.v1",
+  "head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "source_archive": {
+    "path": "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/source-head.tar",
+    "bytes": 45557760,
+    "sha256": "30ca5c9450b10500d335a505b10579346efe433d80904082bfe395f77a394295"
+  },
+  "head_probe": {
+    "path": "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/head-probe",
+    "bytes": 10389024,
+    "sha256": "97f8e38389155601f3cc3d2b663434d8ba2666727a4fbf3295196bb9567cdcfe"
+  },
+  "reference": {
+    "library": {
+      "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+      "bytes": 896992,
+      "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+    },
+    "version": "1.6.0",
+    "version_number": 10600,
+    "header": {
+      "path": "/home/passchaos/Work/zstd/lib/zstd.h",
+      "bytes": 182200,
+      "sha256": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+    },
+    "resolved_parameters": {
+      "ZSTD_c_format": 10,
+      "ZSTD_d_format": 1000,
+      "ZSTD_c_compressionLevel": 100,
+      "ZSTD_c_windowLog": 101,
+      "ZSTD_c_contentSizeFlag": 200,
+      "ZSTD_c_checksumFlag": 201,
+      "ZSTD_c_dictIDFlag": 202,
+      "ZSTD_f_zstd1_magicless": 1
+    },
+    "parameter_scope": "experimental format aliases resolved from this exact local header"
+  },
+  "rows": [
+    {
+      "name": "stream-078-large-sequences-large-sequence-reemission",
+      "argv": [
+        "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/head-probe",
+        "/tmp/vort-incremental-encode-borrows-zstd-20261120/large-sequences.input",
+        "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/stream-078-large-sequences-large-sequence-reemission.head.zst",
+        "/tmp/vort-incremental-encode-borrows-zstd-20261120/stream-078-large-sequences-large-sequence-reemission.config.json"
+      ],
+      "exit_code": 0,
+      "input": {
+        "path": "/tmp/vort-incremental-encode-borrows-zstd-20261120/large-sequences.input",
+        "bytes": 24576,
+        "sha256": "cabc2f88b76cfc4c6346709c86c71ca31bb5dd20e7b71a1a4ba8d8e6a460a33f"
+      },
+      "config": {
+        "path": "/tmp/vort-incremental-encode-borrows-zstd-20261120/stream-078-large-sequences-large-sequence-reemission.config.json",
+        "bytes": 454,
+        "sha256": "369c3897fe67d33a5efe0d0e2da86d6065075e9916e8b48181d3368c897ad7eb"
+      },
+      "probe_error": null,
+      "self_decode_verified": true,
+      "target": "x86_64",
+      "cpu_model": "skylake",
+      "build_mode": "ReleaseFast",
+      "wire": {
+        "path": "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/stream-078-large-sequences-large-sequence-reemission.head.zst",
+        "bytes": 13565,
+        "sha256": "89bb53c65823563efb270cc4f255d60f9315df46c0e54f92bbb2250aa8e471f9"
+      },
+      "current_wire": {
+        "path": "/tmp/vort-incremental-encode-borrows-zstd-20261120/stream-078-large-sequences-large-sequence-reemission.zst",
+        "bytes": 13565,
+        "sha256": "89bb53c65823563efb270cc4f255d60f9315df46c0e54f92bbb2250aa8e471f9"
+      },
+      "head_current_wire_equal": true,
+      "independent_frame": {
+        "envelope": {
+          "format": "standard",
+          "frames": [
+            {
+              "start_byte": 0,
+              "magic_bytes": 4,
+              "descriptor_byte": 4,
+              "descriptor": 4,
+              "header_bytes": 6,
+              "dictionary_id": 0,
+              "dictionary_id_bytes": 0,
+              "content_size": null,
+              "content_size_bytes": 0,
+              "single_segment": false,
+              "window_size": 32768,
+              "checksum": true,
+              "checksum_value": 4020626315,
+              "blocks": [
+                {
+                  "kind": "raw",
+                  "final": false,
+                  "start_byte": 6,
+                  "header_bytes": 3,
+                  "block_size_field": 8192,
+                  "encoded_payload_bytes": 8192,
+                  "end_byte": 8201
+                },
+                {
+                  "kind": "compressed",
+                  "final": false,
+                  "start_byte": 8201,
+                  "header_bytes": 3,
+                  "block_size_field": 9,
+                  "encoded_payload_bytes": 9,
+                  "end_byte": 8213
+                },
+                {
+                  "kind": "compressed",
+                  "final": true,
+                  "start_byte": 8213,
+                  "header_bytes": 3,
+                  "block_size_field": 5345,
+                  "encoded_payload_bytes": 5345,
+                  "end_byte": 13561
+                }
+              ],
+              "end_byte": 13565,
+              "serialized_bytes": 13565
+            }
+          ],
+          "frame_count": 1,
+          "skippable_frames": [],
+          "serialized_bytes": 13565,
+          "exact_frame_bytes": 13565,
+          "parsing_scope": "frame header at physical offset zero/four, exact block extents and checksum trailer; entropy payload semantics independently decoded"
+        },
+        "physical_sequence_counts": [
+          0,
+          1,
+          1116
+        ],
+        "max_physical_sequence_count": 1116,
+        "reference_decode": {
+          "status": "complete",
+          "error": null,
+          "input_read": 13565,
+          "output_written": 24576,
+          "decoded_sha256": "cabc2f88b76cfc4c6346709c86c71ca31bb5dd20e7b71a1a4ba8d8e6a460a33f",
+          "frames_completed": 1,
+          "caller_guards_verified": true,
+          "complete_contents_verified": true
+        }
+      }
+    },
+    {
+      "name": "stream-157-large-sequences-large-sequence-reemission",
+      "argv": [
+        "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/head-probe",
+        "/tmp/vort-incremental-encode-borrows-zstd-20261120/large-sequences.input",
+        "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/stream-157-large-sequences-large-sequence-reemission.head.zst",
+        "/tmp/vort-incremental-encode-borrows-zstd-20261120/stream-157-large-sequences-large-sequence-reemission.config.json"
+      ],
+      "exit_code": 0,
+      "input": {
+        "path": "/tmp/vort-incremental-encode-borrows-zstd-20261120/large-sequences.input",
+        "bytes": 24576,
+        "sha256": "cabc2f88b76cfc4c6346709c86c71ca31bb5dd20e7b71a1a4ba8d8e6a460a33f"
+      },
+      "config": {
+        "path": "/tmp/vort-incremental-encode-borrows-zstd-20261120/stream-157-large-sequences-large-sequence-reemission.config.json",
+        "bytes": 455,
+        "sha256": "eb2d8bfc083cbf059536b5c9a05d7efaab9cf533dd51731d20ff27e0d3208683"
+      },
+      "probe_error": null,
+      "self_decode_verified": true,
+      "target": "x86_64",
+      "cpu_model": "skylake",
+      "build_mode": "ReleaseFast",
+      "wire": {
+        "path": "/tmp/vort-zstd-encoder-borrow-head-baseline-20261120/stream-157-large-sequences-large-sequence-reemission.head.zst",
+        "bytes": 13561,
+        "sha256": "d9397a8be6993d044ffe924afd1f8c4f5829ee31481bf56dac809539d93eded4"
+      },
+      "current_wire": {
+        "path": "/tmp/vort-incremental-encode-borrows-zstd-20261120/stream-157-large-sequences-large-sequence-reemission.zst",
+        "bytes": 13561,
+        "sha256": "d9397a8be6993d044ffe924afd1f8c4f5829ee31481bf56dac809539d93eded4"
+      },
+      "head_current_wire_equal": true,
+      "independent_frame": {
+        "envelope": {
+          "format": "magicless",
+          "frames": [
+            {
+              "start_byte": 0,
+              "magic_bytes": 0,
+              "descriptor_byte": 0,
+              "descriptor": 4,
+              "header_bytes": 2,
+              "dictionary_id": 0,
+              "dictionary_id_bytes": 0,
+              "content_size": null,
+              "content_size_bytes": 0,
+              "single_segment": false,
+              "window_size": 32768,
+              "checksum": true,
+              "checksum_value": 4020626315,
+              "blocks": [
+                {
+                  "kind": "raw",
+                  "final": false,
+                  "start_byte": 2,
+                  "header_bytes": 3,
+                  "block_size_field": 8192,
+                  "encoded_payload_bytes": 8192,
+                  "end_byte": 8197
+                },
+                {
+                  "kind": "compressed",
+                  "final": false,
+                  "start_byte": 8197,
+                  "header_bytes": 3,
+                  "block_size_field": 9,
+                  "encoded_payload_bytes": 9,
+                  "end_byte": 8209
+                },
+                {
+                  "kind": "compressed",
+                  "final": true,
+                  "start_byte": 8209,
+                  "header_bytes": 3,
+                  "block_size_field": 5345,
+                  "encoded_payload_bytes": 5345,
+                  "end_byte": 13557
+                }
+              ],
+              "end_byte": 13561,
+              "serialized_bytes": 13561
+            }
+          ],
+          "frame_count": 1,
+          "skippable_frames": [],
+          "serialized_bytes": 13561,
+          "exact_frame_bytes": 13561,
+          "parsing_scope": "frame header at physical offset zero/four, exact block extents and checksum trailer; entropy payload semantics independently decoded"
+        },
+        "physical_sequence_counts": [
+          0,
+          1,
+          1116
+        ],
+        "max_physical_sequence_count": 1116,
+        "reference_decode": {
+          "status": "complete",
+          "error": null,
+          "input_read": 13561,
+          "output_written": 24576,
+          "decoded_sha256": "cabc2f88b76cfc4c6346709c86c71ca31bb5dd20e7b71a1a4ba8d8e6a460a33f",
+          "frames_completed": 1,
+          "caller_guards_verified": true,
+          "complete_contents_verified": true
+        }
+      }
+    }
+  ]
+}
