@@ -2701,3 +2701,20 @@ byte-identical, and a level-6 control on the same binaries spans
 0.9665--1.0321x with a 0.9919x geometric mean. Levels 4 and 5 were rejected:
 0.9845x and 1.0146x with `osdb` 0.8879x/0.9211x below the control floor.
 Evidence: [data/deflate-hash4-level7-20261122](data/deflate-hash4-level7-20261122/README.md).
+
+## Deflate window-local s16 hash4 matchfinder (2026-11-22)
+
+Levels 6 and 7 classified blocks now use 64 KiB `head3`, 128 KiB `head4` and a
+64 KiB s16 predecessor ring relative to a 32 KiB slide base, rebased once per
+slide with saturating `i16` vector subtraction. This replaces the absolute
+whole-input `u32 prev[]` chain (896 KiB -> 256 KiB of tables) and mirrors
+libdeflate's HC layout. Twelve 128 KiB prefixes at 100 iterations x 5 rounds:
+level 6 **1.0506x** and level 7 **1.0445x** geometric-mean encode speed with
+**byte-identical output on all 24 rows** (570,615 and 568,400 bytes). Routed
+rows gain 1.09--1.29x; the only marginal row, `reymont` level 6, re-measures at
+0.9836x median across three 200 x 5 pairs, above the 0.98 floor. A test-only
+absolute walk with the same 32768 cutoff matches the windowed tables at every
+position of a 100 KiB sliding input. Positions exactly 32768 back saturate to
+the sentinel and are not searched; no benchmark row used such a match. The full
+Debug suite passes 5,737/5,739 tests with two skipped. Evidence:
+[data/deflate-hash4-windowed-20261122](data/deflate-hash4-windowed-20261122/README.md).

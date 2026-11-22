@@ -1353,14 +1353,14 @@ fn hashLazyGreedyPlanAllocWithPosition(
     options: GreedyOptions,
 ) !GreedyPlan {
     if (comptime Position == u32) {
-        if (options.hash4_chain and preferHash4Chain(input, options.window_len)) {
-            const head3 = try allocator.alloc(u32, 1 << 15);
+        if (options.hash4_chain and options.window_len <= hash4_slide_window and preferHash4Chain(input, options.window_len)) {
+            const head3 = try allocator.alloc(i16, 1 << 15);
             defer allocator.free(head3);
-            @memset(head3, std.math.maxInt(u32));
-            const head4 = try allocator.alloc(u32, 1 << 16);
+            @memset(head3, hash4_slide_empty);
+            const head4 = try allocator.alloc(i16, 1 << 16);
             defer allocator.free(head4);
-            @memset(head4, std.math.maxInt(u32));
-            const prev = try allocator.alloc(u32, input.len);
+            @memset(head4, hash4_slide_empty);
+            const prev = try allocator.alloc(i16, hash4_slide_window);
             defer allocator.free(prev);
             var tokens = try initTokenList(allocator, input.len);
             errdefer tokens.deinit(allocator);
@@ -3741,6 +3741,15 @@ const hash4_chain_stride = 8;
 const hash4_chain_match_cap = 64;
 const hash4_chain_classifier_head_bits = 14;
 const hash4_chain_classifier_head_size = 1 << hash4_chain_classifier_head_bits;
+/// Window-local s16 tables for the 4-byte chain. Positions are relative to
+/// the current 32 KiB slide base; the tables are rebased once per slide with
+/// saturating vector subtraction, and the sentinel is the saturated value.
+/// This mirrors libdeflate's HC matchfinder layout: 64 KiB head3, 128 KiB
+/// head4 and 64 KiB predecessor ring, all resident in L2. Positions exactly
+/// 32768 bytes back saturate to the sentinel and are not searched.
+const hash4_slide_window = 1 << 15;
+const hash4_slide_mask = hash4_slide_window - 1;
+const hash4_slide_empty: i16 = std.math.minInt(i16);
 
 /// Classify a block by the sampled match length of the most recent 4-byte
 /// hash occurrence over a middle 4 KiB window. Moderate values (3.5...10.5
@@ -3783,88 +3792,127 @@ fn hash4AtInput(input: []const u8, pos: usize, head_len: usize) ?usize {
     return ((word *% 2654435761) >> 16) & (head_len - 1);
 }
 
-fn insertHash4Chain(input: []const u8, pos: usize, head3: []u32, head4: []u32, prev: []u32) void {
+fn rebaseHash4Table(values: []i16) void {
+    const lanes = 32;
+    const Vec = @Vector(lanes, i16);
+    const zero: Vec = @splat(0);
+    const empty: Vec = @splat(hash4_slide_empty);
+    // Positions are non-negative until their window slides; a negative entry
+    // is already out of range and saturates to the sentinel.
+    const bias: Vec = @splat(@as(i16, -32768));
+    var i: usize = 0;
+    while (i + lanes <= values.len) : (i += lanes) {
+        const current: Vec = values[i..][0..lanes].*;
+        const shifted = current -% bias;
+        values[i..][0..lanes].* = @select(i16, current < zero, empty, shifted);
+    }
+    while (i < values.len) : (i += 1)
+        values[i] = if (values[i] < 0) hash4_slide_empty else @intCast(@as(i32, values[i]) - 32768);
+}
+
+fn slideHash4Window(base: *usize, head3: []i16, head4: []i16, prev: []i16) void {
+    rebaseHash4Table(head3);
+    rebaseHash4Table(head4);
+    rebaseHash4Table(prev);
+    base.* += hash4_slide_window;
+}
+
+fn hash4CandidateAbs(base: usize, candidate: i16) usize {
+    return @intCast(@as(isize, @intCast(base)) + @as(isize, candidate));
+}
+
+fn insertHash4Chain(input: []const u8, pos: usize, base: usize, head3: []i16, head4: []i16, prev: []i16) void {
+    const relative: i16 = @intCast(pos - base);
     if (pos + 4 <= input.len) {
         const h4 = hash4AtInput(input, pos, head4.len).?;
-        prev[pos] = head4[h4];
-        head4[h4] = @intCast(pos);
+        prev[@as(usize, @intCast(relative)) & hash4_slide_mask] = head4[h4];
+        head4[h4] = relative;
     }
     if (pos + 3 <= input.len) {
         const h3 = hash3(input[pos..][0..3]) & (head3.len - 1);
-        head3[h3] = @intCast(pos);
+        head3[h3] = relative;
     }
 }
 
 fn findBestHash4Chain(
     input: []const u8,
     pos: usize,
+    base: usize,
     limits: HashSearchLimits,
-    head3: []const u32,
-    head4: []const u32,
-    prev: []const u32,
+    head3: []const i16,
+    head4: []const i16,
+    prev: []const i16,
 ) MatchCandidate {
     const minimum = limits.minimum;
     if (pos + minimum > input.len) return .{};
     if (limits.max_chain == 0) return .{};
     const max_len = @min(limits.maximum, input.len - pos);
+    const relative: i16 = @intCast(pos - base);
     var best = MatchCandidate{};
     if (pos + 3 <= input.len) {
         const h3 = hash3(input[pos..][0..3]) & (head3.len - 1);
-        const candidate_i = head3[h3];
-        if (candidate_i != std.math.maxInt(u32)) {
-            const candidate: usize = @intCast(candidate_i);
-            const distance = pos - candidate;
-            if (distance != 0 and distance <= limits.window_len and
-                input[candidate] == input[pos] and input[candidate + 1] == input[pos + 1] and input[candidate + 2] == input[pos + 2])
-            {
-                const len = matchLength(input, candidate, pos, max_len);
-                if (len >= minimum and len > best.length)
-                    best = .{ .length = len, .distance = distance };
+        const candidate = head3[h3];
+        if (candidate != hash4_slide_empty) {
+            const distance_i: i32 = @as(i32, relative) - @as(i32, candidate);
+            // A candidate exactly one window back shares its ring slot with
+            // the current position, whose link may already have overwritten
+            // it; stop before reading that slot.
+            if (distance_i > 0 and distance_i <= limits.window_len and distance_i < hash4_slide_window) {
+                const candidate_abs = hash4CandidateAbs(base, candidate);
+                if (input[candidate_abs] == input[pos] and
+                    input[candidate_abs + 1] == input[pos + 1] and
+                    input[candidate_abs + 2] == input[pos + 2])
+                {
+                    const len = matchLength(input, candidate_abs, pos, max_len);
+                    if (len >= minimum and len > best.length)
+                        best = .{ .length = len, .distance = @intCast(distance_i) };
+                }
             }
         }
     }
     if (best.length >= limits.nice_len) return best;
     const hash = hash4AtInput(input, pos, head4.len) orelse return best;
-    var candidate_i = head4[hash];
+    var candidate = head4[hash];
     var checked: usize = 0;
     var walked: usize = 0;
-    while (candidate_i != std.math.maxInt(u32) and walked < limits.max_walks) : (walked += 1) {
-        const candidate: usize = @intCast(candidate_i);
-        const distance = pos - candidate;
-        if (distance == 0 or distance > limits.window_len) break;
+    while (candidate != hash4_slide_empty and walked < limits.max_walks) : (walked += 1) {
+        const distance_i: i32 = @as(i32, relative) - @as(i32, candidate);
+        if (distance_i <= 0 or distance_i > limits.window_len or distance_i >= hash4_slide_window) break;
         if (best.length == max_len) break;
-        const next_candidate = prev[candidate];
+        const slot = @as(usize, @as(u16, @bitCast(candidate))) & hash4_slide_mask;
+        const next_candidate = prev[slot];
+        const candidate_abs = hash4CandidateAbs(base, candidate);
         const required_prefix = @max(best.length, minimum - 1);
-        if (input[candidate + required_prefix] != input[pos + required_prefix]) {
-            candidate_i = next_candidate;
+        if (input[candidate_abs + required_prefix] != input[pos + required_prefix]) {
+            candidate = next_candidate;
             continue;
         }
         checked += 1;
         const prefix_matches = if (best.length >= 8)
-            std.mem.readInt(u64, input[candidate..][0..8], .little) ==
+            std.mem.readInt(u64, input[candidate_abs..][0..8], .little) ==
                 std.mem.readInt(u64, input[pos..][0..8], .little) and
-                std.mem.readInt(u64, input[candidate + best.length - 7 ..][0..8], .little) ==
+                std.mem.readInt(u64, input[candidate_abs + best.length - 7 ..][0..8], .little) ==
                     std.mem.readInt(u64, input[pos + best.length - 7 ..][0..8], .little)
         else if (best.length >= 4)
-            std.mem.readInt(u32, input[candidate..][0..4], .little) ==
+            std.mem.readInt(u32, input[candidate_abs..][0..4], .little) ==
                 std.mem.readInt(u32, input[pos..][0..4], .little) and
-                std.mem.readInt(u32, input[candidate + best.length - 3 ..][0..4], .little) ==
+                std.mem.readInt(u32, input[candidate_abs + best.length - 3 ..][0..4], .little) ==
                     std.mem.readInt(u32, input[pos + best.length - 3 ..][0..4], .little)
         else
-            std.mem.readInt(u16, input[candidate..][0..2], .little) ==
+            std.mem.readInt(u16, input[candidate_abs..][0..2], .little) ==
                 std.mem.readInt(u16, input[pos..][0..2], .little);
         if (!prefix_matches) {
             if (checked == limits.max_chain) break;
-            candidate_i = next_candidate;
+            candidate = next_candidate;
             continue;
         }
-        const len = matchLength(input, candidate, pos, max_len);
+        const len = matchLength(input, candidate_abs, pos, max_len);
         if (len >= minimum and len > best.length) {
-            best = .{ .length = len, .distance = distance };
+            best = .{ .length = len, .distance = @intCast(distance_i) };
             if (len >= limits.nice_len) break;
         }
         if (checked == limits.max_chain) break;
-        candidate_i = next_candidate;
+        candidate = next_candidate;
     }
     return best;
 }
@@ -3874,16 +3922,18 @@ fn hashLazyGreedyPlanHash4Reuse(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: GreedyOptions,
-    head3: []u32,
-    head4: []u32,
-    prev: []u32,
+    head3: []i16,
+    head4: []i16,
+    prev: []i16,
 ) !PlanStats {
     var stats = PlanStats{};
     var recent = options.recent_distances;
     const limits = hashSearchLimits(options);
+    var base: usize = 0;
     var pos: usize = 0;
     while (pos < input.len) {
-        var best = findBestHash4Chain(input, pos, limits, head3, head4, prev);
+        if (pos - base >= hash4_slide_window) slideHash4Window(&base, head3, head4, prev);
+        var best = findBestHash4Chain(input, pos, base, limits, head3, head4, prev);
         if (recent) |*cache| {
             const candidate = recentMatchAt(
                 input,
@@ -3899,16 +3949,17 @@ fn hashLazyGreedyPlanHash4Reuse(
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
             try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertHash4Chain(input, pos, head3, head4, prev);
+            insertHash4Chain(input, pos, base, head3, head4, prev);
             pos += 1;
             continue;
         }
 
         var current_inserted = false;
         if (pos + 1 < input.len) {
-            insertHash4Chain(input, pos, head3, head4, prev);
+            insertHash4Chain(input, pos, base, head3, head4, prev);
             current_inserted = true;
-            const next = findBestHash4Chain(input, pos + 1, limits, head3, head4, prev);
+            if (pos + 1 - base >= hash4_slide_window) slideHash4Window(&base, head3, head4, prev);
+            const next = findBestHash4Chain(input, pos + 1, base, limits, head3, head4, prev);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
                 try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
@@ -3930,8 +3981,10 @@ fn hashLazyGreedyPlanHash4Reuse(
         }
         var insert_pos = if (current_inserted) pos + 1 else pos;
         const end = @min(input.len, pos + best.length);
-        while (insert_pos < end) : (insert_pos += 1)
-            insertHash4Chain(input, insert_pos, head3, head4, prev);
+        while (insert_pos < end) : (insert_pos += 1) {
+            if (insert_pos - base >= hash4_slide_window) slideHash4Window(&base, head3, head4, prev);
+            insertHash4Chain(input, insert_pos, base, head3, head4, prev);
+        }
         pos += best.length;
     }
 
@@ -5713,4 +5766,150 @@ test "ordinal optimal index preserves original plan and ownership" {
         }
     };
     try @import("lz77/ordinal_plan_tests.zig").check(Codec);
+}
+
+fn insertHash4AbsoluteWindow(input: []const u8, pos: usize, head3: []u32, head4: []u32, prev: []u32) void {
+    if (pos + 4 <= input.len) {
+        const h4 = hash4AtInput(input, pos, head4.len).?;
+        prev[pos] = head4[h4];
+        head4[h4] = @intCast(pos);
+    }
+    if (pos + 3 <= input.len) {
+        const h3 = hash3(input[pos..][0..3]) & (head3.len - 1);
+        head3[h3] = @intCast(pos);
+    }
+}
+
+fn findBestHash4AbsoluteWindow(
+    input: []const u8,
+    pos: usize,
+    limits: HashSearchLimits,
+    head3: []const u32,
+    head4: []const u32,
+    prev: []const u32,
+) MatchCandidate {
+    const minimum = limits.minimum;
+    if (pos + minimum > input.len) return .{};
+    if (limits.max_chain == 0) return .{};
+    const max_len = @min(limits.maximum, input.len - pos);
+    var best = MatchCandidate{};
+    if (pos + 3 <= input.len) {
+        const h3 = hash3(input[pos..][0..3]) & (head3.len - 1);
+        const candidate_i = head3[h3];
+        if (candidate_i != std.math.maxInt(u32)) {
+            const candidate: usize = @intCast(candidate_i);
+            const distance = pos - candidate;
+            if (distance != 0 and distance <= limits.window_len and distance < hash4_slide_window and
+                input[candidate] == input[pos] and input[candidate + 1] == input[pos + 1] and input[candidate + 2] == input[pos + 2])
+            {
+                const len = matchLength(input, candidate, pos, max_len);
+                if (len >= minimum and len > best.length)
+                    best = .{ .length = len, .distance = distance };
+            }
+        }
+    }
+    if (best.length >= limits.nice_len) return best;
+    const hash = hash4AtInput(input, pos, head4.len) orelse return best;
+    var candidate_i = head4[hash];
+    var checked: usize = 0;
+    var walked: usize = 0;
+    while (candidate_i != std.math.maxInt(u32) and walked < limits.max_walks) : (walked += 1) {
+        const candidate: usize = @intCast(candidate_i);
+        const distance = pos - candidate;
+        if (distance == 0 or distance > limits.window_len or distance >= hash4_slide_window) break;
+        if (best.length == max_len) break;
+        const next_candidate = prev[candidate];
+        const required_prefix = @max(best.length, minimum - 1);
+        if (input[candidate + required_prefix] != input[pos + required_prefix]) {
+            candidate_i = next_candidate;
+            continue;
+        }
+        checked += 1;
+        const prefix_matches = if (best.length >= 8)
+            std.mem.readInt(u64, input[candidate..][0..8], .little) ==
+                std.mem.readInt(u64, input[pos..][0..8], .little) and
+                std.mem.readInt(u64, input[candidate + best.length - 7 ..][0..8], .little) ==
+                    std.mem.readInt(u64, input[pos + best.length - 7 ..][0..8], .little)
+        else if (best.length >= 4)
+            std.mem.readInt(u32, input[candidate..][0..4], .little) ==
+                std.mem.readInt(u32, input[pos..][0..4], .little) and
+                std.mem.readInt(u32, input[candidate + best.length - 3 ..][0..4], .little) ==
+                    std.mem.readInt(u32, input[pos + best.length - 3 ..][0..4], .little)
+        else
+            std.mem.readInt(u16, input[candidate..][0..2], .little) ==
+                std.mem.readInt(u16, input[pos..][0..2], .little);
+        if (!prefix_matches) {
+            if (checked == limits.max_chain) break;
+            candidate_i = next_candidate;
+            continue;
+        }
+        const len = matchLength(input, candidate, pos, max_len);
+        if (len >= minimum and len > best.length) {
+            best = .{ .length = len, .distance = distance };
+            if (len >= limits.nice_len) break;
+        }
+        if (checked == limits.max_chain) break;
+        candidate_i = next_candidate;
+    }
+    return best;
+}
+
+test "hash4 windowed s16 tables match the absolute walk with the same cutoff" {
+    const allocator = std.testing.allocator;
+    var input: [100 * 1024]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x48_34_57_4e);
+    var i: usize = 0;
+    while (i < input.len) {
+        if (i >= 512 and random.random().uintLessThan(u8, 4) != 0) {
+            const distance = 1 + random.random().uintLessThan(usize, @min(i, 60 * 1024));
+            const length = 3 + random.random().uintLessThan(usize, 128);
+            var copied: usize = 0;
+            while (copied < length and i + copied < input.len) : (copied += 1)
+                input[i + copied] = input[i - distance + copied];
+            i += copied;
+        } else {
+            input[i] = 'a' + random.random().uintLessThan(u8, 26);
+            i += 1;
+        }
+    }
+
+    const head3_len = 1 << 15;
+    const head4_len = 1 << 16;
+    const head3_abs = try allocator.alloc(u32, head3_len);
+    defer allocator.free(head3_abs);
+    const head4_abs = try allocator.alloc(u32, head4_len);
+    defer allocator.free(head4_abs);
+    @memset(head3_abs, std.math.maxInt(u32));
+    @memset(head4_abs, std.math.maxInt(u32));
+    const prev_abs = try allocator.alloc(u32, input.len);
+    defer allocator.free(prev_abs);
+
+    const head3_win = try allocator.alloc(i16, head3_len);
+    defer allocator.free(head3_win);
+    const head4_win = try allocator.alloc(i16, head4_len);
+    defer allocator.free(head4_win);
+    @memset(head3_win, hash4_slide_empty);
+    @memset(head4_win, hash4_slide_empty);
+    const prev_win = try allocator.alloc(i16, hash4_slide_window);
+    defer allocator.free(prev_win);
+
+    const limits = HashSearchLimits{
+        .window_len = default_window_len,
+        .max_chain = 12,
+        .nice_len = 64,
+        .minimum = 3,
+        .maximum = max_match_len,
+        .max_walks = 12,
+    };
+    var base: usize = 0;
+    var pos: usize = 0;
+    while (pos < input.len) : (pos += 1) {
+        if (pos - base >= hash4_slide_window) slideHash4Window(&base, head3_win, head4_win, prev_win);
+        const absolute = findBestHash4AbsoluteWindow(&input, pos, limits, head3_abs, head4_abs, prev_abs);
+        const windowed = findBestHash4Chain(&input, pos, base, limits, head3_win, head4_win, prev_win);
+        try std.testing.expectEqual(absolute.length, windowed.length);
+        try std.testing.expectEqual(absolute.distance, windowed.distance);
+        insertHash4AbsoluteWindow(&input, pos, head3_abs, head4_abs, prev_abs);
+        insertHash4Chain(&input, pos, base, head3_win, head4_win, prev_win);
+    }
 }
