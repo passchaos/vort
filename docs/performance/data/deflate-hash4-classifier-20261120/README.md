@@ -114,3 +114,16 @@ measure **0.9854x** geometric-mean speed at level 6 and **0.9912x** at level 7,
 with `reymont` 0.92x/0.97x, `osdb` 0.95x/0.93x and `dickens` 0.97x at level 6.
 The extra 256 KiB head footprint costs more cache traffic than the shorter
 walk saves. The 16-bit head stays.
+
+## Current hash4 profile boundary (2026-11-22)
+
+`perf record` on the 128 KiB `dickens` level-6 wire (2000 interleaved
+iterations, `vort-bench` ReleaseFast) attributes 26.4% of the whole run to
+`lz77.findBestHash4Chain`, about 69% of Vort's own encode time; the inlined
+lazy planner body adds 6.5% and `matchLength` 2.4%. Inside the search the
+absolute `prev[]` load is **35.6%** of its samples, the `head3` load 3.2% and
+the 3-byte compare 1.1%. The chain-node load is therefore the remaining
+encoder wall, and the delta ring, 17-bit head, prefetch and multi-hop screens
+all lost to its dependency latency. A future step needs a different match
+finder structure (for example libdeflate's window-local s16 tables with
+periodic SIMD reset), not another local edit.
