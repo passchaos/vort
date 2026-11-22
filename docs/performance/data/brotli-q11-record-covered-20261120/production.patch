@@ -1,0 +1,13 @@
+--- a/src/br.zig
++++ b/src/br.zig
+@@ -5777,7 +5777,9 @@
+         }
+     }
+ 
+-    if (schedule.quality.int() >= 10 and window_bits >= default_window_bits and
++    // q11 in this one-shot quality path already inherited the same-options
++    // complete q10 winner. Its record candidate is quality-independent.
++    if (!q11_covered_by_q10 and schedule.quality.int() >= 10 and window_bits >= default_window_bits and
+         input.len >= 4 * 1024 and input.len <= 64 * 1024 and
+         input[input.len - 1] == '\n' and vortBrStableFixedWidthRecord(input.ptr, input.len) != 0)
+     {

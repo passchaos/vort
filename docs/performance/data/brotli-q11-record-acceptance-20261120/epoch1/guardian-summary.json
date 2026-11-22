@@ -1,0 +1,25 @@
+{
+  "intervals": 528,
+  "forbidden_process_intervals": 2,
+  "max_cpu10_scheduled_fraction": 1.1220260835097053,
+  "conflicts": [
+    {
+      "start_ns": 976818549597929,
+      "end_ns": 976818663203631,
+      "cpu2_run_ns": 0,
+      "cpu10_run_ns": 14159472,
+      "cpu10_scheduled_fraction": 0.12463698345000324,
+      "forbidden_processes": [],
+      "conflict": "HT sibling scheduled at least 2 percent"
+    },
+    {
+      "start_ns": 976819119771073,
+      "end_ns": 976819234127386,
+      "cpu2_run_ns": 127996634,
+      "cpu10_run_ns": 128310766,
+      "cpu10_scheduled_fraction": 1.1220260835097053,
+      "forbidden_processes": [],
+      "conflict": "HT sibling scheduled at least 2 percent"
+    }
+  ]
+}

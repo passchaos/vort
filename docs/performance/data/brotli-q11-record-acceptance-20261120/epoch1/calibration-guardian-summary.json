@@ -1,0 +1,6 @@
+{
+  "intervals": 489,
+  "forbidden_process_intervals": 0,
+  "max_cpu10_scheduled_fraction": 0.0046651295736236855,
+  "conflicts": []
+}

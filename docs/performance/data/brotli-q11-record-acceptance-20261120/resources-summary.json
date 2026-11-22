@@ -1,0 +1,11 @@
+{
+  "latest_huffman_source_included": true,
+  "production_record_object": "ReleaseFast/native/single-threaded matching codec",
+  "paired_native_resource_rows": 95,
+  "all_success_wires_identical": true,
+  "exact_caps_per_side": 95,
+  "peak_minus_one_refusals_per_side": 95,
+  "all_actual_final_live_zero": true,
+  "bounded_backing_failure_retry_per_side": 3,
+  "no_performance_samples": true
+}

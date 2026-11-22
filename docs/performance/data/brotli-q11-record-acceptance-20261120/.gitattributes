@@ -1,0 +1,5 @@
+*.log -whitespace
+*.jsonl -whitespace
+*.patch -whitespace
+FINAL.md -whitespace
+*.bin binary

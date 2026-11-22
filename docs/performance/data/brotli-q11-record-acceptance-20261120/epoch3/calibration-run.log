@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/tmp/vort-br-record-skip-epoch3-AH8ty9/run_acceptance.py", line 243, in <module>
+    main()
+  File "/tmp/vort-br-record-skip-epoch3-AH8ty9/run_acceptance.py", line 206, in main
+    raise RuntimeError('Foreign CPU work during calibration')
+RuntimeError: Foreign CPU work during calibration

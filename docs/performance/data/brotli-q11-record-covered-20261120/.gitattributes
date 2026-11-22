@@ -1,0 +1,4 @@
+# Preserve captured output and patch context byte-for-byte.
+*.log -whitespace
+*.patch -whitespace
+*.stderr -whitespace

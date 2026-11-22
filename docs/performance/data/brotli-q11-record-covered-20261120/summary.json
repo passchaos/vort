@@ -1,0 +1,1453 @@
+{
+  "purpose": "Functional and requested-resource prototype only. No clocks, throughput samples, RSS comparison, or performance acceptance judgement.",
+  "rows": 95,
+  "target_rows": 60,
+  "control_rows": 35,
+  "successful_complete_wire_identity_rows": 95,
+  "native_exact_decode_rows_per_version": 190,
+  "exact_peak_caps_pass_per_version": 95,
+  "peak_minus_one_refusals_per_version": 95,
+  "required_record_plan_calls_target": {
+    "before": 2,
+    "after": 1
+  },
+  "required_record_candidate_generator_calls_target": {
+    "before": 2,
+    "after": 1
+  },
+  "work_counter_scope": "Raw record_wire_calls counts record candidate generator entries. It does not count lower-level default/alternative physical wire emits. The counters are identical prototype-only codec shims, excluded from the production patch.",
+  "allocation_attempts_removed_min": 21,
+  "allocation_attempts_removed_max": 31,
+  "allocated_bytes_removed_min": 296624,
+  "allocated_bytes_removed_max": 2389734,
+  "peak_lowered_rows": 0,
+  "peak_unchanged_rows": 60,
+  "backing_failure_indices": [
+    0,
+    1,
+    2
+  ],
+  "backing_failure_and_retry_per_version": 3,
+  "actual_allocator_final_live_all_rows": 0,
+  "reusable_observer_lifetime": "Raw profile_final_live is the detached observer last report, not post-deinit live storage. total_reusable.Scope.finish setsProfile(null) before encoder cleanup. Before/after normal observer snapshots agree; independent allocator live is zero in every normal/exact/below operation.",
+  "reusable_normal_observer_last_reports": {
+    "80": 37,
+    "1048656": 1
+  },
+  "foreign_decode_rows": 91,
+  "foreign_decode_full_consumption": true,
+  "foreign_decoder": {
+    "version_integer": 16777225,
+    "objects": [
+      {
+        "path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.0.9",
+        "sha256": "abf86ae9362dbb413c740a55b194c74adb09a7bd92d8fbd96a293c797a4a6d08"
+      },
+      {
+        "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+        "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+      }
+    ]
+  },
+  "foreign_exclusions": [
+    {
+      "job_id": 86,
+      "reason": "External dictionary attachment is outside the system 1.0.9 decoder check; native attached-dictionary decode and exact before/after wire both pass."
+    },
+    {
+      "job_id": 87,
+      "reason": "External dictionary attachment is outside the system 1.0.9 decoder check; native attached-dictionary decode and exact before/after wire both pass."
+    },
+    {
+      "job_id": 92,
+      "reason": "External dictionary attachment is outside the system 1.0.9 decoder check; native attached-dictionary decode and exact before/after wire both pass."
+    },
+    {
+      "job_id": 93,
+      "reason": "External dictionary attachment is outside the system 1.0.9 decoder check; native attached-dictionary decode and exact before/after wire both pass."
+    }
+  ],
+  "boundaries": [
+    "Generic mode only.",
+    "Native ReleaseFast codec plus identical frozen Debug record object on both sides.",
+    "External RAW and serialized RAW dictionary routing are controls; full serialized-static dictionaries are not part of this matrix.",
+    "HQ controls use existing explicit HQ on 1 KiB, outside fixed-record eligibility, with depth 8 / nice 32 / beam 2 / one iteration.",
+    "Chunked and incremental controls do not invoke this ordinary one-shot quality core.",
+    "Backing allocation failure sweep is bounded to indices 0, 1, 2 on one 4 KiB target row; exact-cap and below-cap checks cover all 95 rows.",
+    "No cross-architecture or throughput acceptance gate was run."
+  ],
+  "target_details": [
+    {
+      "job": {
+        "id": 0,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 445,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020623,
+      "peak_after": 1020623
+    },
+    {
+      "job": {
+        "id": 1,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 448,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020629,
+      "peak_after": 1020629
+    },
+    {
+      "job": {
+        "id": 2,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 446,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020625,
+      "peak_after": 1020625
+    },
+    {
+      "job": {
+        "id": 3,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 449,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020631,
+      "peak_after": 1020631
+    },
+    {
+      "job": {
+        "id": 4,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 447,
+      "allocated_bytes_removed": 296792,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020627,
+      "peak_after": 1020627
+    },
+    {
+      "job": {
+        "id": 5,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 450,
+      "allocated_bytes_removed": 296792,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020633,
+      "peak_after": 1020633
+    },
+    {
+      "job": {
+        "id": 6,
+        "kind": "record",
+        "api": "reusable",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 445,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020623,
+      "peak_after": 1020623
+    },
+    {
+      "job": {
+        "id": 7,
+        "kind": "record",
+        "api": "reusable",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 448,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020629,
+      "peak_after": 1020629
+    },
+    {
+      "job": {
+        "id": 8,
+        "kind": "record",
+        "api": "reusable",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 446,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020625,
+      "peak_after": 1020625
+    },
+    {
+      "job": {
+        "id": 9,
+        "kind": "record",
+        "api": "reusable",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 449,
+      "allocated_bytes_removed": 296624,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020631,
+      "peak_after": 1020631
+    },
+    {
+      "job": {
+        "id": 10,
+        "kind": "record",
+        "api": "reusable",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 447,
+      "allocated_bytes_removed": 296792,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020627,
+      "peak_after": 1020627
+    },
+    {
+      "job": {
+        "id": 11,
+        "kind": "record",
+        "api": "reusable",
+        "size": 4096,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 450,
+      "allocated_bytes_removed": 296792,
+      "alloc_attempts_removed": 21,
+      "peak_before": 1020633,
+      "peak_after": 1020633
+    },
+    {
+      "job": {
+        "id": 12,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 778,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172172,
+      "peak_after": 1172172
+    },
+    {
+      "job": {
+        "id": 13,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 781,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172178,
+      "peak_after": 1172178
+    },
+    {
+      "job": {
+        "id": 14,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 779,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172172,
+      "peak_after": 1172172
+    },
+    {
+      "job": {
+        "id": 15,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 782,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172180,
+      "peak_after": 1172180
+    },
+    {
+      "job": {
+        "id": 16,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 780,
+      "allocated_bytes_removed": 473980,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172175,
+      "peak_after": 1172175
+    },
+    {
+      "job": {
+        "id": 17,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 783,
+      "allocated_bytes_removed": 473980,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172182,
+      "peak_after": 1172182
+    },
+    {
+      "job": {
+        "id": 18,
+        "kind": "record",
+        "api": "reusable",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 778,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172172,
+      "peak_after": 1172172
+    },
+    {
+      "job": {
+        "id": 19,
+        "kind": "record",
+        "api": "reusable",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 781,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172178,
+      "peak_after": 1172178
+    },
+    {
+      "job": {
+        "id": 20,
+        "kind": "record",
+        "api": "reusable",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 779,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172172,
+      "peak_after": 1172172
+    },
+    {
+      "job": {
+        "id": 21,
+        "kind": "record",
+        "api": "reusable",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 782,
+      "allocated_bytes_removed": 473812,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172180,
+      "peak_after": 1172180
+    },
+    {
+      "job": {
+        "id": 22,
+        "kind": "record",
+        "api": "reusable",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 780,
+      "allocated_bytes_removed": 473980,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172175,
+      "peak_after": 1172175
+    },
+    {
+      "job": {
+        "id": 23,
+        "kind": "record",
+        "api": "reusable",
+        "size": 8192,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 783,
+      "allocated_bytes_removed": 473980,
+      "alloc_attempts_removed": 23,
+      "peak_before": 1172182,
+      "peak_after": 1172182
+    },
+    {
+      "job": {
+        "id": 24,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 1464,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722187,
+      "peak_after": 1722187
+    },
+    {
+      "job": {
+        "id": 25,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 1467,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722192,
+      "peak_after": 1722192
+    },
+    {
+      "job": {
+        "id": 26,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 1465,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722187,
+      "peak_after": 1722187
+    },
+    {
+      "job": {
+        "id": 27,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 1468,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722194,
+      "peak_after": 1722194
+    },
+    {
+      "job": {
+        "id": 28,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 1466,
+      "allocated_bytes_removed": 735456,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722189,
+      "peak_after": 1722189
+    },
+    {
+      "job": {
+        "id": 29,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 1469,
+      "allocated_bytes_removed": 735456,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722196,
+      "peak_after": 1722196
+    },
+    {
+      "job": {
+        "id": 30,
+        "kind": "record",
+        "api": "reusable",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 1464,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722187,
+      "peak_after": 1722187
+    },
+    {
+      "job": {
+        "id": 31,
+        "kind": "record",
+        "api": "reusable",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 1467,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722192,
+      "peak_after": 1722192
+    },
+    {
+      "job": {
+        "id": 32,
+        "kind": "record",
+        "api": "reusable",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 1465,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722187,
+      "peak_after": 1722187
+    },
+    {
+      "job": {
+        "id": 33,
+        "kind": "record",
+        "api": "reusable",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 1468,
+      "allocated_bytes_removed": 735288,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722194,
+      "peak_after": 1722194
+    },
+    {
+      "job": {
+        "id": 34,
+        "kind": "record",
+        "api": "reusable",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 1466,
+      "allocated_bytes_removed": 735456,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722189,
+      "peak_after": 1722189
+    },
+    {
+      "job": {
+        "id": 35,
+        "kind": "record",
+        "api": "reusable",
+        "size": 16384,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 1469,
+      "allocated_bytes_removed": 735456,
+      "alloc_attempts_removed": 25,
+      "peak_before": 1722196,
+      "peak_after": 1722196
+    },
+    {
+      "job": {
+        "id": 36,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 2865,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800062,
+      "peak_after": 2800062
+    },
+    {
+      "job": {
+        "id": 37,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 2868,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800068,
+      "peak_after": 2800068
+    },
+    {
+      "job": {
+        "id": 38,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 2866,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800064,
+      "peak_after": 2800064
+    },
+    {
+      "job": {
+        "id": 39,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 2869,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800070,
+      "peak_after": 2800070
+    },
+    {
+      "job": {
+        "id": 40,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 2867,
+      "allocated_bytes_removed": 1392088,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800066,
+      "peak_after": 2800066
+    },
+    {
+      "job": {
+        "id": 41,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 2870,
+      "allocated_bytes_removed": 1392088,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800072,
+      "peak_after": 2800072
+    },
+    {
+      "job": {
+        "id": 42,
+        "kind": "record",
+        "api": "reusable",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 2865,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800062,
+      "peak_after": 2800062
+    },
+    {
+      "job": {
+        "id": 43,
+        "kind": "record",
+        "api": "reusable",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 2868,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800068,
+      "peak_after": 2800068
+    },
+    {
+      "job": {
+        "id": 44,
+        "kind": "record",
+        "api": "reusable",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 2866,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800064,
+      "peak_after": 2800064
+    },
+    {
+      "job": {
+        "id": 45,
+        "kind": "record",
+        "api": "reusable",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 2869,
+      "allocated_bytes_removed": 1391920,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800070,
+      "peak_after": 2800070
+    },
+    {
+      "job": {
+        "id": 46,
+        "kind": "record",
+        "api": "reusable",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 2867,
+      "allocated_bytes_removed": 1392088,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800066,
+      "peak_after": 2800066
+    },
+    {
+      "job": {
+        "id": 47,
+        "kind": "record",
+        "api": "reusable",
+        "size": 32768,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 2870,
+      "allocated_bytes_removed": 1392088,
+      "alloc_attempts_removed": 27,
+      "peak_before": 2800072,
+      "peak_after": 2800072
+    },
+    {
+      "job": {
+        "id": 48,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 5621,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395435,
+      "peak_after": 5395435
+    },
+    {
+      "job": {
+        "id": 49,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 5624,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395441,
+      "peak_after": 5395441
+    },
+    {
+      "job": {
+        "id": 50,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 5622,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395435,
+      "peak_after": 5395435
+    },
+    {
+      "job": {
+        "id": 51,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 5625,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395443,
+      "peak_after": 5395443
+    },
+    {
+      "job": {
+        "id": 52,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 5623,
+      "allocated_bytes_removed": 2389734,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395438,
+      "peak_after": 5395438
+    },
+    {
+      "job": {
+        "id": 53,
+        "kind": "record",
+        "api": "one_shot",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 5626,
+      "allocated_bytes_removed": 2389734,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395445,
+      "peak_after": 5395445
+    },
+    {
+      "job": {
+        "id": 54,
+        "kind": "record",
+        "api": "reusable",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 5621,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395435,
+      "peak_after": 5395435
+    },
+    {
+      "job": {
+        "id": 55,
+        "kind": "record",
+        "api": "reusable",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 16,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 5624,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395441,
+      "peak_after": 5395441
+    },
+    {
+      "job": {
+        "id": 56,
+        "kind": "record",
+        "api": "reusable",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": false
+      },
+      "wire_bytes": 5622,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395435,
+      "peak_after": 5395435
+    },
+    {
+      "job": {
+        "id": 57,
+        "kind": "record",
+        "api": "reusable",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 24,
+        "large_window": false,
+        "metadata": true
+      },
+      "wire_bytes": 5625,
+      "allocated_bytes_removed": 2389398,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395443,
+      "peak_after": 5395443
+    },
+    {
+      "job": {
+        "id": 58,
+        "kind": "record",
+        "api": "reusable",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": false
+      },
+      "wire_bytes": 5623,
+      "allocated_bytes_removed": 2389734,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395438,
+      "peak_after": 5395438
+    },
+    {
+      "job": {
+        "id": 59,
+        "kind": "record",
+        "api": "reusable",
+        "size": 65536,
+        "quality": 11,
+        "window_bits": 30,
+        "large_window": true,
+        "metadata": true
+      },
+      "wire_bytes": 5626,
+      "allocated_bytes_removed": 2389734,
+      "alloc_attempts_removed": 31,
+      "peak_before": 5395445,
+      "peak_after": 5395445
+    }
+  ],
+  "controls": [
+    {
+      "id": 60,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 10,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 61,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 10,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 62,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 16384,
+      "quality": 10,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 63,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 32768,
+      "quality": 10,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 64,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 65536,
+      "quality": 10,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 65,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 10,
+      "window_bits": 24,
+      "large_window": false,
+      "metadata": true
+    },
+    {
+      "id": 66,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 10,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 67,
+      "kind": "record",
+      "api": "reusable",
+      "size": 8192,
+      "quality": 10,
+      "window_bits": 24,
+      "large_window": false,
+      "metadata": true
+    },
+    {
+      "id": 68,
+      "kind": "record",
+      "api": "reusable",
+      "size": 8192,
+      "quality": 10,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 69,
+      "kind": "record",
+      "api": "chunked",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 70,
+      "kind": "record",
+      "api": "incremental",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 71,
+      "kind": "record",
+      "api": "chunked",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 72,
+      "kind": "record",
+      "api": "incremental",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 73,
+      "kind": "record",
+      "api": "chunked",
+      "size": 16384,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 74,
+      "kind": "record",
+      "api": "incremental",
+      "size": 16384,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 75,
+      "kind": "record",
+      "api": "chunked",
+      "size": 32768,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 76,
+      "kind": "record",
+      "api": "incremental",
+      "size": 32768,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 77,
+      "kind": "record",
+      "api": "chunked",
+      "size": 65536,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 78,
+      "kind": "record",
+      "api": "incremental",
+      "size": 65536,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 79,
+      "kind": "record",
+      "api": "chunked",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 80,
+      "kind": "record",
+      "api": "chunked",
+      "size": 32768,
+      "quality": 11,
+      "window_bits": 24,
+      "large_window": false,
+      "metadata": true
+    },
+    {
+      "id": 81,
+      "kind": "record",
+      "api": "incremental",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 82,
+      "kind": "record",
+      "api": "incremental",
+      "size": 32768,
+      "quality": 11,
+      "window_bits": 24,
+      "large_window": false,
+      "metadata": true
+    },
+    {
+      "id": 83,
+      "kind": "nonrecord",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 84,
+      "kind": "nonrecord",
+      "api": "one_shot",
+      "size": 65536,
+      "quality": 11,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 85,
+      "kind": "legacy",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": null,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 86,
+      "kind": "raw",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 87,
+      "kind": "serialized_raw",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 88,
+      "kind": "hq",
+      "api": "one_shot",
+      "size": 1024,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 89,
+      "kind": "nonrecord",
+      "api": "reusable",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 90,
+      "kind": "nonrecord",
+      "api": "reusable",
+      "size": 65536,
+      "quality": 11,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 91,
+      "kind": "legacy",
+      "api": "reusable",
+      "size": 8192,
+      "quality": null,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 92,
+      "kind": "raw",
+      "api": "reusable",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 93,
+      "kind": "serialized_raw",
+      "api": "reusable",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 94,
+      "kind": "hq",
+      "api": "reusable",
+      "size": 1024,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    }
+  ]
+}

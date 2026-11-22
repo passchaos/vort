@@ -1,0 +1,206 @@
+{
+  "purpose": "Narrow executed portability evidence, not the 95-row native matrix and not a throughput judgement. Portable wires are compared against the validated native reference SHA and independently decoded by native Vort. No foreign library is used in portable processes.",
+  "job_ids": [
+    0,
+    3,
+    5,
+    60,
+    66,
+    69,
+    70,
+    83,
+    85,
+    86,
+    87,
+    88
+  ],
+  "case_scope": [
+    {
+      "id": 0,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 3,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 24,
+      "large_window": false,
+      "metadata": true
+    },
+    {
+      "id": 5,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 60,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 10,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 66,
+      "kind": "record",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 10,
+      "window_bits": 30,
+      "large_window": true,
+      "metadata": true
+    },
+    {
+      "id": 69,
+      "kind": "record",
+      "api": "chunked",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 70,
+      "kind": "record",
+      "api": "incremental",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 83,
+      "kind": "nonrecord",
+      "api": "one_shot",
+      "size": 4096,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 85,
+      "kind": "legacy",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": null,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 86,
+      "kind": "raw",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 87,
+      "kind": "serialized_raw",
+      "api": "one_shot",
+      "size": 8192,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    },
+    {
+      "id": 88,
+      "kind": "hq",
+      "api": "one_shot",
+      "size": 1024,
+      "quality": 11,
+      "window_bits": 16,
+      "large_window": false,
+      "metadata": false
+    }
+  ],
+  "targets": [
+    {
+      "target": "x86",
+      "rows_per_side": 12,
+      "native_reference_wire_sha_matches_per_side": 12,
+      "normal_exact_native_vort_decode_per_side": 24,
+      "retry_native_vort_decode_per_side": 3,
+      "own_exact_peak_caps_per_side": 12,
+      "own_peak_minus_one_refusals_per_side": 12,
+      "backing_failure_and_retry_per_side": 3,
+      "actual_allocator_final_live": 0,
+      "removed_work": [
+        {
+          "job_id": 0,
+          "allocated_bytes_removed": 267908,
+          "alloc_attempts_removed": 21
+        },
+        {
+          "job_id": 3,
+          "allocated_bytes_removed": 267908,
+          "alloc_attempts_removed": 21
+        },
+        {
+          "job_id": 5,
+          "allocated_bytes_removed": 268076,
+          "alloc_attempts_removed": 21
+        }
+      ]
+    },
+    {
+      "target": "wasi",
+      "rows_per_side": 12,
+      "native_reference_wire_sha_matches_per_side": 12,
+      "normal_exact_native_vort_decode_per_side": 24,
+      "retry_native_vort_decode_per_side": 3,
+      "own_exact_peak_caps_per_side": 12,
+      "own_peak_minus_one_refusals_per_side": 12,
+      "backing_failure_and_retry_per_side": 3,
+      "actual_allocator_final_live": 0,
+      "removed_work": [
+        {
+          "job_id": 0,
+          "allocated_bytes_removed": 268805,
+          "alloc_attempts_removed": 23
+        },
+        {
+          "job_id": 3,
+          "allocated_bytes_removed": 268813,
+          "alloc_attempts_removed": 23
+        },
+        {
+          "job_id": 5,
+          "allocated_bytes_removed": 268983,
+          "alloc_attempts_removed": 23
+        }
+      ]
+    }
+  ],
+  "native_reference": "../clean-summary.json",
+  "object_policy": "Target-specific frozen-source ReleaseFast record objects; native reference used the paired frozen Debug native object. Resource limits/peaks are checked within each architecture, not compared numerically across architectures.",
+  "scope_boundaries": [
+    "Three 4 KiB q11 targets: standard16/no metadata, standard24/metadata, LargeWindow30/metadata.",
+    "q10 standard16 and LargeWindow30 controls; nonrecord, legacy, RAW/serialized-RAW, explicit HQ 1 KiB, chunked and incremental controls.",
+    "Generic mode only.",
+    "This is 12 rows per portable target/side, not all native 95 rows.",
+    "No portable foreign-library decoding, RSS, or throughput acceptance gate."
+  ]
+}

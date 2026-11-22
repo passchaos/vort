@@ -1,0 +1,36 @@
+{
+  "intervals": 1207,
+  "forbidden_process_intervals": 1,
+  "max_cpu10_scheduled_fraction": 0.040765334032463116,
+  "conflicts": [
+    {
+      "start_ns": 977360674686442,
+      "end_ns": 977360801400159,
+      "cpu2_run_ns": 0,
+      "cpu10_run_ns": 5165527,
+      "cpu10_scheduled_fraction": 0.040765334032463116,
+      "forbidden_processes": [],
+      "process_activity": [
+        {
+          "pid": 2889,
+          "name": "gnome-shell",
+          "last_cpu": 10,
+          "cpu_ticks_delta": 1
+        },
+        {
+          "pid": 3083057,
+          "name": "python3",
+          "last_cpu": 8,
+          "cpu_ticks_delta": 2
+        },
+        {
+          "pid": 3083069,
+          "name": "after-bench",
+          "last_cpu": 2,
+          "cpu_ticks_delta": 13
+        }
+      ],
+      "conflict": "HT sibling scheduled at least 2 percent"
+    }
+  ]
+}
