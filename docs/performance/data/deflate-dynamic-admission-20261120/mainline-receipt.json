@@ -1,0 +1,22 @@
+{
+  "recorded_utc": "2026-11-20T14:08:22.293438+00:00",
+  "gate_exit_code": 0,
+  "gate_build_steps": "17/17",
+  "native_x86_runner_tests": "24/24",
+  "wasi_actual_execution": true,
+  "full_library_test_compilation": true,
+  "deep_exit_code": 0,
+  "deep_build_steps": "7/7",
+  "valid_wires": 14684,
+  "external_valid_checks": 13828,
+  "vort_only_valid_contracts": 856,
+  "truncation_cuts": 408571,
+  "mutation_total": 498324,
+  "ordered_wire_mutation_digests_unchanged": true,
+  "newly_rejected_invalid_distance_cases": {
+    "raw": 8,
+    "gzip": 2
+  },
+  "raw_gzip_remaining_vort_only": 0,
+  "full_library_execution_status": "Pending current-source full rerun; earlier406/406 result binds pre-admission source"
+}

@@ -1,0 +1,80 @@
+[
+  {
+    "sample_index": 14,
+    "info": {
+      "codec_index": 0,
+      "codec": "raw",
+      "pattern": "text",
+      "variant": "baseline",
+      "level": 1
+    },
+    "operator": "bitflip",
+    "first_difference": 0,
+    "reference_output_capacity": 4097,
+    "files": {
+      "original_wire": {
+        "path": "sample-014-original-wire.bin",
+        "bytes": 124,
+        "sha256": "56592cf283716f1d26255e8e3c61d11b4626c83f8d2e645ebbc5c2024445bd20",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-014-original-wire.bin"
+      },
+      "mutated_wire": {
+        "path": "sample-014-mutated-wire.bin",
+        "bytes": 124,
+        "sha256": "d388f3fc1cd2103712c3066a8e584b6bb1296a4a3d613a26fbb832179193c929",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-014-mutated-wire.bin"
+      },
+      "source": {
+        "path": "sample-014-source.bin",
+        "bytes": 128,
+        "sha256": "61c202816cecb9a58d81c48058f90d1b357f7df42a06c422efe5382c954de5ca",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-014-source.bin"
+      },
+      "vort_output": {
+        "path": "sample-014-vort-output.bin",
+        "bytes": 127,
+        "sha256": "63cb321e1908e2133cea7f928b68670e29cd9db39b17ba770d1442fef2bfdc6f",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-014-vort-output.bin"
+      }
+    }
+  },
+  {
+    "sample_index": 13,
+    "info": {
+      "codec_index": 2,
+      "codec": "gzip",
+      "pattern": "rle_zero",
+      "variant": "rich-gzip-header",
+      "level": 9
+    },
+    "operator": "bitflip",
+    "first_difference": 29,
+    "reference_output_capacity": 82021,
+    "files": {
+      "original_wire": {
+        "path": "sample-013-original-wire.bin",
+        "bytes": 59,
+        "sha256": "7de11e5ce18938af138af545726eeedf14caa6df830a9e7ea1d1a923e7bfebb3",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-013-original-wire.bin"
+      },
+      "mutated_wire": {
+        "path": "sample-013-mutated-wire.bin",
+        "bytes": 59,
+        "sha256": "d7fd70975abfe6a278960867051c9a6ff1555889480a25d131a40297fb3bf654",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-013-mutated-wire.bin"
+      },
+      "source": {
+        "path": "sample-013-source.bin",
+        "bytes": 20505,
+        "sha256": "f7f77c4744e5fada88b736fa3b4e9f15c1073b636a11db7c2de3c62d15061a31",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-013-source.bin"
+      },
+      "vort_output": {
+        "path": "sample-013-vort-output.bin",
+        "bytes": 20505,
+        "sha256": "f7f77c4744e5fada88b736fa3b4e9f15c1073b636a11db7c2de3c62d15061a31",
+        "copied_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/samples/sample-013-vort-output.bin"
+      }
+    }
+  }
+]

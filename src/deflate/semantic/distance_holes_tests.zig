@@ -1,6 +1,7 @@
-//! Public raw-wire regressions for holes in long distance-code subtrees.
-//! Api supplies only decodeRawDeflate. The wire encoder is independent of the
-//! production bit writer/encoder; table inspection never reads semantic slots.
+//! Legal public long-distance wires and incomplete-tree kernel oracles.
+//! Api supplies only decodeRawDeflate. Header/literal emission is independent;
+//! distance payload codes use the generic canonical encoder after completing
+//! the old incomplete alphabet. Table inspection never reads semantic slots.
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
 const bits = @import("../../bitstream.zig");
@@ -79,6 +80,19 @@ fn completeDistances() [11]u4 {
 
 const incomplete_distances = [_]u4{ 9, 10 };
 
+fn legalDistances() [11]u4 {
+    // The old {9,10} DIST alphabet failed Deflate wire admission. Preserve
+    // symbols 0/1 and their widths, filling the rest with unused leaves.
+    var lengths: [11]u4 = undefined;
+    lengths[0] = 9;
+    lengths[1] = 10;
+    for (2..10) |symbol| lengths[symbol] = @intCast(symbol - 1);
+    lengths[10] = 10;
+    return lengths;
+}
+
+const HeaderShape = enum { seed, legal, incomplete };
+
 fn header(wire: *Wire, final: bool, distances: []const u4) void {
     wire.put(@intFromBool(final), 1);
     wire.put(2, 2);
@@ -105,12 +119,15 @@ fn makeWire(seed_block: bool, literal_count: usize, token: Token) Wire {
         for (0..history_len) |_| putLiteral(&wire, 'a');
         putLiteral(&wire, 256);
     }
-    header(&wire, true, &incomplete_distances);
+    const legal = legalDistances();
+    const distances: []const u4 = if (token == .missing10) &incomplete_distances else &legal;
+    header(&wire, true, distances);
     for (0..literal_count) |_| putLiteral(&wire, 'a');
     putLiteral(&wire, 257); // Length three, with no length extra bits.
+    const encoder = huffman.HuffmanTable(30).Encoder.init(distances) catch unreachable;
     switch (token) {
-        .existing9 => wire.put(canonicalCode(&incomplete_distances, 0), 9),
-        .existing10 => wire.put(canonicalCode(&incomplete_distances, 1), 10),
+        .existing9 => wire.put(encoder.codes[0], encoder.bits[0]),
+        .existing10 => wire.put(encoder.codes[1], encoder.bits[1]),
         .missing10 => {
             wire.put(768, 10); // Prefix zero, secondary slot three: no code.
             // A stale symbol ten would consume these as distance extra bits,
@@ -152,12 +169,32 @@ fn expectSecondaryShape(table: anytype, prefix: u16, expected: [4]?u16) !void {
     for (actual, expected) |found, wanted| try std.testing.expectEqual(wanted, found);
 }
 
-fn expectHeader(reader: *bits.BufferedBitReader, final: bool, complete: bool) !void {
+fn expectHeader(reader: *bits.BufferedBitReader, final: bool, shape: HeaderShape) !void {
     const start = reader.bitPosition();
+    if (shape == .incomplete) {
+        // This public wire never reaches its missing payload code. Rejection
+        // consumes the complete header, before any literal or match token.
+        var strict = reader.*;
+        const parsed_header = try huffman.parseDynamicHeader(reader);
+        try std.testing.expectEqual(final, parsed_header.final);
+        try std.testing.expectEqual(@as(u16, 258), parsed_header.hlit);
+        try std.testing.expectEqual(@as(u16, 2), parsed_header.hdist);
+        try std.testing.expectEqual(@as(u8, 19), parsed_header.hclen);
+        for (parsed_header.code_length_lengths, 0..) |width, symbol| {
+            try std.testing.expectEqual(@as(u4, if (symbol < 16) 4 else 0), width);
+        }
+        const cl = try huffman.CodeLengthTable.init(&parsed_header.code_length_lengths);
+        for (literalLengths()) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(reader));
+        for (incomplete_distances) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(reader));
+        try std.testing.expectEqual(@as(@TypeOf(start), 1114), reader.bitPosition() - start);
+        try std.testing.expectError(error.InvalidHuffmanCode, huffman.parseDynamicLengths(&strict));
+        try std.testing.expectEqual(reader.bitPosition(), strict.bitPosition());
+        return;
+    }
     const parsed = try huffman.parseDynamicLengths(reader);
     try std.testing.expectEqual(final, parsed.header.final);
     try std.testing.expectEqual(@as(u16, 258), parsed.header.hlit);
-    try std.testing.expectEqual(@as(u16, if (complete) 11 else 2), parsed.header.hdist);
+    try std.testing.expectEqual(@as(u16, 11), parsed.header.hdist);
     try std.testing.expectEqual(@as(u8, 19), parsed.header.hclen);
     try std.testing.expectEqual(@as(u4, 10), parsed.literal_max_bits);
     try std.testing.expectEqual(@as(u4, 10), parsed.distance_max_bits);
@@ -170,7 +207,7 @@ fn expectHeader(reader: *bits.BufferedBitReader, final: bool, complete: bool) !v
     const distance = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
     try std.testing.expectEqual(@as(usize, 11), literal.len);
     try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(286, &literal));
-    try std.testing.expectEqual(complete, semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
+    try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
     try expectCode(literal, 'a', 1, 0);
     try expectCode(literal, 256, 10, 511);
     try expectCode(literal, 257, 10, 1023);
@@ -180,7 +217,7 @@ fn expectHeader(reader: *bits.BufferedBitReader, final: bool, complete: bool) !v
     try std.testing.expect(!rle258.isCandidate(parsed));
     try std.testing.expect(!rle258.shouldUse(&literal, &distance));
     try std.testing.expect(rle258.compactPairLiteral(&literal, parsed) == null);
-    if (complete) {
+    if (shape == .seed) {
         try std.testing.expectEqualSlices(u4, &completeDistances(), parsed.distance_lengths[0..11]);
         try expectCode(distance, 8, 9, 255);
         try expectCode(distance, 9, 10, 511);
@@ -188,23 +225,25 @@ fn expectHeader(reader: *bits.BufferedBitReader, final: bool, complete: bool) !v
         try expectSecondaryShape(distance, 255, .{ 137, 154, 137, 170 });
         try std.testing.expectEqual(@as(@TypeOf(start), 1150), reader.bitPosition() - start);
     } else {
-        try std.testing.expectEqualSlices(u4, &incomplete_distances, parsed.distance_lengths[0..2]);
-        try expectCode(distance, 0, 9, 0);
-        try expectCode(distance, 1, 10, 256);
-        try expectSecondaryShape(distance, 0, .{ 9, 26, 9, null });
-        try std.testing.expectEqual(@as(@TypeOf(start), 1114), reader.bitPosition() - start);
+        try std.testing.expectEqualSlices(u4, &legalDistances(), parsed.distance_lengths[0..11]);
+        try expectCode(distance, 0, 9, 255);
+        try expectCode(distance, 1, 10, 511);
+        try expectCode(distance, 10, 10, 1023);
+        try expectSecondaryShape(distance, 255, .{ 9, 26, 9, 170 });
+        try std.testing.expectEqual(@as(@TypeOf(start), 1150), reader.bitPosition() - start);
     }
 }
 
 fn expectShape(wire: *const Wire, seed_block: bool, literal_count: usize, token: Token) !void {
     var reader = bits.BufferedBitReader.init(wire.padded());
     if (seed_block) {
-        try expectHeader(&reader, false, true);
+        try expectHeader(&reader, false, .seed);
         for (0..history_len) |_| try std.testing.expectEqual(@as(u1, 0), try reader.readBits(u1, 1));
         try std.testing.expectEqual(@as(u16, 511), try reader.readBits(u16, 10));
         try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), 1288), reader.bitPosition());
     }
-    try expectHeader(&reader, true, false);
+    try expectHeader(&reader, true, if (token == .missing10) .incomplete else .legal);
+    if (token == .missing10) return;
     for (0..literal_count) |_| try std.testing.expectEqual(@as(u1, 0), try reader.readBits(u1, 1));
     // Verify public hot-loop headroom at the match token, with padding inside
     // the input slice and guards outside it. Existing codes remain decodable.
@@ -212,12 +251,9 @@ fn expectShape(wire: *const Wire, seed_block: bool, literal_count: usize, token:
     try std.testing.expect(@as(usize, if (seed_block) history_len else 0) + literal_count + 16 <= output_len);
     try std.testing.expectEqual(@as(u16, 1023), try reader.readBits(u16, 10));
     switch (token) {
-        .existing9 => try std.testing.expectEqual(@as(u16, 0), try reader.readBits(u16, 9)),
-        .existing10 => try std.testing.expectEqual(@as(u16, 256), try reader.readBits(u16, 10)),
-        .missing10 => {
-            try std.testing.expectEqual(@as(u16, 768), try reader.readBits(u16, 10));
-            try std.testing.expectEqual(@as(u4, 0), try reader.readBits(u4, 4));
-        },
+        .existing9 => try std.testing.expectEqual(@as(u16, 255), try reader.readBits(u16, 9)),
+        .existing10 => try std.testing.expectEqual(@as(u16, 511), try reader.readBits(u16, 10)),
+        .missing10 => unreachable,
     }
     try std.testing.expectEqual(@as(u16, 511), try reader.readBits(u16, 10));
     try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), @intCast(wire.bit_len)), reader.bitPosition());
@@ -243,6 +279,13 @@ fn check(comptime Api: type, wire: *const Wire, expected_error: ?anyerror, expec
     for (storage[guard_len + output_len ..]) |byte| try std.testing.expectEqual(sentinel, byte);
     if (expected_error) |err| {
         try std.testing.expectError(err, result);
+        // Header admission precedes payload decoding. A valid first block
+        // stays committed, but its own semantic loop may have speculatively
+        // touched unused capacity. Without it, the output stays untouched.
+        for (output[0..expected_output_len]) |byte| try std.testing.expectEqual(@as(u8, 'a'), byte);
+        if (expected_output_len == 0) {
+            for (output) |byte| try std.testing.expectEqual(sentinel, byte);
+        }
     } else {
         const decoded = try result;
         try std.testing.expectEqual(wire.bare().len, decoded.input_read);
@@ -252,8 +295,20 @@ fn check(comptime Api: type, wire: *const Wire, expected_error: ?anyerror, expec
 }
 
 pub fn contracts(comptime Api: type) !void {
-    // Incomplete distance trees are an existing supported contract. Both real
-    // codes, including the ten-bit secondary entry, must remain usable.
+    // Generic Huffman/kernel construction still permits the original hole
+    // shape; public Deflate admission is deliberately stricter.
+    const incomplete = try huffman.HuffmanTable(30).init(&incomplete_distances);
+    try std.testing.expect(!semantic.SemanticDynamicDecoder.treeIsComplete(30, &incomplete));
+    try expectCode(incomplete, 0, 9, 0);
+    try expectCode(incomplete, 1, 10, 256);
+    try expectSecondaryShape(incomplete, 0, .{ 9, 26, 9, null });
+    const literal = try huffman.HuffmanTable(286).init(&literalLengths());
+    var decoder: semantic.SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(&literal, &incomplete));
+    try std.testing.expectEqual(@as(usize, 4), decoder.distance_secondary_len);
+
+    // Both original symbols keep their nine-/ten-bit widths in legal complete
+    // DIST trees, including when reusing state after another dynamic block.
     for ([_]bool{ false, true }) |seed_block| {
         for ([_]Token{ .existing9, .existing10 }) |token| {
             const literal_count: usize = if (seed_block) 0 else history_len;
@@ -262,16 +317,16 @@ pub fn contracts(comptime Api: type) !void {
             try check(Api, &wire, null, history_len + 3);
         }
     }
-    // Public two-block witness: first builds a defined symbol-ten slot three;
-    // second leaves that reused slot absent. There is no private table poison.
+    // The old stale-slot public wire has an incomplete second header. Its
+    // rejection now precedes that missing token and preserves the first block.
     const stale_slot = makeWire(true, 0, .missing10);
     try std.testing.expectEqual(@as(usize, 2436), stale_slot.bit_len);
     try std.testing.expectEqual(@as(usize, 305), stale_slot.bare().len);
     try expectShape(&stale_slot, true, 0, .missing10);
-    try check(Api, &stale_slot, error.InvalidHuffmanCode, 0);
+    try check(Api, &stale_slot, error.InvalidHuffmanCode, history_len);
 
-    // A missing code is invalid before history validation even in a one-block
-    // stream. Its expected error is independent of any undefined slot value.
+    // Without a first block the same header rejection writes no output and
+    // remains independent of history or any undefined semantic slot value.
     const no_history = makeWire(false, 0, .missing10);
     try expectShape(&no_history, false, 0, .missing10);
     try check(Api, &no_history, error.InvalidHuffmanCode, 0);

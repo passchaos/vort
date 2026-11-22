@@ -20948,6 +20948,7 @@ test "raw dynamic Huffman inflate decodes zlib dynamic vectors" {
 test "dynamic Huffman decoder rejects matches without distance codes" {
     var lit_lengths: [258]u4 = @splat(0);
     lit_lengths['a'] = 2;
+    lit_lengths['b'] = 2; // Unused fourth leaf keeps LENS complete.
     lit_lengths[256] = 2;
     lit_lengths[257] = 2;
     var code_len_lengths: [19]u4 = @splat(0);
@@ -23771,4 +23772,8 @@ test "Deflate sync flush chunk alias contracts" {
 
 test "Deflate sync flush descriptor count overflow contracts" {
     try @import("deflate/encode/sync_flush_chunks/overflow_tests.zig").contracts(@This());
+}
+
+test "Deflate dynamic tree admission contracts" {
+    try @import("deflate/dynamic/admission_tests.zig").contracts(@This());
 }

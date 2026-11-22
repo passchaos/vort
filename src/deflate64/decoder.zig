@@ -2,6 +2,7 @@ const std = @import("std");
 const bitstream = @import("../bitstream.zig");
 const core = @import("../core.zig");
 const huffman = @import("../huffman.zig");
+const dynamic_admission = @import("../deflate/dynamic/admission.zig");
 
 pub const Error = core.Error || error{InvalidDeflate64Stream};
 
@@ -126,6 +127,7 @@ fn parseDynamicTables(reader: *bitstream.BufferedBitReader) !DynamicTables {
     var code_length_lengths: [19]u4 = @splat(0);
     for (code_length_order[0..code_length_count]) |symbol|
         code_length_lengths[symbol] = try reader.readBits(u4, 3);
+    try dynamic_admission.validate(.code_lengths, &code_length_lengths);
     const code_length_table = try huffman.HuffmanTable(19).init(&code_length_lengths);
 
     var literal_lengths: [286]u4 = @splat(0);
@@ -169,6 +171,8 @@ fn parseDynamicTables(reader: *bitstream.BufferedBitReader) !DynamicTables {
         }
     }
     if (literal_lengths[256] == 0) return error.InvalidDynamicBlockHeader;
+    try dynamic_admission.validate(.literal_lengths, literal_lengths[0..literal_count]);
+    try dynamic_admission.validate(.distances, distance_lengths[0..distance_count]);
     return .{
         .literal = try huffman.HuffmanTable(286).init(literal_lengths[0..literal_count]),
         .distance = try huffman.HuffmanTable(32).init(distance_lengths[0..distance_count]),
@@ -425,22 +429,22 @@ test "Deflate64 decoder rejects a dynamic block with no end-of-block code" {
     try writer.writeBits(std.testing.allocator, 0, 5); // HLIT -> 257 literals
     try writer.writeBits(std.testing.allocator, 0, 5); // HDIST -> 1 distance
     try writer.writeBits(std.testing.allocator, 0, 4); // HCLEN -> 4 CL codes
-    // CL order 16,17,18,0: only symbol 18 gets a 1-bit code.
+    // Complete CODES: symbols 0 and 18 have one-bit codes.
     try writer.writeBits(std.testing.allocator, 0, 3); // 16
     try writer.writeBits(std.testing.allocator, 0, 3); // 17
     try writer.writeBits(std.testing.allocator, 1, 3); // 18
-    try writer.writeBits(std.testing.allocator, 0, 3); // 0
+    try writer.writeBits(std.testing.allocator, 1, 3); // 0
     // Symbol 18 carries 7-bit counts of 11..138 zeros.
     var remaining: usize = 257;
     while (remaining > 0) {
         const run = @min(remaining, 138);
-        try writer.writeBits(std.testing.allocator, 0, 1); // the single 1-bit code
+        try writer.writeBits(std.testing.allocator, 1, 1); // symbol 18
         try writer.writeBits(std.testing.allocator, @as(u32, @intCast(run - 11)), 7);
         remaining -= run;
     }
-    // The single distance code also expands to zero.
-    try writer.writeBits(std.testing.allocator, 0, 1);
-    try writer.writeBits(std.testing.allocator, 0, 7); // run of 11 zeros, one used
+    // One direct zero length fills the remaining distance slot without
+    // overrun, so this fixture reaches the intended missing-EOB check.
+    try writer.writeBits(std.testing.allocator, 0, 1); // symbol 0
     const wire = try writer.toOwnedSlice(std.testing.allocator);
     defer std.testing.allocator.free(wire);
     try std.testing.expectError(error.InvalidDynamicBlockHeader, decodeAlloc(std.testing.allocator, wire));

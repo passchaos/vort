@@ -1,0 +1,8 @@
+{
+  "captured_utc": "2026-11-20T15:10:00.634003+00:00",
+  "source": "source-provenance.json",
+  "source_sha256": "5cfd7f70971ac0f9ef771a351ec194dc780b1f37155828e647ae7b09d1587413",
+  "record_patch_applied": false,
+  "benchmark_decision": "No clean15-sweep acceptance; broker masks restored; record candidate retained as unadopted prototype",
+  "command": "zig build -j2 test check check-wasm --summary all"
+}

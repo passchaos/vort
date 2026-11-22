@@ -1,0 +1,1455 @@
+diff --git a/src/deflate/dynamic/admission.zig b/src/deflate/dynamic/admission.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/admission.zig
+@@ -0,0 +1,39 @@
++//! RFC 1951/zlib validity for dynamic Huffman alphabets. The generic Huffman
++//! builder also serves codecs and kernel oracles that permit incomplete trees;
++//! only Deflate wire parsers apply this admission policy.
++pub const Alphabet = enum { code_lengths, literal_lengths, distances };
++pub const Error = error{InvalidHuffmanCode};
++
++pub fn validate(comptime alphabet: Alphabet, lengths: []const u4) Error!void {
++    const maximum: usize = if (alphabet == .code_lengths) 7 else 15;
++    var counts: [16]u16 = @splat(0);
++    var active: usize = 0;
++    for (lengths) |width| {
++        if (width > maximum) return error.InvalidHuffmanCode;
++        if (width != 0) {
++            counts[width] += 1;
++            active += 1;
++        }
++    }
++    // An empty distance alphabet is legal in literal-only dynamic blocks.
++    // Its generic error-marker table rejects any later distance-symbol use.
++    if (active == 0) {
++        if (alphabet == .distances) return;
++        return error.InvalidHuffmanCode;
++    }
++    var available: i32 = 1;
++    for (1..maximum + 1) |width| {
++        available = available * 2 - counts[width];
++        if (available < 0) return error.InvalidHuffmanCode;
++    }
++    // zlib permits an incomplete LENS/DISTS set only for one one-bit code.
++    // CODES must always occupy the complete canonical code space.
++    if (available != 0 and
++        (alphabet == .code_lengths or active != 1 or counts[1] != 1))
++        return error.InvalidHuffmanCode;
++}
++
++pub fn isValid(comptime alphabet: Alphabet, lengths: []const u4) bool {
++    validate(alphabet, lengths) catch return false;
++    return true;
++}
+diff --git a/src/deflate/dynamic/admission_tests.zig b/src/deflate/dynamic/admission_tests.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/admission_tests.zig
+@@ -0,0 +1,10 @@
++const shapes = @import("tests/shapes.zig");
++const one_shot = @import("tests/one_shot.zig");
++const incremental = @import("tests/incremental.zig");
++const deflate64 = @import("tests/deflate64.zig");
++pub fn contracts(comptime D: type) !void {
++    try shapes.contracts();
++    try one_shot.contracts(D);
++    try incremental.contracts(D);
++    try deflate64.contracts();
++}
+diff --git a/src/deflate/dynamic/tests/deflate64.zig b/src/deflate/dynamic/tests/deflate64.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/tests/deflate64.zig
+@@ -0,0 +1,31 @@
++const std = @import("std");
++const deflate64 = @import("../../../deflate64.zig");
++const w = @import("wire.zig");
++const real = @import("real_samples.zig");
++const incremental = @import("incremental.zig");
++const t = std.testing;
++
++pub fn contracts() !void {
++    const invalid = [_][]const u8{&real.raw_bad};
++    for (invalid) |raw| {
++        var output: [4097]u8 = @splat(0xa5);
++        try t.expectError(error.InvalidHuffmanCode, deflate64.decodeInto(raw, &output));
++        try t.expectError(error.InvalidHuffmanCode, deflate64.decodeAlloc(t.allocator, raw));
++        for (output) |byte| try t.expectEqual(@as(u8, 0xa5), byte);
++        var history: [65536]u8 = @splat(0xa5);
++        var decoder = try deflate64.IncrementalDecoder.initWithHistory(.{}, &history);
++        try incremental.reject(&decoder, raw, true);
++        for (history) |byte| try t.expectEqual(@as(u8, 0xa5), byte);
++    }
++    inline for (.{ w.Kind.complete, w.Kind.empty_distance, w.Kind.singleton_literal, w.Kind.singleton_distance, w.Kind.deflate64_distance32 }) |kind| {
++        const raw = try w.make(kind);
++        defer t.allocator.free(raw);
++        const expected: []const u8 = if (kind == .singleton_literal) "" else "A";
++        const output = try deflate64.decodeAlloc(t.allocator, raw);
++        defer t.allocator.free(output);
++        try t.expectEqualSlices(u8, expected, output);
++        var history: [65536]u8 = @splat(0xa5);
++        var decoder = try deflate64.IncrementalDecoder.initWithHistory(.{}, &history);
++        try incremental.drain(&decoder, raw, expected);
++    }
++}
+diff --git a/src/deflate/dynamic/tests/incremental.zig b/src/deflate/dynamic/tests/incremental.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/tests/incremental.zig
+@@ -0,0 +1,157 @@
++const std = @import("std");
++const w = @import("wire.zig");
++const real = @import("real_samples.zig");
++const t = std.testing;
++
++fn guard(bytes: []const u8) !void {
++    for (bytes) |byte| try t.expectEqual(@as(u8, 0xa5), byte);
++}
++
++pub fn reject(decoder: anytype, wire: []const u8, comptime fragmented: bool) !void {
++    var caller: [32768 + 32]u8 = @splat(0xa5);
++    const output = caller[16..][0..32768];
++    var consumed: usize = 0;
++    for (0..wire.len + 4) |_| {
++        const offered = wire[consumed..if (fragmented) @min(wire.len, consumed + 1) else wire.len];
++        const input_before = decoder.total_input;
++        const output_before = decoder.total_output;
++        if (decoder.step(offered, output)) |result| {
++            try t.expectEqual(@as(@TypeOf(input_before), @intCast(result.progress.input_read)), decoder.total_input - input_before);
++            try t.expectEqual(@as(@TypeOf(output_before), @intCast(result.progress.output_written)), decoder.total_output - output_before);
++            consumed += result.progress.input_read;
++            try t.expectEqual(@as(usize, 0), result.progress.output_written);
++            try t.expect(result.progress.input_read != 0);
++            try t.expect(result.status != .done);
++        } else |err| {
++            // Existing incremental shape errors retain their header-error
++            // category while all one-shot table errors use InvalidHuffmanCode.
++            try t.expectEqual(error.InvalidDynamicBlockHeader, err);
++            const advanced = decoder.total_input - input_before;
++            try t.expect(advanced <= offered.len);
++            consumed += @intCast(advanced);
++            try t.expectEqual(@as(@TypeOf(output_before), 0), decoder.total_output);
++            if (@hasField(@TypeOf(decoder.*), "last_step_progress")) {
++                try t.expectEqual(advanced, decoder.last_step_progress.input_read);
++                try t.expectEqual(@as(usize, 0), decoder.last_step_progress.output_written);
++            }
++            const error_input = decoder.total_input;
++            const diagnostics = decoder.diagnostics();
++            const phase = diagnostics.last_error_phase_name;
++            const name = diagnostics.last_error_name;
++            try t.expectError(error.InvalidDynamicBlockHeader, decoder.step(wire[consumed..], output));
++            try t.expectEqual(error_input, decoder.total_input);
++            try t.expectEqual(@as(@TypeOf(output_before), 0), decoder.total_output);
++            try t.expectEqualStrings(phase, decoder.diagnostics().last_error_phase_name);
++            try t.expectEqualStrings(name, decoder.diagnostics().last_error_name);
++            if (@hasField(@TypeOf(decoder.*), "last_step_progress")) {
++                try t.expectEqual(@as(usize, 0), decoder.last_step_progress.input_read);
++                try t.expectEqual(@as(usize, 0), decoder.last_step_progress.output_written);
++            }
++            try guard(&caller);
++            return;
++        }
++    }
++    return error.TestUnexpectedResult;
++}
++
++fn rawReject(comptime D: type, raw: []const u8) !void {
++    const Raw = D.RawDeflateIncrementalFixedLiteralDecoder;
++    inline for (.{ false, true }) |fragmented| {
++        var history: [32768]u8 = @splat(0xa5);
++        var decoder = try Raw.initWithHistory(.{}, &history);
++        try reject(&decoder, raw, fragmented);
++        try guard(&history);
++    }
++    // A long input and an attached caller workspace exercise admission before
++    // any semantic/rolling kernel can run or write to caller output/history.
++    const padded = try t.allocator.alloc(u8, raw.len + 8192);
++    defer t.allocator.free(padded);
++    @memcpy(padded[0..raw.len], raw);
++    @memset(padded[raw.len..], 0);
++    var history: [Raw.recommended_history_len]u8 = @splat(0xa5);
++    var decoder = try Raw.initWithHistory(.{ .allow_trailing_data = true }, &history);
++    var workspace: Raw.SemanticWorkspace = undefined;
++    try decoder.attachSemanticWorkspace(&workspace);
++    try reject(&decoder, padded, false);
++    try guard(&history);
++}
++
++fn wrappedReject(comptime D: type, comptime wrapper: w.Wrapper, wire: []const u8) !void {
++    inline for (.{ false, true }) |fragmented| {
++        var history: [32768]u8 = @splat(0xa5);
++        var decoder = if (wrapper == .zlib) try D.ZlibIncrementalDecoder.init(.{}, &history) else try D.GzipIncrementalDecoder.init(.{}, &history);
++        try reject(&decoder, wire, fragmented);
++        try guard(&history);
++    }
++}
++
++pub fn drain(decoder: anytype, wire: []const u8, expected: []const u8) !void {
++    var output: [32768]u8 = @splat(0xa5);
++    var consumed: usize = 0;
++    var produced: usize = 0;
++    for (0..512) |_| {
++        const limit = @min(wire.len, consumed + 1);
++        const before_input = decoder.total_input;
++        const before_output = decoder.total_output;
++        const result = try decoder.step(wire[consumed..limit], output[produced..]);
++        consumed += result.progress.input_read;
++        produced += result.progress.output_written;
++        try t.expectEqual(@as(@TypeOf(before_input), @intCast(result.progress.input_read)), decoder.total_input - before_input);
++        try t.expectEqual(@as(@TypeOf(before_output), @intCast(result.progress.output_written)), decoder.total_output - before_output);
++        if (result.status == .done) {
++            try t.expectEqual(wire.len, consumed);
++            try t.expectEqual(expected.len, produced);
++            try t.expectEqualSlices(u8, expected, output[0..produced]);
++            try guard(output[produced..]);
++            return;
++        }
++        try t.expect(result.progress.input_read != 0 or result.progress.output_written != 0);
++    }
++    return error.TestUnexpectedResult;
++}
++
++fn controls(comptime D: type) !void {
++    inline for (.{ w.Kind.complete, w.Kind.empty_distance, w.Kind.singleton_distance, w.Kind.singleton_literal }) |kind| {
++        const raw = try w.make(kind);
++        defer t.allocator.free(raw);
++        const expected: []const u8 = if (kind == .singleton_literal) "" else "A";
++        var history: [32768]u8 = @splat(0xa5);
++        var decoder = try D.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{}, &history);
++        try drain(&decoder, raw, expected);
++        inline for (.{ w.Wrapper.zlib, w.Wrapper.gzip }) |wrapper| {
++            const frame = try w.wrap(wrapper, raw, expected, "");
++            defer t.allocator.free(frame);
++            var wrapped = if (wrapper == .zlib) try D.ZlibIncrementalDecoder.init(.{}, &history) else try D.GzipIncrementalDecoder.init(.{}, &history);
++            try drain(&wrapped, frame, expected);
++        }
++    }
++    const raw = try w.make(.dictionary_match);
++    defer t.allocator.free(raw);
++    var history: [32768]u8 = @splat(0xa5);
++    var decoder = try D.RawDeflateIncrementalFixedLiteralDecoder.initWithDictionary(.{}, &history, "A");
++    try drain(&decoder, raw, "AAA");
++    const zlib = try w.wrap(.zlib, raw, "AAA", "A");
++    defer t.allocator.free(zlib);
++    var wrapped = try D.ZlibIncrementalDecoder.initWithDictionary(.{}, &history, "A");
++    try drain(&wrapped, zlib, "AAA");
++}
++
++pub fn contracts(comptime D: type) !void {
++    try rawReject(D, &real.raw_bad);
++    try wrappedReject(D, .gzip, &real.gzip_bad);
++    inline for (.{
++        w.Kind.incomplete_codes,       w.Kind.incomplete_literal,      w.Kind.long_literal_singleton,
++        w.Kind.incomplete_distance,    w.Kind.long_distance_singleton, w.Kind.oversubscribed_codes,
++        w.Kind.oversubscribed_literal, w.Kind.oversubscribed_distance, w.Kind.missing_eob,
++    }) |kind| {
++        const raw = try w.make(kind);
++        defer t.allocator.free(raw);
++        try rawReject(D, raw);
++        inline for (.{ w.Wrapper.zlib, w.Wrapper.gzip }) |wrapper| {
++            const frame = try w.wrap(wrapper, raw, "A", "");
++            defer t.allocator.free(frame);
++            try wrappedReject(D, wrapper, frame);
++        }
++    }
++    try controls(D);
++}
+diff --git a/src/deflate/dynamic/tests/one_shot.zig b/src/deflate/dynamic/tests/one_shot.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/tests/one_shot.zig
+@@ -0,0 +1,138 @@
++const std = @import("std");
++const w = @import("wire.zig");
++const real = @import("real_samples.zig");
++const t = std.testing;
++
++fn guard(bytes: []const u8) !void {
++    for (bytes) |byte| try t.expectEqual(@as(u8, 0xa5), byte);
++}
++
++pub fn rejectRaw(comptime D: type, raw: []const u8, expected: anyerror) !void {
++    var caller: [4097 + 32]u8 = @splat(0xa5);
++    const output = caller[16..][0..4097];
++    try t.expectError(expected, D.decodeRawAuto(raw, output));
++    try guard(&caller);
++    try t.expectError(expected, D.decodeRawAutoWithDictionary(raw, "A", output));
++    try guard(&caller);
++    try t.expectError(expected, D.decodeRawDynamicAllocStrict(t.allocator, raw));
++    try t.expectError(expected, D.decodeRawAutoAlloc(t.allocator, raw));
++    try t.expectError(expected, D.parseRawDeflateHeaderInfo(raw));
++    try t.expectError(expected, D.profileFirstDynamicDeflateBlock(raw));
++    var joined: [1024]u8 = @splat(0x5a);
++    const chunks = [_][]const u8{ raw[0..1], raw[1 .. raw.len / 2], raw[raw.len / 2 ..] };
++    try t.expectError(expected, D.decodeRawChunks(&chunks, &joined, output));
++    try guard(&caller);
++    try t.expectError(expected, D.RawDeflateDecoder.init(raw, output));
++    try guard(&caller);
++
++    const dictionary_frame = try w.wrap(.zlib, raw, "A", "A");
++    defer t.allocator.free(dictionary_frame);
++    const dictionary_chunks = [_][]const u8{ dictionary_frame[0..6], dictionary_frame[6..] };
++    try t.expectError(expected, D.decodeZlibWithDictionary(dictionary_frame, output, "A"));
++    try t.expectError(expected, D.decodeZlibChunksIntoWithDictionary(&dictionary_chunks, output, "A"));
++    try guard(&caller);
++
++    var appended: std.ArrayList(u8) = .empty;
++    defer appended.deinit(t.allocator);
++    try appended.appendSlice(t.allocator, "committed-prefix");
++    try t.expectError(expected, D.decodeRawAutoAppend(t.allocator, &appended, raw));
++    try t.expectEqualSlices(u8, "committed-prefix", appended.items);
++    inline for (.{ w.Wrapper.zlib, w.Wrapper.gzip }) |wrapper| {
++        const frame = try w.wrap(wrapper, raw, "A", "");
++        defer t.allocator.free(frame);
++        const split = [_][]const u8{ frame[0..2], frame[2..11], frame[11..] };
++        if (wrapper == .zlib) {
++            try t.expectError(expected, D.decodeZlib(frame, output));
++            try t.expectError(expected, D.decodeZlibChunksInto(&split, output));
++            try t.expectError(expected, D.ZlibDecoder.initFromChunksDirect(&split, output));
++        } else {
++            try t.expectError(expected, D.decodeGzip(frame, output));
++            try t.expectError(expected, D.decodeGzipChunksInto(&split, output));
++            try t.expectError(expected, D.GzipDecoder.initFromChunksDirect(&split, output));
++        }
++        try guard(&caller);
++    }
++}
++
++fn controls(comptime D: type) !void {
++    inline for (.{ w.Kind.complete, w.Kind.empty_distance, w.Kind.singleton_distance, w.Kind.singleton_literal }) |kind| {
++        const raw = try w.make(kind);
++        defer t.allocator.free(raw);
++        const expected: []const u8 = if (kind == .singleton_literal) "" else "A";
++        var output: [8]u8 = @splat(0xa5);
++        const decoded = try D.decodeRawAuto(raw, &output);
++        try t.expectEqual(expected.len, decoded.output_written);
++        try t.expectEqualSlices(u8, expected, output[0..decoded.output_written]);
++        const allocated = try D.decodeRawAutoAlloc(t.allocator, raw);
++        defer t.allocator.free(allocated);
++        try t.expectEqualSlices(u8, expected, allocated);
++        inline for (.{ w.Wrapper.zlib, w.Wrapper.gzip }) |wrapper| {
++            const frame = try w.wrap(wrapper, raw, expected, "");
++            defer t.allocator.free(frame);
++            const split = [_][]const u8{ frame[0..1], frame[1..13], frame[13..] };
++            const count = if (wrapper == .zlib) try D.decodeZlibChunksInto(&split, &output) else try D.decodeGzipChunksInto(&split, &output);
++            try t.expectEqual(expected.len, count);
++            try t.expectEqualSlices(u8, expected, output[0..count]);
++        }
++    }
++    const dictionary_raw = try w.make(.dictionary_match);
++    defer t.allocator.free(dictionary_raw);
++    var output: [3]u8 = undefined;
++    const decoded = try D.decodeRawAutoWithDictionary(dictionary_raw, "A", &output);
++    try t.expectEqual(@as(usize, 3), decoded.output_written);
++    try t.expectEqualSlices(u8, "AAA", &output);
++
++    // Empty DIST is admitted for literals, but actual distance use retains
++    // its InvalidHuffmanCode symbol error rather than a shape/header error.
++    const no_distance = try w.make(.empty_distance_match);
++    defer t.allocator.free(no_distance);
++    var protected: [8]u8 = @splat(0xa5);
++    try t.expectError(error.InvalidHuffmanCode, D.decodeRawAutoWithDictionary(no_distance, "A", &protected));
++    try guard(&protected);
++    const zlib = try w.wrap(.zlib, dictionary_raw, "AAA", "A");
++    defer t.allocator.free(zlib);
++    const chunks = [_][]const u8{ zlib[0..4], zlib[4..] };
++    try t.expectEqual(@as(usize, 3), try D.decodeZlibChunksIntoWithDictionary(&chunks, &output, "A"));
++    try t.expectEqualSlices(u8, "AAA", &output);
++
++    const raw = try w.make(.complete);
++    defer t.allocator.free(raw);
++    try t.expectError(error.OutputTooSmall, D.decodeRawAuto(raw, &.{}));
++    try t.expectError(error.OutputLimitExceeded, D.decodeRawAutoAllocLimited(t.allocator, raw, 0));
++    try t.expectError(error.OutOfMemory, D.decodeRawAutoAlloc(t.failing_allocator, raw));
++    try t.expectError(error.SizeMismatch, D.decodeRawAutoAllocExactSize(t.allocator, raw, 2));
++}
++
++fn realCases(comptime D: type) !void {
++    try rejectRaw(D, &real.raw_bad, error.InvalidHuffmanCode);
++    var caller: [82021 + 32]u8 = @splat(0xa5);
++    const output = caller[16..][0..82021];
++    try t.expectError(error.InvalidHuffmanCode, D.decodeGzip(&real.gzip_bad, output));
++    const chunks = [_][]const u8{ real.gzip_bad[0..1], real.gzip_bad[1..29], real.gzip_bad[29..] };
++    try t.expectError(error.InvalidHuffmanCode, D.decodeGzipChunksInto(&chunks, output));
++    try t.expectError(error.InvalidHuffmanCode, D.GzipDecoder.initFromChunksDirect(&chunks, output));
++    try guard(&caller);
++    const raw = try D.decodeRawAutoAlloc(t.allocator, &real.raw_original);
++    defer t.allocator.free(raw);
++    try t.expectEqualSlices(u8, &real.raw_plain, raw);
++    const gzip = try D.decodeGzipAlloc(t.allocator, &real.gzip_original);
++    defer t.allocator.free(gzip);
++    try t.expectEqualSlices(u8, &real.gzip_plain, gzip);
++}
++
++pub fn contracts(comptime D: type) !void {
++    try realCases(D);
++    inline for (.{
++        w.Kind.incomplete_codes,       w.Kind.incomplete_literal,      w.Kind.long_literal_singleton,
++        w.Kind.incomplete_distance,    w.Kind.long_distance_singleton, w.Kind.oversubscribed_codes,
++        w.Kind.oversubscribed_literal, w.Kind.oversubscribed_distance,
++    }) |kind| {
++        const raw = try w.make(kind);
++        defer t.allocator.free(raw);
++        try rejectRaw(D, raw, error.InvalidHuffmanCode);
++    }
++    const no_eob = try w.make(.missing_eob);
++    defer t.allocator.free(no_eob);
++    try rejectRaw(D, no_eob, error.InvalidDynamicBlockHeader);
++    try controls(D);
++}
+diff --git a/src/deflate/dynamic/tests/real_samples.zig b/src/deflate/dynamic/tests/real_samples.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/tests/real_samples.zig
+@@ -0,0 +1,61 @@
++// Real classified deep samples 14 and 13; SHA provenance is retained with the isolated evidence.
++
++pub const raw_original = [_]u8{
++    0x05, 0x00, 0xdb, 0x0a, 0x82, 0x30, 0xf4, 0xbd, 0xaf, 0xf0, 0x03, 0x44, 0x8c, 0x9c, 0xb6, 0x47,
++    0x0d, 0x57, 0x9d, 0xb2, 0xd6, 0x38, 0xae, 0xec, 0x51, 0xd2, 0x90, 0x9d, 0x50, 0x44, 0xe7, 0xe5,
++    0xeb, 0x23, 0x55, 0x88, 0x9d, 0xc3, 0xb9, 0x9b, 0x42, 0xbf, 0xc2, 0x10, 0x48, 0x96, 0x23, 0x66,
++    0xc0, 0x60, 0x27, 0x96, 0x6a, 0xf4, 0xc7, 0x52, 0x65, 0xf9, 0x74, 0x89, 0x18, 0x9d, 0xb4, 0xe9,
++    0xdb, 0xdb, 0x9b, 0xab, 0xb8, 0xaa, 0xe5, 0x99, 0x52, 0xfc, 0x51, 0x33, 0x7c, 0xf7, 0xed, 0x71,
++    0xb6, 0xc2, 0xe3, 0x4b, 0x63, 0x49, 0x24, 0xf6, 0x23, 0x85, 0xdf, 0x1d, 0x66, 0x17, 0xcc, 0xbd,
++    0x36, 0x6c, 0xa5, 0xb0, 0x50, 0xea, 0xba, 0x21, 0xa6, 0x23, 0xa7, 0xe4, 0x49, 0x2c, 0x02, 0xe6,
++    0xbd, 0x8a, 0x69, 0x1b, 0x61, 0x68, 0xf0, 0x09, 0x9e, 0x7e, 0x38, 0x7f,
++};
++
++pub const raw_bad = [_]u8{
++    0x0d, 0x00, 0xdb, 0x0a, 0x82, 0x30, 0xf4, 0xbd, 0xaf, 0xf0, 0x03, 0x44, 0x8c, 0x9c, 0xb6, 0x47,
++    0x0d, 0x57, 0x9d, 0xb2, 0xd6, 0x38, 0xae, 0xec, 0x51, 0xd2, 0x90, 0x9d, 0x50, 0x44, 0xe7, 0xe5,
++    0xeb, 0x23, 0x55, 0x88, 0x9d, 0xc3, 0xb9, 0x9b, 0x42, 0xbf, 0xc2, 0x10, 0x48, 0x96, 0x23, 0x66,
++    0xc0, 0x60, 0x27, 0x96, 0x6a, 0xf4, 0xc7, 0x52, 0x65, 0xf9, 0x74, 0x89, 0x18, 0x9d, 0xb4, 0xe9,
++    0xdb, 0xdb, 0x9b, 0xab, 0xb8, 0xaa, 0xe5, 0x99, 0x52, 0xfc, 0x51, 0x33, 0x7c, 0xf7, 0xed, 0x71,
++    0xb6, 0xc2, 0xe3, 0x4b, 0x63, 0x49, 0x24, 0xf6, 0x23, 0x85, 0xdf, 0x1d, 0x66, 0x17, 0xcc, 0xbd,
++    0x36, 0x6c, 0xa5, 0xb0, 0x50, 0xea, 0xba, 0x21, 0xa6, 0x23, 0xa7, 0xe4, 0x49, 0x2c, 0x02, 0xe6,
++    0xbd, 0x8a, 0x69, 0x1b, 0x61, 0x68, 0xf0, 0x09, 0x9e, 0x7e, 0x38, 0x7f,
++};
++
++pub const raw_plain = [_]u8{
++    0x45, 0x52, 0x54, 0x54, 0x70, 0x20, 0x39, 0x39, 0x2c, 0x45, 0x4a, 0x72, 0x7a, 0x4a, 0x74, 0x34,
++    0x50, 0x35, 0x55, 0x54, 0x54, 0x4d, 0x4a, 0x35, 0x4a, 0x33, 0x46, 0x79, 0x65, 0x75, 0x30, 0x75,
++    0x62, 0x52, 0x4d, 0x55, 0x77, 0x4b, 0x37, 0x35, 0x6c, 0x48, 0x56, 0x6b, 0x72, 0x6f, 0x4e, 0x5a,
++    0x39, 0x52, 0x41, 0x65, 0x66, 0x50, 0x49, 0x6c, 0x45, 0x54, 0x6d, 0x6c, 0x69, 0x74, 0x67, 0x38,
++    0x6f, 0x47, 0x78, 0x76, 0x46, 0x2e, 0x39, 0x79, 0x69, 0x76, 0x6c, 0x46, 0x42, 0x76, 0x64, 0x50,
++    0x46, 0x30, 0x70, 0x43, 0x78, 0x2c, 0x4a, 0x6b, 0x4f, 0x66, 0x6b, 0x35, 0x7a, 0x6c, 0x36, 0x59,
++    0x52, 0x52, 0x4c, 0x0a, 0x6c, 0x35, 0x56, 0x37, 0x20, 0x62, 0x39, 0x42, 0x41, 0x46, 0x34, 0x35,
++    0x2e, 0x58, 0x59, 0x77, 0x31, 0x37, 0x54, 0x36, 0x6b, 0x54, 0x57, 0x4a, 0x2e, 0x56, 0x51, 0x20,
++};
++
++pub const raw_before_output = [_]u8{
++    0x52, 0x59, 0x46, 0x33, 0x20, 0x39, 0x39, 0x2c, 0x45, 0x4a, 0x72, 0x7a, 0x4a, 0x74, 0x34, 0x50,
++    0x35, 0x55, 0x54, 0x54, 0x4d, 0x4a, 0x35, 0x4a, 0x33, 0x46, 0x79, 0x65, 0x75, 0x30, 0x75, 0x62,
++    0x52, 0x4d, 0x55, 0x77, 0x4b, 0x37, 0x35, 0x6c, 0x48, 0x56, 0x6b, 0x72, 0x6f, 0x4e, 0x5a, 0x39,
++    0x52, 0x41, 0x65, 0x66, 0x50, 0x49, 0x6c, 0x45, 0x54, 0x6d, 0x6c, 0x69, 0x74, 0x67, 0x38, 0x6f,
++    0x47, 0x78, 0x76, 0x46, 0x2e, 0x39, 0x79, 0x69, 0x76, 0x6c, 0x46, 0x42, 0x76, 0x64, 0x50, 0x46,
++    0x30, 0x70, 0x43, 0x78, 0x2c, 0x4a, 0x6b, 0x4f, 0x66, 0x6b, 0x35, 0x7a, 0x6c, 0x36, 0x59, 0x52,
++    0x52, 0x4c, 0x0a, 0x6c, 0x35, 0x56, 0x37, 0x20, 0x62, 0x39, 0x42, 0x41, 0x46, 0x34, 0x35, 0x2e,
++    0x58, 0x59, 0x77, 0x31, 0x37, 0x54, 0x36, 0x6b, 0x54, 0x57, 0x4a, 0x2e, 0x56, 0x51, 0x20,
++};
++
++pub const gzip_original = [_]u8{
++    0x1f, 0x8b, 0x08, 0x07, 0xdd, 0x71, 0x36, 0x5f, 0x02, 0x07, 0x01, 0x00, 0x0a, 0x65, 0xf1, 0xed,
++    0xc1, 0x31, 0x01, 0x00, 0x00, 0x00, 0xc2, 0x20, 0xfb, 0xa7, 0x36, 0xc6, 0x1e, 0x60, 0x00, 0x00,
++    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++    0x00, 0x40, 0xe7, 0xa2, 0x77, 0x40, 0x80, 0x19, 0x50, 0x00, 0x00,
++};
++
++pub const gzip_bad = [_]u8{
++    0x1f, 0x8b, 0x08, 0x07, 0xdd, 0x71, 0x36, 0x5f, 0x02, 0x07, 0x01, 0x00, 0x0a, 0x65, 0xf1, 0xed,
++    0xc1, 0x31, 0x01, 0x00, 0x00, 0x00, 0xc2, 0x20, 0xfb, 0xa7, 0x36, 0xc6, 0x1e, 0x70, 0x00, 0x00,
++    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++    0x00, 0x40, 0xe7, 0xa2, 0x77, 0x40, 0x80, 0x19, 0x50, 0x00, 0x00,
++};
++
++pub const gzip_plain = [_]u8{0} ** 20505;
+diff --git a/src/deflate/dynamic/tests/shapes.zig b/src/deflate/dynamic/tests/shapes.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/tests/shapes.zig
+@@ -0,0 +1,31 @@
++const std = @import("std");
++const admission = @import("../admission.zig");
++const huffman = @import("../../../huffman.zig");
++pub fn contracts() !void {
++    const t = std.testing;
++    try admission.validate(.code_lengths, &.{ 1, 1 });
++    try admission.validate(.literal_lengths, &.{ 1, 1 });
++    try admission.validate(.literal_lengths, &.{1});
++    try admission.validate(.distances, &.{1});
++    try admission.validate(.distances, &.{ 0, 0 });
++    inline for (.{ admission.Alphabet.code_lengths, admission.Alphabet.literal_lengths, admission.Alphabet.distances }) |kind| {
++        try t.expectError(error.InvalidHuffmanCode, admission.validate(kind, &.{ 1, 1, 1 }));
++        try t.expectError(error.InvalidHuffmanCode, admission.validate(kind, &.{ 2, 2 }));
++        try t.expectError(error.InvalidHuffmanCode, admission.validate(kind, &.{7}));
++    }
++    try t.expectError(error.InvalidHuffmanCode, admission.validate(.code_lengths, &.{1}));
++    try t.expectError(error.InvalidHuffmanCode, admission.validate(.code_lengths, &.{0}));
++    // Shape admission counts every leaf, including unused reserved symbols.
++    // Their actual use remains a codec symbol-decoding error.
++    try admission.validate(.distances, &([_]u4{5} ** 32));
++    var fixed: [288]u4 = undefined;
++    @memset(fixed[0..144], 8);
++    @memset(fixed[144..256], 9);
++    @memset(fixed[256..280], 7);
++    @memset(fixed[280..], 8);
++    try admission.validate(.literal_lengths, &fixed);
++    // Other codecs and semantic kernel oracles keep the generic builder's
++    // incomplete-tree capability, independent of Deflate wire admission.
++    _ = try huffman.HuffmanTable(2).init(&.{ 2, 2 });
++    _ = try huffman.HuffmanTable(2).Encoder.init(&.{ 2, 2 });
++}
+diff --git a/src/deflate/dynamic/tests/wire.zig b/src/deflate/dynamic/tests/wire.zig
+new file mode 100644
+--- /dev/null
++++ b/src/deflate/dynamic/tests/wire.zig
+@@ -0,0 +1,136 @@
++const std = @import("std");
++const huffman = @import("../../../huffman.zig");
++const bitstream = @import("../../../bitstream.zig");
++const checksum = @import("../../../checksum.zig");
++pub const Kind = enum {
++    complete,
++    deflate64_distance32,
++    empty_distance,
++    singleton_distance,
++    singleton_literal,
++    dictionary_match,
++    incomplete_codes,
++    incomplete_literal,
++    long_literal_singleton,
++    incomplete_distance,
++    long_distance_singleton,
++    oversubscribed_codes,
++    oversubscribed_literal,
++    oversubscribed_distance,
++    missing_eob,
++    empty_distance_match,
++};
++pub fn make(kind: Kind) ![]u8 {
++    const a = std.testing.allocator;
++    var literals: [286]u4 = @splat(0);
++    literals['A'] = 1;
++    literals[256] = 1;
++    var distances: [32]u4 = @splat(0);
++    distances[0] = 1;
++    distances[1] = 1;
++    var codes: [19]u4 = @splat(0);
++    @memset(codes[0..16], 4);
++    switch (kind) {
++        .empty_distance => distances = @splat(0),
++        .singleton_distance => distances[1] = 0,
++        .singleton_literal => {
++            literals['A'] = 0;
++            distances = @splat(0);
++        },
++        .dictionary_match, .empty_distance_match => {
++            literals = @splat(0);
++            literals[256] = 1;
++            literals[257] = 1;
++            distances = @splat(0);
++            if (kind == .dictionary_match) distances[0] = 1;
++        },
++        .incomplete_codes => codes[15] = 0,
++        .incomplete_literal => {
++            literals['A'] = 2;
++            literals[256] = 2;
++        },
++        .long_literal_singleton => {
++            literals['A'] = 0;
++            literals[256] = 7;
++        },
++        .incomplete_distance => distances[1] = 3,
++        .long_distance_singleton => {
++            distances[0] = 7;
++            distances[1] = 0;
++        },
++        .oversubscribed_codes => {
++            codes = @splat(0);
++            codes[0] = 1;
++            codes[1] = 1;
++            codes[2] = 1;
++        },
++        .oversubscribed_literal => literals['B'] = 1,
++        .oversubscribed_distance => distances[2] = 1,
++        .missing_eob => {
++            literals[256] = 0;
++            literals['B'] = 1;
++        },
++        .deflate64_distance32 => distances = @splat(5),
++        .complete => {},
++    }
++    var hlit: usize = 257;
++    for (literals, 0..) |width, i| if (width != 0) {
++        hlit = @max(hlit, i + 1);
++    };
++    var hdist: usize = 1;
++    for (distances, 0..) |width, i| if (width != 0) {
++        hdist = @max(hdist, i + 1);
++    };
++    var writer: bitstream.BitWriter = .{};
++    defer writer.deinit(a);
++    try writer.writeBits(a, 1, 1);
++    try writer.writeBits(a, 2, 2);
++    try writer.writeBits(a, @intCast(hlit - 257), 5);
++    try writer.writeBits(a, @intCast(hdist - 1), 5);
++    try writer.writeBits(a, 15, 4);
++    for (huffman.code_length_order) |symbol| try writer.writeBits(a, codes[symbol], 3);
++    if (kind != .oversubscribed_codes) {
++        const encoder = try huffman.CodeLengthTable.Encoder.init(&codes);
++        for (literals[0..hlit]) |width| try encoder.writeSymbol(&writer, a, width);
++        for (distances[0..hdist]) |width| try encoder.writeSymbol(&writer, a, width);
++        if (kind != .oversubscribed_literal and kind != .missing_eob) {
++            const lit = try huffman.HuffmanTable(286).Encoder.init(literals[0..hlit]);
++            if (kind == .dictionary_match or kind == .empty_distance_match) {
++                try lit.writeSymbol(&writer, a, 257);
++                if (kind == .dictionary_match) {
++                    const dist = try huffman.HuffmanTable(32).Encoder.init(distances[0..hdist]);
++                    try dist.writeSymbol(&writer, a, 0);
++                } else try writer.writeBits(a, 0, 15);
++            } else if (kind != .singleton_literal and kind != .long_literal_singleton)
++                try lit.writeSymbol(&writer, a, 'A');
++            try lit.writeSymbol(&writer, a, 256);
++        }
++    }
++    return writer.toOwnedSlice(a);
++}
++pub const Wrapper = enum { zlib, gzip };
++pub fn wrap(comptime wrapper: Wrapper, raw: []const u8, plain: []const u8, dictionary: []const u8) ![]u8 {
++    const a = std.testing.allocator;
++    var output: std.ArrayList(u8) = .empty;
++    errdefer output.deinit(a);
++    if (wrapper == .zlib) {
++        try output.appendSlice(a, if (dictionary.len == 0) &.{ 0x78, 0x01 } else &.{ 0x78, 0x20 });
++        if (dictionary.len != 0) {
++            var id: [4]u8 = undefined;
++            std.mem.writeInt(u32, &id, checksum.Adler32.hash(dictionary), .big);
++            try output.appendSlice(a, &id);
++        }
++    } else try output.appendSlice(a, &.{ 0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3 });
++    try output.appendSlice(a, raw);
++    if (wrapper == .zlib) {
++        var footer: [4]u8 = undefined;
++        std.mem.writeInt(u32, &footer, checksum.Adler32.hash(plain), .big);
++        try output.appendSlice(a, &footer);
++    } else {
++        var footer: [8]u8 = undefined;
++        std.mem.writeInt(u32, footer[0..4], checksum.Crc32.hash(plain), .little);
++        std.mem.writeInt(u32, footer[4..8], @intCast(plain.len), .little);
++        try output.appendSlice(a, &footer);
++    }
++    return output.toOwnedSlice(a);
++}
+diff --git a/src/deflate/incremental/decoder/compact_tables.zig b/src/deflate/incremental/decoder/compact_tables.zig
+--- a/src/deflate/incremental/decoder/compact_tables.zig
++++ b/src/deflate/incremental/decoder/compact_tables.zig
+@@ -2,6 +2,7 @@
+ //! Deflate decoder, including its dynamic code-length alphabet.
+ 
+ const huffman = @import("../../../huffman.zig");
++const dynamic_admission = @import("../../dynamic/admission.zig");
+ 
+ /// Expand already validated canonical entries into a primary lookup. The
+ /// resumable decoder also retains these entries for long-code misses, so
+@@ -53,48 +54,13 @@
+ }
+ 
+ pub fn validCodeLengthAlphabet(lengths: [19]u4) bool {
+-    var counts: [8]usize = @splat(0);
+-    var active: usize = 0;
+-    for (lengths) |length| {
+-        if (length > 7) return false;
+-        if (length != 0) {
+-            counts[length] += 1;
+-            active += 1;
+-        }
+-    }
+-    if (active == 0) return false;
+-    var available: isize = 1;
+-    for (1..8) |bits| {
+-        available = available * 2 - @as(isize, @intCast(counts[bits]));
+-        if (available < 0) return false;
+-    }
+-    return true;
++    return dynamic_admission.isValid(.code_lengths, &lengths);
+ }
+ 
+ pub fn validDynamicAlphabet(lengths: []const u4) bool {
+-    var counts: [16]usize = @splat(0);
+-    var active: usize = 0;
+-    for (lengths) |length| {
+-        if (length > 15) return false;
+-        if (length != 0) {
+-            counts[length] += 1;
+-            active += 1;
+-        }
+-    }
+-    // zlib's inftrees accepts a LENS/DISTS alphabet with no active symbols by
+-    // installing an error-marker table and deferring the failure until a symbol
+-    // is actually decoded. A literal-only dynamic block therefore carries a
+-    // zero-length distance alphabet legally, and its distance table is never
+-    // consulted. The code-length alphabet keeps its own stricter check because
+-    // zlib rejects every incomplete CODES set.
+-    if (active == 0) return true;
+-    if (active == 1) return true; // RFC permits one-bit incomplete singleton.
+-    var available: isize = 1;
+-    for (1..16) |bits| {
+-        available = available * 2 - @as(isize, @intCast(counts[bits]));
+-        if (available < 0) return false;
+-    }
+-    return available == 0;
++    // The caller checks EOB before this shared data-tree check, so an empty
++    // literal alphabet cannot pass; an unused empty distance alphabet can.
++    return dynamic_admission.isValid(.distances, lengths);
+ }
+ 
+ /// Entries are grouped by code width, so long-code lookup only scans the
+diff --git a/src/deflate/semantic/distance_holes_modes.zig b/src/deflate/semantic/distance_holes_modes.zig
+--- a/src/deflate/semantic/distance_holes_modes.zig
++++ b/src/deflate/semantic/distance_holes_modes.zig
+@@ -1,4 +1,6 @@
+-//! Real two-block wires exercise each long-distance semantic consumer.
++//! Two-block payload fixtures exercise each long-distance semantic consumer.
++//! Their second header has the deliberately incomplete {9,10} DIST alphabet:
++//! generic kernel construction accepts it, while public Deflate rejects it.
+ //! Api.sink(reader, output, initial, decoder) bridges the existing private
+ //! LinearSemanticSink plus decodeSemanticDynamicBlockIntoSinkMode(false,false).
+ const std = @import("std");
+@@ -24,8 +26,10 @@
+     missing: bool,
+ };
+ 
+-// Generated by the independent producer in distance_holes_tests.zig and its
+-// Python oracle. Files include sixteen zero bytes after the raw wire.
++// Archived wires from the original independent distance-hole producer and its
++// Python oracle. Keep these incomplete-tree kernel fixtures byte-identical;
++// public positive cases now use completed trees in distance_holes_tests.zig.
++// Files include sixteen zero bytes after the raw wire.
+ // Padded SHA256: missing10 ecb6529ba719d7db6d4859b52d0a9349ae3f4fa87c9b3304899a2abd85c1bc03
+ // existing9 1269f41cabd9f9bc9ed26bb63507fe809d0d2b1d95f0b4b49a5afb459df42aa2
+ // existing10 1be38d7ad939f05d8cacec9fc215e58b3c6e89449b3ea25fde92a6a6fedacb0c
+@@ -60,15 +64,32 @@
+         try std.testing.expectEqual(@as(u16, 256), try self.literal.decodeValue(&self.reader));
+         try std.testing.expectEqual(@as(@TypeOf(self.reader.bitPosition()), 1288), self.reader.bitPosition());
+ 
+-        const second = try huffman.parseDynamicLengths(&self.reader);
+-        try std.testing.expect(second.header.final);
+-        try std.testing.expectEqual(@as(u16, 258), second.header.hlit);
+-        try std.testing.expectEqual(@as(u16, 2), second.header.hdist);
+-        try std.testing.expectEqual(@as(u8, 19), second.header.hclen);
+-        try std.testing.expectEqual(@as(u4, 10), second.literal_max_bits);
+-        try std.testing.expectEqual(@as(u4, 10), second.distance_max_bits);
+-        self.literal = try huffman.HuffmanTable(286).init(second.literal_lengths[0..258]);
+-        self.distance = try huffman.HuffmanTable(30).init(second.distance_lengths[0..2]);
++        const second_start = self.reader.bitPosition();
++        var strict = self.reader;
++        const second = try huffman.parseDynamicHeader(&self.reader);
++        try std.testing.expect(second.final);
++        try std.testing.expectEqual(@as(u16, 258), second.hlit);
++        try std.testing.expectEqual(@as(u16, 2), second.hdist);
++        try std.testing.expectEqual(@as(u8, 19), second.hclen);
++        for (second.code_length_lengths, 0..) |width, symbol| {
++            try std.testing.expectEqual(@as(u4, if (symbol < 16) 4 else 0), width);
++        }
++        var literal_lengths: [258]u4 = @splat(0);
++        literal_lengths['a'] = 1;
++        for (0..8) |i| literal_lengths[i] = @intCast(i + 2);
++        literal_lengths[256] = 10;
++        literal_lengths[257] = 10;
++        const distance_lengths = [_]u4{ 9, 10 };
++        // Verify the archived header's direct symbols against known lengths,
++        // then build generic oracle tables without public wire admission.
++        const cl = try huffman.CodeLengthTable.init(&second.code_length_lengths);
++        for (literal_lengths) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(&self.reader));
++        for (distance_lengths) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(&self.reader));
++        try std.testing.expectEqual(@as(@TypeOf(second_start), 1114), self.reader.bitPosition() - second_start);
++        try std.testing.expectError(error.InvalidHuffmanCode, huffman.parseDynamicLengths(&strict));
++        try std.testing.expectEqual(self.reader.bitPosition(), strict.bitPosition());
++        self.literal = try huffman.HuffmanTable(286).init(&literal_lengths);
++        self.distance = try huffman.HuffmanTable(30).init(&distance_lengths);
+         try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(286, &self.literal));
+         try std.testing.expect(!semantic.SemanticDynamicDecoder.treeIsComplete(30, &self.distance));
+         try std.testing.expectEqual(@as(usize, 2), self.distance.len);
+diff --git a/src/deflate/semantic/distance_holes_tests.zig b/src/deflate/semantic/distance_holes_tests.zig
+--- a/src/deflate/semantic/distance_holes_tests.zig
++++ b/src/deflate/semantic/distance_holes_tests.zig
+@@ -1,6 +1,7 @@
+-//! Public raw-wire regressions for holes in long distance-code subtrees.
+-//! Api supplies only decodeRawDeflate. The wire encoder is independent of the
+-//! production bit writer/encoder; table inspection never reads semantic slots.
++//! Legal public long-distance wires and incomplete-tree kernel oracles.
++//! Api supplies only decodeRawDeflate. Header/literal emission is independent;
++//! distance payload codes use the generic canonical encoder after completing
++//! the old incomplete alphabet. Table inspection never reads semantic slots.
+ const std = @import("std");
+ const huffman = @import("../../huffman.zig");
+ const bits = @import("../../bitstream.zig");
+@@ -79,6 +80,19 @@
+ 
+ const incomplete_distances = [_]u4{ 9, 10 };
+ 
++fn legalDistances() [11]u4 {
++    // The old {9,10} DIST alphabet failed Deflate wire admission. Preserve
++    // symbols 0/1 and their widths, filling the rest with unused leaves.
++    var lengths: [11]u4 = undefined;
++    lengths[0] = 9;
++    lengths[1] = 10;
++    for (2..10) |symbol| lengths[symbol] = @intCast(symbol - 1);
++    lengths[10] = 10;
++    return lengths;
++}
++
++const HeaderShape = enum { seed, legal, incomplete };
++
+ fn header(wire: *Wire, final: bool, distances: []const u4) void {
+     wire.put(@intFromBool(final), 1);
+     wire.put(2, 2);
+@@ -105,12 +119,15 @@
+         for (0..history_len) |_| putLiteral(&wire, 'a');
+         putLiteral(&wire, 256);
+     }
+-    header(&wire, true, &incomplete_distances);
++    const legal = legalDistances();
++    const distances: []const u4 = if (token == .missing10) &incomplete_distances else &legal;
++    header(&wire, true, distances);
+     for (0..literal_count) |_| putLiteral(&wire, 'a');
+     putLiteral(&wire, 257); // Length three, with no length extra bits.
++    const encoder = huffman.HuffmanTable(30).Encoder.init(distances) catch unreachable;
+     switch (token) {
+-        .existing9 => wire.put(canonicalCode(&incomplete_distances, 0), 9),
+-        .existing10 => wire.put(canonicalCode(&incomplete_distances, 1), 10),
++        .existing9 => wire.put(encoder.codes[0], encoder.bits[0]),
++        .existing10 => wire.put(encoder.codes[1], encoder.bits[1]),
+         .missing10 => {
+             wire.put(768, 10); // Prefix zero, secondary slot three: no code.
+             // A stale symbol ten would consume these as distance extra bits,
+@@ -152,12 +169,32 @@
+     for (actual, expected) |found, wanted| try std.testing.expectEqual(wanted, found);
+ }
+ 
+-fn expectHeader(reader: *bits.BufferedBitReader, final: bool, complete: bool) !void {
++fn expectHeader(reader: *bits.BufferedBitReader, final: bool, shape: HeaderShape) !void {
+     const start = reader.bitPosition();
++    if (shape == .incomplete) {
++        // This public wire never reaches its missing payload code. Rejection
++        // consumes the complete header, before any literal or match token.
++        var strict = reader.*;
++        const parsed_header = try huffman.parseDynamicHeader(reader);
++        try std.testing.expectEqual(final, parsed_header.final);
++        try std.testing.expectEqual(@as(u16, 258), parsed_header.hlit);
++        try std.testing.expectEqual(@as(u16, 2), parsed_header.hdist);
++        try std.testing.expectEqual(@as(u8, 19), parsed_header.hclen);
++        for (parsed_header.code_length_lengths, 0..) |width, symbol| {
++            try std.testing.expectEqual(@as(u4, if (symbol < 16) 4 else 0), width);
++        }
++        const cl = try huffman.CodeLengthTable.init(&parsed_header.code_length_lengths);
++        for (literalLengths()) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(reader));
++        for (incomplete_distances) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(reader));
++        try std.testing.expectEqual(@as(@TypeOf(start), 1114), reader.bitPosition() - start);
++        try std.testing.expectError(error.InvalidHuffmanCode, huffman.parseDynamicLengths(&strict));
++        try std.testing.expectEqual(reader.bitPosition(), strict.bitPosition());
++        return;
++    }
+     const parsed = try huffman.parseDynamicLengths(reader);
+     try std.testing.expectEqual(final, parsed.header.final);
+     try std.testing.expectEqual(@as(u16, 258), parsed.header.hlit);
+-    try std.testing.expectEqual(@as(u16, if (complete) 11 else 2), parsed.header.hdist);
++    try std.testing.expectEqual(@as(u16, 11), parsed.header.hdist);
+     try std.testing.expectEqual(@as(u8, 19), parsed.header.hclen);
+     try std.testing.expectEqual(@as(u4, 10), parsed.literal_max_bits);
+     try std.testing.expectEqual(@as(u4, 10), parsed.distance_max_bits);
+@@ -170,7 +207,7 @@
+     const distance = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+     try std.testing.expectEqual(@as(usize, 11), literal.len);
+     try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(286, &literal));
+-    try std.testing.expectEqual(complete, semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
++    try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
+     try expectCode(literal, 'a', 1, 0);
+     try expectCode(literal, 256, 10, 511);
+     try expectCode(literal, 257, 10, 1023);
+@@ -180,7 +217,7 @@
+     try std.testing.expect(!rle258.isCandidate(parsed));
+     try std.testing.expect(!rle258.shouldUse(&literal, &distance));
+     try std.testing.expect(rle258.compactPairLiteral(&literal, parsed) == null);
+-    if (complete) {
++    if (shape == .seed) {
+         try std.testing.expectEqualSlices(u4, &completeDistances(), parsed.distance_lengths[0..11]);
+         try expectCode(distance, 8, 9, 255);
+         try expectCode(distance, 9, 10, 511);
+@@ -188,23 +225,25 @@
+         try expectSecondaryShape(distance, 255, .{ 137, 154, 137, 170 });
+         try std.testing.expectEqual(@as(@TypeOf(start), 1150), reader.bitPosition() - start);
+     } else {
+-        try std.testing.expectEqualSlices(u4, &incomplete_distances, parsed.distance_lengths[0..2]);
+-        try expectCode(distance, 0, 9, 0);
+-        try expectCode(distance, 1, 10, 256);
+-        try expectSecondaryShape(distance, 0, .{ 9, 26, 9, null });
+-        try std.testing.expectEqual(@as(@TypeOf(start), 1114), reader.bitPosition() - start);
++        try std.testing.expectEqualSlices(u4, &legalDistances(), parsed.distance_lengths[0..11]);
++        try expectCode(distance, 0, 9, 255);
++        try expectCode(distance, 1, 10, 511);
++        try expectCode(distance, 10, 10, 1023);
++        try expectSecondaryShape(distance, 255, .{ 9, 26, 9, 170 });
++        try std.testing.expectEqual(@as(@TypeOf(start), 1150), reader.bitPosition() - start);
+     }
+ }
+ 
+ fn expectShape(wire: *const Wire, seed_block: bool, literal_count: usize, token: Token) !void {
+     var reader = bits.BufferedBitReader.init(wire.padded());
+     if (seed_block) {
+-        try expectHeader(&reader, false, true);
++        try expectHeader(&reader, false, .seed);
+         for (0..history_len) |_| try std.testing.expectEqual(@as(u1, 0), try reader.readBits(u1, 1));
+         try std.testing.expectEqual(@as(u16, 511), try reader.readBits(u16, 10));
+         try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), 1288), reader.bitPosition());
+     }
+-    try expectHeader(&reader, true, false);
++    try expectHeader(&reader, true, if (token == .missing10) .incomplete else .legal);
++    if (token == .missing10) return;
+     for (0..literal_count) |_| try std.testing.expectEqual(@as(u1, 0), try reader.readBits(u1, 1));
+     // Verify public hot-loop headroom at the match token, with padding inside
+     // the input slice and guards outside it. Existing codes remain decodable.
+@@ -212,12 +251,9 @@
+     try std.testing.expect(@as(usize, if (seed_block) history_len else 0) + literal_count + 16 <= output_len);
+     try std.testing.expectEqual(@as(u16, 1023), try reader.readBits(u16, 10));
+     switch (token) {
+-        .existing9 => try std.testing.expectEqual(@as(u16, 0), try reader.readBits(u16, 9)),
+-        .existing10 => try std.testing.expectEqual(@as(u16, 256), try reader.readBits(u16, 10)),
+-        .missing10 => {
+-            try std.testing.expectEqual(@as(u16, 768), try reader.readBits(u16, 10));
+-            try std.testing.expectEqual(@as(u4, 0), try reader.readBits(u4, 4));
+-        },
++        .existing9 => try std.testing.expectEqual(@as(u16, 255), try reader.readBits(u16, 9)),
++        .existing10 => try std.testing.expectEqual(@as(u16, 511), try reader.readBits(u16, 10)),
++        .missing10 => unreachable,
+     }
+     try std.testing.expectEqual(@as(u16, 511), try reader.readBits(u16, 10));
+     try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), @intCast(wire.bit_len)), reader.bitPosition());
+@@ -243,6 +279,13 @@
+     for (storage[guard_len + output_len ..]) |byte| try std.testing.expectEqual(sentinel, byte);
+     if (expected_error) |err| {
+         try std.testing.expectError(err, result);
++        // Header admission precedes payload decoding. A valid first block
++        // stays committed, but its own semantic loop may have speculatively
++        // touched unused capacity. Without it, the output stays untouched.
++        for (output[0..expected_output_len]) |byte| try std.testing.expectEqual(@as(u8, 'a'), byte);
++        if (expected_output_len == 0) {
++            for (output) |byte| try std.testing.expectEqual(sentinel, byte);
++        }
+     } else {
+         const decoded = try result;
+         try std.testing.expectEqual(wire.bare().len, decoded.input_read);
+@@ -252,8 +295,20 @@
+ }
+ 
+ pub fn contracts(comptime Api: type) !void {
+-    // Incomplete distance trees are an existing supported contract. Both real
+-    // codes, including the ten-bit secondary entry, must remain usable.
++    // Generic Huffman/kernel construction still permits the original hole
++    // shape; public Deflate admission is deliberately stricter.
++    const incomplete = try huffman.HuffmanTable(30).init(&incomplete_distances);
++    try std.testing.expect(!semantic.SemanticDynamicDecoder.treeIsComplete(30, &incomplete));
++    try expectCode(incomplete, 0, 9, 0);
++    try expectCode(incomplete, 1, 10, 256);
++    try expectSecondaryShape(incomplete, 0, .{ 9, 26, 9, null });
++    const literal = try huffman.HuffmanTable(286).init(&literalLengths());
++    var decoder: semantic.SemanticDynamicDecoder = undefined;
++    try std.testing.expect(decoder.init(&literal, &incomplete));
++    try std.testing.expectEqual(@as(usize, 4), decoder.distance_secondary_len);
++
++    // Both original symbols keep their nine-/ten-bit widths in legal complete
++    // DIST trees, including when reusing state after another dynamic block.
+     for ([_]bool{ false, true }) |seed_block| {
+         for ([_]Token{ .existing9, .existing10 }) |token| {
+             const literal_count: usize = if (seed_block) 0 else history_len;
+@@ -262,16 +317,16 @@
+             try check(Api, &wire, null, history_len + 3);
+         }
+     }
+-    // Public two-block witness: first builds a defined symbol-ten slot three;
+-    // second leaves that reused slot absent. There is no private table poison.
++    // The old stale-slot public wire has an incomplete second header. Its
++    // rejection now precedes that missing token and preserves the first block.
+     const stale_slot = makeWire(true, 0, .missing10);
+     try std.testing.expectEqual(@as(usize, 2436), stale_slot.bit_len);
+     try std.testing.expectEqual(@as(usize, 305), stale_slot.bare().len);
+     try expectShape(&stale_slot, true, 0, .missing10);
+-    try check(Api, &stale_slot, error.InvalidHuffmanCode, 0);
+-
+-    // A missing code is invalid before history validation even in a one-block
+-    // stream. Its expected error is independent of any undefined slot value.
++    try check(Api, &stale_slot, error.InvalidHuffmanCode, history_len);
++
++    // Without a first block the same header rejection writes no output and
++    // remains independent of history or any undefined semantic slot value.
+     const no_history = makeWire(false, 0, .missing10);
+     try expectShape(&no_history, false, 0, .missing10);
+     try check(Api, &no_history, error.InvalidHuffmanCode, 0);
+diff --git a/src/deflate/semantic/public_linear_contracts.zig b/src/deflate/semantic/public_linear_contracts.zig
+--- a/src/deflate/semantic/public_linear_contracts.zig
++++ b/src/deflate/semantic/public_linear_contracts.zig
+@@ -13,6 +13,7 @@
+ const osdb_header_bits = 762;
+ const guard_len = 64;
+ const sentinel: u8 = 0xa5;
++const stored_prefix = "stored";
+ 
+ // Deliberately independent of the production bit writer and Huffman encoder.
+ const Wire = struct {
+@@ -75,8 +76,14 @@
+     return result;
+ }
+ 
+-fn invalidDistancePrefix() Wire {
++fn invalidDistancePrefix(seed_block: bool) Wire {
+     var wire: Wire = .{};
++    if (seed_block) {
++        wire.put(0, 8); // Non-final stored header and byte alignment.
++        wire.put(stored_prefix.len, 16);
++        wire.put(0xffff - stored_prefix.len, 16);
++        for (stored_prefix) |byte| wire.put(byte, 8);
++    }
+     wire.put(1, 1);
+     wire.put(2, 2);
+     wire.put(1, 5); // HLIT258.
+@@ -95,9 +102,9 @@
+     for (lengths) |length| wire.put(reverse(length, 4), 4);
+     for (0..30) |symbol| wire.put(reverse(if (symbol == 0 or symbol == 29) 2 else 0, 4), 4);
+ 
+-    // This distance tree is intentionally incomplete: canonical wire prefixes
+-    // 00 and 10 exist, while 01 has no primary entry. Other decoders may reject
+-    // the tree at the header; Vort accepts it and must reject its missing code.
++    // The old wire attempted to reach a missing primary distance prefix using
++    // DIST0/DIST29 at width two. That incomplete alphabet now fails admission
++    // before these literals; retain the payload to prove early rejection.
+     for (0..256) |_| wire.put(0, 1); // Literal 'a', canonical code zero.
+     wire.put(1023, 10); // LL257.
+     wire.put(1, 2); // Missing distance prefix.
+@@ -106,7 +113,7 @@
+     return wire;
+ }
+ 
+-const Shape = enum { osdb, incomplete_distance };
++const Shape = enum { osdb, incomplete_distance, incomplete_distance_prefix };
+ 
+ fn expectCode(table: anytype, symbol: u16, width: u4, code: u16) !void {
+     for (table.entries[0..table.len]) |entry| {
+@@ -116,6 +123,50 @@
+         return;
+     }
+     return error.TestExpectedEqual;
++}
++
++fn expectIncompleteHeader(reader: *bits.BufferedBitReader, input_len: usize, output_len: usize) !void {
++    const start = reader.bitPosition();
++    var strict = reader.*;
++    const header = try huffman.parseDynamicHeader(reader);
++    try std.testing.expect(header.final);
++    try std.testing.expectEqual(@as(u16, 258), header.hlit);
++    try std.testing.expectEqual(@as(u16, 30), header.hdist);
++    try std.testing.expectEqual(@as(u8, 19), header.hclen);
++    const cl = try huffman.CodeLengthTable.init(&header.code_length_lengths);
++    var literal_lengths: [286]u4 = @splat(0);
++    literal_lengths['a'] = 1;
++    for (0..8) |i| literal_lengths[i] = @intCast(i + 2);
++    literal_lengths[256] = 10;
++    literal_lengths[257] = 10;
++    var distance_lengths: [30]u4 = @splat(0);
++    distance_lengths[0] = 2;
++    distance_lengths[29] = 2;
++    // Decode direct CL symbols as an independent fixture witness. Constructing
++    // generic tables here does not admit this tree through the public parser.
++    for (literal_lengths[0..258]) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(reader));
++    for (distance_lengths) |width| try std.testing.expectEqual(@as(u16, width), try cl.decodeValue(reader));
++    const literal = try huffman.HuffmanTable(286).init(literal_lengths[0..258]);
++    const distance = try huffman.HuffmanTable(30).init(&distance_lengths);
++    try std.testing.expectEqual(@as(usize, 11), literal.len);
++    try std.testing.expectEqual(@as(usize, 2), distance.len);
++    try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(286, &literal));
++    try std.testing.expect(!semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
++    try expectCode(literal, 'a', 1, 0);
++    try expectCode(literal, 256, 10, 511);
++    try expectCode(literal, 257, 10, 1023);
++    try expectCode(distance, 0, 2, 0);
++    try expectCode(distance, 29, 2, 2);
++    var decoder: semantic.SemanticDynamicDecoder = undefined;
++    try std.testing.expect(decoder.init(&literal, &distance));
++    try std.testing.expectEqual(@as(u32, 0), decoder.distance[1]);
++    try std.testing.expectEqual(@as(@TypeOf(start), 1226), reader.bitPosition() - start);
++    try std.testing.expectError(error.InvalidHuffmanCode, huffman.parseDynamicLengths(&strict));
++    try std.testing.expectEqual(reader.bitPosition(), strict.bitPosition());
++    // The old body has ample hot-loop headroom, yet admission must reject
++    // before consuming even its first one-bit literal.
++    try std.testing.expect(input_len * 8 >= start + 1226 + 256 + 12 + 512);
++    try std.testing.expect(output_len >= stored_prefix.len + 256 + 16);
+ }
+ 
+ fn expectEntry(
+@@ -131,6 +182,19 @@
+     try std.testing.expect(input.len != 0);
+     try std.testing.expect(!Api.slicesOverlap(input, output));
+     var reader = bits.BufferedBitReader.init(input);
++    if (shape == .incomplete_distance_prefix) {
++        try std.testing.expectEqual(@as(u1, 0), try reader.readBits(u1, 1));
++        try std.testing.expectEqual(@as(u2, 0), try reader.readBits(u2, 2));
++        reader.alignToByte();
++        try std.testing.expectEqual(@as(u16, stored_prefix.len), try reader.readBits(u16, 16));
++        try std.testing.expectEqual(@as(u16, 0xffff - stored_prefix.len), try reader.readBits(u16, 16));
++        for (stored_prefix) |byte| try std.testing.expectEqual(byte, try reader.readBits(u8, 8));
++        try std.testing.expectEqual(@as(usize, (5 + stored_prefix.len) * 8), reader.bitPosition());
++    }
++    if (shape != .osdb) {
++        try expectIncompleteHeader(&reader, input.len, output.len);
++        return;
++    }
+     try std.testing.expectEqual(@as(u1, 1), try reader.readBits(u1, 1));
+     try std.testing.expectEqual(@as(u2, 2), try reader.readBits(u2, 2));
+     const parsed = try huffman.parseDynamicLengthsAfterHeader(true, &reader);
+@@ -150,50 +214,24 @@
+     var decoder: semantic.SemanticDynamicDecoder = undefined;
+     try std.testing.expect(decoder.initWithDynamicDistanceDecoder(&literal, &dynamic_distance));
+ 
+-    switch (shape) {
+-        .osdb => {
+-            try std.testing.expectEqual(@as(u16, 279), parsed.header.hlit);
+-            try std.testing.expectEqual(@as(u16, 30), parsed.header.hdist);
+-            try std.testing.expectEqual(@as(u4, 14), parsed.literal_max_bits);
+-            try std.testing.expectEqual(@as(u4, 9), parsed.distance_max_bits);
+-            try std.testing.expectEqual(@as(usize, 22), distance.len);
+-            try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
+-            try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), osdb_header_bits), reader.bitPosition());
+-            try std.testing.expect(decoder.literal_secondary_len != 0);
+-            try std.testing.expect(decoder.distance_secondary_len != 0);
+-            const length_primary = decoder.literal[16383 & semantic.SemanticDynamicDecoder.literal_lookup_mask];
+-            const secondary_flags = semantic.SemanticDynamicDecoder.exceptional_flag | semantic.SemanticDynamicDecoder.secondary_flag;
+-            try std.testing.expectEqual(secondary_flags, length_primary & secondary_flags);
+-            try expectCode(literal, 0, 5, 0);
+-            try expectCode(literal, 257, 5, 16);
+-            try expectCode(literal, 278, 14, 16383);
+-            try expectCode(literal, 256, 14, 8191);
+-            try expectCode(distance, 0, 8, 127);
+-            try expectCode(distance, 29, 6, 31);
+-        },
+-        .incomplete_distance => {
+-            try std.testing.expectEqual(@as(u16, 258), parsed.header.hlit);
+-            try std.testing.expectEqual(@as(u16, 30), parsed.header.hdist);
+-            try std.testing.expectEqual(@as(u8, 19), parsed.header.hclen);
+-            try std.testing.expectEqual(@as(u4, 10), parsed.literal_max_bits);
+-            try std.testing.expectEqual(@as(u4, 2), parsed.distance_max_bits);
+-            try std.testing.expectEqual(@as(usize, 11), literal.len);
+-            try std.testing.expectEqual(@as(usize, 2), distance.len);
+-            try std.testing.expectEqual(@as(u4, 0), parsed.literal_lengths[285]);
+-            try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), 1226), reader.bitPosition());
+-            try std.testing.expect(!semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
+-            try expectCode(literal, 'a', 1, 0);
+-            try expectCode(literal, 256, 10, 511);
+-            try expectCode(literal, 257, 10, 1023);
+-            try expectCode(distance, 0, 2, 0);
+-            try expectCode(distance, 29, 2, 2);
+-            try std.testing.expectEqual(@as(u32, 0), decoder.distance[1]);
+-            // 256 one-bit literals precede the bad token and 512 follow it.
+-            // Even its token start retains wide-input and output headroom.
+-            try std.testing.expect(input.len * 8 >= 1226 + 256 + 12 + 512);
+-            try std.testing.expect(output.len >= 256 + 16);
+-        },
+-    }
++    try std.testing.expectEqual(@as(u16, 279), parsed.header.hlit);
++    try std.testing.expectEqual(@as(u16, 30), parsed.header.hdist);
++    try std.testing.expectEqual(@as(u4, 14), parsed.literal_max_bits);
++    try std.testing.expectEqual(@as(u4, 9), parsed.distance_max_bits);
++    try std.testing.expectEqual(@as(usize, 22), distance.len);
++    try std.testing.expect(semantic.SemanticDynamicDecoder.treeIsComplete(30, &distance));
++    try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), osdb_header_bits), reader.bitPosition());
++    try std.testing.expect(decoder.literal_secondary_len != 0);
++    try std.testing.expect(decoder.distance_secondary_len != 0);
++    const length_primary = decoder.literal[16383 & semantic.SemanticDynamicDecoder.literal_lookup_mask];
++    const secondary_flags = semantic.SemanticDynamicDecoder.exceptional_flag | semantic.SemanticDynamicDecoder.secondary_flag;
++    try std.testing.expectEqual(secondary_flags, length_primary & secondary_flags);
++    try expectCode(literal, 0, 5, 0);
++    try expectCode(literal, 257, 5, 16);
++    try expectCode(literal, 278, 14, 16383);
++    try expectCode(literal, 256, 14, 8191);
++    try expectCode(distance, 0, 8, 127);
++    try expectCode(distance, 29, 6, 31);
+     if (hot) {
+         // These are the actual first-iteration conditions in the five-false
+         // linear core. In the no-history cases the first token itself fails;
+@@ -229,6 +267,11 @@
+     const result = Api.decodeRawDeflate(guarded_input, output);
+     if (expected_error) |err| {
+         try std.testing.expectError(err, result);
++        if (shape == .incomplete_distance or shape == .incomplete_distance_prefix) {
++            const prefix: []const u8 = if (shape == .incomplete_distance_prefix) stored_prefix else "";
++            try std.testing.expectEqualSlices(u8, prefix, output[0..prefix.len]);
++            for (output[prefix.len..]) |byte| try std.testing.expectEqual(sentinel, byte);
++        }
+     } else {
+         const decoded = try result;
+         try std.testing.expectEqual(input.len - 16, decoded.input_read);
+@@ -267,8 +310,10 @@
+     // removing the length/distance/EOB tail forces exact bounded truncation.
+     for (1..5) |cut| try check(Api, long.bare()[0 .. long.bare().len - cut], 211, .osdb, error.TruncatedFrame, 0);
+ 
+-    const invalid_prefix = invalidDistancePrefix();
++    const invalid_prefix = invalidDistancePrefix(false);
+     try check(Api, invalid_prefix.bare(), 1024, .incomplete_distance, error.InvalidHuffmanCode, 0);
++    const after_stored = invalidDistancePrefix(true);
++    try check(Api, after_stored.bare(), 1024, .incomplete_distance_prefix, error.InvalidHuffmanCode, 0);
+ }
+ 
+ // Exercise the library's root alias directly as well. The complete suite above
+diff --git a/src/deflate.zig b/src/deflate.zig
+--- a/src/deflate.zig
++++ b/src/deflate.zig
+@@ -20965,6 +20965,7 @@
+ test "dynamic Huffman decoder rejects matches without distance codes" {
+     var lit_lengths: [258]u4 = @splat(0);
+     lit_lengths['a'] = 2;
++    lit_lengths['b'] = 2; // Unused fourth leaf keeps LENS complete.
+     lit_lengths[256] = 2;
+     lit_lengths[257] = 2;
+     var code_len_lengths: [19]u4 = @splat(0);
+@@ -23789,3 +23790,7 @@
+ test "Deflate sync flush descriptor count overflow contracts" {
+     try @import("deflate/encode/sync_flush_chunks/overflow_tests.zig").contracts(@This());
+ }
++
++test "Deflate dynamic tree admission contracts" {
++    try @import("deflate/dynamic/admission_tests.zig").contracts(@This());
++}
+diff --git a/src/deflate64/decoder.zig b/src/deflate64/decoder.zig
+--- a/src/deflate64/decoder.zig
++++ b/src/deflate64/decoder.zig
+@@ -2,6 +2,7 @@
+ const bitstream = @import("../bitstream.zig");
+ const core = @import("../core.zig");
+ const huffman = @import("../huffman.zig");
++const dynamic_admission = @import("../deflate/dynamic/admission.zig");
+ 
+ pub const Error = core.Error || error{InvalidDeflate64Stream};
+ 
+@@ -126,6 +127,7 @@
+     var code_length_lengths: [19]u4 = @splat(0);
+     for (code_length_order[0..code_length_count]) |symbol|
+         code_length_lengths[symbol] = try reader.readBits(u4, 3);
++    try dynamic_admission.validate(.code_lengths, &code_length_lengths);
+     const code_length_table = try huffman.HuffmanTable(19).init(&code_length_lengths);
+ 
+     var literal_lengths: [286]u4 = @splat(0);
+@@ -169,6 +171,8 @@
+         }
+     }
+     if (literal_lengths[256] == 0) return error.InvalidDynamicBlockHeader;
++    try dynamic_admission.validate(.literal_lengths, literal_lengths[0..literal_count]);
++    try dynamic_admission.validate(.distances, distance_lengths[0..distance_count]);
+     return .{
+         .literal = try huffman.HuffmanTable(286).init(literal_lengths[0..literal_count]),
+         .distance = try huffman.HuffmanTable(32).init(distance_lengths[0..distance_count]),
+@@ -425,22 +429,22 @@
+     try writer.writeBits(std.testing.allocator, 0, 5); // HLIT -> 257 literals
+     try writer.writeBits(std.testing.allocator, 0, 5); // HDIST -> 1 distance
+     try writer.writeBits(std.testing.allocator, 0, 4); // HCLEN -> 4 CL codes
+-    // CL order 16,17,18,0: only symbol 18 gets a 1-bit code.
++    // Complete CODES: symbols 0 and 18 have one-bit codes.
+     try writer.writeBits(std.testing.allocator, 0, 3); // 16
+     try writer.writeBits(std.testing.allocator, 0, 3); // 17
+     try writer.writeBits(std.testing.allocator, 1, 3); // 18
+-    try writer.writeBits(std.testing.allocator, 0, 3); // 0
++    try writer.writeBits(std.testing.allocator, 1, 3); // 0
+     // Symbol 18 carries 7-bit counts of 11..138 zeros.
+     var remaining: usize = 257;
+     while (remaining > 0) {
+         const run = @min(remaining, 138);
+-        try writer.writeBits(std.testing.allocator, 0, 1); // the single 1-bit code
++        try writer.writeBits(std.testing.allocator, 1, 1); // symbol 18
+         try writer.writeBits(std.testing.allocator, @as(u32, @intCast(run - 11)), 7);
+         remaining -= run;
+     }
+-    // The single distance code also expands to zero.
+-    try writer.writeBits(std.testing.allocator, 0, 1);
+-    try writer.writeBits(std.testing.allocator, 0, 7); // run of 11 zeros, one used
++    // One direct zero length fills the remaining distance slot without
++    // overrun, so this fixture reaches the intended missing-EOB check.
++    try writer.writeBits(std.testing.allocator, 0, 1); // symbol 0
+     const wire = try writer.toOwnedSlice(std.testing.allocator);
+     defer std.testing.allocator.free(wire);
+     try std.testing.expectError(error.InvalidDynamicBlockHeader, decodeAlloc(std.testing.allocator, wire));
+diff --git a/src/fuzz.zig b/src/fuzz.zig
+--- a/src/fuzz.zig
++++ b/src/fuzz.zig
+@@ -390,6 +390,9 @@
+ 
+ fn malformedRepeat18OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
+     var lengths: [19]u4 = @splat(0);
++    // A singleton CODES tree fails admission before repeat decoding. Include
++    // an unused zero symbol so the two 138-zero runs test the actual overrun.
++    lengths[0] = 1;
+     lengths[18] = 1;
+     const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
+ 
+@@ -399,7 +402,7 @@
+     try writer.writeBits(allocator, 0, 3);
+     try writer.writeBits(allocator, 0, 3);
+     try writer.writeBits(allocator, 1, 3);
+-    try writer.writeBits(allocator, 0, 3);
++    try writer.writeBits(allocator, 1, 3);
+     try encoder.writeSymbol(&writer, allocator, 18);
+     try writer.writeBits(allocator, 127, 7);
+     try encoder.writeSymbol(&writer, allocator, 18);
+@@ -409,6 +412,9 @@
+ 
+ fn malformedRepeat17OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
+     var lengths: [19]u4 = @splat(0);
++    // CODES must be complete; the unused zero symbol keeps this fixture's
++    // failure in the repeat-length bounds check rather than tree admission.
++    lengths[0] = 1;
+     lengths[17] = 1;
+     const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
+ 
+@@ -418,15 +424,16 @@
+     try writer.writeBits(allocator, 0, 3);
+     try writer.writeBits(allocator, 1, 3);
+     try writer.writeBits(allocator, 0, 3);
+-    try writer.writeBits(allocator, 0, 3);
+-    // Repeat-17 can encode only 3..10 zeros at a time. Fill the expected
+-    // HLIT+HDIST length vector exactly with 86 three-zero repeats, then emit
+-    // one more repeat so parseDynamicLengthsBody must reject the overrun.
++    try writer.writeBits(allocator, 1, 3);
++    // The old 86 three-zero repeats filled all 258 lengths, so its extra
++    // opcode was never parsed. Stop at 255 and overrun with a four-zero run.
+     var repeats: usize = 0;
+-    while (repeats < 87) : (repeats += 1) {
++    while (repeats < 85) : (repeats += 1) {
+         try encoder.writeSymbol(&writer, allocator, 17);
+         try writer.writeBits(allocator, 0, 3);
+     }
++    try encoder.writeSymbol(&writer, allocator, 17);
++    try writer.writeBits(allocator, 1, 3);
+     return writer.toOwnedSlice(allocator);
+ }
+ 
+@@ -467,6 +474,10 @@
+ fn malformedMissingDistanceDynamicAlloc(allocator: std.mem.Allocator) ![]u8 {
+     var lit_lengths: [258]u4 = @splat(0);
+     lit_lengths['a'] = 2;
++    // Three two-bit LL leaves were incomplete and failed header admission.
++    // The unused fourth leaf makes LL valid, preserving the empty-DIST token
++    // rejection this fixture is intended to reach.
++    lit_lengths['b'] = 2;
+     lit_lengths[256] = 2;
+     lit_lengths[257] = 2;
+     var code_len_lengths: [19]u4 = @splat(0);
+@@ -523,3 +534,29 @@
+     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
+     try std.testing.expectEqual(@as(usize, 13), stats.expected_errors);
+ }
++
++test "deflate malformed smoke fixtures reach repeat overruns and empty distance use" {
++    const allocator = std.testing.allocator;
++    const repeat18 = try malformedRepeat18OverrunDynamicHeaderAlloc(allocator);
++    defer allocator.free(repeat18);
++    var reader18 = bitstream.BufferedBitReader.init(repeat18);
++    try std.testing.expectError(error.InvalidDynamicBlockHeader, huffman.parseDynamicLengths(&reader18));
++    try std.testing.expectEqual(@as(usize, 45), reader18.bitPosition());
++
++    const repeat17 = try malformedRepeat17OverrunDynamicHeaderAlloc(allocator);
++    defer allocator.free(repeat17);
++    var reader17 = bitstream.BufferedBitReader.init(repeat17);
++    try std.testing.expectError(error.InvalidDynamicBlockHeader, huffman.parseDynamicLengths(&reader17));
++    try std.testing.expectEqual(@as(usize, 373), reader17.bitPosition());
++
++    const missing_distance = try malformedMissingDistanceDynamicAlloc(allocator);
++    defer allocator.free(missing_distance);
++    var reader = bitstream.BufferedBitReader.init(missing_distance);
++    const parsed = try huffman.parseDynamicLengths(&reader);
++    try std.testing.expectEqual(@as(usize, 324), reader.bitPosition());
++    try std.testing.expectEqual(@as(u4, 0), parsed.distance_max_bits);
++    const literal = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
++    try std.testing.expectEqual(@as(u16, 'a'), try literal.decodeValue(&reader));
++    try std.testing.expectEqual(@as(u16, 257), try literal.decodeValue(&reader));
++    try std.testing.expectError(error.InvalidHuffmanCode, deflate.decodeRawAutoAlloc(allocator, missing_distance));
++}
+diff --git a/src/huffman.zig b/src/huffman.zig
+--- a/src/huffman.zig
++++ b/src/huffman.zig
+@@ -15,6 +15,7 @@
+ };
+ const bitstream = @import("bitstream.zig");
+ const core = @import("core.zig");
++const deflate_dynamic_admission = @import("deflate/dynamic/admission.zig");
+ 
+ pub const Error = core.Error;
+ 
+@@ -1123,6 +1124,7 @@
+ }
+ 
+ pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!DynamicLengths {
++    try deflate_dynamic_admission.validate(.code_lengths, &header.code_length_lengths);
+     const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
+     const code_decoder = FastDecoder(19, 7).init(code_lengths);
+     const total = header.hlit + header.hdist;
+@@ -1165,6 +1167,8 @@
+     // consistently report a malformed dynamic header instead of decoding until
+     // the bitstream happens to run out.
+     if (parsed.literal_lengths[256] == 0) return error.InvalidDynamicBlockHeader;
++    try deflate_dynamic_admission.validate(.literal_lengths, parsed.literal_lengths[0..header.hlit]);
++    try deflate_dynamic_admission.validate(.distances, parsed.distance_lengths[0..header.hdist]);
+     return parsed;
+ }
+ 
+@@ -2557,21 +2561,46 @@
+ }
+ 
+ test "dynamic length parser expands repeat symbols" {
+-    // Synthetic dynamic block header:
+-    // - final dynamic block, HLIT=257, HDIST=1, HCLEN=18
+-    // - code-length alphabet uses symbols 1, 3, 17, 18, all 3 bits wide
+-    // - length stream expands to: one literal length 3, 255 zeros, one length 1, one distance length 1.
+-    const bytes = [_]u8{ 0x05, 0xc0, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02, 0x20, 0xfb, 0xa7, 0x06 };
+-    var reader = bitstream.BitReader.init(&bytes);
++    // Complete CODES and LENS keep this fixture focused on repeat expansion.
++    // The former four width-three CODES leaves and LENS {3,1} were both
++    // incomplete trees; accepting them was not a legal Deflate contract.
++    var lengths: [19]u4 = @splat(0);
++    lengths[1] = 2;
++    lengths[3] = 2; // Unused leaf completes CODES.
++    lengths[17] = 2;
++    lengths[18] = 2;
++    const encoder = try CodeLengthTable.Encoder.init(&lengths);
++    var writer: bitstream.BitWriter = .{};
++    defer writer.deinit(std.testing.allocator);
++    try writer.writeBits(std.testing.allocator, 0b101, 3);
++    try writer.writeBits(std.testing.allocator, 0, 5);
++    try writer.writeBits(std.testing.allocator, 0, 5);
++    try writer.writeBits(std.testing.allocator, 14, 4);
++    for (code_length_order[0..18]) |symbol|
++        try writer.writeBits(std.testing.allocator, lengths[symbol], 3);
++    try encoder.writeSymbol(&writer, std.testing.allocator, 1);
++    try encoder.writeSymbol(&writer, std.testing.allocator, 18);
++    try writer.writeBits(std.testing.allocator, 127, 7); // 138 zeros
++    try encoder.writeSymbol(&writer, std.testing.allocator, 18);
++    try writer.writeBits(std.testing.allocator, 103, 7); // 114 zeros
++    try encoder.writeSymbol(&writer, std.testing.allocator, 17);
++    try writer.writeBits(std.testing.allocator, 0, 3); // three zeros
++    try encoder.writeSymbol(&writer, std.testing.allocator, 1); // EOB
++    try encoder.writeSymbol(&writer, std.testing.allocator, 1); // distance
++    const bytes = try writer.toOwnedSlice(std.testing.allocator);
++    defer std.testing.allocator.free(bytes);
++    var reader = bitstream.BitReader.init(bytes);
+     const parsed = try parseDynamicLengths(&reader);
+     try std.testing.expectEqual(@as(u16, 257), parsed.header.hlit);
+     try std.testing.expectEqual(@as(u16, 1), parsed.header.hdist);
+-    try std.testing.expectEqual(@as(u4, 3), parsed.literal_lengths[0]);
++    try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[0]);
+     for (parsed.literal_lengths[1..256]) |bits| try std.testing.expectEqual(@as(u4, 0), bits);
+     try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[256]);
+     try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
+-    try std.testing.expectEqual(@as(u4, 3), parsed.literal_max_bits);
++    try std.testing.expectEqual(@as(u4, 1), parsed.literal_max_bits);
+     try std.testing.expectEqual(@as(u4, 1), parsed.distance_max_bits);
++    try std.testing.expectEqual(@as(u16, 1), parsed.code_length_symbol_histogram[17]);
++    try std.testing.expectEqual(@as(u16, 2), parsed.code_length_symbol_histogram[18]);
+ }
+ 
+ test "dynamic length parser rejects invalid repeat symbols" {

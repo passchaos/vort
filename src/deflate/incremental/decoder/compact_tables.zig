@@ -2,6 +2,7 @@
 //! Deflate decoder, including its dynamic code-length alphabet.
 
 const huffman = @import("../../../huffman.zig");
+const dynamic_admission = @import("../../dynamic/admission.zig");
 
 /// Expand already validated canonical entries into a primary lookup. The
 /// resumable decoder also retains these entries for long-code misses, so
@@ -53,48 +54,13 @@ pub fn buildCanonicalLookup(
 }
 
 pub fn validCodeLengthAlphabet(lengths: [19]u4) bool {
-    var counts: [8]usize = @splat(0);
-    var active: usize = 0;
-    for (lengths) |length| {
-        if (length > 7) return false;
-        if (length != 0) {
-            counts[length] += 1;
-            active += 1;
-        }
-    }
-    if (active == 0) return false;
-    var available: isize = 1;
-    for (1..8) |bits| {
-        available = available * 2 - @as(isize, @intCast(counts[bits]));
-        if (available < 0) return false;
-    }
-    return true;
+    return dynamic_admission.isValid(.code_lengths, &lengths);
 }
 
 pub fn validDynamicAlphabet(lengths: []const u4) bool {
-    var counts: [16]usize = @splat(0);
-    var active: usize = 0;
-    for (lengths) |length| {
-        if (length > 15) return false;
-        if (length != 0) {
-            counts[length] += 1;
-            active += 1;
-        }
-    }
-    // zlib's inftrees accepts a LENS/DISTS alphabet with no active symbols by
-    // installing an error-marker table and deferring the failure until a symbol
-    // is actually decoded. A literal-only dynamic block therefore carries a
-    // zero-length distance alphabet legally, and its distance table is never
-    // consulted. The code-length alphabet keeps its own stricter check because
-    // zlib rejects every incomplete CODES set.
-    if (active == 0) return true;
-    if (active == 1) return true; // RFC permits one-bit incomplete singleton.
-    var available: isize = 1;
-    for (1..16) |bits| {
-        available = available * 2 - @as(isize, @intCast(counts[bits]));
-        if (available < 0) return false;
-    }
-    return available == 0;
+    // The caller checks EOB before this shared data-tree check, so an empty
+    // literal alphabet cannot pass; an unused empty distance alphabet can.
+    return dynamic_admission.isValid(.distances, lengths);
 }
 
 /// Entries are grouped by code width, so long-code lookup only scans the
