@@ -16,7 +16,7 @@ pub fn main(init: std.process.Init) !void {
     defer provenance.deinit(init.gpa);
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
-    const source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
+    const source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(8 * 1024 * 1024));
     defer init.gpa.free(source);
     if (source.len < 32 * 1024) return error.InputTooSmall;
     var records_q8: [q8_records_fixture.input_len]u8 = undefined;
