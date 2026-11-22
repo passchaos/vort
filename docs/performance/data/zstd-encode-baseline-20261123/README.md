@@ -125,10 +125,17 @@ knee sweep's conclusion that lower budgets cost more size per unit of speed.
 Reverted. The level-3 gap is per-candidate cost inside `findBest`/`matchAt`/
 `planReuse`, not the number of candidates.
 
+A follow-up micro-screen forced `matchAt` inline (the annotation showed about
+15% of its self time in prologue, `ret` and `vzeroupper`). Level-3
+`dickens.64k` measured 6.16 ms versus 6.18 ms with identical 27,477-byte
+output, i.e. no effect, so call overhead is not the lever either. Reverted.
+
 ## Next
 
 1. Reduce the level-3 per-candidate cost in `controlled_search` (candidate
-   generation, reuse planning, or duplicate checks) rather than the budget.
+   generation, reuse planning, or duplicate checks) rather than the budget or
+   call overhead. The flat annotation (top instruction 8.65% inside
+   `findBest`, 10.19% inside `matchAt`) points at the candidate loop itself.
    Keep frame SHA/size checks and the full paired matrix.
 2. Compare at matched strategies or equal ratio before claiming a speed gap:
    run the reference with `--strategy`/HQ controls and Vort with the same
