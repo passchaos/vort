@@ -2756,3 +2756,17 @@ Weakest rows are command-dense text (`xml.64k` 0.6799, `nci.64k` 0.6894,
 0.8754 are the strongest. This supersedes the 2026-11-12 ranking for current
 source while keeping its separate competitor epoch. Evidence:
 [data/zstd-decode-current-20261122](data/zstd-decode-current-20261122/README.md).
+
+## Brotli planned planner modes versus libbrotli (2026-11-22)
+
+`run-br-planned-encode-bench` on twelve 64 KiB Silesia prefixes against system
+libbrotli 1.0.9. The bench's `vort` column is the reusable legacy fast path
+(no planned quality is set), `lazy` is `.balanced` and `ratio` is `.ratio`; the
+`--quality` flag selects the reference quality. At reference q9: legacy fast
+4.3613x speed / 1.1276x size, balanced 3.2847x / 1.0660x, ratio **0.3331x /
+0.9995x**. The ratio planner matches q9 size at one third of the reference
+throughput; structured text is weakest (`nci` 0.0880x / 1.0532x, `xml`
+0.1496x / 1.0224x, `mr` 0.1555x / 1.0367x). At reference q11 the fixed ratio
+planner is 3.3185x faster but 1.1281x larger, which is not a quality-equivalent
+row. Evidence:
+[data/brotli-planned-modes-current-20261122](data/brotli-planned-modes-current-20261122/README.md).
