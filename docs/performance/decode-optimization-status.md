@@ -2847,3 +2847,15 @@ elapsed per row. A single preemption previously flipped the known-active ratio
 recovery and known-active ratios stable, including under two concurrent CPU
 burners (recovery-dense 1.13, recovery128 1.10, recovery256 1.12,
 known32 1.07, known64 1.02).
+
+## Brotli ratio adaptive-beam screen (2026-11-23)
+
+The ratio stage profile tool now accepts `--path` (64 KiB prefix) and
+`--stats-only`. Comparing the beam-8 and beam-32 sweeps, only `dickens`,
+`nci`, `reymont`, `samba` and `webster` change size between the two beams
+(+1.0...+3.0%); `xml`, `mozilla`, `mr`, `ooffice`, `osdb`, `sao` and `x-ray`
+are byte-identical. A lazy match-coverage classifier separates most safe rows
+(<=90.8% except `mr` 92.9%) from the sensitive ones (92.0...97.9%), but `xml`
+is safe at 97.2% coverage, indistinguishable from sensitive `nci` at 97.9%.
+The remaining safe-row speed opportunity is only about 1.8--3% geometric mean,
+so beam 32 stays and the adaptive classifier is not adopted.

@@ -5,7 +5,13 @@ const benchmark_provenance = @import("benchmark_provenance");
 const q8_records_fixture = @import("q8_records_fixture.zig");
 
 const Case = struct { name: []const u8, payload: []const u8 };
-const Options = struct { iterations: usize = 3, csv_path: ?[]const u8 = null };
+const Options = struct {
+    iterations: usize = 3,
+    csv_path: ?[]const u8 = null,
+    limit: usize = 64 * 1024,
+    stats_only: bool = false,
+    paths: std.ArrayList([]const u8) = .empty,
+};
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -21,12 +27,24 @@ pub fn main(init: std.process.Init) !void {
     if (source.len < 32 * 1024) return error.InputTooSmall;
     var records_q8: [q8_records_fixture.input_len]u8 = undefined;
     q8_records_fixture.fill(&records_q8);
-    const cases = [_]Case{
+    var cases: std.ArrayList(Case) = .empty;
+    defer cases.deinit(init.gpa);
+    try cases.appendSlice(init.gpa, &.{
         .{ .name = "source4k", .payload = source[0 .. 4 * 1024] },
         .{ .name = "source16k", .payload = source[0 .. 16 * 1024] },
         .{ .name = "source32k", .payload = source[0 .. 32 * 1024] },
         .{ .name = "records_q8", .payload = &records_q8 },
-    };
+    });
+    var loaded: std.ArrayList([]u8) = .empty;
+    defer {
+        for (loaded.items) |bytes| init.gpa.free(bytes);
+        loaded.deinit(init.gpa);
+    }
+    for (options.paths.items) |path| {
+        const bytes = try readPrefixAlloc(init, path, options.limit);
+        try loaded.append(init.gpa, bytes);
+        try cases.append(init.gpa, .{ .name = std.fs.path.basename(path), .payload = bytes });
+    }
 
     var csv: std.Io.Writer.Allocating = .init(init.gpa);
     defer csv.deinit();
@@ -34,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
         "case,reference_version,input_bytes,input_sha256,encoded_sha256,iterations,selected_bytes,lazy_bytes,optimal_bytes,record_optimal_bytes,stored_bytes,optimal_attempted,optimal_selected,record_optimal_attempted,record_optimal_selected,lazy_tokens,lazy_literals,lazy_matches,lazy_matched_bytes,lazy_fixed_bits,lazy_commands,lazy_recent_distances,lazy_last_distances,optimal_tokens,optimal_literals,optimal_matches,optimal_matched_bytes,optimal_fixed_bits,optimal_commands,optimal_recent_distances,optimal_last_distances,record_optimal_tokens,record_optimal_literals,record_optimal_matches,record_optimal_matched_bytes,optimal_index_bytes,optimal_positions,optimal_chain_nodes,optimal_prefix_rejections,optimal_bound_rejections,optimal_prefix_mismatch_histogram,optimal_bound_length_histogram,optimal_bound_distance_cost_histogram,optimal_bound_slack_histogram,optimal_length_extension_histogram,optimal_match_length_calls,optimal_valid_match_candidates,optimal_length_choices_built,optimal_candidate_budget_stops,lazy_plan_ns,lazy_command_ns,lazy_wire_ns,optimal_plan_ns,optimal_index_ns,optimal_search_ns,optimal_reconstruct_ns,optimal_command_ns,optimal_wire_ns,record_optimal_ns,selection_ns,total_ns,stage_ns,unaccounted_ns,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
-    for (cases) |case| try writeCase(init, reference, &csv.writer, case, options.iterations, provenance);
+    for (cases.items) |case| try writeCase(init, reference, &csv.writer, case, options.iterations, options.stats_only, provenance);
 
     if (options.csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
@@ -46,7 +64,7 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn writeCase(init: std.process.Init, reference: libbrotli.Runtime, writer: *std.Io.Writer, case: Case, iterations: usize, provenance: benchmark_provenance.Info) !void {
+fn writeCase(init: std.process.Init, reference: libbrotli.Runtime, writer: *std.Io.Writer, case: Case, iterations: usize, stats_only: bool, provenance: benchmark_provenance.Info) !void {
     const expected = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, case.payload);
     defer init.gpa.free(expected);
     const decoded = try vort.brDecodeStreamAllocExactSize(init.gpa, expected, case.payload.len);
@@ -61,7 +79,7 @@ fn writeCase(init: std.process.Init, reference: libbrotli.Runtime, writer: *std.
         var current: vort.BrotliRatioEncodeProfile = .{};
         const encoded = try vort.brProfilePlannedRatioBlockAlloc(init.gpa, case.payload, init.io, &current);
         defer init.gpa.free(encoded);
-        if (!std.mem.eql(u8, expected, encoded)) return error.SizeMismatch;
+        if (!stats_only and !std.mem.eql(u8, expected, encoded)) return error.SizeMismatch;
         if (shape) |prior| try expectSameShape(prior, current) else shape = current;
         addTimings(&aggregate, current);
     }
@@ -169,6 +187,19 @@ fn addTimings(total: *vort.BrotliRatioEncodeProfile, sample: vort.BrotliRatioEnc
     }) |field| @field(total, field) +%= @field(sample, field);
 }
 
+fn readPrefixAlloc(init: std.process.Init, path: []const u8, limit: usize) ![]u8 {
+    const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+    defer file.close(init.io);
+    const stat = try file.stat(init.io);
+    const len = @min(@as(usize, @intCast(stat.size)), limit);
+    const bytes = try init.gpa.alloc(u8, len);
+    errdefer init.gpa.free(bytes);
+    var buffer: [4096]u8 = undefined;
+    var reader = file.reader(init.io, &buffer);
+    if (try reader.interface.readSliceShort(bytes) != len) return error.TruncatedInput;
+    return bytes;
+}
+
 fn parseOptions(args: *std.process.Args.Iterator) !Options {
     var options: Options = .{};
     while (args.next()) |arg| {
@@ -176,9 +207,15 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingPath
+        else if (std.mem.eql(u8, arg, "--limit"))
+            options.limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--path"))
+            try options.paths.append(std.heap.page_allocator, args.next() orelse return error.MissingPath)
+        else if (std.mem.eql(u8, arg, "--stats-only"))
+            options.stats_only = true
         else
             return error.UnknownArgument;
     }
-    if (options.iterations == 0) return error.InvalidBlockPlan;
+    if (options.iterations == 0 or options.limit == 0) return error.InvalidBlockPlan;
     return options;
 }
