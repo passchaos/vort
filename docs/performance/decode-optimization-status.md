@@ -2905,3 +2905,27 @@ not adding it. The next attempt must reduce live values inside the single-pass
 loop or classify block shape before choosing an executor; another cache, tier,
 second pass, or size threshold will not pass. Evidence:
 [data/zstd-dense-register-screen-20261123](data/zstd-dense-register-screen-20261123/README.md).
+
+## Zstd encode current baseline and level-9 profile (2026-11-23)
+
+The 2026-10-25 encode matrix cannot rank current source (multi-second
+level-3 rows no longer reproduce), so a fresh four-file 64 KiB slice was
+measured against runtime libzstd 1.4.8: level 1 is 3.5--9.5x slower with
+1--11% larger output, level 3 is 7--15x slower with size mixed from -10.5%
+(`x-ray`) to +1.2% (`dickens`), and level 9 is 11--67x slower with size from
++0.4% (`x-ray`) to +15.3% (`mozilla`). These are nominal-level comparisons;
+Vort levels 3/9 run a quality ladder and optimal DP while libzstd level 9 runs
+`lazy2`, and the ledger already records the 25.6 s level-9 mixed-search cliff
+being reduced to about 0.25 s. Evidence:
+[data/zstd-encode-baseline-20261123](data/zstd-encode-baseline-20261123/README.md).
+
+A `perf record` of the worst row (`nci.64k` level 9, 1752 samples) now puts
+`emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch` at 25.43% (after
+excluding the 12.82% harness SHA-256), `sequenceLiteralsPayloadSectionLen` at
+10.93%, memset 5.27%, memcpy 4.46%, `huffman.packageMergeCodeLengths` 3.65%,
+`planRepeatSequenceCodes` 3.53% and `lz77.matchLength` 3.03%; the reference's
+`ZSTD_compressBlock_lazy2` is 1.21%. The candidate literal-section sizing is
+the next concrete encoder target: losing candidates rebuild the Huffman plan
+and stream length instead of costing once. The next encode step is a matched-
+strategy or equal-ratio comparison plus removal of repeated candidate costing,
+each with the full paired matrix and wire checks.
