@@ -30,7 +30,7 @@ def main() -> int:
     quality_modes = ("generic", "text", "font")
     fast_quality_sizes = {
         0: {"generic": 122, "text": 143, "font": 142},
-        1: {"generic": 69, "text": 95, "font": 92},
+        1: {"generic": 69, "text": 97, "font": 92},
         2: {"generic": 80, "text": 115, "font": 97},
         3: {"generic": 62, "text": 103, "font": 86},
     }

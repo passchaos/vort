@@ -29,7 +29,9 @@ pub fn main(init: std.process.Init) !void {
     rejected += 1;
     try checkInvalid("trailing-data", &[_]u8{ 0x06, 0x00 }, error.TrailingData);
     rejected += 1;
-    try checkInvalid("unsupported-compressed-block", &[_]u8{ 0x00, 0x00, 0x00 }, error.UnsupportedBrotliFeature);
+    // The general decoder supports compressed blocks; this three-byte
+    // compressed header is simply truncated before its metablock body.
+    try checkInvalid("truncated-compressed-block", &[_]u8{ 0x00, 0x00, 0x00 }, error.TruncatedFrame);
     rejected += 1;
 
     const with_metadata = try vort.brEncodeStoredStreamWithOptionsAlloc(init.gpa, "payload", .{ .metadata = "metadata" });

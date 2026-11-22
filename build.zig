@@ -6645,9 +6645,9 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/br/progressive_copy_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
@@ -6675,10 +6675,10 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/br/progressive_huffman_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
