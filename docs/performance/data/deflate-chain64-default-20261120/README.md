@@ -57,3 +57,13 @@ The depth was selected on this corpus; other corpora or larger blocks may
 prefer a different knee. libdeflate 1.10 is the system reference; a 1.26
 comparison is a follow-up once the encode tool grows an explicit reference
 path.
+
+## Follow-up nice_len screen (2026-11-22)
+
+Lowering the level-6 `nice_len` from 80 to 64 stops the dependent chain walk
+earlier on long matches. Twelve 128 KiB prefixes at 50 iterations x 3 rounds
+measure **1.0082x** geometric-mean speed for **+0.028%** total size
+(570,615 -> 570,775 bytes). The row spread is noise-dominated: `nci` 1.0684x
+and `xml` 1.0781x (+1.06% size) improve while `webster` 0.9747x and `osdb`
+0.9782x regress. The effect is below the 3% adoption bar, so `nice_len = 80`
+stays.
