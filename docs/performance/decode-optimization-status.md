@@ -2810,3 +2810,11 @@ geometric mean is **1.121** against a 1.20 threshold. The sparse cases
 (3.86x/4.55x) and all known-active checks pass. This records a dense
 literal code-length recovery shortfall, not a functional failure; the gate
 stays red until that path improves.
+
+The `literal-dense` per-case threshold also looks unattainable by construction:
+production and root-traversal share the same package-merge build, so their
+ratio measures only the recovery-implementation difference. That difference is
+4.5% of the whole build, so even a free linear recovery could not reach 1.10;
+the zstd cases show 12--20% because their alphabets make recovery a larger
+share. The gate needs recalibration or a recovery-isolated benchmark rather
+than a production-path optimization.
