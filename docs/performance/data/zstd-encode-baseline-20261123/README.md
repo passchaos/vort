@@ -97,7 +97,17 @@ concrete next target.
 2. Remove repeated candidate costing: compute the literal-section Huffman
    length once per candidate (or use an entropy estimate for arbitration) and
    build the exact section only for the winner. This is the largest measured
-   encoder-internal cost after the emitter itself.
+   encoder-internal cost after the emitter itself. Call-graph inspection shows
+   the recomputation sites are the candidate estimators
+   `bestSequencePayloadLenWithLiteralEnds` (src/zstd.zig:28649),
+   `bestTablePlanSequenceWithPreviousTables` (29375),
+   `sequencePayloadLenWithTablePlans` (30698),
+   `multiSequencePayloadLenInternal` (31472), and
+   `rleSequencePayloadLenInternal` (31689), which each call
+   `sequenceLiteralsPayloadSectionLen` even though several evaluate the same
+   literal layout with different table plans. The contained first cut is to
+   thread an already-computed literal-section length into the table-plan and
+   RLE estimators; output must stay byte-identical.
 3. Re-run the full paired matrix (twelve files, 64 KiB and 1 MiB, alternating
    pairs, confidence intervals) before and after any change, with wire
    checksum and size checks, per the adoption bar in the performance
