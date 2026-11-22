@@ -2886,14 +2886,22 @@ loads per sequence. The remaining loop spreads evenly at ~1.5% per instruction
 and includes a store/reload pair for the loop counter plus repeated
 `remaining_bits` and `bytes.ptr` reloads.
 
-Three variants were rejected. Keeping the three repeat offsets in registers
+Five variants were rejected. Keeping the three repeat offsets in registers
 with inline resolution removed the `state` pointer reload and the vector
 offset update but reached only **0.9967x** (95% CI **[0.9935, 1.0001]**,
 weakest `mozilla.64k` 0.9823, three controls below 0.98) over 24 rows and five
 alternating pairs. An 8-byte short-match copy tier and a register bit-window
 reservoir both lost 7--14% in quick alternating screens because they add a
-data-dependent branch (refill or `match_len <= 8`) and loop-carried registers.
-The adopted `ShiftingGroup` win came from removing state, not adding it. The
-next attempt should reduce live values or process several sequences per
-iteration; another cache, tier, or selector will not pass. Evidence:
+data-dependent branch (refill or `match_len <= 8`) and loop-carried registers;
+the reservoir also repeats a design already rejected in
+`zstd-wide-split-capacity.md`. A batched field/copy split (eight pending
+sequences, in-order validation, infallible copy pass) lost 6--12% by removing
+the out-of-order overlap between one sequence's copy and the next sequence's
+FSE loads. Routing every four-stream literal section to the dense executor
+gained 1.4% on `dickens.1m` but lost 6% on binary `x-ray.1m`, so the wide
+executor's long-match kernels remain necessary and a size-only threshold
+cannot replace them. The adopted `ShiftingGroup` win came from removing state,
+not adding it. The next attempt must reduce live values inside the single-pass
+loop or classify block shape before choosing an executor; another cache, tier,
+second pass, or size threshold will not pass. Evidence:
 [data/zstd-dense-register-screen-20261123](data/zstd-dense-register-screen-20261123/README.md).

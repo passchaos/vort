@@ -83,16 +83,61 @@ Rejected: the refill test is taken every two to three sequences with no
 predictable pattern, and the window plus valid count added two loop-carried
 registers. The branch misprediction and extra spills cost 7--14%.
 
+## Screen 4: batched field/copy split
+
+The executor decoded one sequence per pass. The candidate decoded up to eight
+sequences' fallible field work into a pending array (validating every copy
+precondition in bitstream order against projected cursors) and then ran an
+infallible copy pass over the batch, on the theory that separating the FSE
+state from the output cursors would relieve the spill pressure.
+
+Quick alternating screen, same method:
+
+| size | base | variant |
+| --- | ---: | ---: |
+| dickens.64k | 0.7891, 0.7844 | 0.7017, 0.6969 |
+| dickens.1m | 0.7582, 0.7543 | 0.7141, 0.7046 |
+
+Rejected: the two loops remove the out-of-order overlap between one sequence's
+copy and the next sequence's FSE table loads, which the single-pass loop gets
+for free. The register relief does not repay the lost instruction-level
+parallelism; the batch is 6--12% slower.
+
+## Screen 5: dense executor for every four-stream literal section
+
+The dispatcher sends literal sections above 16 KiB to the wide executor
+(capacity 128 KiB), which carries the pair fast path and the 68--71-byte match
+kernels. The candidate raised the dense executor's staged-literal capacity to
+the 128 KiB Zstd block bound and routed every four-stream section to it.
+
+Quick alternating screen, same method:
+
+| size | base | variant |
+| --- | ---: | ---: |
+| dickens.64k | 0.8000, 0.7719 | 0.7936, 0.7936 |
+| dickens.1m | 0.7657, 0.7585 | 0.7525, 0.7501 |
+| mozilla.1m | 0.7495, 0.7416 | 0.7403, 0.7444 |
+| x-ray.1m | 0.8460, 0.8504 | 0.7957, 0.7999 |
+
+Rejected: text gains about 1.4% on the 1 MiB row, but binary `x-ray` loses
+about 6%, so the wide executor's long-match kernels are essential for that
+shape. A size-only threshold cannot replace the existing dispatch; any future
+attempt needs a block-shape classifier and a full paired campaign, and the
+realistic ceiling is about one percent.
+
 ## Conclusion
 
-The executor is bounded by register allocation, not by any single arithmetic
-step. Every variant that adds loop-carried state or a data-dependent branch
-lost 7--14%, while the adopted `ShiftingGroup` change won 1.86% precisely
-because it removed state. The next serious attempt must reduce live values or
-process several sequences per iteration (libzstd-style unrolling) rather than
-add a cache, a tier, or an extra selector. The 12.38% match-source load is the
-largest single target but needs a copy shape that avoids a new unpredictable
-branch.
+The executor is bounded by register allocation and out-of-order overlap, not
+by any single arithmetic step. Every variant that adds loop-carried state or a
+data-dependent branch lost 7--14%, the batched split lost the copy/FSE overlap,
+and replacing the wide executor lost binary-data kernels; the adopted
+`ShiftingGroup` change won 1.86% precisely because it removed state without
+adding a branch. Screen 3 also repeated a previously rejected reservoir design
+(recorded in `zstd-wide-split-capacity.md`), so future work should search that
+note first. The next serious attempt must reduce live values inside the
+single-pass loop or find a classifier-backed executor choice, not add a cache,
+a tier, or a second pass. The 12.38% match-source load is the largest single
+target but needs a copy shape that avoids a new unpredictable branch.
 
 ## Raw data
 
