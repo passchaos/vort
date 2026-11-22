@@ -2745,3 +2745,14 @@ store (2.3%); the remaining cost is spread across grouped field decoding. The
 earlier prefetch (+0.7% geomean) and match-first reorder screens stay closed,
 so the next lever is a fused state machine or a different table/token layout,
 not another local copy edit.
+
+## Zstd decode current-source matrix (2026-11-22)
+
+Twenty-four rows against system libzstd 1.4.8 (`decodeFrameInto` versus
+`ZSTD_decompress`, level-9 wires, 400/80 iterations): geometric Vort/reference
+**0.7774x** at 64 KiB and **0.7805x** at 1 MiB, **0.7789x** over all rows.
+Weakest rows are command-dense text (`xml.64k` 0.6799, `nci.64k` 0.6894,
+`reymont.1m` 0.7177, `webster.1m` 0.7278); `x-ray.64k` 0.9944 and `sao.1m`
+0.8754 are the strongest. This supersedes the 2026-11-12 ranking for current
+source while keeping its separate competitor epoch. Evidence:
+[data/zstd-decode-current-20261122](data/zstd-decode-current-20261122/README.md).
