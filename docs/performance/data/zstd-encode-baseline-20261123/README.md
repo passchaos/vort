@@ -114,14 +114,22 @@ appear as a separate hotspot; the cost is per-position candidate search with
 the level-3 budget of 24 against the reference's two-hash double-fast matcher.
 That matches the 7.7x gap without implicating emission or section sizing.
 
+## Rejected: level-3 budget 24 to 12
+
+Halving the level-3 controlled-search budget measured, over the same four
+64 KiB files: dickens 6.18 -> 5.34 ms (1.16x) at +2.51% size, mozilla
+3.25 -> 3.07 ms (1.06x) at +0.73%, x-ray 7.12 -> 6.63 ms (1.07x) at +0.16%,
+nci 2.15 -> 2.13 ms (1.01x) at +4.87%. Roughly 7% geometric-mean speed for 2%
+geometric-mean size is a bad trade against a 7.7x gap and repeats the existing
+knee sweep's conclusion that lower budgets cost more size per unit of speed.
+Reverted. The level-3 gap is per-candidate cost inside `findBest`/`matchAt`/
+`planReuse`, not the number of candidates.
+
 ## Next
 
-1. Cut the level-3 controlled-search budget (24 toward 8--12) or reduce the
-   per-candidate cost, and measure the size/speed knee against libzstd
-   double-fast. The existing knee sweep only compared Vort budgets (32/24/16);
-   it never compared against the reference's per-position work, so the current
-   default may sit far off the frontier. Keep frame SHA/size checks and the
-   full paired matrix.
+1. Reduce the level-3 per-candidate cost in `controlled_search` (candidate
+   generation, reuse planning, or duplicate checks) rather than the budget.
+   Keep frame SHA/size checks and the full paired matrix.
 2. Compare at matched strategies or equal ratio before claiming a speed gap:
    run the reference with `--strategy`/HQ controls and Vort with the same
    search effort, then rank on the ratio/speed frontier rather than nominal
