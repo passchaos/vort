@@ -77,3 +77,15 @@ the full `test check check-wasm` matrix passes (389/389 steps,
 `prefix-128k-before.csv` / `prefix-128k-after.csv` and
 `prefix-1m-before.csv` / `prefix-1m-after.csv` (schema of
 `run-deflate-encode-bench`).
+
+## Follow-up classifier screen (2026-11-22)
+
+A variant required at least 70% distinct sampled 4-grams and widened the
+average-best window to 3.5...16 bytes, aiming to route moderately repetitive
+text (11...16-byte best matches) to the 4-byte chain while excluding RLE-like
+blocks. An offline replication of both classifiers over the same middle 4 KiB
+samples selected identical rows for all twelve 128 KiB and six 1 MiB prefixes:
+`mr`/`nci`/`samba`/`xml` fail the distinctness bound (0.10/0.31/0.61/0.38) and
+also exceed 16 bytes on average, while `sao`/`x-ray` stay below 3.5 bytes.
+Since no measured row changes routing, the variant only adds an 8 KiB clear and
+per-sample bit bookkeeping, so it was not adopted.
