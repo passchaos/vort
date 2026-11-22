@@ -89,3 +89,17 @@ samples selected identical rows for all twelve 128 KiB and six 1 MiB prefixes:
 also exceed 16 bytes on average, while `sao`/`x-ray` stay below 3.5 bytes.
 Since no measured row changes routing, the variant only adds an 8 KiB clear and
 per-sample bit bookkeeping, so it was not adopted.
+
+## Follow-up chain representation screen (2026-11-22)
+
+Replacing the absolute `u32 prev[]` with a `u16` distance-delta ring (at most
+65,536 slots, capped one past the window) preserves every reachable chain node
+and all wires: a position-level differential over a 70 KiB mixed input
+including ring wraparound matches the absolute walk exactly, and all 24
+level-6/7 benchmark rows keep byte-identical output. It is not a win. Twelve
+128 KiB prefixes at 50 iterations x 3 rounds measure **0.9753x** geometric-mean
+speed at level 6 and **0.9593x** at level 7 (`reymont` 0.81x/0.81x,
+`ooffice` 0.91x/0.87x, `webster` 0.96x/0.91x). The walk is bound by the
+dependent next-node load, so inserting a subtract before that load costs more
+latency than the quarter-size predecessor array saves. The absolute `u32`
+chain stays.
