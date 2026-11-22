@@ -1,0 +1,26 @@
+rows=24 geomean=0.9967x
+  mozilla.64k 0.9823x
+  webster.64k 0.9829x
+  reymont.64k 0.9836x
+  xml.64k 0.9869x
+  dickens.64k 0.9878x
+  samba.64k 0.9911x
+  nci.64k 0.9931x
+  mozilla.1m  0.9941x
+  sao.1m  0.9958x
+  nci.1m  0.9960x
+  x-ray.64k 0.9968x
+  mr.64k 0.9974x
+  xml.1m  0.9974x
+  osdb.64k 0.9979x
+  osdb.1m  0.9981x
+  webster.1m  0.9989x
+  ooffice.1m  1.0015x
+  samba.1m  1.0024x
+  sao.64k 1.0024x
+  mr.1m  1.0026x
+  x-ray.1m  1.0028x
+  dickens.1m  1.0052x
+  reymont.1m  1.0053x
+  ooffice.64k 1.0201x
+bootstrap95=[0.9935, 1.0001] min=0.9823 max=1.0201

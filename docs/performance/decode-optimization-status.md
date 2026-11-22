@@ -2873,3 +2873,27 @@ gain 1.04--1.05 (`dickens.64k` 1.0489, `reymont.64k` 1.0459, `nci.64k`
 1.0432, `webster.64k` 1.0408). The full Debug suite passes 5,745/5,747 tests
 with two skipped and `check-wasm` exits zero. Evidence:
 [data/zstd-dense-shifting-group-20261123](data/zstd-dense-shifting-group-20261123/README.md).
+
+## Zstd dense decoder register-pressure screen (2026-11-23)
+
+A fresh symbolized profile of the committed dense executor (`dickens.1m`,
+level 9) puts it at 58.63% of process samples, the wide split executor at
+7.26%, `decodeFourStreamHuffmanReservoirNative` at 2.13% and FSE table build at
+1.50%; libzstd 1.4.8 decode is about 26%. The hottest single instruction is the
+16-byte match-source load of `appendForwardWildcopy16Once` at 12.38%, with its
+store at 1.73%; `perf stat` reports 0.57 store-forwarding blocks and 0.76 split
+loads per sequence. The remaining loop spreads evenly at ~1.5% per instruction
+and includes a store/reload pair for the loop counter plus repeated
+`remaining_bits` and `bytes.ptr` reloads.
+
+Three variants were rejected. Keeping the three repeat offsets in registers
+with inline resolution removed the `state` pointer reload and the vector
+offset update but reached only **0.9967x** (95% CI **[0.9935, 1.0001]**,
+weakest `mozilla.64k` 0.9823, three controls below 0.98) over 24 rows and five
+alternating pairs. An 8-byte short-match copy tier and a register bit-window
+reservoir both lost 7--14% in quick alternating screens because they add a
+data-dependent branch (refill or `match_len <= 8`) and loop-carried registers.
+The adopted `ShiftingGroup` win came from removing state, not adding it. The
+next attempt should reduce live values or process several sequences per
+iteration; another cache, tier, or selector will not pass. Evidence:
+[data/zstd-dense-register-screen-20261123](data/zstd-dense-register-screen-20261123/README.md).
