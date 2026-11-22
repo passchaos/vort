@@ -2770,3 +2770,14 @@ throughput; structured text is weakest (`nci` 0.0880x / 1.0532x, `xml`
 planner is 3.3185x faster but 1.1281x larger, which is not a quality-equivalent
 row. Evidence:
 [data/brotli-planned-modes-current-20261122](data/brotli-planned-modes-current-20261122/README.md).
+
+## Brotli ratio-planner candidate beam (2026-11-22)
+
+`selectOptimalRatioCandidates` now uses a 32-entry candidate beam instead of
+128 for the `.ratio` planned level; the public q0--q11 quality presets use the
+quality-scheduled path and are unchanged. Twelve 64 KiB prefixes at reference
+q9 (three iterations, 32 re-run at ten): **1.1683x** geometric-mean speed for
+**+0.54%** size, confirmation **1.1668x**. Six rows are byte-identical; worst
+rows are `xml` 1.3827x / +2.28% and `nci` 1.7537x / +2.10%. The 64-entry point
+gives 1.0703x / +0.24%; the 8-entry point is rejected at `nci` +5.12%.
+Evidence: [data/brotli-ratio-beam-20261122](data/brotli-ratio-beam-20261122/README.md).

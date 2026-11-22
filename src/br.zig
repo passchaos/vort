@@ -4237,6 +4237,9 @@ pub const CompressedHeaderFamily = header_profile.Family;
 
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
+/// Candidate beam for the `.ratio` optimal proposal stage. The exact wire
+/// comparison still decides whether the candidate survives.
+const ratio_optimal_candidates: usize = 32;
 const SummaryError = Error || error{SummaryHistoryExhausted};
 
 pub const CompressedSupportLimits = struct {
@@ -6733,7 +6736,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,
-        .max_candidates = 128,
+        .max_candidates = ratio_optimal_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
     }, io, &optimal_profile);
@@ -6865,7 +6868,7 @@ pub fn profileLiteralContextSearch(
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,
-        .max_candidates = 128,
+        .max_candidates = ratio_optimal_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
     });
@@ -7028,7 +7031,7 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,
-        .max_candidates = 128,
+        .max_candidates = ratio_optimal_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
     });
