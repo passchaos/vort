@@ -140,6 +140,20 @@ slower than libzstd's double-fast level 3 (0.78 ms) at +15.3% size. The
 level-3 gap is two separate targets: the ladder/greedy ratio spend, and a fast
 primary that is roughly twice the reference's per-position cost.
 
+## Fast-primary profile (2026-11-23)
+
+`perf record -F 8000` over `dickens.64k` level 3 with
+`--native-selection fast_compressed`, one hundred iterations (1275 samples):
+`zstd.match.double_fast.planReuse` is **22.83%**, the reference
+`ZSTD_compressBlock_doubleFast` 18.75%, the harness SHA-256 18.24%,
+`emitLargeSequenceCompressedBlockWithStatePolicy` 5.00%,
+`emitLargeHashTokenSequenceBlockReuseFast` 3.91%, `emitLongHuffmanStream`
+3.13%, `double_fast.storeMatch` 2.97%, `sequence.large.transition.fill` 2.74%
+and `emitSequenceLiteralsSection` 1.64%. After excluding the harness hash, the
+fast primary is dominated by rep-reuse planning plus match storage, not by
+emission. The same `planReuse` is 8.47% of the controlled-search path, so it
+is the single shared target across levels 1--3.
+
 ## Next
 
 1. Reduce the level-3 per-candidate cost in `controlled_search` (candidate
@@ -149,6 +163,9 @@ primary that is roughly twice the reference's per-position cost.
    Keep frame SHA/size checks and the full paired matrix. In parallel, the
    fast primary (`fast_compressed`) is 2.1x slower than double-fast and is the
    cheaper surface to optimize first because it has no ratio-ladder coupling.
+   Start with `double_fast.planReuse` (22.83% of the fast primary, 8.47% of
+   the controlled search): inspect whether the rep-beam reuse planning can be
+   pruned or fused with match storage without changing the chosen matches.
 2. Compare at matched strategies or equal ratio before claiming a speed gap:
    run the reference with `--strategy`/HQ controls and Vort with the same
    search effort, then rank on the ratio/speed frontier rather than nominal
