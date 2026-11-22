@@ -42,3 +42,12 @@ q9 size at one third of its throughput.
 `base-q9-*.csv` (128 beam, 3 iterations), `64-`, `32-`, `16-`, `8-` sweeps
 (3 iterations) and `32b-q9-*.csv` (32 beam, 10 iterations), schema of
 `run-br-planned-encode-bench`.
+
+## Validation
+
+The final source passes the complete Debug suite: **5,745/5,747 tests passed
+with two skipped**, exit zero, and `zig build check-wasm` exits zero. The
+earlier run that still had the profile path at 128 failed only the
+`br ratio block profile reproduces the production wire` comparison; sharing
+`ratio_optimal_candidates` fixed it, and the production wire path was unchanged
+between the two runs.

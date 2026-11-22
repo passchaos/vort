@@ -2781,3 +2781,6 @@ q9 (three iterations, 32 re-run at ten): **1.1683x** geometric-mean speed for
 rows are `xml` 1.3827x / +2.28% and `nci` 1.7537x / +2.10%. The 64-entry point
 gives 1.0703x / +0.24%; the 8-entry point is rejected at `nci` +5.12%.
 Evidence: [data/brotli-ratio-beam-20261122](data/brotli-ratio-beam-20261122/README.md).
+
+Final validation for the 32-entry beam: the complete Debug suite passes
+5,745/5,747 tests with two skipped and `check-wasm` exits zero.
