@@ -130,13 +130,25 @@ A follow-up micro-screen forced `matchAt` inline (the annotation showed about
 `dickens.64k` measured 6.16 ms versus 6.18 ms with identical 27,477-byte
 output, i.e. no effect, so call overhead is not the lever either. Reverted.
 
+## Level-3 selection split (2026-11-23)
+
+Forcing the fast primary with `--native-selection fast_compressed` at level 3
+measures `dickens.64k` at 1.65 ms and 31,694 bytes versus 6.18 ms and 27,477
+bytes for the default greedy ladder. The default therefore spends 3.7x time
+for 13.3% smaller output, and the fast primary itself is still about 2.1x
+slower than libzstd's double-fast level 3 (0.78 ms) at +15.3% size. The
+level-3 gap is two separate targets: the ladder/greedy ratio spend, and a fast
+primary that is roughly twice the reference's per-position cost.
+
 ## Next
 
 1. Reduce the level-3 per-candidate cost in `controlled_search` (candidate
    generation, reuse planning, or duplicate checks) rather than the budget or
    call overhead. The flat annotation (top instruction 8.65% inside
    `findBest`, 10.19% inside `matchAt`) points at the candidate loop itself.
-   Keep frame SHA/size checks and the full paired matrix.
+   Keep frame SHA/size checks and the full paired matrix. In parallel, the
+   fast primary (`fast_compressed`) is 2.1x slower than double-fast and is the
+   cheaper surface to optimize first because it has no ratio-ladder coupling.
 2. Compare at matched strategies or equal ratio before claiming a speed gap:
    run the reference with `--strategy`/HQ controls and Vort with the same
    search effort, then rank on the ratio/speed frontier rather than nominal
