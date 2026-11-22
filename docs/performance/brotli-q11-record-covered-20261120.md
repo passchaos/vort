@@ -45,3 +45,21 @@ retains each epoch, preparation/resource checks, source/build identity and
 restoration receipts. Adoption requires a future stable paired end-to-end
 matrix meeting the repository thresholds. No throughput, peak-memory reduction
 or industry-leadership claim is made.
+
+## 2026-11-22 guarded retries
+
+Two further CPU2/HT10 epochs used the frozen 60-row matrix and unchanged
+before/after binaries. The first stopped during calibration row 5 when the HT
+sibling reached 3.93% in one 100 ms interval; the second stopped at calibration
+row 1 with a 37.1% sibling interval. Both retained every observed sample and
+set `adoption_allowed: false`. No complete epoch exists, so the patch remains
+unadopted and no throughput claim is made.
+
+The retained partial epochs are triaged only as a non-acceptance estimate of
+effect size. Order-raw `before_ns / after_ns` geometric means: the first epoch
+has 8 synthetic record targets at **1.0987x** with four control groups at
+0.9946--1.0055x; the second has 22 targets at **1.0771x** with controls at
+1.0004--1.0096x. This is consistent with the generator counters and motivates
+a future dedicated-host epoch, but it is not acceptance evidence: the target
+counts are small, the epochs are guard-stopped, and no confidence interval is
+claimed.
