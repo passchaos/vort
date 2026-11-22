@@ -63,3 +63,15 @@ timing, and all 24 output sizes are unchanged.
 `level7-128k-before.csv` / `level7-128k-after.csv` (100 x 5), and the
 `focus-L{6,7}-{reymont,dickens,xml}-r{1,2,3}-{B,V}.csv` re-measurement files
 (200 x 5). Each CSV carries the executable SHA and command.
+
+## Follow-up 3-byte chain extension screen (2026-11-22)
+
+Extending the same window-local s16 tables to the lazy parser's 3-byte chain
+(used by blocks the hash4 classifier leaves on the historical parser) is not a
+win. Twelve 128 KiB prefixes at 50 iterations x 3 rounds measure **0.9934x**
+geometric-mean speed at level 6 and **0.9738x** at level 7, with byte-identical
+output on all 24 rows. The split is content-dependent: near-incompressible
+`x-ray` gains **1.2006x/1.1316x** and `samba` 1.0562x/1.0377x, while long-match
+and deep-chain rows regress (`mozilla` 0.8804x/0.8063x, `mr` 0.8893x/0.9318x,
+`nci` 0.9355x/0.8994x, `xml` 0.9756x/0.9655x). The absolute `u32` chain stays
+for the 3-byte path; only the 4-byte chain uses the window-local tables.
