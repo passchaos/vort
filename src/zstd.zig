@@ -153,6 +153,9 @@ test "Zstd source stream cursor contracts" {
 test "Zstd source frame decode API contracts" {
     try @import("zstd/source/decode_api_tests.zig").contracts(SourceDecodeApiTestSupport);
 }
+test "Zstd source window and decoded size admission contracts" {
+    try @import("zstd/source/decode_admission_tests.zig").contracts(SourceDecodeApiTestSupport);
+}
 test "Zstd source output alias contracts" {
     try @import("zstd/source/decode_alias_tests.zig").contracts(@This());
 }

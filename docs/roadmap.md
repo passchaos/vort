@@ -168,6 +168,11 @@ and growth, retained scratch and entropy workspace; quota and backing OOM
 remain distinct and failed publication preserves caller state. Defaults retain
 their existing allocation paths. Actual wasm32-wasi consumers verify exact
 budget boundaries, ownership handoff, refusal/retry and zero-heap size queries.
+[Source decode admission](zstd-gap.md#source-window-and-decoded-size-admission)
+now enforces a caller-selected window cap at data-frame headers and keeps
+checking the known decoded-size lower bound across frames of unknown size.
+Cursor header traversal and skip still allow callers to bypass decoding an
+unsupported frame without allocating for its advertised window.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 
