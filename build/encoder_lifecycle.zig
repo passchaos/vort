@@ -16,7 +16,7 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
         for ([_]struct { family: []const u8, filters: []const []const u8, label: []const u8 }{
             .{ .family = "deflate", .filters = &.{ "Deflate encoder transition borrow contracts", "Deflate wrapper transition options" }, .label = "Deflate encoder transition borrows and options" },
             .{ .family = "br", .filters = &.{ "Brotli encoder finish pending metadata", "Brotli lifecycle borrows", "Brotli flush", "Brotli streamed metadata" }, .label = "Brotli flush, metadata and lifecycle borrows" },
-            .{ .family = "zstd", .filters = &.{ "Zstd incremental next-frame borrow", "Zstd incremental encoder setter borrows", "Zstd incremental encoder skippable borrows" }, .label = "Zstd next-frame, setter and skippable borrows" },
+            .{ .family = "zstd", .filters = &.{ "Zstd incremental next-frame borrow", "Zstd incremental encoder setter borrows", "Zstd incremental encoder skippable borrows", "Zstd streamed skippable" }, .label = "Zstd next-frame, setter and skippable lifecycle" },
         }) |codec| {
             const tests = b.addTest(.{
                 .name = b.fmt("vort-{s}-encoder-lifecycle{s}-tests", .{ codec.family, variant.suffix }),

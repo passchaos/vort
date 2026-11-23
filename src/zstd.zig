@@ -16,6 +16,10 @@ test "Zstd incremental encoder skippable borrows pending preflight" {
     try @import("zstd/incremental/encoder/skippable_borrow_tests.zig").parallelPending(@This());
 }
 
+test "Zstd streamed skippable encoder contracts" {
+    try @import("zstd/incremental/encoder/skippable_stream_tests.zig").contracts(@This());
+}
+
 test "Zstd incremental encoder setter borrows serial" {
     try @import("zstd/incremental/encoder/setter_borrow_tests.zig").serial(@This());
 }

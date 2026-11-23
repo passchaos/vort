@@ -55,6 +55,9 @@ variant exercise these zero-output boundaries alongside exact-length,
 checksum, truncation, and trailing-input controls. The
 [incremental Zstd skippable observer](formats/zstd-skippable-observer.md)
 delivers admitted headers and body fragments even after fixed capture fills.
+The paired [streamed Zstd encoder](formats/zstd-skippable-stream.md) emits
+known-length skippable payloads in fragments without staging a whole body,
+using the same wire in the serial and persistent parallel encoders.
 The [incremental Brotli metadata observer](formats/brotli-metadata.md#incremental-decode-observation)
 now delivers complete metadata by fragment even when fixed capture is disabled
 or full, without consuming plaintext quota or retaining metadata-sized storage.

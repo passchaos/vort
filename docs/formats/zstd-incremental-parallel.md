@@ -160,6 +160,8 @@ preset ID zero is legal. Metadata-only nonzero-ID routes do not supply history
 and are limited to their raw-output contract. Standard skippable frames may be
 written only at done/drained boundaries, contribute delivered output bytes and
 do not advance data-frame count; magicless mode rejects skippable writing.
+The [streamed skippable encoder](zstd-skippable-stream.md) charges only its
+inline header to pending output and copies the body directly to caller output.
 
 ZIP incremental `zstd_parallel_options = null` preserves serial wire, allocation
 and existing resolution guards. An explicit option selects the new stable owning

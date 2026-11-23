@@ -12,6 +12,7 @@ const prefix = @import("../../prefix/binding.zig");
 const prefix_errors = @import("prefix_errors.zig");
 const step_borrows = @import("step_borrows.zig");
 const skippable_wire = @import("../../frame/skippable.zig");
+const skippable_stream = @import("../skippable_stream.zig");
 
 /// Build an incremental Zstd frame encoder. One bounded block is retained;
 /// completed raw, RLE, or entropy-coded blocks drain through arbitrary caller
@@ -43,6 +44,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         stream_output: Count = 0,
         frame_count: Count = 0,
         skippable_only: bool = false,
+        streamed_skippable: ?skippable_stream.State = null,
 
         const Self = @This();
         const allow_zero_dictionary_id = if (@hasDecl(Codec, "allow_zero_dictionary_id")) Codec.allow_zero_dictionary_id else false;
@@ -58,6 +60,8 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             pending_output: usize,
             frame_count: Count,
             frame_index: Count,
+            skippable_streaming: bool = false,
+            skippable_remaining: u32 = 0,
             finishing: bool,
             done: bool,
         };
@@ -268,6 +272,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.dictionary_id = dictionary_id;
             self.dictionary = dictionary;
             self.skippable_only = false;
+            self.streamed_skippable = null;
             self.prefix_failure = null;
         }
         pub fn nextFrame(self: *Self, options: Codec.Options) Error!void {
@@ -322,14 +327,17 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 .frame_input = self.total_input,
                 .frame_output = self.total_output,
                 .buffered_input = self.block.items.len,
-                .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_output = if (self.streamed_skippable) |*active| active.pendingHeaderLen() else self.pending.items.len - self.pending_offset,
                 .frame_count = self.frame_count,
                 .frame_index = if (self.done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
+                .skippable_streaming = self.streamed_skippable != null,
+                .skippable_remaining = if (self.streamed_skippable) |active| active.remaining else 0,
                 .finishing = self.finishing,
                 .done = self.done,
             };
         }
         pub fn finish(self: *Self) void {
+            if (self.streamed_skippable != null) return;
             self.finishing = true;
             self.flush_requested = false;
         }
@@ -338,7 +346,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         /// are idempotent; the request drains through the normal tiny-output
         /// path and callers may resume input once `need_input` is returned.
         pub fn flush(self: *Self) void {
-            if (!self.finishing and !self.done) self.flush_requested = true;
+            if (!self.finishing and !self.done and self.streamed_skippable == null) self.flush_requested = true;
         }
         /// Queue a standard Zstd skippable frame at a fresh or drained boundary.
         /// Start the next data frame with `nextFrame` after this drains.
@@ -361,6 +369,39 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.done = false;
             self.skippable_only = true;
         }
+        /// Start a standard skippable frame at the same boundary as
+        /// `writeSkippable`, with an inline header and no borrowed body.
+        pub fn beginSkippable(self: *Self, skippable_id: u4, payload_len: u32) Error!void {
+            if (@hasField(Codec.Options, "format")) {
+                if (self.options.format == .magicless) return error.InvalidBlockPlan;
+            }
+            if ((!self.done and !prefixUsage(self.options)) or !self.setterEligible()) return error.InvalidBlockPlan;
+            try self.validateSkippableBorrows("");
+            const wire_len = skippable_stream.wireLen(payload_len);
+            _ = try count.add(self.total_output, wire_len);
+            _ = try count.add(self.stream_output, wire_len);
+            _ = self.prefix_state.activate(.skippable);
+            self.prefix_state.busy = true;
+            self.streamed_skippable = .init(skippable_id, payload_len);
+            self.skippable_only = true;
+            self.done = false;
+        }
+        /// Output the inline header and copy body bytes directly into caller
+        /// output. Input progress counts only body bytes, none are retained.
+        /// `.done` completes this skippable frame without advancing data count.
+        pub fn stepSkippable(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            const active = if (self.streamed_skippable) |*value| value else return error.InvalidStreamState;
+            try self.validateStepBorrows(input, output);
+            var progress: core.Progress = .{};
+            const status = try active.step(input, output, &progress, &self.total_output, &self.stream_output, std.math.maxInt(Count));
+            if (status == .done) {
+                self.streamed_skippable = null;
+                self.skippable_only = false;
+                self.done = true;
+                self.completePrefix();
+            }
+            return .{ .progress = progress, .status = status };
+        }
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             return self.stepCommon(input, output, null);
         }
@@ -375,6 +416,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             return self.stepCommon(input, output, directive);
         }
         fn stepCommon(self: *Self, input: []const u8, output: []u8, directive: ?prefix.Directive) Error!core.StepResult {
+            if (self.streamed_skippable != null) return error.InvalidStreamState;
             if (!self.done or input.len != 0) try self.validateStepBorrows(input, output);
             if (self.prefix_failure) |err| return err;
             if (self.done) {
