@@ -1206,6 +1206,7 @@ const winner_literal_cost = @import("zstd/literals/winner_cost_cache.zig");
 const single_sequence_cost = @import("zstd/sequence/single_cost.zig");
 const paired_anchor_cache = @import("zstd/match/paired_anchor_cache.zig");
 const seekable = @import("zstd/seekable.zig");
+const seekable_range = @import("zstd/seekable/range.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const fast_cover_standard = @import("zstd/dictionary/fast_cover.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
@@ -20421,146 +20422,133 @@ fn nativeSeekableFrameSize(compressed_len: usize, input: []const u8, with_checks
 }
 
 pub fn nativeSeekableRangeScratchLen(table: NativeSeekTable, offset: u64, length: usize) Error!usize {
-    const range_end = try nativeSeekableRangeEnd(table, offset, length);
-    if (length == 0) return 0;
-
-    var needed: usize = 0;
-    var entries = table.iterator();
-    while (try entries.next()) |entry_value| {
-        const frame_end = std.math.add(u64, entry_value.decompressed_offset, entry_value.decompressed_size) catch return error.IntegerOverflow;
-        if (frame_end <= offset) continue;
-        if (entry_value.decompressed_offset >= range_end) break;
-        needed = @max(needed, std.math.cast(usize, entry_value.decompressed_size) orelse return error.IntegerOverflow);
-    }
-    return needed;
+    return (try seekable_range.prepareTable(table, offset, length, std.math.maxInt(Count))).scratch_len;
 }
 
 /// Return the exact scratch requirement using a previously built seek index.
 /// Offset lookup is O(log n), and only intersecting entries are then scanned.
 pub fn nativeSeekableRangeScratchLenWithIndex(index: NativeSeekIndex, offset: u64, length: usize) Error!usize {
-    return (try prepareNativeSeekableIndexedRange(index, offset, length)).scratch_len;
+    return (try seekable_range.prepareIndex(index, offset, length, std.math.maxInt(Count))).scratch_len;
 }
 
-const NativeSeekableIndexedRange = struct {
-    range_end: u64,
-    first_entry: usize,
-    scratch_len: usize,
-};
+test "Zstd seekable window limit contracts" {
+    try @import("zstd/seekable/window_tests.zig").contracts(@This());
+}
 
-fn prepareNativeSeekableIndexedRange(index: NativeSeekIndex, offset: u64, length: usize) Error!NativeSeekableIndexedRange {
-    const range_end = try nativeSeekableRangeEnd(index.table, offset, length);
-    if (length == 0) return .{ .range_end = range_end, .first_entry = 0, .scratch_len = 0 };
+pub const NativeSeekableRangeDecodeOptions = struct {
+    /// Maximum advertised window of each data frame in the selected entries.
+    /// A finite limit checks their wire layout before allocating or decoding.
+    max_window_size: Count = std.math.maxInt(Count),
+    dictionary: ?NativeDictionary = null,
+    dictionary_set: ?NativeDictionarySet = null,
 
-    const first = std.math.cast(usize, try index.frameIndexForDecompressedOffset(offset)) orelse return error.IntegerOverflow;
-    var needed: usize = 0;
-    for (index.entries[first..]) |entry_value| {
-        if (entry_value.decompressed_offset >= range_end) break;
-        needed = @max(needed, std.math.cast(usize, entry_value.decompressed_size) orelse return error.IntegerOverflow);
+    pub fn validate(self: NativeSeekableRangeDecodeOptions) Error!void {
+        if (self.dictionary_set) |set| {
+            if (self.dictionary != null) return error.InvalidBlockPlan;
+            try set.validate();
+        }
     }
-    return .{ .range_end = range_end, .first_entry = first, .scratch_len = needed };
-}
-
-fn nativeSeekableRangeEnd(table: NativeSeekTable, offset: u64, length: usize) Error!u64 {
-    const length_u64 = std.math.cast(u64, length) orelse return error.IntegerOverflow;
-    const range_end = std.math.add(u64, offset, length_u64) catch return error.IntegerOverflow;
-    if (offset > table.decompressed_size or range_end > table.decompressed_size) return error.RangeOutOfBounds;
-    return range_end;
-}
+};
 
 /// Decode only seekable frames intersecting `[offset, offset + output.len)`.
 /// `frame_scratch` must fit the largest selected decompressed frame; callers can
 /// obtain the exact requirement from `nativeSeekableRangeScratchLen`.
 pub fn decodeNativeSeekableRangeInto(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8) Error!usize {
-    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, .none);
+    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, .{});
 }
 
 pub fn decodeNativeSeekableRangeIntoWithDictionary(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8, dictionary: NativeDictionary) Error!usize {
-    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, .{ .explicit = dictionary });
+    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, .{ .dictionary = dictionary });
 }
 
 pub fn decodeNativeSeekableRangeIntoWithDictionarySet(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
     try dictionary_set.validate();
-    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, .{ .set = dictionary_set });
+    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, .{ .dictionary_set = dictionary_set });
+}
+
+/// A finite window limit admits every selected entry before publishing output.
+pub fn decodeNativeSeekableRangeIntoWithOptions(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
+    try options.validate();
+    return decodeNativeSeekableRangeIntoInternal(stream, offset, output, frame_scratch, options);
 }
 
 /// Decode a range through a reusable caller-owned index, avoiding terminal
 /// table parsing and the linear scan from entry zero on every request.
 pub fn decodeNativeSeekableRangeIntoWithIndex(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8) Error!usize {
-    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, .none);
+    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, .{});
 }
 
 pub fn decodeNativeSeekableRangeIntoWithIndexAndDictionary(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8, dictionary: NativeDictionary) Error!usize {
-    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, .{ .explicit = dictionary });
+    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, .{ .dictionary = dictionary });
 }
 
 pub fn decodeNativeSeekableRangeIntoWithIndexAndDictionarySet(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
     try dictionary_set.validate();
-    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, .{ .set = dictionary_set });
+    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, .{ .dictionary_set = dictionary_set });
 }
 
-const NativeSeekableDictionaryResolver = union(enum) {
-    none,
-    explicit: NativeDictionary,
-    set: NativeDictionarySet,
-};
+pub fn decodeNativeSeekableRangeIntoWithIndexAndOptions(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
+    try options.validate();
+    return decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, frame_scratch, options);
+}
 
-fn decodeNativeSeekableRangeIntoInternal(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8, dictionary_resolver: NativeSeekableDictionaryResolver) Error!usize {
+fn decodeNativeSeekableRangeIntoInternal(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
     const table = try inspectNativeSeekTable(stream);
-    const needed_scratch = try nativeSeekableRangeScratchLen(table, offset, output.len);
-    if (frame_scratch.len < needed_scratch) return error.OutputTooSmall;
+    const range = try seekable_range.prepareTable(table, offset, output.len, options.max_window_size);
+    if (frame_scratch.len < range.scratch_len) return error.OutputTooSmall;
+    return decodeNativeSeekablePreparedTableRangeInto(table, range, offset, output, frame_scratch, options);
+}
+
+fn decodeNativeSeekablePreparedTableRangeInto(table: NativeSeekTable, range: seekable_range.Plan, offset: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
     if (output.len == 0) return 0;
 
-    const range_end = std.math.add(u64, offset, @as(u64, @intCast(output.len))) catch return error.IntegerOverflow;
     var output_offset: usize = 0;
     var entries = table.iterator();
     while (try entries.next()) |entry_value| {
         const frame_end = std.math.add(u64, entry_value.decompressed_offset, entry_value.decompressed_size) catch return error.IntegerOverflow;
         if (frame_end <= offset) continue;
-        if (entry_value.decompressed_offset >= range_end) break;
+        if (entry_value.decompressed_offset >= range.end) break;
         if (entry_value.decompressed_size == 0) continue;
 
-        output_offset += try decodeNativeSeekableEntryRange(table, entry_value, offset, range_end, output[output_offset..], frame_scratch, dictionary_resolver);
+        output_offset += try decodeNativeSeekableEntryRange(table, entry_value, offset, range.end, output[output_offset..], frame_scratch, options);
     }
     if (output_offset != output.len) return error.SizeMismatch;
     return output_offset;
 }
 
-fn decodeNativeSeekableRangeIntoWithIndexInternal(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8, dictionary_resolver: NativeSeekableDictionaryResolver) Error!usize {
+fn decodeNativeSeekableRangeIntoWithIndexInternal(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
     // Preflight range bounds, first-frame lookup, and scratch sizing together.
     // Repeated one-frame reads otherwise paid for the binary search twice.
-    const range = try prepareNativeSeekableIndexedRange(index, offset, output.len);
+    const range = try seekable_range.prepareIndex(index, offset, output.len, options.max_window_size);
     if (frame_scratch.len < range.scratch_len) return error.OutputTooSmall;
-    return decodeNativeSeekablePreparedRangeInto(index, range, offset, output, frame_scratch, dictionary_resolver);
+    return decodeNativeSeekablePreparedRangeInto(index, range, offset, output, frame_scratch, options);
 }
 
-fn decodeNativeSeekablePreparedRangeInto(index: NativeSeekIndex, range: NativeSeekableIndexedRange, offset: u64, output: []u8, frame_scratch: []u8, dictionary_resolver: NativeSeekableDictionaryResolver) Error!usize {
+fn decodeNativeSeekablePreparedRangeInto(index: NativeSeekIndex, range: seekable_range.IndexedPlan, offset: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
     if (output.len == 0) return 0;
 
     var output_offset: usize = 0;
     for (index.entries[range.first_entry..]) |entry_value| {
-        if (entry_value.decompressed_offset >= range.range_end) break;
+        if (entry_value.decompressed_offset >= range.end) break;
         if (entry_value.decompressed_size == 0) continue;
-        output_offset += try decodeNativeSeekableEntryRange(index.table, entry_value, offset, range.range_end, output[output_offset..], frame_scratch, dictionary_resolver);
+        output_offset += try decodeNativeSeekableEntryRange(index.table, entry_value, offset, range.end, output[output_offset..], frame_scratch, options);
     }
     if (output_offset != output.len) return error.SizeMismatch;
     return output_offset;
 }
 
-fn decodeNativeSeekableEntryRange(table: NativeSeekTable, entry_value: NativeSeekTableEntry, offset: u64, range_end: u64, output: []u8, frame_scratch: []u8, dictionary_resolver: NativeSeekableDictionaryResolver) Error!usize {
+fn decodeNativeSeekableEntryRange(table: NativeSeekTable, entry_value: NativeSeekTableEntry, offset: u64, range_end: u64, output: []u8, frame_scratch: []u8, options: NativeSeekableRangeDecodeOptions) Error!usize {
     const frame_end = std.math.add(u64, entry_value.decompressed_offset, entry_value.decompressed_size) catch return error.IntegerOverflow;
-    const compressed_start = std.math.cast(usize, entry_value.compressed_offset) orelse return error.IntegerOverflow;
-    const compressed_size = std.math.cast(usize, entry_value.compressed_size) orelse return error.IntegerOverflow;
-    const compressed_end = std.math.add(usize, compressed_start, compressed_size) catch return error.IntegerOverflow;
-    if (table.frame_offset > table.stream.len or compressed_end > table.frame_offset) return error.CorruptFrame;
+    const frame = try seekable_range.entryBytes(table, entry_value);
     const decompressed_size = std.math.cast(usize, entry_value.decompressed_size) orelse return error.IntegerOverflow;
     if (decompressed_size > frame_scratch.len) return error.OutputTooSmall;
     const decoded_frame = frame_scratch[0..decompressed_size];
-    const frame = table.stream[compressed_start..compressed_end];
-    _ = switch (dictionary_resolver) {
-        .none => try decodeNativeFrameIntoExactSize(frame, decoded_frame, decompressed_size),
-        .explicit => |dictionary| try decodeNativeFrameIntoWithDictionaryExactSize(frame, decoded_frame, dictionary, decompressed_size),
-        .set => |set| try decodeNativeFrameIntoWithDictionarySetExactSize(frame, decoded_frame, set, decompressed_size),
-    };
+    _ = if (options.dictionary_set) |set|
+        try decodeNativeFrameIntoWithDictionarySetExactSize(frame, decoded_frame, set, decompressed_size)
+    else if (options.dictionary) |dictionary|
+        try decodeNativeFrameIntoWithDictionaryExactSize(frame, decoded_frame, dictionary, decompressed_size)
+    else
+        try decodeNativeFrameIntoExactSize(frame, decoded_frame, decompressed_size);
     if (entry_value.checksum) |expected| {
         const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded_frame));
         if (actual != expected) return error.ChecksumMismatch;
@@ -20578,49 +20566,59 @@ fn decodeNativeSeekableEntryRange(table: NativeSeekTable, entry_value: NativeSee
 }
 
 pub fn decodeNativeSeekableRangeAlloc(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize) Error![]u8 {
-    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, .none);
+    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, .{});
 }
 
 pub fn decodeNativeSeekableRangeAllocWithDictionary(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize, dictionary: NativeDictionary) Error![]u8 {
-    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, .{ .explicit = dictionary });
+    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, .{ .dictionary = dictionary });
 }
 
 pub fn decodeNativeSeekableRangeAllocWithDictionarySet(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize, dictionary_set: NativeDictionarySet) Error![]u8 {
     try dictionary_set.validate();
-    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, .{ .set = dictionary_set });
+    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, .{ .dictionary_set = dictionary_set });
+}
+
+pub fn decodeNativeSeekableRangeAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize, options: NativeSeekableRangeDecodeOptions) Error![]u8 {
+    try options.validate();
+    return decodeNativeSeekableRangeAllocInternal(allocator, stream, offset, length, options);
 }
 
 pub fn decodeNativeSeekableRangeAllocWithIndex(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize) Error![]u8 {
-    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, .none);
+    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, .{});
 }
 
 pub fn decodeNativeSeekableRangeAllocWithIndexAndDictionary(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize, dictionary: NativeDictionary) Error![]u8 {
-    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, .{ .explicit = dictionary });
+    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, .{ .dictionary = dictionary });
 }
 
 pub fn decodeNativeSeekableRangeAllocWithIndexAndDictionarySet(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize, dictionary_set: NativeDictionarySet) Error![]u8 {
     try dictionary_set.validate();
-    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, .{ .set = dictionary_set });
+    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, .{ .dictionary_set = dictionary_set });
 }
 
-fn decodeNativeSeekableRangeAllocInternal(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize, dictionary_resolver: NativeSeekableDictionaryResolver) Error![]u8 {
+pub fn decodeNativeSeekableRangeAllocWithIndexAndOptions(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize, options: NativeSeekableRangeDecodeOptions) Error![]u8 {
+    try options.validate();
+    return decodeNativeSeekableRangeAllocWithIndexInternal(allocator, index, offset, length, options);
+}
+
+fn decodeNativeSeekableRangeAllocInternal(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize, options: NativeSeekableRangeDecodeOptions) Error![]u8 {
     const table = try inspectNativeSeekTable(stream);
-    const scratch_len = try nativeSeekableRangeScratchLen(table, offset, length);
-    const output = try allocator.alloc(u8, length);
-    errdefer allocator.free(output);
-    const scratch = try allocator.alloc(u8, scratch_len);
-    defer allocator.free(scratch);
-    _ = try decodeNativeSeekableRangeIntoInternal(stream, offset, output, scratch, dictionary_resolver);
-    return output;
-}
-
-fn decodeNativeSeekableRangeAllocWithIndexInternal(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize, dictionary_resolver: NativeSeekableDictionaryResolver) Error![]u8 {
-    const range = try prepareNativeSeekableIndexedRange(index, offset, length);
+    const range = try seekable_range.prepareTable(table, offset, length, options.max_window_size);
     const output = try allocator.alloc(u8, length);
     errdefer allocator.free(output);
     const scratch = try allocator.alloc(u8, range.scratch_len);
     defer allocator.free(scratch);
-    _ = try decodeNativeSeekablePreparedRangeInto(index, range, offset, output, scratch, dictionary_resolver);
+    _ = try decodeNativeSeekablePreparedTableRangeInto(table, range, offset, output, scratch, options);
+    return output;
+}
+
+fn decodeNativeSeekableRangeAllocWithIndexInternal(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize, options: NativeSeekableRangeDecodeOptions) Error![]u8 {
+    const range = try seekable_range.prepareIndex(index, offset, length, options.max_window_size);
+    const output = try allocator.alloc(u8, length);
+    errdefer allocator.free(output);
+    const scratch = try allocator.alloc(u8, range.scratch_len);
+    defer allocator.free(scratch);
+    _ = try decodeNativeSeekablePreparedRangeInto(index, range, offset, output, scratch, options);
     return output;
 }
 

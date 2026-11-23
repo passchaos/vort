@@ -33,7 +33,8 @@ Explicit reusable `*WithOptions` calls use the options provided for that
 call; normal reusable methods use the configured limit. Existing prefix
 rules remain: a direct decode consumes a pending prefix when the call begins,
 while size queries and chunk refusals before the decoder call do not consume
-it. No new setting is imposed on the options-less or seekable APIs.
+it. Options-less APIs continue to use the unlimited policy. For indexed
+range reads, see the separate [seekable window control](zstd-seekable-window-limit.md).
 
 Use `zig build check-zstd-source-reverse` to execute native, Linux x86 and
 WASI window admission regressions alongside the source decoder contracts. An

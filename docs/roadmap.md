@@ -197,6 +197,9 @@ unsupported frame without allocating for its advertised window.
 The [one-shot frame window control](formats/zstd-frame-window-limit.md) extends
 that policy to slice and reusable decode, including prefix calls and chunk
 facades that check finite limits before coalescing into caller scratch.
+[Seekable range window controls](formats/zstd-seekable-window-limit.md)
+preflight selected frame headers before allocation or output, without reading
+unselected frame bytes.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 

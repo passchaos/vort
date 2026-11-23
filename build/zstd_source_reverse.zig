@@ -52,7 +52,7 @@ pub fn register(
         const implementation_tests = b.addTest(.{
             .name = b.fmt("vort-zstd-source-reverse{s}-tests", .{suffix}),
             .root_module = codecModule(b, variant, optimize),
-            .filters = &.{ "Zstd source", "Zstd frame window limit", "Zstd chunk window" },
+            .filters = &.{ "Zstd source", "Zstd frame window limit", "Zstd chunk window", "Zstd seekable window limit" },
         });
         if (index == 2) {
             implementation_tests.stack_size = 8 * 1024 * 1024;
