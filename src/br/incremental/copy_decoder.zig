@@ -5,6 +5,7 @@ const progressive_bits = @import("bit_reader.zig");
 const shared_dictionary = @import("../shared_dictionary.zig");
 const empty_reference = @import("../summary/empty_reference.zig");
 const metadata_events = @import("metadata_events.zig");
+const metadata_limits = @import("metadata_limits.zig");
 
 /// Progressive decoder for compressed Brotli streams with explicit distances.
 /// History is caller-owned, which makes memory use visible and lets overlapping
@@ -104,6 +105,10 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Maximum total metadata body bytes in one Brotli stream.
+            max_metadata_bytes: Counter = std.math.maxInt(Counter),
+            /// Maximum metadata blocks in one stream, including empty blocks.
+            max_metadata_blocks: Counter = std.math.maxInt(Counter),
             /// Receive metadata synchronously, independent of fixed capture.
             metadata_observer: ?MetadataObserver = null,
             /// Complete one Brotli stream and retain whole-byte lookahead for
@@ -685,6 +690,13 @@ pub fn Decoder(comptime Codec: type) type {
                             };
                             if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
                             if (self.metadata) {
+                                metadata_limits.validate(
+                                    self.metadata_total,
+                                    self.metadata_block_count,
+                                    self.metadata_remaining,
+                                    self.options.max_metadata_bytes,
+                                    self.options.max_metadata_blocks,
+                                ) catch |err| return self.fail(.trailer, err);
                                 const next_count = if (self.metadata_remaining == 0) try self.nextMetadataBlockCount() else null;
                                 if (self.options.metadata_observer) |observer|
                                     observer.emitStart(self.metadata_block_count, self.metadata_remaining, self.final_meta_block);

@@ -61,6 +61,8 @@ using the same wire in the serial and persistent parallel encoders.
 The [incremental Brotli metadata observer](formats/brotli-metadata.md#incremental-decode-observation)
 now delivers complete metadata by fragment even when fixed capture is disabled
 or full, without consuming plaintext quota or retaining metadata-sized storage.
+Per-stream metadata byte and block limits reject excess at the validated header,
+before body reads or observer events, including when metadata is discarded.
 [Streamed metadata encoding](formats/brotli-metadata.md#streamed-body-encoding)
 now writes a declared-length body directly from caller input to output without
 body-sized pending storage, through the same wire header as legacy metadata.

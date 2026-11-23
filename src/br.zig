@@ -2416,6 +2416,10 @@ test "Brotli metadata observer contracts" {
     try @import("br/incremental/metadata_event_tests.zig").contracts(@This());
 }
 
+test "Brotli metadata quota contracts" {
+    try @import("br/incremental/metadata_limit_tests.zig").contracts(@This());
+}
+
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;

@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const progressive_bits = @import("bit_reader.zig");
 const metadata_events = @import("metadata_events.zig");
+const metadata_limits = @import("metadata_limits.zig");
 
 /// Byte-progressive decoder for final Brotli compressed meta-blocks containing
 /// one insert-only command. The bounded prefix buffer is discarded logically
@@ -47,6 +48,10 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Options = struct {
             max_output_len: Counter = std.math.maxInt(Counter),
             expected_output_len: ?Counter = null,
+            /// Maximum total declared metadata body bytes per Brotli stream.
+            max_metadata_bytes: Counter = std.math.maxInt(Counter),
+            /// Maximum metadata blocks per Brotli stream, including empty blocks.
+            max_metadata_blocks: Counter = std.math.maxInt(Counter),
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
             /// Called synchronously during step. Chunk bytes are borrowed for
@@ -317,6 +322,13 @@ pub fn Decoder(comptime Codec: type) type {
                             };
                             if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
                             if (self.metadata) {
+                                metadata_limits.validate(
+                                    self.metadata_total,
+                                    self.metadata_block_count,
+                                    self.metadata_remaining,
+                                    self.options.max_metadata_bytes,
+                                    self.options.max_metadata_blocks,
+                                ) catch |err| return self.fail(.trailer, err);
                                 const next_count = if (self.metadata_remaining == 0) try self.nextMetadataBlockCount() else null;
                                 if (self.options.metadata_observer) |observer|
                                     observer.emitStart(self.metadata_block_count, self.metadata_remaining, self.final_meta_block);

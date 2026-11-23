@@ -64,6 +64,10 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Maximum total metadata body bytes in one Brotli stream.
+            max_metadata_bytes: Counter = std.math.maxInt(Counter),
+            /// Maximum metadata blocks in one stream, including empty blocks.
+            max_metadata_blocks: Counter = std.math.maxInt(Counter),
             /// Receive metadata synchronously, independent of fixed capture.
             metadata_observer: ?MetadataObserver = null,
             allow_trailing_data: bool = false,
@@ -456,6 +460,8 @@ pub fn Decoder(comptime Codec: type) type {
                 .compressed_header_scratch = header_scratch,
                 .metadata_output = self.options.metadata_output,
                 .metadata_block_lengths = self.options.metadata_block_lengths,
+                .max_metadata_bytes = self.options.max_metadata_bytes,
+                .max_metadata_blocks = self.options.max_metadata_blocks,
                 .metadata_observer = self.options.metadata_observer,
                 .allow_trailing_data = self.options.allow_trailing_data,
             });

@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const metadata_events = @import("../metadata_events.zig");
+const metadata_limits = @import("../metadata_limits.zig");
 
 /// Byte-progressive decoder for the Brotli stored/uncompressed subset emitted
 /// by Vort. Only a bounded header prefix is retained; aligned meta-block bytes
@@ -42,6 +43,10 @@ pub const Decoder = struct {
     pub const MetadataObserver = metadata_events.Observer;
     pub const Options = struct {
         max_output_len: Counter = std.math.maxInt(Counter),
+        /// Maximum total declared metadata body bytes per Brotli stream.
+        max_metadata_bytes: Counter = std.math.maxInt(Counter),
+        /// Maximum metadata blocks per Brotli stream, including empty blocks.
+        max_metadata_blocks: Counter = std.math.maxInt(Counter),
         metadata_output: []u8 = &.{},
         metadata_block_lengths: []usize = &.{},
         /// Called synchronously during step. Chunk bytes are borrowed for
@@ -320,6 +325,13 @@ pub const Decoder = struct {
                             continue;
                         }
                         if (self.metadata) {
+                            metadata_limits.validate(
+                                self.metadata_total,
+                                self.metadata_block_count,
+                                self.payload_remaining,
+                                self.options.max_metadata_bytes,
+                                self.options.max_metadata_blocks,
+                            ) catch |err| return self.fail(.header, err);
                             const next_count = if (self.payload_remaining == 0) try self.nextMetadataBlockCount() else null;
                             if (self.options.metadata_observer) |observer|
                                 observer.emitStart(self.metadata_block_count, self.current_metadata_len, self.final_meta_block);

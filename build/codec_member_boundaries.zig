@@ -35,11 +35,11 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
             const tests = b.addTest(.{
                 .name = b.fmt("vort-{s}-member-boundaries{s}-tests", .{ family, variant.suffix }),
                 .root_module = module,
-                .filters = if (is_br) &.{ "Brotli final metadata", "Brotli metadata observer" } else &.{ "Zstd empty member", "Zstd incremental skippable observer" },
+                .filters = if (is_br) &.{ "Brotli final metadata", "Brotli metadata observer", "Brotli metadata quota" } else &.{ "Zstd empty member", "Zstd incremental skippable observer" },
             });
             if (wasm_run) |run| {
                 tests.stack_size = 8 * 1024 * 1024;
-                run.addArgs(&.{ family, if (is_br) "Brotli final metadata and metadata observer" else "Zstd empty member and incremental skippable observer" });
+                run.addArgs(&.{ family, if (is_br) "Brotli final metadata, observer and quotas" else "Zstd empty member and incremental skippable observer" });
                 run.addArtifactArg(tests);
             } else {
                 gate.dependOn(&b.addRunArtifact(tests).step);

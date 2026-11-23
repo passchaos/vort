@@ -146,6 +146,16 @@ is retained with the options; resetting with the same options keeps it, and
 reconfiguring or starting a next stream with new options may replace it.
 Metadata indices restart at zero for each stream.
 
+`max_metadata_bytes` and `max_metadata_blocks` independently bound metadata
+body bytes and block count per Brotli stream. Both default to unlimited. The
+full declared body length is checked against the remaining quota after header
+and alignment validation, before its observer start, body read, or fixed capture. An
+empty block uses one block credit and zero body bytes. These limits also apply
+when metadata is being discarded and do not consume plaintext output quota.
+A refused block returns `OutputLimitExceeded`; previously delivered plaintext
+and metadata remain committed. Reset or next-stream/frame starts new counters
+with the applicable stream options.
+
 The decoder tests send the full 16 MiB metadata limit through one reused
 8 KiB input slice for each of the four decoders. The owned metadata-only case
 runs with a zero requested-heap limit and reports zero peak working bytes.
