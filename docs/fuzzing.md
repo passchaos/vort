@@ -95,6 +95,10 @@ the [dynamic admission fix](performance/deflate-dynamic-admission-20261120.md)
 removes eight raw and two gzip observations at unchanged generated-wire and
 mutation-sequence digests in the current seed.
 
+A later [bounded three-format screen](performance/codec-functional-differential-20261124.md)
+records reference parity for generated valid wires and the regression for
+incremental zlib completion with an allowed tail and a short output pledge.
+
 `tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
 complements the raw-byte target with generated valid wires. A deterministic
 SplitMix64 generator feeds eight content patterns (RLE, periodic, random,

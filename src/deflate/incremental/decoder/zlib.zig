@@ -443,6 +443,7 @@ pub fn Decoder(comptime Codec: type) type {
                         switch (probed.decision) {
                             .need_input => return result(input_read, output_written, .need_input),
                             .trailing => {
+                                try self.validateExpectedOutput();
                                 self.phase = .done;
                                 return result(input_read, output_written, .done);
                             },

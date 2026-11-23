@@ -16,6 +16,10 @@ trailing-prefix recovery. Zlib-only `requiredDictionaryId` and
 `provideDictionary` preserve resumable FDICT behavior; they return null or
 `InvalidStreamState` for gzip. Explicit `allow_concatenated` continues with the
 selected wrapper type only, while a different wrapper is trailing data.
+When an allowed tail ends the logical stream, `step` verifies the cumulative
+`expected_output_len` before reporting `.done`, even if the tail was split
+across calls. A short pledge returns `SizeMismatch` with prior member output
+and the exact failed-call progress preserved.
 
 The direct zlib/gzip incremental decoders and the auto facade accept
 `max_members`, an independent logical-stream cap that includes empty members.

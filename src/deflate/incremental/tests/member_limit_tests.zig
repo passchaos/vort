@@ -35,6 +35,7 @@ fn wrapperContracts(comptime Decoder: type, comptime format: Format) !void {
     try exactAndExtra(Decoder, empty, one, header_len);
     try headerPrecedence(Decoder, format, empty, header_len);
     try trailing(Decoder, empty);
+    try trailingPledge(Decoder, one);
 }
 
 fn zeroCap(comptime Decoder: type, comptime format: Format, wire: []const u8, header_len: usize) !void {
@@ -148,6 +149,42 @@ fn trailing(comptime Decoder: type, comptime empty: []const u8) !void {
     try t.expectEqualStrings(tail[1..], tail[1 + done.progress.input_read ..]);
     try t.expectEqual(@as(Count, 1), completed(decoder.snapshot()));
     try t.expectEqual(@as(?Count, empty.len), decoder.memberEndOffset());
+}
+
+fn trailingPledge(comptime Decoder: type, comptime one: []const u8) !void {
+    const tail = one[0..1] ++ "\x00";
+    const wire = one ++ tail;
+    var history: [32 * 1024]u8 = undefined;
+    for ([_]bool{ false, true }) |split| {
+        for ([_]Count{ 1, 2 }) |expected| {
+            var decoder = try Decoder.init(.{
+                .expected_output_len = expected,
+                .max_members = 1,
+                .allow_concatenated = true,
+                .allow_trailing_data = true,
+            }, &history);
+            var output: [2]u8 = @splat(sentinel);
+            const offset = if (split) one.len + 1 else 0;
+            if (split)
+                try expectStep(try decoder.step(wire[0..offset], &output), .need_input, offset, 1);
+            const destination: []u8 = if (split) output[1..] else &output;
+            const read = if (split) 0 else one.len;
+            const written: usize = if (split) 0 else 1;
+            if (expected == 1) {
+                try expectStep(try decoder.step(wire[offset..], destination), .done, read, written);
+                try decoder.finish();
+                try t.expectEqualStrings(if (split) tail[0..1] else "", decoder.trailingPrefix());
+            } else {
+                try t.expectError(error.SizeMismatch, decoder.step(wire[offset..], destination));
+                const snapshot = decoder.snapshot();
+                try t.expect(!snapshot.done);
+                try t.expectEqual(core.Progress{ .input_read = read, .output_written = written }, snapshot.last_step_progress);
+            }
+            try t.expectEqual(@as(Count, 1), completed(decoder.snapshot()));
+            try t.expectEqual(@as(?Count, one.len), decoder.memberEndOffset());
+            try t.expectEqualSlices(u8, &.{ 'A', sentinel }, &output);
+        }
+    }
 }
 
 fn dictionary(comptime Decoder: type) !void {
