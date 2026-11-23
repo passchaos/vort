@@ -567,6 +567,10 @@ test "gzip direct chunk consumer contracts" {
     try @import("deflate/tests/gzip_chunks_direct.zig").contracts(@This());
 }
 
+test "gzip header metadata limit contracts" {
+    try @import("deflate/tests/gzip_header_limits.zig").contracts(@This());
+}
+
 test "zlib or gzip auto wrapper contracts" {
     try @import("deflate/tests/zlib_or_gzip_auto.zig").contracts(@This());
 }
@@ -1054,6 +1058,9 @@ pub const GzipDecodeOptions = struct {
     /// Skip only the payload CRC comparison; gzip FHCRC remains strict.
     ignore_crc32: bool = false,
     ignore_isize: bool = false,
+    /// Per-field metadata cap for each member: XLEN body bytes, or the
+    /// filename/comment length including its NUL. Default is unlimited.
+    max_header_metadata_len: usize = std.math.maxInt(usize),
     /// In concatenated mode, complete gzip magic commits the next member.
     /// Header, payload and required-footer errors remain errors afterward.
     allow_trailing_data: bool = false,
@@ -10081,7 +10088,7 @@ fn gzipProbeFailureMemberIndex(input: []const u8, scratch: []u8, options: GzipDe
     var offset: usize = 0;
     var member_index: usize = 0;
     while (offset < input.len) : (member_index += 1) {
-        const data_offset = parseGzipHeader(input[offset..]) catch {
+        const data_offset = parseGzipHeaderLimited(input[offset..], options.max_header_metadata_len) catch {
             if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) return null;
             return .{ .index = member_index, .offset = offset };
         };
@@ -10103,7 +10110,7 @@ fn gzipProbeMemberCount(input: []const u8, scratch: []u8, options: GzipDecodeOpt
     var count: usize = 0;
     var last_offset: usize = 0;
     while (offset < input.len) : (count += 1) {
-        const data_offset = parseGzipHeader(input[offset..]) catch {
+        const data_offset = parseGzipHeaderLimited(input[offset..], options.max_header_metadata_len) catch {
             if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
             return null;
         };
@@ -16372,7 +16379,7 @@ pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecod
 
 fn decodeGzipPrefixWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!DecodeResult {
     if (input.len != 0) try decode_output_alias.validate(input, "", output);
-    const data_offset = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeaderLimited(input, options.max_header_metadata_len);
 
     if (options.ignore_crc32) {
         if (try decodeRawStoredOnlyIntoMaybe(input[data_offset..], output)) |stored| {
@@ -16397,7 +16404,7 @@ fn decodeGzipPrefixWithOptions(input: []const u8, output: []u8, options: GzipDec
     return .{ .input_read = footer_offset + 8, .output_written = raw.output_written };
 }
 
-fn parseGzipHeaderFromChunksKnownTotal(chunks: []const []const u8, total_len: usize) Error!usize {
+fn parseGzipHeaderFromChunksKnownTotal(chunks: []const []const u8, total_len: usize, max_metadata_len: usize) Error!usize {
     // Match the contiguous parser's priority: an incomplete fixed header is
     // truncated even when its available prefix already has invalid bytes.
     if (total_len < gzip_header.len) return error.TruncatedFrame;
@@ -16410,10 +16417,11 @@ fn parseGzipHeaderFromChunksKnownTotal(chunks: []const []const u8, total_len: us
 
     if ((flags & 0x04) != 0) {
         const extra_len = try cursor.readLittleU16();
+        if (extra_len > max_metadata_len) return error.OutputLimitExceeded;
         try cursor.skip(extra_len);
     }
-    if ((flags & 0x08) != 0) try skipGzipChunkZeroTerminated(&cursor);
-    if ((flags & 0x10) != 0) try skipGzipChunkZeroTerminated(&cursor);
+    if ((flags & 0x08) != 0) try skipGzipChunkZeroTerminated(&cursor, max_metadata_len);
+    if ((flags & 0x10) != 0) try skipGzipChunkZeroTerminated(&cursor, max_metadata_len);
     if ((flags & 0x02) != 0) {
         const crc_offset = cursor.absolute;
         const expected = try cursor.readLittleU16();
@@ -16425,8 +16433,18 @@ fn parseGzipHeaderFromChunksKnownTotal(chunks: []const []const u8, total_len: us
     return cursor.absolute;
 }
 
-fn skipGzipChunkZeroTerminated(cursor: *ChunkCursor) Error!void {
-    while (try cursor.readByte() != 0) {}
+fn skipGzipChunkZeroTerminated(cursor: *ChunkCursor, max_metadata_len: usize) Error!void {
+    if (max_metadata_len == std.math.maxInt(usize)) {
+        while (try cursor.readByte() != 0) {}
+        return;
+    }
+    for (0..max_metadata_len) |_| {
+        if (try cursor.readByte() == 0) return;
+    }
+    // A byte past the cap (even NUL) makes the field too long. EOF instead
+    // still means a truncated header.
+    _ = try cursor.readByte();
+    return error.OutputLimitExceeded;
 }
 
 pub fn decodeGzipChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
@@ -16436,7 +16454,7 @@ pub fn decodeGzipChunksInto(chunks: []const []const u8, output: []u8) Error!usiz
 pub fn decodeGzipChunksIntoWithOptions(chunks: []const []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
     const total_len = try chunksTotalLen(chunks);
     try decode_direct_borrows.validateKnownTotal(chunks, total_len, "", output);
-    const data_offset = try parseGzipHeaderFromChunksKnownTotal(chunks, total_len);
+    const data_offset = try parseGzipHeaderFromChunksKnownTotal(chunks, total_len, options.max_header_metadata_len);
     var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, data_offset, total_len);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, data_offset, "", output);
     const footer_offset = data_offset + raw.input_read;
@@ -17065,7 +17083,7 @@ pub fn decodeGzipConcatenatedAllocExactSize(allocator: std.mem.Allocator, input:
 
 pub fn decodeGzipConcatenatedAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
-    const data_offset = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeaderLimited(input, options.max_header_metadata_len);
     if (input.len == data_offset) return error.TruncatedFrame;
     try rejectReservedFirstBlockBeforeAlloc(input[data_offset..]);
     if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
@@ -17112,7 +17130,7 @@ fn precheckGzipConcatenatedStoredExact(input: []const u8, options: GzipDecodeOpt
     var offset: usize = 0;
     var output_len: usize = 0;
     while (offset < input.len) {
-        const data_offset = parseGzipHeader(input[offset..]) catch |err| {
+        const data_offset = parseGzipHeaderLimited(input[offset..], options.max_header_metadata_len) catch |err| {
             if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
@@ -17144,7 +17162,7 @@ pub fn decodeGzipConcatenatedWithOptions(input: []const u8, output: []u8, option
     var offset: usize = 0;
     var out_offset: usize = 0;
     while (offset < input.len) {
-        const data_offset = parseGzipHeader(input[offset..]) catch |err| {
+        const data_offset = parseGzipHeaderLimited(input[offset..], options.max_header_metadata_len) catch |err| {
             if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
@@ -17264,7 +17282,7 @@ fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allo
     errdefer out.deinit(allocator);
     var offset: usize = 0;
     while (offset < input.len) {
-        const data_offset = parseGzipHeader(input[offset..]) catch |err| {
+        const data_offset = parseGzipHeaderLimited(input[offset..], options.max_header_metadata_len) catch |err| {
             if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
@@ -17304,7 +17322,7 @@ fn decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator: std.mem.All
 
     var offset: usize = 0;
     while (offset < input.len) {
-        const data_offset = parseGzipHeader(input[offset..]) catch |err| {
+        const data_offset = parseGzipHeaderLimited(input[offset..], options.max_header_metadata_len) catch |err| {
             if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
@@ -17381,7 +17399,7 @@ pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
-    const data_offset = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeaderLimited(input, options.max_header_metadata_len);
     const raw_input = input[data_offset..];
     if (raw_input.len == 0) return error.TruncatedFrame;
     if (isStoredBlockHeaderByte(raw_input[0])) {
@@ -17406,7 +17424,7 @@ fn decodeGzipAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out:
     const start = out.items.len;
     errdefer out.items.len = start;
     const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
-    const data_offset = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeaderLimited(input, options.max_header_metadata_len);
     const raw_input = input[data_offset..];
     if (raw_input.len == 0) return error.TruncatedFrame;
     if (isStoredBlockHeaderByte(raw_input[0])) {
@@ -17428,7 +17446,7 @@ fn decodeGzipAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out:
 }
 
 fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
-    const data_offset = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeaderLimited(input, options.max_header_metadata_len);
     const raw_input = input[data_offset..];
     if (raw_input.len == 0) return error.TruncatedFrame;
     if (isStoredBlockHeaderByte(raw_input[0])) {
@@ -17628,6 +17646,10 @@ fn writeGzipHeader(output: []u8, header_options: GzipHeaderOptions) Error!usize 
 }
 
 pub fn parseGzipHeaderInfo(input: []const u8) Error!GzipHeaderInfo {
+    return parseGzipHeaderInfoLimited(input, std.math.maxInt(usize));
+}
+
+fn parseGzipHeaderInfoLimited(input: []const u8, max_metadata_len: usize) Error!GzipHeaderInfo {
     if (input.len < 10) return error.TruncatedFrame;
     if (!std.mem.eql(u8, input[0..2], &.{ 0x1f, 0x8b })) return error.BadGzipHeader;
     if (input[2] != 8) return error.BadGzipHeader;
@@ -17648,17 +17670,18 @@ pub fn parseGzipHeaderInfo(input: []const u8) Error!GzipHeaderInfo {
         if (input.len - offset < 2) return error.TruncatedFrame;
         const xlen: usize = std.mem.readInt(u16, input[offset..][0..2], .little);
         offset += 2;
+        if (xlen > max_metadata_len) return error.OutputLimitExceeded;
         if (input.len - offset < xlen) return error.TruncatedFrame;
         info.extra = input[offset..][0..xlen];
         offset += xlen;
     }
     if ((flags & 0x08) != 0) {
-        const end = try gzipZeroTerminatedEnd(input, offset);
+        const end = try gzipZeroTerminatedEnd(input, offset, max_metadata_len);
         info.filename = input[offset..end];
         offset = end + 1;
     }
     if ((flags & 0x10) != 0) {
-        const end = try gzipZeroTerminatedEnd(input, offset);
+        const end = try gzipZeroTerminatedEnd(input, offset, max_metadata_len);
         info.comment = input[offset..end];
         offset = end + 1;
     }
@@ -17683,12 +17706,19 @@ fn parseGzipHeader(input: []const u8) Error!usize {
     return (try parseGzipHeaderInfo(input)).data_offset;
 }
 
-fn gzipZeroTerminatedEnd(input: []const u8, offset: usize) Error!usize {
+fn parseGzipHeaderLimited(input: []const u8, max_metadata_len: usize) Error!usize {
+    return (try parseGzipHeaderInfoLimited(input, max_metadata_len)).data_offset;
+}
+
+fn gzipZeroTerminatedEnd(input: []const u8, offset: usize, max_metadata_len: usize) Error!usize {
+    const end = offset + @min(input.len - offset, max_metadata_len);
     var index = offset;
-    while (index < input.len) : (index += 1) {
+    while (index < end) : (index += 1) {
         if (input[index] == 0) return index;
     }
-    return error.TruncatedFrame;
+    // An actual byte past the cap would be consumed by the field, even if it
+    // is the NUL. If no such byte is available, the header is just truncated.
+    return if (end < input.len) error.OutputLimitExceeded else error.TruncatedFrame;
 }
 
 fn writeStoredHeader(final: bool, len: u16, output: []u8) void {

@@ -102,7 +102,9 @@ buffering the member. A completion event confirms validation (including FHCRC
 when present) before any plaintext from that member is published. The
 [automatic zlib/gzip wrapper](formats/zlib-gzip-auto-detect.md) now forwards
 these events when it selects gzip, leaving zlib dictionary handling and member
-boundaries unchanged.
+boundaries unchanged. The same per-field header metadata cap is available to
+whole-input and chunk gzip decode, including concatenated and auto routes;
+existing whole-input defaults remain unlimited.
 
 The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
 malformed trees before ordinary, compact incremental and Deflate64 decoding.

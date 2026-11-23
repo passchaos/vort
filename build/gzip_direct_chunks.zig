@@ -32,7 +32,7 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
         const codec_tests = b.addTest(.{
             .name = b.fmt("vort-gzip-direct-chunks{s}-tests", .{suffix}),
             .root_module = codecModule(b, variant, optimize),
-            .filters = &.{"gzip direct chunk consumer contracts"},
+            .filters = &.{ "gzip direct chunk consumer contracts", "gzip header metadata limit contracts" },
         });
         const public_tests = b.addTest(.{
             .name = b.fmt("vort-gzip-direct-chunks{s}-public-tests", .{suffix}),

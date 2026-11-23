@@ -55,3 +55,23 @@ system zlib 1.2.11 `inflateGetHeader`/`Z_BLOCK` check confirms all fields and
 header completion at compressed byte 29 with zero output, then decodes `A`.
 Flipping the last FHCRC byte returns `Z_DATA_ERROR` before any output and
 without confirming the header.
+
+## Whole-input gzip header limits
+
+`GzipDecodeOptions.max_header_metadata_len` applies the same per-field rule to
+ordinary, concatenated, direct and coalesced chunk, and auto-detected gzip
+decode/size/probe calls. The default is unlimited for these calls, preserving
+legacy handling of valid large headers. The incremental defaults remain
+1 MiB. For auto detection, use `ZlibOrGzipDecodeOptions.gzip`; zlib is unaffected.
+
+The limit covers the `XLEN` body bytes of FEXTRA and, separately, each present
+filename or comment including its NUL terminator. The fixed header, XLEN
+prefix and FHCRC are excluded. A complete oversized XLEN or an actual first
+byte beyond the limit returns `OutputLimitExceeded` before decoding the
+refused member. An incomplete header with no byte past the cap still returns
+`TruncatedFrame`. FHCRC remains strict even when the payload CRC is ignored.
+The limit does not roll back earlier members' output or change caller-owned
+scratch requirements for APIs that coalesce compressed chunks.
+
+The native, Linux x86 and actual WASI quota tests run through the three
+`test-gzip-direct-chunks` variants.
