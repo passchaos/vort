@@ -83,6 +83,10 @@ stream. Atomic refusal and corrected-member retry are covered for Fixed/Best
 encoders, all four gzip transition variants and zlib exact-size transitions.
 The [wrapper transition evidence](performance/deflate-wrapper-transition-options-20261120.md)
 records the current-source portability and library verification scope.
+The [incremental gzip header observer](formats/gzip-header-events.md)
+exposes fixed fields and chunks of extra data, filename and comment without
+buffering the member. A completion event confirms validation (including FHCRC
+when present) before any plaintext from that member is published.
 
 The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
 malformed trees before ordinary, compact incremental and Deflate64 decoding.

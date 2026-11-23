@@ -527,6 +527,10 @@ test "zlib incremental relaxed footer and member boundary contracts" {
     try @import("deflate/incremental/tests/relaxed/zlib_contracts.zig").contracts(@This());
 }
 
+test "gzip incremental header event contracts" {
+    try @import("deflate/incremental/decoder/gzip_header_event_tests.zig").contracts(GzipIncrementalDecoder);
+}
+
 test "gzip incremental relaxed footer and member boundary contracts" {
     try @import("deflate/incremental/tests/relaxed/gzip_contracts.zig").contracts(@This());
 }
