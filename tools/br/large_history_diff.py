@@ -255,7 +255,14 @@ def main():
                         (name, "streaming progress/guards"))
                 if c["event"] != "none":
                     require(progress["event_acknowledged"], (name, "event acknowledgement"))
-                    require(row["summary"]["metadata_meta_block_count"] == int(c["event"] == "metadata"), "metadata event wire count")
+                    metadata_count = row["summary"]["metadata_meta_block_count"]
+                    metadata_bytes = row["summary"]["metadata_bytes"]
+                    if c["event"] == "metadata":
+                        require(metadata_count == 1 and metadata_bytes == len("LargeWindow history metadata"),
+                                "metadata event wire count and body size")
+                    else:
+                        require(metadata_count in (0, 1) and metadata_bytes == 0,
+                                "plain flush may emit only one empty alignment block")
             if c["exercise_new_stream"]:
                 suffix = payload[-min(SUFFIX, len(payload)):]
                 reset_path = Path(str(wire_path) + ".reset.br")

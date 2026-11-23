@@ -32,7 +32,7 @@ fn prepare(encoder: anytype, case: Case, encoded: *std.ArrayList(u8), stride: us
     }
     try feed(encoder, payload(case), encoded, stride);
     if (case == .pending_output) {
-        encoder.flush();
+        encoder.endChunk();
         const step = try encoder.step("", &.{});
         try std.testing.expect(step.status == .need_output);
         try std.testing.expect(encoder.snapshot().pending_output != 0);
@@ -139,6 +139,74 @@ fn checkNoMetadata(comptime Encoder: type, fixtures: []const []const u8) !void {
             }
         }
     }
+}
+
+fn checkFlush(comptime Encoder: type, options: Encoder.Options, expected_padding: usize, explicit_metadata: bool) !void {
+    const first = ("The quick brown fox jumps over the lazy dog. " ** 3)[0..121];
+    const second = "A continuation in the same Brotli stream.";
+    var encoder = Encoder.initWithOptions(a, options);
+    defer encoder.deinit();
+    var wire: std.ArrayList(u8) = .empty;
+    defer wire.deinit(a);
+    try feed(&encoder, first, &wire, 1);
+    encoder.flush();
+    if (explicit_metadata) try encoder.writeMetadata("M");
+    const blocked = try encoder.step("", &.{});
+    try std.testing.expectEqual(.need_output, blocked.status);
+    try std.testing.expectEqual(@as(usize, 0), blocked.progress.output_written);
+    try std.testing.expect(encoder.snapshot().flush_requested);
+    try std.testing.expectError(error.TrailingData, encoder.step(second, &.{}));
+    try drain(&encoder, &wire, 1, false);
+    try std.testing.expectEqual(@as(u3, 0), encoder.codec_state.bit_index);
+    try std.testing.expect(!encoder.snapshot().flush_requested);
+
+    // No final marker and no later input are available to the decoder. A
+    // non-final complete prefix still publishes every accepted plaintext byte.
+    var history: [first.len]u8 = undefined;
+    var captured: [1]u8 = undefined;
+    var metadata_lengths: [2]usize = @splat(1);
+    var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .metadata_output = &captured, .metadata_block_lengths = &metadata_lengths });
+    var decoded: [first.len + 1]u8 = @splat(0xa5);
+    const prefix = try decoder.step(wire.items, &decoded);
+    try std.testing.expectEqual(.need_input, prefix.status);
+    try std.testing.expectEqual(wire.items.len, prefix.progress.input_read);
+    try std.testing.expectEqual(first.len, prefix.progress.output_written);
+    try std.testing.expectEqualSlices(u8, first, decoded[0..first.len]);
+    try std.testing.expectEqual(@as(u8, 0xa5), decoded[first.len]);
+    const metadata_count = expected_padding + @as(usize, @intFromBool(explicit_metadata));
+    try std.testing.expectEqual(@as(br.Counter, metadata_count), decoder.snapshot().metadata_block_count);
+    if (expected_padding != 0) try std.testing.expectEqual(@as(usize, 0), metadata_lengths[0]);
+    if (explicit_metadata) {
+        try std.testing.expectEqual(@as(usize, 1), metadata_lengths[expected_padding]);
+        try std.testing.expectEqualSlices(u8, "M", &captured);
+    }
+
+    encoder.flush();
+    const again = try encoder.step("", &.{});
+    try std.testing.expectEqual(.need_input, again.status);
+    try std.testing.expectEqual(@as(usize, 0), again.progress.output_written);
+    try std.testing.expectEqual(@as(Encoder.Counter, wire.items.len), encoder.snapshot().output_written);
+
+    try feed(&encoder, second, &wire, 1);
+    try encoder.finish();
+    try drain(&encoder, &wire, 1, true);
+    const complete = try br.decodeStreamAllocExactSize(a, wire.items, first.len + second.len);
+    defer a.free(complete);
+    try std.testing.expectEqualSlices(u8, first, complete[0..first.len]);
+    try std.testing.expectEqualSlices(u8, second, complete[first.len..]);
+    const summary = try br.summarizeStream(wire.items);
+    try std.testing.expectEqual(@as(br.Counter, metadata_count), summary.metadata_meta_block_count);
+    try std.testing.expectEqual(@as(br.Counter, @intFromBool(explicit_metadata)), summary.metadata_bytes);
+}
+
+test "Brotli flush exposes all plaintext with empty and one-byte output" {
+    try checkFlush(br.IncrementalStoredStreamEncoder, .{ .block_len = 256 }, 0, false);
+    try checkFlush(br.IncrementalPlannedStreamEncoder, .{ .block_len = 256, .stream = .{ .quality = 4 } }, 1, false);
+    try checkFlush(br.IncrementalStaticDictionaryStreamEncoder, .{ .block_len = 256 }, 1, false);
+}
+
+test "Brotli flush uses accepted metadata for alignment without an empty block" {
+    try checkFlush(br.IncrementalPlannedStreamEncoder, .{ .block_len = 256, .stream = .{ .quality = 4 } }, 0, true);
 }
 
 test "Brotli encoder finish pending metadata preserves frozen no metadata wire controls" {

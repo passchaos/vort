@@ -73,6 +73,9 @@ Ended prefix and observer storage can change roles without corrupting the new
 borrow. Native/x86/WASI contracts, reference interoperability and the distinct
 before/after library validation scopes are recorded in the
 [lifecycle evidence](performance/incremental-encoder-lifecycle-20261120.md).
+Explicit Brotli flush now seals a partial output byte with an empty metadata
+block so a decoder can recover all accepted plaintext without a later chunk
+or finalization. One-shot chunk boundaries still use the existing wire path.
 
 Deflate wrapper transitions now reject invalid gzip header fields and exact
 input pledges above the applicable raw input cap before resetting the completed

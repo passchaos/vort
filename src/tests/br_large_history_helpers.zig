@@ -104,26 +104,17 @@ pub fn expectHistory(encoder: anytype, committed: []const u8, window_bits: u5, r
     try std.testing.expectEqualSlices(u8, committed[committed.len - length ..], encoder.codec_state.history.items);
 }
 
-/// Finalize a flushed prefix using ISLAST/ISLASTEMPTY directly. The reservoir
-/// byte was withheld by the encoder; no encoder finalization hook is called.
+/// Append ISLAST/ISLASTEMPTY to the published bytes only, without calling an
+/// encoder finalization hook or reconstructing any withheld reservoir bits.
 pub fn sealPrefix(allocator: std.mem.Allocator, encoder: anytype, wire: []const u8) ![]u8 {
     const snapshot = encoder.snapshot();
     try std.testing.expectEqual(@as(usize, 0), snapshot.buffered_input);
     try std.testing.expectEqual(@as(usize, 0), snapshot.pending_output);
-    var sealed: std.ArrayList(u8) = .empty;
-    errdefer sealed.deinit(allocator);
-    try sealed.appendSlice(allocator, wire);
-    const bit_index = encoder.codec_state.bit_index;
-    if (bit_index == 0) {
-        try sealed.append(allocator, 3);
-    } else {
-        try std.testing.expect(encoder.pending.items.len != 0);
-        try std.testing.expectEqual(encoder.pending.items.len - 1, encoder.pending_offset);
-        const final = @as(u16, encoder.pending.items[encoder.pending.items.len - 1]) | (@as(u16, 3) << @as(u4, bit_index));
-        try sealed.append(allocator, @truncate(final));
-        if (bit_index == 7) try sealed.append(allocator, @truncate(final >> 8));
-    }
-    return sealed.toOwnedSlice(allocator);
+    try std.testing.expectEqual(@as(u3, 0), encoder.codec_state.bit_index);
+    const sealed = try allocator.alloc(u8, wire.len + 1);
+    @memcpy(sealed[0..wire.len], wire);
+    sealed[wire.len] = 3;
+    return sealed;
 }
 
 pub fn checkWire(comptime Br: type, allocator: std.mem.Allocator, wire: []const u8, input: []const u8, window_bits: u5, large: bool) !Br.StreamSummary {

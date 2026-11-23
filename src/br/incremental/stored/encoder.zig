@@ -20,6 +20,7 @@ pub fn Encoder(comptime Codec: type) type {
         metadata_requested: bool = false,
         prefix_written: bool = false,
         flush_requested: bool = false,
+        seal_flush_tail: bool = false,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
@@ -97,6 +98,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.metadata_requested = false;
             self.prefix_written = false;
             self.flush_requested = false;
+            self.seal_flush_tail = false;
             self.finishing = false;
             self.final_written = false;
             self.done = false;
@@ -155,11 +157,19 @@ pub fn Encoder(comptime Codec: type) type {
             // Accepted metadata follows any buffered plaintext before the
             // final marker. A plain flush alone still uses the final block.
             self.flush_requested = self.metadata_requested;
+            self.seal_flush_tail = false;
         }
-        /// Publish buffered bytes as a non-final meta-block. The
-        /// bit-level writer state is retained so later input continues the same
-        /// Brotli stream after `step` acknowledges the flush with `need_input`.
+        /// Publish all accepted plaintext without ending the stream. After
+        /// `step` acknowledges the flush with `need_input`, a decoder can
+        /// reproduce that plaintext without waiting for a later input chunk.
         pub fn flush(self: *Self) void {
+            if (self.finishing or self.done) return;
+            self.flush_requested = true;
+            self.seal_flush_tail = true;
+        }
+        /// Internal complete-wire chunk boundary: preserve block segmentation
+        /// without requiring the unfinished prefix to be independently decodable.
+        pub fn endChunk(self: *Self) void {
             if (!self.finishing and !self.done) self.flush_requested = true;
         }
         /// Insert a metadata meta-block after all previously accepted content.
@@ -201,6 +211,15 @@ pub fn Encoder(comptime Codec: type) type {
             var output_written: usize = 0;
             while (true) {
                 const ready_end = Codec.readyOutputLen(&self.codec_state, self.pending.items.len, self.final_written);
+                if (comptime @hasDecl(Codec, "byte_aligned_flush") and Codec.byte_aligned_flush) {
+                    if (self.seal_flush_tail and !self.metadata_requested and self.plain.items.len == 0 and ready_end != self.pending.items.len) {
+                        // An empty metadata block seals the mutable tail without
+                        // ending the stream or changing its plaintext history.
+                        // Do it before exposing more pending bytes in this step.
+                        try self.writeMetadataBlock(allocator, "");
+                        continue;
+                    }
+                }
                 if (self.pending_offset != ready_end) {
                     const remaining = self.pending.items[self.pending_offset..ready_end];
                     const n = @min(output.len - output_written, remaining.len);
@@ -260,12 +279,13 @@ pub fn Encoder(comptime Codec: type) type {
                 }
                 if (self.flush_requested) {
                     if (self.metadata_requested) {
-                        try self.writeMetadataBlock(allocator);
+                        try self.writeMetadataBlock(allocator, self.pending_metadata);
                         self.pending_metadata = &.{};
                         self.metadata_requested = false;
                         continue;
                     }
                     self.flush_requested = false;
+                    self.seal_flush_tail = false;
                     if (!self.finishing) return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
@@ -305,10 +325,10 @@ pub fn Encoder(comptime Codec: type) type {
             }
         }
 
-        fn writeMetadataBlock(self: *Self, allocator: std.mem.Allocator) Error!void {
+        fn writeMetadataBlock(self: *Self, allocator: std.mem.Allocator, body: []const u8) Error!void {
             const checkpoint = PendingCheckpoint.init(&self.pending);
             errdefer checkpoint.restore(&self.pending);
-            try Codec.writeMetadata(allocator, &self.pending, &self.codec_state, self.pending_metadata);
+            try Codec.writeMetadata(allocator, &self.pending, &self.codec_state, body);
         }
 
         fn writeFinal(self: *Self, allocator: std.mem.Allocator) Error!void {

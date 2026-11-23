@@ -1787,6 +1787,7 @@ fn readSingleSymbolPrefixForIncremental(comptime alphabet_size: usize, reader: *
 }
 
 const IncrementalStoredEncoderCodec = struct {
+    pub const byte_aligned_flush = true;
     pub const Error = br.Error;
     pub const StreamOptions = br.StoredStreamOptions;
     pub const max_block_len = br.max_uncompressed_meta_block_len;
@@ -1847,6 +1848,7 @@ const IncrementalStoredEncoderCodec = struct {
 pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
 
 const IncrementalPlannedEncoderCodec = struct {
+    pub const byte_aligned_flush = true;
     pub const Error = br.Error;
     pub const StreamOptions = br.PlannedStreamChunksOptions;
     pub const max_block_len = hq_options.max_block_len;
@@ -2132,6 +2134,7 @@ pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(I
 /// command and output capacity in caller-owned state, while the shared generic
 /// incremental core supplies resumable input/output progress and stream reuse.
 const IncrementalStaticDictionaryEncoderCodec = struct {
+    pub const byte_aligned_flush = true;
     pub const Error = br.Error;
     pub const StreamOptions = br.StoredStreamOptions;
     pub const max_block_len = br.max_uncompressed_meta_block_len;

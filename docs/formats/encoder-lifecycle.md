@@ -8,6 +8,16 @@ alive until `need_input`, or until `done` if finish follows the request.
 Completion clears the pending request. Stored, planned and static-dictionary
 encoders share this behavior across input/output backpressure and empty input.
 
+An explicit Brotli `flush()` publishes enough bytes for a streaming decoder
+with available output space to reproduce all plaintext accepted before the
+request, without waiting for another write or for `finish()`. Call
+`step(&.{}, output)` until it acknowledges with `need_input`; the stream is
+still open. A partial final byte is sealed by an empty metadata meta-block.
+This carries no user metadata or plaintext, but may be visible to a decoder
+that reports empty metadata blocks. An aligned boundary needs no padding.
+This padding applies to explicit flushes, not implicit one-shot chunk
+boundaries used to preserve the existing wire.
+
 `writeMetadata` admits the requested bytes before publishing the request.
 Metadata must stay outside the encoder object, its complete owned capacities
 and active observers. A conflict returns `InvalidBlockPlan` with state and
@@ -86,8 +96,14 @@ zig build -j2 test-encoder-lifecycle-wasm
 ```
 
 The WASI test gate executes the Zig test runner and writes
-`zig-out/encoder-lifecycle-wasm.json`. `check-wasm` compiles these regression
-artifacts. `check-library-tests` compiles the entire library test suite without
+`zig-out/encoder-lifecycle-wasm.json`. Brotli's flush contracts in this gate
+cover the flushed prefix without finalization, zero- and one-byte output
+buffers, repeated flush, explicit metadata, and unaligned-tail retry after
+allocator or quota failure. The Brotli filter passed 50 tests each on native,
+Linux x86 and executed wasm32-wasi. Independently, libbrotlidec 1.0.9
+recovered all 121 plaintext bytes from the 48-byte quality-4 flushed prefix
+alone, consuming the prefix without needing `finish()` or following data.
+`check-wasm` compiles these regression artifacts. `check-library-tests` compiles the entire library test suite without
 starting a second test execution.
 
 See the [functional evidence](../performance/incremental-encoder-lifecycle-20261120.md)

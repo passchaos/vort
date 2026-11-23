@@ -19,7 +19,8 @@ test "Brotli general large window q0 q1 and command streams flush metadata and c
         try encoder.finish();
         try h.drain(a, &encoder, &wire, .done);
         const summary = try h.checkExtended(a, wire.items, h.plain, 25, .{});
-        try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+        try std.testing.expectEqual(@as(br.Counter, "in stream metadata".len), summary.metadata_bytes);
+        try std.testing.expect(summary.metadata_meta_block_count == 1 or summary.metadata_meta_block_count == 2);
         const completed = encoder.snapshot().stream_count;
         var standard = options;
         standard.stream.large_window = false;

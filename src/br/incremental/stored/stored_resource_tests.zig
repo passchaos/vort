@@ -182,6 +182,45 @@ test "Brotli stored resources failed flush preserves mutable tail and accepted i
     try std.testing.expectEqualSlices(u8, expected, wire.items);
 }
 
+test "Brotli flush padding quota and backing failures preserve the unpublished tail for retry" {
+    for ([_]bool{ false, true }) |quota_failure| {
+        var ledger = h.TrackingAllocator.init(a);
+        ledger.force_moving_growth = true;
+        var profile: br.EncodeMemoryProfile = .{};
+        var encoder = Encoder.initWithOptions(ledger.allocator(), .{ .stream = .{ .window_bits = 18, .memory_profile = &profile } });
+        defer encoder.deinit();
+        try std.testing.expectEqual(.need_input, (try encoder.step("", &.{})).status);
+        try std.testing.expectEqual(@as(u3, 4), encoder.codec_state.bit_index);
+        try restrictPending(&encoder);
+        encoder.flush();
+        if (quota_failure) {
+            encoder.options.stream.max_total_working_memory = ledger.live;
+        } else {
+            ledger.fail_alloc_after = ledger.alloc_attempts;
+        }
+        const before = encoder.snapshot();
+        var output: [4]u8 = @splat(0xa5);
+        const expected_error = if (quota_failure) error.WorkingMemoryLimitExceeded else error.OutOfMemory;
+        try std.testing.expectError(expected_error, encoder.step("", &output));
+        try h.untouched(&output);
+        try std.testing.expectEqual(before, encoder.snapshot());
+        try std.testing.expectEqual(@as(u3, 4), encoder.codec_state.bit_index);
+        try std.testing.expectEqualSlices(u8, &.{0x03}, encoder.pending.items);
+        try exactAccounting(&encoder, &ledger);
+
+        encoder.options.stream.max_total_working_memory = null;
+        ledger.clearFailures();
+        var wire: std.ArrayList(u8) = .empty;
+        defer wire.deinit(a);
+        try drain(&encoder, &wire, .need_input);
+        try std.testing.expectEqualSlices(u8, &.{ 0x63, 0 }, wire.items);
+        try encoder.finish();
+        try drain(&encoder, &wire, .done);
+        try decode(wire.items, "");
+        try exactAccounting(&encoder, &ledger);
+    }
+}
+
 test "Brotli stored resources metadata failure retains sent prefix and retries with exact durable progress" {
     const metadata = "M" ** 256;
     var ledger = h.TrackingAllocator.init(a);
