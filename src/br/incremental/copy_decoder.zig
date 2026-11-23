@@ -4,6 +4,7 @@ const stream_count = core.stream_count;
 const progressive_bits = @import("bit_reader.zig");
 const shared_dictionary = @import("../shared_dictionary.zig");
 const empty_reference = @import("../summary/empty_reference.zig");
+const metadata_events = @import("metadata_events.zig");
 
 /// Progressive decoder for compressed Brotli streams with explicit distances.
 /// History is caller-owned, which makes memory use visible and lets overlapping
@@ -87,6 +88,8 @@ pub fn Decoder(comptime Codec: type) type {
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Counter = core.StreamCount;
+        pub const MetadataEvent = metadata_events.Event;
+        pub const MetadataObserver = metadata_events.Observer;
         pub const embedded_compressed_header_capacity: usize = Codec.max_stream_header_bytes;
         pub const Options = struct {
             max_output_len: Counter = std.math.maxInt(Counter),
@@ -101,6 +104,8 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Receive metadata synchronously, independent of fixed capture.
+            metadata_observer: ?MetadataObserver = null,
             /// Complete one Brotli stream and retain whole-byte lookahead for
             /// an outer member dispatcher instead of rejecting trailing data.
             allow_trailing_data: bool = false,
@@ -679,9 +684,14 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.trailer, err),
                             };
                             if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
-                            if (self.metadata and self.metadata_remaining == 0) {
-                                try self.finishMetadataBlock();
-                            } else self.phase = if (self.metadata) .metadata else .stored;
+                            if (self.metadata) {
+                                const next_count = if (self.metadata_remaining == 0) try self.nextMetadataBlockCount() else null;
+                                if (self.options.metadata_observer) |observer|
+                                    observer.emitStart(self.metadata_block_count, self.metadata_remaining, self.final_meta_block);
+                                if (next_count) |count| {
+                                    try self.finishMetadataBlock(count);
+                                } else self.phase = .metadata;
+                            } else self.phase = .stored;
                             self.next_header_state = .is_last;
                             break;
                         },
@@ -702,17 +712,20 @@ pub fn Decoder(comptime Codec: type) type {
                     const n = @min(self.metadata_remaining, input.len - input_read);
                     const next_metadata_total = stream_count.addLocal(self.metadata_total, n) catch
                         return self.fail(.metadata, error.IntegerOverflow);
-                    if (n == self.metadata_remaining)
-                        _ = stream_count.add(self.metadata_block_count, 1) catch return self.fail(.metadata, error.IntegerOverflow);
+                    const next_count = if (n == self.metadata_remaining) try self.nextMetadataBlockCount() else null;
+                    const bytes = input[input_read..][0..n];
+                    if (self.options.metadata_observer) |observer|
+                        observer.emitChunk(self.metadata_block_count, self.current_metadata_len, bytes);
                     const capture = @min(n, self.metadata_output.len -| self.metadata_written);
-                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], input[input_read..][0..capture]);
+                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], bytes[0..capture]);
                     self.metadata_written += capture;
                     self.metadata_total = next_metadata_total;
                     self.current_metadata_len += n;
                     input_read += n;
                     self.metadata_remaining -= n;
-                    if (self.metadata_remaining != 0) return result(input_read, output_written, .need_input);
-                    try self.finishMetadataBlock();
+                    if (next_count) |count| {
+                        try self.finishMetadataBlock(count);
+                    } else return result(input_read, output_written, .need_input);
                 },
                 .dictionary => {
                     if (self.dictionary_source == .compound) {
@@ -1066,19 +1079,18 @@ pub fn Decoder(comptime Codec: type) type {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(.trailer, error.SizeMismatch);
         }
-        fn finishMetadataBlock(self: *Self) Error!void {
-            try self.recordMetadataBlock();
-            if (self.final_meta_block) try self.validateFinalOutputSize();
-            self.phase = if (self.final_meta_block) .padding else .trailer;
-        }
-        fn recordMetadataBlock(self: *Self) Error!void {
-            const count = stream_count.add(self.metadata_block_count, 1) catch
+        fn nextMetadataBlockCount(self: *Self) Error!Counter {
+            return stream_count.add(self.metadata_block_count, 1) catch
                 return self.fail(self.phase, error.IntegerOverflow);
+        }
+        fn finishMetadataBlock(self: *Self, next_count: Counter) Error!void {
             if (self.metadata_block_count < self.metadata_block_lengths.len)
                 self.metadata_block_lengths[@intCast(self.metadata_block_count)] = self.current_metadata_len;
-            self.metadata_block_count = count;
+            self.metadata_block_count = next_count;
             self.current_metadata_len = 0;
             self.metadata = false;
+            if (self.final_meta_block) try self.validateFinalOutputSize();
+            self.phase = if (self.final_meta_block) .padding else .trailer;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };

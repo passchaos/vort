@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const counts = core.stream_count;
 const working = @import("../../io/working_allocator.zig");
+const metadata_events = @import("metadata_events.zig");
 
 /// Allocator-owning facade for the true symbol-progressive Brotli decoder.
 /// It owns the bounded history ring and, only for an entropy header larger than
@@ -38,6 +39,8 @@ pub fn Decoder(comptime Codec: type) type {
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Counter = core.StreamCount;
+        pub const MetadataEvent = metadata_events.Event;
+        pub const MetadataObserver = metadata_events.Observer;
         pub const Options = struct {
             max_compressed_len: Counter = std.math.maxInt(Counter),
             expected_compressed_len: ?Counter = null,
@@ -61,6 +64,8 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Receive metadata synchronously, independent of fixed capture.
+            metadata_observer: ?MetadataObserver = null,
             allow_trailing_data: bool = false,
         };
         pub const Phase = enum { input, output, done };
@@ -451,6 +456,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .compressed_header_scratch = header_scratch,
                 .metadata_output = self.options.metadata_output,
                 .metadata_block_lengths = self.options.metadata_block_lengths,
+                .metadata_observer = self.options.metadata_observer,
                 .allow_trailing_data = self.options.allow_trailing_data,
             });
             return true;

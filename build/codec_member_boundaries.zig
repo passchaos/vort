@@ -27,7 +27,7 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
         .{ .suffix = "-x86", .target = x86 },
         .{ .suffix = "-wasm", .target = wasi },
     }, 0..) |variant, index| {
-        const gate = b.step(b.fmt("test-codec-member-boundaries{s}", .{variant.suffix}), "Validate Zstd empty members and Brotli final metadata across input splits");
+        const gate = b.step(b.fmt("test-codec-member-boundaries{s}", .{variant.suffix}), "Validate Zstd empty members and Brotli metadata boundaries and events across input splits");
         const wasm_run = if (index == 2) b.addSystemCommand(&.{ "node", "tools/wasi_test_gate.js" }) else null;
         for ([_][]const u8{ "br", "zstd" }) |family| {
             const is_br = std.mem.eql(u8, family, "br");
@@ -35,11 +35,11 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
             const tests = b.addTest(.{
                 .name = b.fmt("vort-{s}-member-boundaries{s}-tests", .{ family, variant.suffix }),
                 .root_module = module,
-                .filters = if (is_br) &.{"Brotli final metadata"} else &.{"Zstd empty member"},
+                .filters = if (is_br) &.{ "Brotli final metadata", "Brotli metadata observer" } else &.{"Zstd empty member"},
             });
             if (wasm_run) |run| {
                 tests.stack_size = 8 * 1024 * 1024;
-                run.addArgs(&.{ family, if (is_br) "Brotli final metadata" else "Zstd empty member" });
+                run.addArgs(&.{ family, if (is_br) "Brotli final metadata and metadata observer" else "Zstd empty member" });
                 run.addArtifactArg(tests);
             } else {
                 gate.dependOn(&b.addRunArtifact(tests).step);

@@ -27,6 +27,7 @@ const Codec = struct {
             compressed_header_scratch: []u8,
             metadata_output: []u8,
             metadata_block_lengths: []usize,
+            metadata_observer: ?@import("metadata_events.zig").Observer,
             allow_trailing_data: bool,
         };
         pub const Phase = enum { prefix, payload, compressed_header, done };

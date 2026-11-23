@@ -72,6 +72,53 @@ into Deflate64-style sticky failures. A caller must use the encoder's reported
 progress/snapshot and preserve the event body across retry; already accepted
 plaintext or delivered output is not rolled back by an entire-call guarantee.
 
+## Incremental decode observation
+
+`IncrementalStreamDecoder`, `IncrementalCopyStreamDecoder`,
+`IncrementalLiteralStreamDecoder` and `IncrementalStoredStreamDecoder` offer
+`Options.metadata_observer`. It can be used alone or alongside fixed
+`metadata_output` and `metadata_block_lengths` captures. Those captures keep
+their existing capacity and truncation semantics. The observer sees all
+accepted metadata bytes even when a capture is absent or full.
+
+```zig
+var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(history, .{
+    .metadata_observer = .{ .context = &collector, .on_event = Collector.onMetadata },
+});
+```
+
+The callback signature is `fn (?*anyopaque, Decoder.MetadataEvent) void`.
+A `.start` event announces the metadata block index, declared body length and
+`final` flag after header and padding validation. Empty blocks emit only that
+event. A nonempty block follows with one or more `.chunk` events containing
+the same index, a byte offset within the body and a transient read-only slice.
+Chunk boundaries may vary with input fragmentation. The block has arrived in
+full when its chunks cover the announced length; a truncated block can emit
+a start and an incomplete prefix. An event does not certify later stream
+bytes or the stream's decoded-size check.
+
+Metadata delivery does not use plaintext output space or quotas and does not
+retain the body or allocate memory for it. It observes the decoder's normal
+wire order: an earlier plaintext block may still require output space before
+the decoder reaches subsequent metadata. Callback state is caller-owned and
+must remain independent of the decoder and all active input, output, history,
+scratch and capture storage. Callbacks must not reenter the decoder or mutate
+that storage. Copy any chunk bytes needed after the callback. The observer
+is retained with the options; resetting with the same options keeps it, and
+reconfiguring or starting a next stream with new options may replace it.
+Metadata indices restart at zero for each stream.
+
+The decoder tests send the full 16 MiB metadata limit through one reused
+8 KiB input slice for each of the four decoders. The owned metadata-only case
+runs with a zero requested-heap limit and reports zero peak working bytes.
+The native, x86 and actual WASI cases run through the three
+`test-codec-member-boundaries` variants. A separate libbrotli 1.2.0 callback
+probe observed three metadata blocks (5,130 bytes), including empty and final
+blocks, and exactly three plaintext bytes on four input partitions. Nonzero
+alignment padding produced no event. The reference used the local decoder
+build with SHA-256 `3acf45976e96498b954bb104b06ef5b8e1cd08b5e0d8d6826c233ed1f07c0469`
+and matching common library `3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739`.
+
 ## Evidence scope
 
 The initial 64 KiB encoder policy and its dated benchmark outputs remain attached
