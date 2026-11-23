@@ -105,8 +105,8 @@ these events when it selects gzip, leaving zlib dictionary handling and member
 boundaries unchanged. The same per-field header metadata cap is available to
 whole-input and chunk gzip decode, including concatenated and auto routes;
 existing whole-input defaults remain unlimited. Direct and auto-detected
-incremental zlib/gzip can independently cap the number of members, including
-empty members that do not use the plaintext budget.
+incremental and one-shot zlib/gzip can independently cap the number of
+members, including empty members that do not use the plaintext budget.
 
 The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
 malformed trees before ordinary, compact incremental and Deflate64 decoding.

@@ -25,7 +25,13 @@ DICTID, gzip optional fields or events, or DEFLATE plaintext. The fixed
 header may have been consumed. Previously completed counts and output remain
 committed. A malformed or partial header keeps its existing error or
 input-wait behavior, and an unrecognized allowed tail is not a member.
-`reset` starts a new count. One-shot decoding is unchanged by this option.
+`reset` starts a new count. The one-shot `ZlibDecodeOptions` and
+`GzipDecodeOptions` also offer `max_members` (unlimited by default), counted
+per call. With auto detection set the cap on the selected wrapper's options.
+Prefix APIs decode only one member and can refuse it with a zero cap. The
+cap applies to options-based size queries, probes, and chunk decoders too;
+fixed-output concatenation keeps already delivered members, while append
+still rolls back its logical length on failure.
 
 `stepWithHeaderEvents` and `stepToBlockBoundaryWithHeaderEvents` forward a
 per-call [gzip header observer](gzip-header-events.md) after detecting gzip.
