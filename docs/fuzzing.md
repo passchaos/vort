@@ -103,6 +103,11 @@ reference destination limits from acceptance differences without changing
 the generated cases. This summary-only option accepts 4,096 through 1 MiB
 (before the one-byte slack), applies only to Brotli, and cannot be combined
 with artifact capture or replay. Omit it to use the historical capacity.
+`--brotli-reference-exact-input` selects the streaming reference for ordinary
+Brotli too and rejects otherwise successful decodes if input remains. Its
+summary counts those unconsumed tails; it can be combined with the capacity
+floor but not capture or replay. Without it, ordinary Brotli retains the
+historical one-shot reference policy.
 
 `tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
 complements the raw-byte target with generated valid wires. A deterministic

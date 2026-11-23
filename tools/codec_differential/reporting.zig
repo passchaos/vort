@@ -134,6 +134,11 @@ pub const Sample = struct {
     reference_output: ?File = null,
 };
 pub const References = struct { zlib: []const u8, zstd: []const u8, brotli_decoder_version_encoded: u32 };
+pub const BrotliReferenceAudit = struct {
+    output_floor: usize = 0,
+    exact_input: bool = false,
+    trailing_rejections: usize = 0,
+};
 const default_reference_capacity_scope = "Reference destination request is min(max(source.len *% 4,4096),1048576)+1. Vort one-shot routes are mostly unbounded. zlib inflate single-stream routes require Z_STREAM_END but do not require avail_in==0; consumed/remaining observations never change that verdict.";
 pub const Manifest = struct {
     schema: []const u8 = "vort.codec-differential.classification.v1",
@@ -350,7 +355,7 @@ pub const Reporter = struct {
         return .{ .path = name, .bytes = bytes.len, .sha256 = try self.allocator.dupe(u8, &hex) };
     }
 
-    pub fn finish(self: *Reporter, writer: *std.Io.Writer, stats: Stats, seed: u64, deep: bool, only: []const u8, references: References, brotli_reference_floor: usize) !void {
+    pub fn finish(self: *Reporter, writer: *std.Io.Writer, stats: Stats, seed: u64, deep: bool, only: []const u8, references: References, audit: BrotliReferenceAudit) !void {
         var wires = self.wire_hash;
         var mutations = self.mutation_hash;
         var wire_digest: [32]u8 = undefined;
@@ -359,15 +364,20 @@ pub const Reporter = struct {
         mutations.final(&mutation_digest);
         const wire_hex = std.fmt.bytesToHex(wire_digest, .lower);
         const mutation_hex = std.fmt.bytesToHex(mutation_digest, .lower);
-        const capacity_scope: ?[]u8 = if (brotli_reference_floor != 0)
-            try std.fmt.allocPrint(self.allocator, "{s} Brotli only: destination is raised to at least {d}+1 bytes.", .{ default_reference_capacity_scope, brotli_reference_floor })
+        var floor_buffer: [96]u8 = undefined;
+        const floor_scope = if (audit.output_floor != 0)
+            try std.fmt.bufPrint(&floor_buffer, " Brotli only: destination is raised to at least {d}+1 bytes.", .{audit.output_floor})
         else
-            null;
-        defer if (capacity_scope) |scope| self.allocator.free(scope);
-        const manifest: Manifest = .{ .seed = seed, .deep = deep, .only = only, .reference_versions = references, .stats = stats, .classified = stats.classified(), .generated_wire_digest_sha256 = &wire_hex, .mutation_sequence_digest_sha256 = &mutation_hex, .bounds = self.bounds, .artifacts = self.counts, .samples = self.samples.items, .reference_capacity_scope = if (capacity_scope) |scope| scope else default_reference_capacity_scope };
+            "";
+        const input_scope = if (audit.exact_input) " Ordinary Brotli uses streaming decode with full input consumption required." else "";
+        var scope_buffer: [512]u8 = undefined;
+        const capacity_scope = try std.fmt.bufPrint(&scope_buffer, "{s}{s}{s}", .{ default_reference_capacity_scope, floor_scope, input_scope });
+        const manifest: Manifest = .{ .seed = seed, .deep = deep, .only = only, .reference_versions = references, .stats = stats, .classified = stats.classified(), .generated_wire_digest_sha256 = &wire_hex, .mutation_sequence_digest_sha256 = &mutation_hex, .bounds = self.bounds, .artifacts = self.counts, .samples = self.samples.items, .reference_capacity_scope = capacity_scope };
         const body = try std.json.Stringify.valueAlloc(self.allocator, manifest, .{});
         defer self.allocator.free(body);
         try printLegacy(writer, stats, seed, deep, only);
+        if (audit.exact_input)
+            try writer.print("  Brotli exact-input trailing rejections={d}\n", .{audit.trailing_rejections});
         try writer.print("  actual external-reference valid checks={d} ok={d}; Vort-only contracts={d}\nclassification_json: {s}\n", .{ manifest.classified.external_valid_checks, manifest.classified.external_valid_ok, manifest.classified.vort_only_valid_contracts, body });
         if (self.directory) |directory| {
             if (body.len > self.bounds.max_manifest_bytes) return error.ArtifactManifestLimitExceeded;

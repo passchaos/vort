@@ -61,5 +61,27 @@ All 14 observations become equal-output accepts with a larger buffer. The
 wire and mutation digests, valid and truncation results, and every other
 codec's classification stay unchanged. This explains the 14 Vort-only
 observations in this screen as capacity effects, not a confirmed Brotli
-wire-acceptance bug. The 747 reference-only observations were not separately
-adjudicated here.
+wire-acceptance bug. The 747 reference-only observations were checked in the
+follow-up below.
+
+## Brotli complete-input follow-up
+
+With the same 65,537-byte reference destination, compare the ordinary
+libbrotli one-shot route to its streaming route with complete-input
+consumption required:
+
+```sh
+zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --max-size=256 --brotli-reference-floor=65536 --brotli-reference-exact-input
+# Repeat with LD_LIBRARY_PATH=$HOME/Work/brotli/build-vort.
+```
+
+Both libbrotli 1.0.9 and 1.2.0 returned streaming success with input remaining
+on 747 comparisons. Requiring full input moved those 747 observations from
+reference-only acceptance to both-reject. Both-accept remained 4,926, no
+accepted outputs differed, and both Brotli one-sided counts became zero.
+The generated-wire and mutation digests, valid and truncation results, and
+other codecs' counts were unchanged. This resolves the remaining Brotli
+observations in this bounded screen as a trailing-input policy difference,
+not a decoder issue. Other codecs' one-sided observations were not separately
+adjudicated in this follow-up.

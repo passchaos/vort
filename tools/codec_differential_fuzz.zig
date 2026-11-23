@@ -181,7 +181,7 @@ const Harness = struct {
     deep: bool,
     max_mutation_wire: usize = 2048,
     hq_br_limit: usize = 1024,
-    brotli_reference_floor: usize = 0,
+    brotli_audit: reporting.BrotliReferenceAudit = .{},
 
     fn fail(
         self: *Harness,
@@ -431,7 +431,7 @@ const Harness = struct {
         // fixed ceiling bounds every reference allocation.
         const default_capacity = reporting.referenceCapacity(capacity);
         const output_capacity = if (codec == .br)
-            @max(default_capacity, self.brotli_reference_floor + 1)
+            @max(default_capacity, self.brotli_audit.output_floor + 1)
         else
             default_capacity;
         self.last_reference = .{ .output_capacity = output_capacity };
@@ -473,8 +473,9 @@ const Harness = struct {
                 return a.realloc(dst, result) catch dst[0..result];
             },
             .br => {
-                if (wire_case.brotli_large_window) {
-                    return brotliDecompressStream(a, dst, wire_case.wire, true);
+                if (wire_case.brotli_large_window or self.brotli_audit.exact_input) {
+                    const tails = if (wire_case.brotli_large_window) null else &self.brotli_audit.trailing_rejections;
+                    return brotliDecompressStream(a, dst, wire_case.wire, wire_case.brotli_large_window, tails);
                 }
                 var decoded_size: usize = dst.len;
                 const result = c.BrotliDecoderDecompress(
@@ -649,6 +650,7 @@ const Harness = struct {
         dst: []u8,
         wire: []const u8,
         large_window: bool,
+        trailing_rejections: ?*usize,
     ) ?[]u8 {
         const state = c.BrotliDecoderCreateInstance(null, null, null) orelse {
             a.free(dst);
@@ -684,6 +686,7 @@ const Harness = struct {
                 },
                 c.BROTLI_DECODER_RESULT_SUCCESS => {
                     if (avail_in != 0) {
+                        if (trailing_rejections) |count| count.* += 1;
                         a.free(dst);
                         return null;
                     }
@@ -1706,7 +1709,7 @@ pub fn main(init: std.process.Init) !void {
     var only: ?Codec = null;
     var deep = false;
     var max_size: usize = 8192;
-    var brotli_reference_floor: usize = 0;
+    var brotli_audit: reporting.BrotliReferenceAudit = .{};
     var divergence_directory: ?[]const u8 = null;
     var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
@@ -1718,9 +1721,11 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.startsWith(u8, arg, "--max-size=")) {
             max_size = try std.fmt.parseInt(usize, arg["--max-size=".len..], 0);
         } else if (std.mem.startsWith(u8, arg, "--brotli-reference-floor=")) {
-            brotli_reference_floor = try std.fmt.parseInt(usize, arg["--brotli-reference-floor=".len..], 0);
-            if (brotli_reference_floor < 4096 or brotli_reference_floor > 1 << 20)
+            brotli_audit.output_floor = try std.fmt.parseInt(usize, arg["--brotli-reference-floor=".len..], 0);
+            if (brotli_audit.output_floor < 4096 or brotli_audit.output_floor > 1 << 20)
                 return error.InvalidBrotliReferenceFloor;
+        } else if (std.mem.eql(u8, arg, "--brotli-reference-exact-input")) {
+            brotli_audit.exact_input = true;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
             const name = arg["--only=".len..];
             inline for (codecs) |codec| {
@@ -1740,8 +1745,10 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (replay_directory != null and divergence_directory != null) return error.ConflictingArtifactModes;
-    if (brotli_reference_floor != 0 and (replay_directory != null or divergence_directory != null))
-        return error.ConflictingBrotliReferenceFloorArtifactModes;
+    if (replay_directory != null or divergence_directory != null) {
+        if (brotli_audit.output_floor != 0) return error.ConflictingBrotliReferenceFloorArtifactModes;
+        if (brotli_audit.exact_input) return error.ConflictingBrotliReferenceInputArtifactModes;
+    }
 
     // The C reference libraries allocate through libc; use the same allocator
     // so cross-allocator ownership never enters the comparison.
@@ -1753,7 +1760,7 @@ pub fn main(init: std.process.Init) !void {
         .failures = .empty,
         .only = only,
         .deep = deep,
-        .brotli_reference_floor = brotli_reference_floor,
+        .brotli_audit = brotli_audit,
     };
     defer {
         for (harness.failures.items) |failure| allocator.free(failure.detail);
@@ -1797,7 +1804,7 @@ pub fn main(init: std.process.Init) !void {
         .zlib = std.mem.span(c.zlibVersion()),
         .zstd = std.mem.span(c.ZSTD_versionString()),
         .brotli_decoder_version_encoded = c.BrotliDecoderVersion(),
-    }, brotli_reference_floor);
+    }, harness.brotli_audit);
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
             failure.codec.label(),
@@ -1828,6 +1835,7 @@ fn printUsage(init: std.process.Init) !void {
         \\Usage: vort-codec-differential-fuzz [--seed=N] [--deep] [--max-size=N]
         \\                                   [--only=raw-deflate|zlib|gzip|zstd|brotli]
         \\                                   [--brotli-reference-floor=BYTES]
+        \\                                   [--brotli-reference-exact-input]
         \\                                   [--divergence-dir=NEW_DIRECTORY]
         \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\
