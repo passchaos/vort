@@ -194,6 +194,9 @@ now enforces a caller-selected window cap at data-frame headers and keeps
 checking the known decoded-size lower bound across frames of unknown size.
 Cursor header traversal and skip still allow callers to bypass decoding an
 unsupported frame without allocating for its advertised window.
+The [one-shot frame window control](formats/zstd-frame-window-limit.md) extends
+that policy to slice and reusable decode, including prefix calls and chunk
+facades that check finite limits before coalescing into caller scratch.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 
