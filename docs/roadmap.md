@@ -97,7 +97,10 @@ records the current-source portability and library verification scope.
 The [incremental gzip header observer](formats/gzip-header-events.md)
 exposes fixed fields and chunks of extra data, filename and comment without
 buffering the member. A completion event confirms validation (including FHCRC
-when present) before any plaintext from that member is published.
+when present) before any plaintext from that member is published. The
+[automatic zlib/gzip wrapper](formats/zlib-gzip-auto-detect.md) now forwards
+these events when it selects gzip, leaving zlib dictionary handling and member
+boundaries unchanged.
 
 The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
 malformed trees before ordinary, compact incremental and Deflate64 decoding.

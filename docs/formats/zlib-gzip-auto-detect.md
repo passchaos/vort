@@ -17,6 +17,15 @@ trailing-prefix recovery. Zlib-only `requiredDictionaryId` and
 `InvalidStreamState` for gzip. Explicit `allow_concatenated` continues with the
 selected wrapper type only, while a different wrapper is trailing data.
 
+`stepWithHeaderEvents` and `stepToBlockBoundaryWithHeaderEvents` forward a
+per-call [gzip header observer](gzip-header-events.md) after detecting gzip.
+The two-byte detection prefix does not produce or duplicate events. `.complete`
+occurs only after validating the complete gzip header (including FHCRC when
+present) and before writing plaintext from that member. Zlib ignores the
+observer, including on dictionary requests and retries. The observer is not
+retained by the decoder or its clones. These methods do not change detected
+format, concatenation, trailing-input or progress semantics.
+
 One-shot `decodeZlibOrGzipPrefix*` and owned
 `decodeZlibOrGzipPrefixAlloc*` functions follow libz `inflateInit2(47)`:
 exactly one wrapper stream is decoded and `input_read` identifies the untouched
@@ -28,7 +37,12 @@ Contracts cover stored/fixed/dynamic wrappers, split detection, invalid and
 committed headers, zlib dictionary retry, same-format concatenation, mixed
 wrapper tails, checksum options, cumulative output limits, detecting and
 selected-state clones, failed-call progress, native/x86/WASI consumers, and
-Python libz 1.2.11 `wbits=47` boundary parity.
+Python libz 1.2.11 `wbits=47` boundary parity. The observer tests also cover
+split detections, same-format members, corrupt FHCRC and failed-call progress,
+block-boundary stepping, clone/reset, and silent zlib dictionary retries. An
+independent libz 1.2.11 `inflateInit2(47)` / `inflateGetHeader` / `Z_BLOCK`
+probe confirms the fixture's complete gzip header at byte 29 before plaintext,
+refuses a bad FHCRC, and reports no gzip header for zlib.
 
 ```sh
 zig build -j2 test-zlib-or-gzip-auto

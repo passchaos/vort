@@ -20,9 +20,27 @@ pub fn contracts(comptime V: type) !void {
         try std.testing.expectEqualStrings(plain, owned.bytes);
     }
 
+    const Auto = V.ZlibOrGzipIncrementalDecoder;
+    const Observe = struct {
+        start_count: usize = 0,
+        payload_offset: ?V.StreamCount = null,
+
+        fn onEvent(context: ?*anyopaque, event: Auto.HeaderEvent) void {
+            const state: *@This() = @ptrCast(@alignCast(context.?));
+            switch (event) {
+                .start => state.start_count += 1,
+                .field => {},
+                .complete => |header| state.payload_offset = header.header_end_offset,
+            }
+        }
+    };
     var history: [65_536]u8 = undefined;
-    var decoder = try V.ZlibOrGzipIncrementalDecoder.init(.{ .expected_output_len = plain.len }, &history);
-    const result = try decoder.step(gzip, &output);
+    var decoder = try Auto.init(.{ .expected_output_len = plain.len }, &history);
+    var observed: Observe = .{};
+    const result = try decoder.stepWithHeaderEvents(gzip, &output, .{ .context = &observed, .on_event = Observe.onEvent });
     try std.testing.expectEqual(@as(@TypeOf(result.status), .done), result.status);
     try std.testing.expectEqual(V.ZlibOrGzipFormat.gzip, decoder.selectedFormat().?);
+    try std.testing.expectEqual(@as(usize, 1), observed.start_count);
+    try std.testing.expectEqual(@as(?V.StreamCount, 10), observed.payload_offset);
+    try std.testing.expectEqualStrings(plain, &output);
 }

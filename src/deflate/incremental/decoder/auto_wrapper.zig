@@ -24,6 +24,10 @@ pub fn Decoder(comptime Codec: type) type {
         pub const CloneError = Codec.ZlibDecoder.CloneError;
         pub const CloneStorage = Codec.ZlibDecoder.CloneStorage;
         pub const DictionarySet = Codec.DictionarySet;
+        pub const HeaderObserver = Codec.GzipDecoder.HeaderObserver;
+        pub const HeaderEvent = Codec.GzipDecoder.HeaderEvent;
+        pub const HeaderField = Codec.GzipDecoder.HeaderField;
+        pub const MemberHeader = Codec.GzipDecoder.MemberHeader;
         pub const Format = Codec.Format;
         pub const Phase = enum { detecting, zlib, gzip };
         pub const Options = struct {
@@ -218,14 +222,26 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            return self.stepInternal(input, output, false);
+            return self.stepInternal(input, output, false, null);
+        }
+
+        /// Forward this call's synchronous header observer to gzip, if
+        /// selected. Zlib emits no events. The observer is never retained;
+        /// the same borrowing rules as for GzipDecoder apply.
+        pub fn stepWithHeaderEvents(self: *Self, input: []const u8, output: []u8, observer: HeaderObserver) Error!core.StepResult {
+            return self.stepInternal(input, output, false, observer);
         }
 
         pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            return self.stepInternal(input, output, true);
+            return self.stepInternal(input, output, true, null);
         }
 
-        fn stepInternal(self: *Self, input: []const u8, output: []u8, block_boundary: bool) Error!core.StepResult {
+        /// Combine block-boundary stepping with gzip header observation.
+        pub fn stepToBlockBoundaryWithHeaderEvents(self: *Self, input: []const u8, output: []u8, observer: HeaderObserver) Error!core.StepResult {
+            return self.stepInternal(input, output, true, observer);
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, output: []u8, block_boundary: bool, observer: ?HeaderObserver) Error!core.StepResult {
             const semantic_admitted = try self.admitStep(input, output);
             const workspace = switch (self.active) {
                 .detecting => null,
@@ -270,7 +286,15 @@ pub fn Decoder(comptime Codec: type) type {
             const child_result = switch (self.active) {
                 .detecting => unreachable,
                 .zlib => |*decoder| if (block_boundary) decoder.stepToBlockBoundary(remaining, output) else decoder.step(remaining, output),
-                .gzip => |*decoder| if (block_boundary) decoder.stepToBlockBoundary(remaining, output) else decoder.step(remaining, output),
+                .gzip => |*decoder| blk: {
+                    if (observer) |sink| {
+                        break :blk if (block_boundary)
+                            decoder.stepToBlockBoundaryWithHeaderEvents(remaining, output, sink)
+                        else
+                            decoder.stepWithHeaderEvents(remaining, output, sink);
+                    }
+                    break :blk if (block_boundary) decoder.stepToBlockBoundary(remaining, output) else decoder.step(remaining, output);
+                },
             };
             const stepped = child_result catch |err| {
                 const child_progress = self.childLastProgress();
@@ -342,6 +366,8 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn bootstrapSelected(self: *Self) Error!void {
+            // Replay just the two detection bytes. Neither wrapper can have
+            // finished a gzip fixed header or produced plaintext here.
             var no_output: [0]u8 = .{};
             const boot = switch (self.active) {
                 .detecting => unreachable,

@@ -3,7 +3,10 @@
 `vort.GzipIncrementalDecoder.stepWithHeaderEvents` is the usual incremental
 `step` with a synchronous header observer. `stepToBlockBoundaryWithHeaderEvents`
 combines the observer with the existing raw-DEFLATE block-boundary contract.
-Neither method buffers a member header or allocates memory for metadata.
+Neither method buffers a complete variable-length header or allocates memory
+for metadata. The same methods and event types are available on the
+[automatic zlib/gzip decoder](zlib-gzip-auto-detect.md); they are silent when
+it selects zlib.
 
 ```zig
 const r = try decoder.stepWithHeaderEvents(input, output, .{
