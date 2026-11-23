@@ -2969,3 +2969,24 @@ queries and 699 exact parser/command pairs per mode, with unchanged logical
 counters and heap/failure contracts. [Proof, patch and sources](data/brotli-recent-evidence-proof-20261123/README.md)
 are archived. Complete wire identity, generated stack/text and matched full-API
 performance gates remain required before adopting encoder changes.
+
+## Brotli recent-evidence complete-operation gates (2026-11-23)
+
+The recent-distance cache now has full functional proof: 48 Silesia q10/q11
+wires (8/64 KiB) plus both explicit command-state ceiling wires match exactly,
+libbrotli1.2.0 cross-decoding passes, and144publicAPI/profile/exact-cap/cap-1
+entries preserve outputs and requested-heap behavior. Actual x86ELF32 and WASI
+ReleaseSafe executions pass the scalar/cache proof. The counter-free follow-up
+passes the same gates with enabled/disabled/scalar query equivalence.
+
+Both pinnedCPU2three-pair32-row performance screens reject adoption: original
+target1.000122x [0.997539,1.002392],counter-free1.001005x [0.997663,1.003218].
+All encoder sources remain unchanged. [Complete evidence, probes and samples](data/brotli-recent-evidence-full-20261123/README.md)
+record code/own-frame changes without claiming total stack or industry parity.
+
+A filtered optimized publicq10profile instead attributes17.68%self to literal
+context mode selection and71.77%inclusive to the legacy preferred-context path.
+The [next structural boundary](data/brotli-recent-evidence-full-20261123/q10-next-structural-boundary.md)
+is nonrecent common command/distance preparation and winner-only output, with
+same-last recoding and early-return semantics preserved. An isolated prototype
+is investigating it; no new encoder optimization is adopted.

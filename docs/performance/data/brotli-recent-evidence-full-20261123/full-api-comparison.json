@@ -1,0 +1,10 @@
+{
+  "schema": "vort.brotli.full-api-comparison.v1",
+  "ok": true,
+  "api_entries": 144,
+  "contract_failures": {
+    "baseline": 0,
+    "variant": 0
+  },
+  "differences": []
+}

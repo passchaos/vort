@@ -1,0 +1,156 @@
+{
+  "schema": "vort.recent-evidence-runtime-portability-summary.v1",
+  "status": "passed",
+  "candidate_snapshot": "/tmp/vort-br-recent-evidence-runtime-20261123",
+  "candidate": "recent-evidence-cache-statistics-disabled",
+  "origin_snapshot": "/tmp/vort-br-recent-evidence-proof-20261123",
+  "snapshot_base_revision": "b1656a4e338833064b0ba5fb47166b96f218b73c",
+  "hq_cache_statistics": false,
+  "hq_cache_statistics_type": "void",
+  "source_manifest": {
+    "path": "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/source-sha256.json",
+    "sha256": "7dd0040a07a1770b2f5765c6d5e81cca82545195d175fd5aa7a4ccc5755f28c5"
+  },
+  "source_changes": false,
+  "performance_runs": false,
+  "all_compile_run_sessions_closed": true,
+  "sessions": [
+    7513,
+    29863
+  ],
+  "compiler": "0.16.0",
+  "completed_at_utc": "2026-11-23T05:27:33.443735+00:00",
+  "targets": {
+    "x86-linux-musl": {
+      "receipt": "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/x86-linux-musl-receipt.json",
+      "receipt_sha256": "ba63dc971a4666714c8924f3f9d217b4b904b9b73a49e8e5bd24abc4e2078adc",
+      "artifact": {
+        "path": "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/recent-evidence-runtime-x86-linux-musl",
+        "sha256": "f0ce7c6fbd167d36cd50e4eddf4fc38c8742d07e4e9a765216fb21db2ee532f1",
+        "size_bytes": 4061384
+      },
+      "mode": "ReleaseSafe",
+      "compile_command": [
+        "zig",
+        "test",
+        "src/br.zig",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "x86-linux-musl",
+        "--test-filter",
+        "recent evidence proof",
+        "--test-no-exec",
+        "-femit-bin=/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/recent-evidence-runtime-x86-linux-musl",
+        "--name",
+        "recent-evidence-runtime-x86-linux-musl"
+      ],
+      "run_command": [
+        "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/recent-evidence-runtime-x86-linux-musl",
+        "--seed=0x20261123"
+      ],
+      "compile_exit_code": 0,
+      "run_exit_code": 0,
+      "proof": {
+        "tests_passed": 25,
+        "scalar_enabled_disabled_query_groups": 65400,
+        "parser_token_command_pairs": 699,
+        "exact_expected_counts": true,
+        "query_statistics_modes": [
+          "scalar",
+          "enabled",
+          "disabled"
+        ],
+        "coverage": [
+          "minimum-2-3-4-match-facts",
+          "maximum-including-258",
+          "failed-prefix",
+          "EOF",
+          "same-position-and-positive-span",
+          "capped-tail-extension",
+          "backward-skipped-positions",
+          "eviction",
+          "void-statistics-storage",
+          "hq-statistics-disabled-factory",
+          "beam-2-4-8-exact-tokens-commands",
+          "varied-models-and-recent-rings",
+          "minimum-two-parser-rejection",
+          "logical-counter-equivalence",
+          "allocator-failures-0-through-11",
+          "exact-heap-cap-and-cap-minus-one"
+        ]
+      }
+    },
+    "wasm32-wasi": {
+      "receipt": "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/wasm32-wasi-receipt.json",
+      "receipt_sha256": "ace3a03fb551d1d8402e3e54a23ba03af37c57ab3a69f2ba07459a9b3890b71b",
+      "artifact": {
+        "path": "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/recent-evidence-runtime-wasm32-wasi.wasm",
+        "sha256": "66b49cac741d99a92f9dd3912d12d1b250311f32b4e111c3ac24538ac89a8f4c",
+        "size_bytes": 2089475
+      },
+      "mode": "ReleaseSafe",
+      "compile_command": [
+        "zig",
+        "test",
+        "src/br.zig",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "wasm32-wasi",
+        "--test-filter",
+        "recent evidence proof",
+        "--test-no-exec",
+        "-femit-bin=/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/recent-evidence-runtime-wasm32-wasi.wasm",
+        "--name",
+        "recent-evidence-runtime-wasm32-wasi"
+      ],
+      "run_command": [
+        "node",
+        "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/run_wasi_receipt.mjs",
+        "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/recent-evidence-runtime-wasm32-wasi.wasm",
+        "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/wasm32-wasi-execution.json",
+        "--seed=0x20261123"
+      ],
+      "compile_exit_code": 0,
+      "run_exit_code": 0,
+      "proof": {
+        "tests_passed": 25,
+        "scalar_enabled_disabled_query_groups": 65400,
+        "parser_token_command_pairs": 699,
+        "exact_expected_counts": true,
+        "query_statistics_modes": [
+          "scalar",
+          "enabled",
+          "disabled"
+        ],
+        "coverage": [
+          "minimum-2-3-4-match-facts",
+          "maximum-including-258",
+          "failed-prefix",
+          "EOF",
+          "same-position-and-positive-span",
+          "capped-tail-extension",
+          "backward-skipped-positions",
+          "eviction",
+          "void-statistics-storage",
+          "hq-statistics-disabled-factory",
+          "beam-2-4-8-exact-tokens-commands",
+          "varied-models-and-recent-rings",
+          "minimum-two-parser-rejection",
+          "logical-counter-equivalence",
+          "allocator-failures-0-through-11",
+          "exact-heap-cap-and-cap-minus-one"
+        ]
+      }
+    }
+  },
+  "generic_wasi_execution": {
+    "path": "/tmp/vort-br-recent-evidence-runtime-20261123/proof-artifacts/portability/wasm32-wasi-execution.json",
+    "sha256": "e34f9f8b992cfa885173835bd2eb0209bc4b2b7efcc3e0b771a1b3f4276697dd"
+  },
+  "scripts_sha256": {
+    "run_portability.py": "809d2f6596c184c2eb439c410695358f7da23c4dcce135ba32b45cc8aa8c145e",
+    "run_wasi_receipt.mjs": "209a83bd47adcd22132abf2756a7a0bd4e286b7439b8f050e0f1130761641a87"
+  }
+}

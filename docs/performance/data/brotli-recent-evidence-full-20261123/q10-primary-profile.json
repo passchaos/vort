@@ -1,0 +1,342 @@
+{
+  "schema": "vort.brotli.primary-quality-profile.v1",
+  "scope": "AND of measureVort and quality-preset encode call chains; includes untimed per-round warmup; routing evidence, not throughput",
+  "all_samples": 13895,
+  "all_period_cycles": 16977573649,
+  "selected_samples": 10552,
+  "selected_period_cycles": 12919026601,
+  "primary_self": [
+    {
+      "symbol": "br.encoder.literal_context_split.chooseModeFromHistograms",
+      "period_cycles": 2284582660,
+      "fraction": 0.1768386063871996
+    },
+    {
+      "symbol": "br.encoder.small_huffman.buildInternal",
+      "period_cycles": 1211511526,
+      "fraction": 0.09377730717778866
+    },
+    {
+      "symbol": "compiler_rt.memset",
+      "period_cycles": 1209114429,
+      "fraction": 0.09359175937499875
+    },
+    {
+      "symbol": "br.encoder.context_map.build",
+      "period_cycles": 1098840259,
+      "fraction": 0.08505596380728436
+    },
+    {
+      "symbol": "br.encodeCommandPlanWithStandardWrite",
+      "period_cycles": 1022579596,
+      "fraction": 0.07915299097850352
+    },
+    {
+      "symbol": "br.encoder.literal_alphabet.buildLargeSupport",
+      "period_cycles": 874511423,
+      "fraction": 0.06769174257542811
+    },
+    {
+      "symbol": "br.encoder.static_dictionary_matcher.Index.findCandidates",
+      "period_cycles": 614309641,
+      "fraction": 0.04755076833361805
+    },
+    {
+      "symbol": "br.encoder.complex_prefix.codeLengthCodeLengths",
+      "period_cycles": 588034565,
+      "fraction": 0.045516940491049304
+    },
+    {
+      "symbol": "br.encoder.literal_context_split.treeBitCostProfiled",
+      "period_cycles": 509347921,
+      "fraction": 0.039426184087319224
+    },
+    {
+      "symbol": "br.encoder.distance.encodeWithFormat",
+      "period_cycles": 370764007,
+      "fraction": 0.02869906676802577
+    },
+    {
+      "symbol": "br.encoder.command_plan.alphabetFromFrequenciesInto",
+      "period_cycles": 246770177,
+      "fraction": 0.01910129800188651
+    },
+    {
+      "symbol": "br.length.codeForValue",
+      "period_cycles": 241028503,
+      "fraction": 0.01865686250551904
+    },
+    {
+      "symbol": "br.commandWireDistance",
+      "period_cycles": 184390550,
+      "fraction": 0.014272789715111138
+    },
+    {
+      "symbol": "br.commandEntryForLengthsAndDistance",
+      "period_cycles": 179617660,
+      "fraction": 0.013903343150179492
+    },
+    {
+      "symbol": "br.encoder.complex_prefix.finishBitCost",
+      "period_cycles": 176232521,
+      "fraction": 0.01364131574637045
+    },
+    {
+      "symbol": "br.encoder.complex_prefix.bitCost",
+      "period_cycles": 167094716,
+      "fraction": 0.012934002008097576
+    },
+    {
+      "symbol": "lz77.optimalPlanAlloc",
+      "period_cycles": 156057903,
+      "fraction": 0.01207969515194901
+    },
+    {
+      "symbol": "lz77.optimalPlanAllocWithCostModel",
+      "period_cycles": 137088247,
+      "fraction": 0.010611344897253223
+    },
+    {
+      "symbol": "br.encoder.distance_parameter_search.score",
+      "period_cycles": 121548086,
+      "fraction": 0.009408455431974383
+    },
+    {
+      "symbol": "compiler_rt.memcpy.memcpyFast",
+      "period_cycles": 113979134,
+      "fraction": 0.008822579093627488
+    },
+    {
+      "symbol": "compiler_rt.memmove.memmoveFast",
+      "period_cycles": 106673080,
+      "fraction": 0.008257052430849779
+    },
+    {
+      "symbol": "br.encoder.command_plan.PrefixAlphabetFor(704).recordFrequency",
+      "period_cycles": 103976768,
+      "fraction": 0.008048343827386473
+    },
+    {
+      "symbol": "br.encoder.literal_context.value",
+      "period_cycles": 96421434,
+      "fraction": 0.0074635215932240965
+    },
+    {
+      "symbol": "br.encoder.bit_writer.Writer.writeBits",
+      "period_cycles": 79493341,
+      "fraction": 0.006153198956479183
+    },
+    {
+      "symbol": "[unknown]",
+      "period_cycles": 77344487,
+      "fraction": 0.0059868664558685196
+    }
+  ],
+  "primary_inclusive": [
+    {
+      "symbol": "br.encodePlannedStreamWithOptionsAlloc",
+      "period_cycles": 12919026601,
+      "fraction": 1.0
+    },
+    {
+      "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded",
+      "period_cycles": 12919026601,
+      "fraction": 1.0
+    },
+    {
+      "symbol": "__libc_start_call_main",
+      "period_cycles": 12919026601,
+      "fraction": 1.0
+    },
+    {
+      "symbol": "planned_encode_bench.main",
+      "period_cycles": 12919026601,
+      "fraction": 1.0
+    },
+    {
+      "symbol": "main",
+      "period_cycles": 12919026601,
+      "fraction": 1.0
+    },
+    {
+      "symbol": "planned_encode_bench.measureVort",
+      "period_cycles": 12919026601,
+      "fraction": 1.0
+    },
+    {
+      "symbol": "br.encodeLazyCommandPlanAllocRecorded",
+      "period_cycles": 10805728177,
+      "fraction": 0.8364196863069838
+    },
+    {
+      "symbol": "br.encoder.command_candidate_group.encode",
+      "period_cycles": 10802113524,
+      "fraction": 0.8361398933232215
+    },
+    {
+      "symbol": "br.encodeFinalCommandCandidateGroupRecorded",
+      "period_cycles": 10791083871,
+      "fraction": 0.8352861406883947
+    },
+    {
+      "symbol": "br.encodePreferredCommandPlanAllocRecorded",
+      "period_cycles": 10682053034,
+      "fraction": 0.8268465855758168
+    },
+    {
+      "symbol": "br.encoder.literal_context_split.chooseProposals",
+      "period_cycles": 8014318148,
+      "fraction": 0.6203499996957704
+    },
+    {
+      "symbol": "br.encoder.literal_context_split.chooseModeFromHistograms",
+      "period_cycles": 7559464222,
+      "fraction": 0.5851419348741691
+    },
+    {
+      "symbol": "br.encodeQualityOptimalCandidateAllocRecorded",
+      "period_cycles": 7330432715,
+      "fraction": 0.5674137023940012
+    },
+    {
+      "symbol": "br.considerStaticDictionaryCandidate",
+      "period_cycles": 3136659236,
+      "fraction": 0.24279377486204776
+    },
+    {
+      "symbol": "br.encoder.literal_context_split.treeBitCostProfiled",
+      "period_cycles": 2737403069,
+      "fraction": 0.21188926639319025
+    },
+    {
+      "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded",
+      "period_cycles": 2564591017,
+      "fraction": 0.19851271277678825
+    },
+    {
+      "symbol": "br.encodeCommandPlanWithStandardWrite",
+      "period_cycles": 2512109608,
+      "fraction": 0.19445037815817715
+    },
+    {
+      "symbol": "br.encoder.context_map.chooseSlice",
+      "period_cycles": 1913169762,
+      "fraction": 0.1480893120733965
+    },
+    {
+      "symbol": "br.encoder.context_map.build",
+      "period_cycles": 1804051327,
+      "fraction": 0.13964297641900955
+    },
+    {
+      "symbol": "br.encoder.context_candidate_group.encodePreparedPrimary",
+      "period_cycles": 1410305844,
+      "fraction": 0.10916502361647239
+    },
+    {
+      "symbol": "compiler_rt.memset",
+      "period_cycles": 1256916645,
+      "fraction": 0.09729190006487858
+    },
+    {
+      "symbol": "br.encoder.small_huffman.buildInternal",
+      "period_cycles": 1215160743,
+      "fraction": 0.0940597755953177
+    },
+    {
+      "symbol": "br.encoder.command_plan.PrefixAlphabetFor(256).codeLengths",
+      "period_cycles": 897851750,
+      "fraction": 0.06949840554786857
+    },
+    {
+      "symbol": "br.encoder.literal_alphabet.buildLargeSupport",
+      "period_cycles": 887966973,
+      "fraction": 0.06873327228316618
+    },
+    {
+      "symbol": "br.encoder.complex_prefix.finishBitCost",
+      "period_cycles": 792373691,
+      "fraction": 0.06133385397152647
+    },
+    {
+      "symbol": "br.chooseDistanceParameterAlternativeAlloc",
+      "period_cycles": 744370453,
+      "fraction": 0.05761815313100926
+    },
+    {
+      "symbol": "br.encoder.static_dictionary_matcher.Index.findLongest",
+      "period_cycles": 689090491,
+      "fraction": 0.05333919592259844
+    },
+    {
+      "symbol": "br.encoder.distance_parameter_search.score",
+      "period_cycles": 688065220,
+      "fraction": 0.05325983460292126
+    },
+    {
+      "symbol": "br.encoder.static_dictionary_matcher.Index.findCandidates",
+      "period_cycles": 675619615,
+      "fraction": 0.05229647990257281
+    },
+    {
+      "symbol": "br.encoder.complex_prefix.codeLengthCodeLengths",
+      "period_cycles": 631930934,
+      "fraction": 0.048914748263703185
+    },
+    {
+      "symbol": "br.encoder.complex_prefix.bitCost",
+      "period_cycles": 492818451,
+      "fraction": 0.03814671694861695
+    },
+    {
+      "symbol": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded",
+      "period_cycles": 481521237,
+      "fraction": 0.03727225369771495
+    },
+    {
+      "symbol": "br.commandEntryForLengthsAndDistance",
+      "period_cycles": 375434953,
+      "fraction": 0.029060622335969132
+    },
+    {
+      "symbol": "br.encoder.distance.encodeWithFormat",
+      "period_cycles": 370764007,
+      "fraction": 0.02869906676802577
+    },
+    {
+      "symbol": "br.encoder.context_candidate_group.encodeCore",
+      "period_cycles": 272210016,
+      "fraction": 0.02107047414693995
+    },
+    {
+      "symbol": "br.encoder.command_plan.alphabetFromFrequenciesInto",
+      "period_cycles": 246770177,
+      "fraction": 0.01910129800188651
+    },
+    {
+      "symbol": "br.length.codeForValue",
+      "period_cycles": 241028503,
+      "fraction": 0.01865686250551904
+    },
+    {
+      "symbol": "br.commandWireDistance",
+      "period_cycles": 184390550,
+      "fraction": 0.014272789715111138
+    },
+    {
+      "symbol": "lz77.optimalPlanAlloc",
+      "period_cycles": 172101794,
+      "fraction": 0.013321575944946071
+    },
+    {
+      "symbol": "br.chooseSameLastDistancePlan",
+      "period_cycles": 170485543,
+      "fraction": 0.013196469692755609
+    }
+  ],
+  "chain_fractions": {
+    "other": 0.17315341442418322,
+    "legacy_preferred_context": 0.7176815619593444,
+    "prepared_context": 0.10916502361647239
+  }
+}
