@@ -104,11 +104,44 @@ both-reject: 927 raw Deflate, 408 zlib and 544 gzip. Libz reached
 results, both-accept outputs, both digests and the Brotli and Zstd counts
 were unchanged.
 
-The 34 reference-only Zstd observations remain unclassified. The libzstd
-1.4.8 dictionary-capable one-shot API accepted a valid concatenation with a
-skippable frame and rejected an unrecognized extra byte in an independent
-check; the streaming oracle already requires full input and a zero final
-hint. A [historical oversized RLE sample](codec-differential-reporting-20261120.md#representative-adjudication)
+The 34 reference-only Zstd observations were still unclassified at that
+checkpoint. The libzstd 1.4.8 dictionary-capable one-shot API accepted a
+valid concatenation with a skippable frame and rejected an unrecognized extra
+byte in an independent check. The streaming oracle already requires full
+input and a zero final hint. A [historical oversized RLE sample](codec-differential-reporting-20261120.md#representative-adjudication)
 violated the format's block limit, but its explicit-window generator variant
-was not part of this small run. That sample cannot explain this aggregate
-without per-case evidence.
+was not part of this small run.
+
+## Zstd per-observation follow-up
+
+On `896a0212`, the isolated [diagnostic patch](data/zstd-reference-audit-20261124/diagnostics.patch)
+rechecks only the generated reference-only Zstd outcomes. It retains error
+names, layout status and digests, not compressed samples. Apply it in an
+isolated checkout (`git apply --unidiff-zero /path/to/diagnostics.patch`) and
+run the Deflate complete-input command above without changing the seed or
+max size. Repeat with `LD_LIBRARY_PATH=$HOME/Work/zstd/lib` to select the
+local libzstd 1.6.0 build instead of system libzstd 1.4.8.
+
+The [34 observations](data/zstd-reference-audit-20261124/observations.csv)
+refer to 23 distinct wire digests. Vort returns `CorruptFrame` in all of them
+while outer frame/block inspection succeeds. For 33 observations, the only
+changed byte is the symbol compression modes byte, and only its low two bits
+changed from zero to nonzero. The audit locates that byte in the valid parent
+using the literals-section lengths and sequence-count widths independently of
+entropy decoding. RFC 8878's Symbol Compression Modes field requires these
+reserved bits to be zero; Vort's rejection matches that constraint. The last observation changes
+one data bit in the final sequence byte without moving the end marker; its
+sequence modes still inspect successfully. It is a version-specific acceptance
+difference here, not a separately proven format violation or a confirmed Vort
+bug.
+
+| libzstd | Valid checks passed | Both accept | Both reject | Reference only | Vort only | Output mismatch |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1.4.8 | 544 | 4,455 | 16,183 | 34 | 0 | 0 |
+| 1.6.0 | 544 | 4,455 | 16,217 | 0 | 0 | 0 |
+
+Both runs retain the original wire and mutation digests and the same 12,206
+Zstd truncation comparisons with no one-sided verdict. The loaded libzstd
+libraries had SHA-256 `5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667`
+(system) and `c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e`
+(local). No production decoder change follows from this bounded audit.
