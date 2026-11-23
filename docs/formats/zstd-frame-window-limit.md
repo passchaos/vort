@@ -41,3 +41,26 @@ WASI window admission regressions alongside the source decoder contracts. An
 independent libzstd 1.4.8 streaming probe rejected a 2,048-byte declaration
 under a 1,024-byte window cap before producing output, and accepted it at an
 exact 2,048-byte cap. Vort's option is in bytes, not log2 units.
+
+## CLI
+
+The five native Zstd decode and size commands accept `--max-window-size=BYTES`
+(or `--max-window-size BYTES`) after their required arguments. The optional
+`max_output` positional argument still works and can appear before or after
+the window option. For example:
+
+```sh
+vort decode-zstd-native-file-to data.zst data.out --max-window-size=8388608
+vort size-zstd-native-file data.zst 1048576 --max-window-size 8388608
+```
+
+The cap checks decode admission, not the CLI's separate input-file read limit.
+On `OutputLimitExceeded` with a window option, stderr reports
+`zstd_decode_limit_exceeded` and the configured window and output limits. It
+does not infer which of the two limits caused the refusal. The `file-to`
+command finishes decoding before opening the output file, so refusals and
+other decode errors leave existing destinations intact and do not create a
+new one. Omitting the option keeps the legacy decode and size paths.
+
+`zig build test-zstd-decode-window-cli` runs the same black-box cases against
+the native CLI and the shared dispatcher in an actual wasm32-wasi process.

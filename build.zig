@@ -1618,6 +1618,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    wasm_check_step.dependOn(@import("build/zstd_decode_window_cli.zig").register(b, cli_exe, wasm_target, wasm_mod, optimize));
+
     const run_cli = b.addRunArtifact(cli_exe);
     if (b.args) |args| run_cli.addArgs(args);
     const run_step = b.step("run", "Run the vort CLI smoke example");

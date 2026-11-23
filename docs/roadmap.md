@@ -199,7 +199,9 @@ that policy to slice and reusable decode, including prefix calls and chunk
 facades that check finite limits before coalescing into caller scratch.
 [Seekable range window controls](formats/zstd-seekable-window-limit.md)
 preflight selected frame headers before allocation or output, without reading
-unselected frame bytes.
+unselected frame bytes. The [Zstd CLI decode and size commands](formats/zstd-frame-window-limit.md#cli)
+now expose `--max-window-size` without changing the existing output argument
+or success format, and preserve `file-to` destinations on decode refusal.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 
