@@ -534,10 +534,9 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn mapHistoryError(self: *const Self, err: Error) Error {
-            return if (self.history_capped and err == error.InvalidMatch)
-                error.OutputLimitExceeded
-            else
-                err;
+            if (err != error.InvalidMatch or !self.history_capped) return err;
+            const decoder = if (self.progressive) |*value| value else return err;
+            return if (decoder.history_capacity_exceeded) error.OutputLimitExceeded else err;
         }
 
         fn completeStep(self: *Self, input_read: usize, output_written: usize, initial_status: core.StepResult.Status) Error!core.StepResult {

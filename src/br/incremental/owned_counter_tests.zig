@@ -44,6 +44,7 @@ const Codec = struct {
         prefix_remaining: u2 = 2,
         input_read: core.StreamCount = 0,
         output_written: core.StreamCount = 0,
+        history_capacity_exceeded: bool = false,
 
         pub fn initWithOptions(_: []u8, _: Options) @This() {
             return .{};

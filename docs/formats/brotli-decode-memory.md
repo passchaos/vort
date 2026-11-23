@@ -116,6 +116,15 @@ and the copy decoder's void reset keep their established signatures, so those
 paths surface invalid options on the first step or finish. Dictionary errors
 retain precedence over the policy rejection.
 
+The owned incremental decoder's `max_history_len` may retain a smaller history
+ring than the format window. A valid history reference beyond that ring reports
+`OutputLimitExceeded`. Malformed zero distances, invalid static dictionary
+addresses and compound dictionary overruns retain `InvalidMatch` even with a
+history cap. The caller-history decoder reports `InvalidMatch` for an
+undersized ring as before. Both decoders preserve actual failed-call progress
+and sticky errors; reset and next-frame initialization clear the internal
+history-capacity failure cause.
+
 ## Validation
 
 Run the focused public contracts with:

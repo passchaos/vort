@@ -75,6 +75,9 @@ pub fn Decoder(comptime Codec: type) type {
         frame_count: Counter = 0,
         fatal_error: ?Error = null,
         header_storage_exhausted: bool = false,
+        /// Internal failure cause for the owned facade. Caller-owned history
+        /// keeps its existing InvalidMatch error for an undersized ring.
+        history_capacity_exceeded: bool = false,
         error_input_offset: ?Counter = null,
         error_output_offset: ?Counter = null,
         last_step_progress: core.Progress = .{},
@@ -865,7 +868,10 @@ pub fn Decoder(comptime Codec: type) type {
             const distance = self.copy_distance;
             if (distance == 0 or distance > self.maxBackwardDistance()) return false;
             const remaining = self.decoded_len - self.total_output;
-            if (distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
+            if (distance > self.history.len) {
+                self.history_capacity_exceeded = true;
+                return self.fail(.copy, error.InvalidMatch);
+            }
             if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
             if (self.update_distance_ring) pushLastDistance(&self.last_distances, distance);
             self.update_distance_ring = false;
@@ -885,7 +891,10 @@ pub fn Decoder(comptime Codec: type) type {
                     // A caller may intentionally provide a history ring smaller
                     // than the protocol window. Such a reference is still a
                     // history match, not a compound-dictionary distance.
-                    if (distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
+                    if (distance > self.history.len) {
+                        self.history_capacity_exceeded = true;
+                        return self.fail(.copy, error.InvalidMatch);
+                    }
                     if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
                     if (self.update_distance_ring) pushLastDistance(&self.last_distances, distance);
                     self.update_distance_ring = false;

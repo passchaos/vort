@@ -96,6 +96,7 @@ const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
 const incremental_copy = @import("br/incremental/copy_decoder.zig");
 const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
 const incremental_contracts_tests = @import("br/incremental/contracts_tests.zig");
+const incremental_history_error_tests = @import("br/incremental/history_error_tests.zig");
 const incremental_owned_copy = @import("br/incremental/owned_copy_decoder.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
@@ -2410,6 +2411,7 @@ test {
     _ = @import("br/incremental/fuzz_driver.zig");
     _ = incremental_copy_tests;
     _ = incremental_contracts_tests;
+    _ = incremental_history_error_tests;
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = incremental_stored_encoder;

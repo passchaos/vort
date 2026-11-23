@@ -1,0 +1,38 @@
+{
+  "reference_path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+  "reference_sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463",
+  "version_packed": 16777225,
+  "rows": [
+    {
+      "case": "static-dictionary-length-2",
+      "wire_hex": "420000084458201211",
+      "wire_sha256": "15f80880247e0dc269a4cd8b764ec5bc1ec764e1c2687bdbd097e6996d29d4f0",
+      "status": 0,
+      "decoded_bytes": 0,
+      "streaming": {
+        "result": 0,
+        "error_code": -12,
+        "error_name": "DICTIONARY",
+        "input_read": 9,
+        "output_written": 0,
+        "output_hex": ""
+      }
+    },
+    {
+      "case": "zero-distance",
+      "wire_hex": "820000044458210248410803",
+      "wire_sha256": "6686db0af13965b5fd77abbd3b31fb1c44093f7c23ab4dc4d0667928e760c14b",
+      "status": 0,
+      "decoded_bytes": 0,
+      "streaming": {
+        "result": 0,
+        "error_code": -16,
+        "error_name": "DISTANCE",
+        "input_read": 12,
+        "output_written": 0,
+        "output_hex": ""
+      }
+    }
+  ],
+  "passed": true
+}
