@@ -84,4 +84,31 @@ The generated-wire and mutation digests, valid and truncation results, and
 other codecs' counts were unchanged. This resolves the remaining Brotli
 observations in this bounded screen as a trailing-input policy difference,
 not a decoder issue. Other codecs' one-sided observations were not separately
-adjudicated in this follow-up.
+adjudicated in that follow-up.
+
+## Deflate complete-input follow-up
+
+Keeping the same Brotli settings, require `avail_in == 0` after `Z_STREAM_END`
+for the raw Deflate, zlib and single-member gzip libz reference calls. The
+multi-member gzip reference already requires full consumption.
+
+```sh
+zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --max-size=256 --brotli-reference-floor=65536 --brotli-reference-exact-input \
+  --zlib-reference-exact-input
+```
+
+With libz 1.2.11 this moved 1,879 observations from reference-only accept to
+both-reject: 927 raw Deflate, 408 zlib and 544 gzip. Libz reached
+`Z_STREAM_END` with an unconsumed tail in all 1,879. Valid and truncated
+results, both-accept outputs, both digests and the Brotli and Zstd counts
+were unchanged.
+
+The 34 reference-only Zstd observations remain unclassified. The libzstd
+1.4.8 dictionary-capable one-shot API accepted a valid concatenation with a
+skippable frame and rejected an unrecognized extra byte in an independent
+check; the streaming oracle already requires full input and a zero final
+hint. A [historical oversized RLE sample](codec-differential-reporting-20261120.md#representative-adjudication)
+violated the format's block limit, but its explicit-window generator variant
+was not part of this small run. That sample cannot explain this aggregate
+without per-case evidence.

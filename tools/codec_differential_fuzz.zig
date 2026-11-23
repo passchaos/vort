@@ -126,9 +126,8 @@ const WireCase = struct {
     /// Brotli Large Window extension: Vort must opt in and libbrotli only
     /// accepts the wire through a streaming decoder with the same parameter.
     brotli_large_window: bool = false,
-    /// Zstd skippable/concatenated wires are rejected by the libzstd one-shot
-    /// API but accepted by its streaming API, which is the matching reference
-    /// contract for Vort's frame-loop decoder.
+    /// Use the streaming reference for Zstd skippable and concatenated wires
+    /// to check input consumption and the final frame-completion hint.
     zstd_stream_reference: bool = false,
     /// Concatenated gzip members need a per-member inflate state: a single
     /// inflate call stops at the first member's Z_STREAM_END without
@@ -182,6 +181,8 @@ const Harness = struct {
     max_mutation_wire: usize = 2048,
     hq_br_limit: usize = 1024,
     brotli_audit: reporting.BrotliReferenceAudit = .{},
+    zlib_exact_input: bool = false,
+    zlib_trailing_rejections: usize = 0,
 
     fn fail(
         self: *Harness,
@@ -436,13 +437,14 @@ const Harness = struct {
             default_capacity;
         self.last_reference = .{ .output_capacity = output_capacity };
         const dst = a.alloc(u8, output_capacity) catch return null;
+        const zlib_tails = if (self.zlib_exact_input) &self.zlib_trailing_rejections else null;
         switch (codec) {
-            .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary, &self.last_reference),
-            .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary, &self.last_reference),
+            .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary, &self.last_reference, zlib_tails),
+            .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary, &self.last_reference, zlib_tails),
             .gzip => if (wire_case.gzip_multi_member)
                 return gzipInflateMembers(a, dst, wire_case.wire)
             else
-                return zlibInflate(a, dst, wire_case.wire, 31, null, &self.last_reference),
+                return zlibInflate(a, dst, wire_case.wire, 31, null, &self.last_reference, zlib_tails),
             .zstd => {
                 if (wire_case.zstd_stream_reference) {
                     return zstdDecompressStream(a, dst, wire_case.wire);
@@ -500,6 +502,7 @@ const Harness = struct {
         window_bits: c_int,
         dictionary: ?[]const u8,
         observation: *reporting.ReferenceObservation,
+        trailing_rejections: ?*usize,
     ) ?[]u8 {
         var stream: c.z_stream = std.mem.zeroes(c.z_stream);
         if (c.inflateInit2(&stream, window_bits) != c.Z_OK) {
@@ -542,6 +545,13 @@ const Harness = struct {
         if (code != c.Z_STREAM_END) {
             a.free(dst);
             return null;
+        }
+        if (trailing_rejections) |count| {
+            if (observation.input_remaining.? != 0) {
+                count.* += 1;
+                a.free(dst);
+                return null;
+            }
         }
         const written = dst.len - stream.avail_out;
         return a.realloc(dst, written) catch dst[0..written];
@@ -587,11 +597,9 @@ const Harness = struct {
         return a.realloc(dst, total) catch dst[0..total];
     }
 
-    /// Streaming libzstd reference. The one-shot API rejects skippable frames
-    /// and trailing concatenated members, while Vort's frame loop accepts them,
-    /// so the streaming API is the matching interoperability contract. A
-    /// truncated stream that makes zero progress on the final call is treated
-    /// as a rejection.
+    /// Streaming libzstd reference with explicit consumption and completion
+    /// checks. A truncated stream that makes zero progress on the final call
+    /// is treated as a rejection.
     fn zstdDecompressStream(a: std.mem.Allocator, dst: []u8, wire: []const u8) ?[]u8 {
         // Match ZSTD_decompress, which accepts an empty input as a zero-byte
         // result; Vort's frame loop takes the same empty-output shortcut.
@@ -1710,6 +1718,7 @@ pub fn main(init: std.process.Init) !void {
     var deep = false;
     var max_size: usize = 8192;
     var brotli_audit: reporting.BrotliReferenceAudit = .{};
+    var zlib_exact_input = false;
     var divergence_directory: ?[]const u8 = null;
     var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
@@ -1726,6 +1735,8 @@ pub fn main(init: std.process.Init) !void {
                 return error.InvalidBrotliReferenceFloor;
         } else if (std.mem.eql(u8, arg, "--brotli-reference-exact-input")) {
             brotli_audit.exact_input = true;
+        } else if (std.mem.eql(u8, arg, "--zlib-reference-exact-input")) {
+            zlib_exact_input = true;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
             const name = arg["--only=".len..];
             inline for (codecs) |codec| {
@@ -1748,6 +1759,7 @@ pub fn main(init: std.process.Init) !void {
     if (replay_directory != null or divergence_directory != null) {
         if (brotli_audit.output_floor != 0) return error.ConflictingBrotliReferenceFloorArtifactModes;
         if (brotli_audit.exact_input) return error.ConflictingBrotliReferenceInputArtifactModes;
+        if (zlib_exact_input) return error.ConflictingZlibReferenceInputArtifactModes;
     }
 
     // The C reference libraries allocate through libc; use the same allocator
@@ -1761,6 +1773,7 @@ pub fn main(init: std.process.Init) !void {
         .only = only,
         .deep = deep,
         .brotli_audit = brotli_audit,
+        .zlib_exact_input = zlib_exact_input,
     };
     defer {
         for (harness.failures.items) |failure| allocator.free(failure.detail);
@@ -1804,7 +1817,7 @@ pub fn main(init: std.process.Init) !void {
         .zlib = std.mem.span(c.zlibVersion()),
         .zstd = std.mem.span(c.ZSTD_versionString()),
         .brotli_decoder_version_encoded = c.BrotliDecoderVersion(),
-    }, harness.brotli_audit);
+    }, harness.brotli_audit, if (harness.zlib_exact_input) harness.zlib_trailing_rejections else null);
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
             failure.codec.label(),
@@ -1836,6 +1849,7 @@ fn printUsage(init: std.process.Init) !void {
         \\                                   [--only=raw-deflate|zlib|gzip|zstd|brotli]
         \\                                   [--brotli-reference-floor=BYTES]
         \\                                   [--brotli-reference-exact-input]
+        \\                                   [--zlib-reference-exact-input]
         \\                                   [--divergence-dir=NEW_DIRECTORY]
         \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\

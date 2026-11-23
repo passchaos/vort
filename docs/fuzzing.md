@@ -107,7 +107,10 @@ with artifact capture or replay. Omit it to use the historical capacity.
 Brotli too and rejects otherwise successful decodes if input remains. Its
 summary counts those unconsumed tails; it can be combined with the capacity
 floor but not capture or replay. Without it, ordinary Brotli retains the
-historical one-shot reference policy.
+historical one-shot reference policy. `--zlib-reference-exact-input` requires
+complete input for single-stream raw Deflate, zlib and gzip reference calls.
+It reports successful prefixes refused for leaving a tail, leaves the
+already-strict multi-member gzip reference unchanged, and is also summary-only.
 
 `tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
 complements the raw-byte target with generated valid wires. A deterministic
@@ -164,9 +167,8 @@ truncation and mutation pipeline:
   and OS fields through both the stored and best encoders;
 - Zstd content checksums, unknown content size, explicit Window_Log 10
   frames, two-frame concatenation and skippable frames in leading, trailing
-  and interspersed positions. The libzstd one-shot API rejects skippable and
-  concatenated suffixes while Vort's frame loop accepts them, so those
-  variants use a `ZSTD_decompressStream` reference whose completion rule is
+  and interspersed positions. These variants use a `ZSTD_decompressStream`
+  reference to inspect frame completion explicitly. Its completion rule is
   full input consumption plus a zero final hint (the API buffers partial
   magic bytes and returns a positive hint for truncated streams, and returns
   0 at every frame boundary);

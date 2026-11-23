@@ -139,7 +139,9 @@ pub const BrotliReferenceAudit = struct {
     exact_input: bool = false,
     trailing_rejections: usize = 0,
 };
-const default_reference_capacity_scope = "Reference destination request is min(max(source.len *% 4,4096),1048576)+1. Vort one-shot routes are mostly unbounded. zlib inflate single-stream routes require Z_STREAM_END but do not require avail_in==0; consumed/remaining observations never change that verdict.";
+const destination_scope = "Reference destination request is min(max(source.len *% 4,4096),1048576)+1. Vort one-shot routes are mostly unbounded.";
+const default_zlib_input_scope = " zlib inflate single-stream routes require Z_STREAM_END but do not require avail_in==0; consumed/remaining observations never change that verdict.";
+const default_reference_capacity_scope = destination_scope ++ default_zlib_input_scope;
 pub const Manifest = struct {
     schema: []const u8 = "vort.codec-differential.classification.v1",
     seed: u64,
@@ -355,7 +357,7 @@ pub const Reporter = struct {
         return .{ .path = name, .bytes = bytes.len, .sha256 = try self.allocator.dupe(u8, &hex) };
     }
 
-    pub fn finish(self: *Reporter, writer: *std.Io.Writer, stats: Stats, seed: u64, deep: bool, only: []const u8, references: References, audit: BrotliReferenceAudit) !void {
+    pub fn finish(self: *Reporter, writer: *std.Io.Writer, stats: Stats, seed: u64, deep: bool, only: []const u8, references: References, audit: BrotliReferenceAudit, zlib_trailing_rejections: ?usize) !void {
         var wires = self.wire_hash;
         var mutations = self.mutation_hash;
         var wire_digest: [32]u8 = undefined;
@@ -370,14 +372,20 @@ pub const Reporter = struct {
         else
             "";
         const input_scope = if (audit.exact_input) " Ordinary Brotli uses streaming decode with full input consumption required." else "";
+        const zlib_input_scope = if (zlib_trailing_rejections != null)
+            " zlib inflate single-stream routes require Z_STREAM_END and avail_in==0."
+        else
+            default_zlib_input_scope;
         var scope_buffer: [512]u8 = undefined;
-        const capacity_scope = try std.fmt.bufPrint(&scope_buffer, "{s}{s}{s}", .{ default_reference_capacity_scope, floor_scope, input_scope });
+        const capacity_scope = try std.fmt.bufPrint(&scope_buffer, "{s}{s}{s}{s}", .{ destination_scope, zlib_input_scope, floor_scope, input_scope });
         const manifest: Manifest = .{ .seed = seed, .deep = deep, .only = only, .reference_versions = references, .stats = stats, .classified = stats.classified(), .generated_wire_digest_sha256 = &wire_hex, .mutation_sequence_digest_sha256 = &mutation_hex, .bounds = self.bounds, .artifacts = self.counts, .samples = self.samples.items, .reference_capacity_scope = capacity_scope };
         const body = try std.json.Stringify.valueAlloc(self.allocator, manifest, .{});
         defer self.allocator.free(body);
         try printLegacy(writer, stats, seed, deep, only);
         if (audit.exact_input)
             try writer.print("  Brotli exact-input trailing rejections={d}\n", .{audit.trailing_rejections});
+        if (zlib_trailing_rejections) |count|
+            try writer.print("  zlib exact-input trailing rejections={d}\n", .{count});
         try writer.print("  actual external-reference valid checks={d} ok={d}; Vort-only contracts={d}\nclassification_json: {s}\n", .{ manifest.classified.external_valid_checks, manifest.classified.external_valid_ok, manifest.classified.vort_only_valid_contracts, body });
         if (self.directory) |directory| {
             if (body.len > self.bounds.max_manifest_bytes) return error.ArtifactManifestLimitExceeded;
