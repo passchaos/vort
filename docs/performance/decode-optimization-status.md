@@ -2953,3 +2953,12 @@ also pass. Deflate adds an independent length-257/distance-257 fixture with a
 256-byte CINFO declaration, validating the existing zlib-compatible tolerance
 across both incremental entrypoints, tiny buffers, checksums, tails and reset.
 See [the functional contract record](codec-history-error-contracts-20261123.md).
+
+Final codec history-contract gates: combined Debug `test check check-wasm`
+passes 410/410 steps and 5,834/5,836 tests (two skipped); the separate native/
+Wasm check passes 406/406 steps. Post-rebase Brotli/zlib focused suites pass
+24/24 and 50/50. Change-specific ReleaseSafe suites pass; the optional full
+ReleaseSafe compile was cancelled after the required gates completed.
+[Final receipt and logs](data/codec-history-errors-20261123/validation.json)
+and the [next recent-distance evidence boundary](brotli-recent-match-evidence-20261123.md)
+are retained for continuation.
