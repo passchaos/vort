@@ -2941,3 +2941,15 @@ All measured paired wire hashes/sizes matched; the latter two also passed
 restored. Raw rounds, source patches, hashes and reproduction scripts are in
 [data/zstd-repeat-probe-screen-20261123](data/zstd-repeat-probe-screen-20261123/README.md).
 These short unpinned screens carry no industry ranking or RSS claim.
+
+## Brotli history errors and Deflate CINFO contracts (2026-11-23)
+
+The owned incremental Brotli decoder now maps `InvalidMatch` to
+`OutputLimitExceeded` only for a confirmed history-ring capacity failure.
+Malformed static/compound dictionary references and zero distances retain their
+format error under a history cap. Two real-wire regressions failed before the
+fix and pass afterward in Debug/ReleaseSafe; existing stream/counter contracts
+also pass. Deflate adds an independent length-257/distance-257 fixture with a
+256-byte CINFO declaration, validating the existing zlib-compatible tolerance
+across both incremental entrypoints, tiny buffers, checksums, tails and reset.
+See [the functional contract record](codec-history-error-contracts-20261123.md).

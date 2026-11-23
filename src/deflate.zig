@@ -597,6 +597,10 @@ test "incremental zlib encoder window contracts" {
     try @import("deflate/zlib/incremental_window_tests.zig").contracts(@This());
 }
 
+test "zlib incremental advertised window compatibility contracts" {
+    try @import("deflate/zlib/incremental_decode_window_tests.zig").contracts(@This());
+}
+
 // Private adapters let the independent window oracle inspect candidates that
 // a public best/adaptive call may discard. Production APIs retain their normal
 // selection policy and do not expose parser internals.
