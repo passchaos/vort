@@ -1,0 +1,903 @@
+{
+  "schema": "vort.brotli.nonrecent-full-corpus-paired.v1",
+  "pairs": 3,
+  "iterations": 3,
+  "target_limits": [
+    8192,
+    65536
+  ],
+  "control_limits": [
+    4096
+  ],
+  "rows": [
+    {
+      "case": "dickens",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.124869579407783,
+        1.0887991644949908,
+        1.0906262905434472
+      ],
+      "speed_ratio": 1.1013076040109815,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "mozilla",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.038542864730733,
+        1.0027241716879696,
+        1.0088536058340296
+      ],
+      "speed_ratio": 1.0165873167543558,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "mr",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0034492556276644,
+        0.9991525964723589,
+        1.0055348259101002
+      ],
+      "speed_ratio": 1.0027087028771906,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "nci",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0320520749422153,
+        1.000948239478131,
+        1.0013599089641152
+      ],
+      "speed_ratio": 1.0113492196625926,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "ooffice",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0002954699833622,
+        1.0009889151705123,
+        1.0030560286576324
+      ],
+      "speed_ratio": 1.001446118405837,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "osdb",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0216212305767878,
+        1.0070967221915,
+        1.0122409303054365
+      ],
+      "speed_ratio": 1.013635149574542,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "reymont",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0251311675443906,
+        1.0020674580401776,
+        1.0435480514893454
+      ],
+      "speed_ratio": 1.0234413254609602,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "samba",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0302683323652646,
+        1.030510494588498,
+        1.0193717172043135
+      ],
+      "speed_ratio": 1.0267036750673504,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "sao",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        0.9966360796104471,
+        1.0076563861856545,
+        0.9946882212033504
+      ],
+      "speed_ratio": 0.9996439624871433,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "webster",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.044965856132185,
+        1.0329972267020426,
+        1.036140317765479
+      ],
+      "speed_ratio": 1.038022123146967,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "x-ray",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.0293791298749906,
+        1.0107345698559396,
+        1.010397108072107
+      ],
+      "speed_ratio": 1.0167984085604211,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "xml",
+      "limit": 8192,
+      "quality": 10,
+      "pair_ratios": [
+        1.001026999867697,
+        1.004617003229523,
+        0.9747643336102686
+      ],
+      "speed_ratio": 0.9933797788984112,
+      "sample_batch": "nonrecent-pilot-8192-q10"
+    },
+    {
+      "case": "dickens",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.0598062155929282,
+        1.0710575204650812,
+        1.0899093270424614
+      ],
+      "speed_ratio": 1.0735193463539723,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "mozilla",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.0025862768518572,
+        0.9971746022390382,
+        1.002761415371982
+      ],
+      "speed_ratio": 1.0008374008013297,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "mr",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.0032682454287267,
+        1.007952788682226,
+        1.004405212829005
+      ],
+      "speed_ratio": 1.0052067705370775,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "nci",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        0.9963867223188558,
+        0.9957247665551954,
+        1.0054394943586742
+      ],
+      "speed_ratio": 0.9991738527866385,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "ooffice",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        0.9987430026383222,
+        1.055878474422076,
+        0.9988857826145725
+      ],
+      "speed_ratio": 1.0174845870218472,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "osdb",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.00312432541987,
+        1.0058492926347293,
+        1.0096725812605445
+      ],
+      "speed_ratio": 1.0062118165131715,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "reymont",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.0001988138029356,
+        1.009276334424945,
+        1.0084627422858197
+      ],
+      "speed_ratio": 1.0059709225002618,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "samba",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.0175404873207572,
+        1.020660877494454,
+        1.0049225808344793
+      ],
+      "speed_ratio": 1.0143517683089864,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "sao",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.0006357483766686,
+        0.9954579694343785,
+        0.9998921515442059
+      ],
+      "speed_ratio": 0.9986593378831854,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "webster",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        1.026381879676513,
+        1.0305359526573799,
+        1.023895032303024
+      ],
+      "speed_ratio": 1.0269339695199347,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "x-ray",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        0.9995876026285034,
+        1.0065479929330126,
+        1.0054990245694142
+      ],
+      "speed_ratio": 1.0038735246660135,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "xml",
+      "limit": 8192,
+      "quality": 11,
+      "pair_ratios": [
+        0.9997883064232151,
+        0.972719035272253,
+        0.9923690601210017
+      ],
+      "speed_ratio": 0.9882258903467604,
+      "sample_batch": "nonrecent-pilot-8192-q11"
+    },
+    {
+      "case": "dickens",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        0.9962603813197396,
+        1.0062850512058914,
+        0.9946572439835434
+      ],
+      "speed_ratio": 0.9990543389283127,
+      "sample_batch": "nonrecent-pilot-65536-q10"
+    },
+    {
+      "case": "mozilla",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        0.9819951235291388,
+        0.9926360743313917,
+        0.9934408250866207
+      ],
+      "speed_ratio": 0.9893435563469124,
+      "sample_batch": "nonrecent-pilot-65536-q10"
+    },
+    {
+      "case": "nci",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.0070287533913587,
+        0.9988844321844434,
+        0.9972007567177207
+      ],
+      "speed_ratio": 1.0010287981269337,
+      "sample_batch": "nonrecent-pilot-65536-q10"
+    },
+    {
+      "case": "x-ray",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.0672856551094436,
+        1.055350492405315,
+        1.0663817882989055
+      ],
+      "speed_ratio": 1.062992098557309,
+      "sample_batch": "nonrecent-pilot-65536-q10"
+    },
+    {
+      "case": "dickens",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        0.9961343049977491,
+        1.0166646927485075,
+        1.0185588250925268
+      ],
+      "speed_ratio": 1.0104013504771105,
+      "sample_batch": "nonrecent-pilot-65536-q11"
+    },
+    {
+      "case": "mozilla",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.0011667510300604,
+        0.9981601281491238,
+        1.0056753868634567
+      ],
+      "speed_ratio": 1.0016626630082734,
+      "sample_batch": "nonrecent-pilot-65536-q11"
+    },
+    {
+      "case": "nci",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        0.9966156405881131,
+        0.9942329762596113,
+        0.9884736673433082
+      ],
+      "speed_ratio": 0.9931015402802804,
+      "sample_batch": "nonrecent-pilot-65536-q11"
+    },
+    {
+      "case": "x-ray",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.0400037578265608,
+        1.0211489692375393,
+        0.9862184696609093
+      ],
+      "speed_ratio": 1.0155447089928444,
+      "sample_batch": "nonrecent-pilot-65536-q11"
+    },
+    {
+      "case": "mr",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.014908031302776,
+        1.0119210164977235,
+        0.9837530069933851
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 1.0034285631641537
+    },
+    {
+      "case": "ooffice",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        0.9930541711920738,
+        0.9949182834121454,
+        1.0063565427215848
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 0.9980923849247668
+    },
+    {
+      "case": "osdb",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        0.9905426143113786,
+        0.9987588922387507,
+        1.013753541557626
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 1.0009723226164198
+    },
+    {
+      "case": "reymont",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.0076212273728415,
+        0.9947918964001964,
+        0.9988541380594398
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 1.0004081167733032
+    },
+    {
+      "case": "samba",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.0126524252735967,
+        1.0084868979981083,
+        1.0110414623655097
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 1.0107254730086441
+    },
+    {
+      "case": "sao",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        0.9991969209594221,
+        0.9856385468237066,
+        0.9990629177253598
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 0.9946123987120257
+    },
+    {
+      "case": "webster",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.0054766592733906,
+        1.0066018375089594,
+        1.0152231428741418
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 1.0090911730332994
+    },
+    {
+      "case": "xml",
+      "limit": 65536,
+      "quality": 10,
+      "pair_ratios": [
+        1.0043563318634727,
+        1.0069934840016368,
+        1.01411731213728
+      ],
+      "sample_batch": "nonrecent-extra-65536-q10",
+      "speed_ratio": 1.0084806266367181
+    },
+    {
+      "case": "mr",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.0030669389028657,
+        0.9947207827559134,
+        1.0065660151967553
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 1.0014388997926684
+    },
+    {
+      "case": "ooffice",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.000413598729958,
+        0.9877905825773395,
+        0.9947072576280219
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.994290412012206
+    },
+    {
+      "case": "osdb",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.0081800933600626,
+        0.9960353854777888,
+        0.9498099996519733
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.9843507451169221
+    },
+    {
+      "case": "reymont",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        0.9764744675022615,
+        0.996404839401006,
+        0.940699120582982
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.970917851222497
+    },
+    {
+      "case": "samba",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        0.9986866455035256,
+        1.00222165107391,
+        0.9366542100975848
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.9787176887157887
+    },
+    {
+      "case": "sao",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.0026152370633536,
+        0.9850741215294934,
+        1.0041472989115519
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.9972411976739646
+    },
+    {
+      "case": "webster",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.000503018938539,
+        1.0107332713857613,
+        0.9845345184338697
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.9985319624728691
+    },
+    {
+      "case": "xml",
+      "limit": 65536,
+      "quality": 11,
+      "pair_ratios": [
+        1.000760623787438,
+        1.0002301548713772,
+        0.9919105645204395
+      ],
+      "sample_batch": "nonrecent-extra-65536-q11",
+      "speed_ratio": 0.9976255337003913
+    },
+    {
+      "case": "dickens",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.013813876966092,
+        1.0209637833028515,
+        1.0175601067781477
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 1.0174417316085869
+    },
+    {
+      "case": "mozilla",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        0.9800597074576899,
+        0.9857106693358274,
+        0.998865705696912
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 0.9881806941089178
+    },
+    {
+      "case": "mr",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.003577399302259,
+        1.0043375399682093,
+        1.0057031162122074
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 1.0045389669116092
+    },
+    {
+      "case": "nci",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        0.9997244152208429,
+        1.0097800907902672,
+        1.0043876546116461
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 1.0046223199194528
+    },
+    {
+      "case": "ooffice",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.0226195723126434,
+        1.0061589110154086,
+        0.9558853170438475
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 0.9944787090967222
+    },
+    {
+      "case": "osdb",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        0.9977034366815486,
+        0.9995335060691845,
+        0.996725459764228
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 0.9979867890621884
+    },
+    {
+      "case": "reymont",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.0074015174128395,
+        1.0046451036416657,
+        1.0058164984359819
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 1.0059537391212132
+    },
+    {
+      "case": "samba",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.003975827282679,
+        0.987832383532875,
+        1.0014952679402498
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 0.9977425012540277
+    },
+    {
+      "case": "sao",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        0.9978570610150581,
+        1.0006518601840217,
+        0.9952642949939106
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 0.9979219805666519
+    },
+    {
+      "case": "webster",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        0.9591924855573094,
+        0.9592326863940396,
+        1.0003194096019699
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 0.9727236555165416
+    },
+    {
+      "case": "x-ray",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.004851300819866,
+        1.0012291645664297,
+        0.9964109406848644
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 1.0008244948765583
+    },
+    {
+      "case": "xml",
+      "limit": 4096,
+      "quality": 10,
+      "pair_ratios": [
+        1.0089217686782215,
+        1.0038723307176893,
+        0.9908923838955254
+      ],
+      "sample_batch": "nonrecent-extra-4096-q10",
+      "speed_ratio": 1.0011999571716375
+    },
+    {
+      "case": "dickens",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0035568775894965,
+        1.0222973183874522,
+        1.0058930036556344
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.0105481241072163
+    },
+    {
+      "case": "mozilla",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0009942355228927,
+        1.014345110105798,
+        1.0021954898343017
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.005826916619501
+    },
+    {
+      "case": "mr",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0000050095538464,
+        1.0010622710616224,
+        1.0062525759167167
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.0024362383030423
+    },
+    {
+      "case": "nci",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0042342221524172,
+        1.0039838765702738,
+        0.9972631130959112
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.0018218595662844
+    },
+    {
+      "case": "ooffice",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0013323584609608,
+        1.0083116442432203,
+        1.0258797252767968
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.0117887046061276
+    },
+    {
+      "case": "osdb",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        0.9914615396792081,
+        0.9994795060815995,
+        0.9983268402005607
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 0.9964163326093921
+    },
+    {
+      "case": "reymont",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0032616403995869,
+        1.00680324261237,
+        1.0090778154235693
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.006378052873091
+    },
+    {
+      "case": "samba",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0035100594253468,
+        1.0053544291097811,
+        0.9919114638325452
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.000240906618347
+    },
+    {
+      "case": "sao",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        0.9970263023725021,
+        0.9958162672081631,
+        1.0041612819397252
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 0.9989945094482336
+    },
+    {
+      "case": "webster",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0038592457527387,
+        1.0009154747215852,
+        1.0139577956829213
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.0062287037272168
+    },
+    {
+      "case": "x-ray",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        0.9990993463487521,
+        0.9969073408328165,
+        1.0016705625816116
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 0.9992238540039735
+    },
+    {
+      "case": "xml",
+      "limit": 4096,
+      "quality": 11,
+      "pair_ratios": [
+        1.0022071990385182,
+        1.0003907019440297,
+        1.0028679612129732
+      ],
+      "sample_batch": "nonrecent-extra-4096-q11",
+      "speed_ratio": 1.0018214063663093
+    }
+  ],
+  "target_rows": 48,
+  "control_rows": 24,
+  "target_geomean": 1.0082523991614385,
+  "control_geomean": 1.0010207531929445,
+  "all_geomean": 1.0058360642456126,
+  "rows_below_098": 3,
+  "sample_sources": [
+    "nonrecent-pilot",
+    "nonrecent-extra"
+  ],
+  "scope_reason": "Source preparation gate is input>=8KiB; prior recent-cache pilot labels are retained separately. Full targets+unaffected4KiBcontrols frozen before expansion decision.",
+  "target_block_bootstrap_ci95": [
+    1.0055360444483328,
+    1.0109152212596044
+  ],
+  "control_block_bootstrap_ci95": [
+    0.9997271021497234,
+    1.002113653277602
+  ],
+  "ci_scope": "fixed corpus;resampleprocess-pairblocks independentlybyactualsample_batch,sizeandquality;10000drawsseed20261123",
+  "adoption_gate": {
+    "target_geomean_at_least_103": false,
+    "target_ci_excludes_parity": true,
+    "every_row_at_least_098": false
+  }
+}

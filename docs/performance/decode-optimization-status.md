@@ -2990,3 +2990,19 @@ The [next structural boundary](data/brotli-recent-evidence-full-20261123/q10-nex
 is nonrecent common command/distance preparation and winner-only output, with
 same-last recoding and early-return semantics preserved. An isolated prototype
 is investigating it; no new encoder optimization is adopted.
+
+## Nonrecent prepared-context complete screen (2026-11-23)
+
+A separate prototype shares ordinary nonrecent command/distance/same-last
+preparation and uses exact counting plus winner emission. Debug/ReleaseSafe
+and actual x86/WASI proofs pass33tests/104directrows;50completepublicwires
+and156API/profile/quota entries match baseline. No encoder source is adopted.
+
+Source eligibility is input>=8KiB, so the complete fixed matrix treats8/64KiB
+as48targetrows and4KiB as24unaffected controls across12files,q10/q11.
+Target1.008252x CI[1.005536,1.010915],controls1.001021x,three rows below0.98x.
+Despite a positive interval,the3% target bar and row floor fail;candidate
+rejected. [Corrected scope,source,proofs and raw samples](data/brotli-nonrecent-context-full-20261123/README.md)
+are retained,including the originalpilotlabels and separate expansionbatches.
+The remaining literal-context proposal/search cost requires a larger measured
+structural improvement before claiming codec leadership.

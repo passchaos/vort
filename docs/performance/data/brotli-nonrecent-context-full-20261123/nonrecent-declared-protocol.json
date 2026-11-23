@@ -1,0 +1,25 @@
+{
+  "declared_at_utc": "2026-11-23T06:38:59.269153+00:00",
+  "reason": "new source gate requires input>=8KiB;recent-cache prior8KiB/64KiB labelsdo notdefine nonrecent scope",
+  "target_sizes": [
+    8192,
+    65536
+  ],
+  "control_sizes": [
+    4096
+  ],
+  "qualities": [
+    10,
+    11
+  ],
+  "corpus": "all12Silesiafiles at each size",
+  "pairs": 3,
+  "iterations": 3,
+  "affinity_cpu": 2,
+  "target_gate": ">=1.03 geomean and95%paired-blockCI lower>1",
+  "row_floor": ">=0.98 everyrow",
+  "wire": "exact",
+  "baseline_sha256": "f15d100c21958bb91b7babb077df46cfee1772f596a7630267b10777841b7585",
+  "candidate_sha256": "0dfc1f4f5fe3fd7da8bee8bbe01c5fa47b12d772a4678fd926eb3b0bd1a662f0",
+  "prior_pilot_retained": true
+}

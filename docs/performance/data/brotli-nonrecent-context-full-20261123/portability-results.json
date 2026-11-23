@@ -1,0 +1,182 @@
+{
+  "schema": "vort.nonrecent-context-portability-summary.v1",
+  "status": "passed",
+  "snapshot": "/tmp/vort-br-nonrecent-context-20261123",
+  "snapshot_base_revision": "b929184e4f815773f9fde0d2c40224a0a5dcf938",
+  "candidate": "nonrecent-context-shared-preparation",
+  "source_manifest": {
+    "path": "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/source-sha256.json",
+    "sha256": "a9b315e04ef8eb524a96f1bce70ccb28bf41454e231c8cf912aea30e7399bd54"
+  },
+  "source_changes": false,
+  "performance_runs": false,
+  "all_compile_run_sessions_closed": true,
+  "sessions": [
+    27718,
+    35509
+  ],
+  "completed_at_utc": "2026-11-23T06:28:09.768011+00:00",
+  "targets": {
+    "x86-linux-musl": {
+      "path": "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/x86-linux-musl-receipt.json",
+      "sha256": "e95baee03f49352c52adba587545c49240ca46df59c199b58f3fa5b99a233441",
+      "artifact": {
+        "path": "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/nonrecent-context-x86-linux-musl",
+        "sha256": "3747c7be03eeef8c6bfcce0c3d5254f0051c066e6c1da2c1736aa500df4b2da0",
+        "size_bytes": 12420484
+      },
+      "object_compile_command": [
+        "zig",
+        "build-obj",
+        "src/br/encoder/record_optimal_object.zig",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "x86-linux-musl",
+        "-femit-bin=/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/record-optimal-x86-linux-musl.o"
+      ],
+      "compile_command": [
+        "zig",
+        "test",
+        "src/br.zig",
+        "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/record-optimal-x86-linux-musl.o",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "x86-linux-musl",
+        "--test-filter",
+        "Brotli nonrecent context",
+        "--test-no-exec",
+        "-femit-bin=/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/nonrecent-context-x86-linux-musl",
+        "--name",
+        "nonrecent-context-x86-linux-musl"
+      ],
+      "run_command": [
+        "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/nonrecent-context-x86-linux-musl",
+        "--seed=0x20261123"
+      ],
+      "mode": "ReleaseSafe",
+      "object_compile_exit_code": 0,
+      "compile_exit_code": 0,
+      "run_exit_code": 0,
+      "trap": null,
+      "wasi_stack_bytes": null,
+      "proof": {
+        "tests_passed": 33,
+        "direct_cold_warm_count_emit_rows": 104,
+        "public_q10_q11_wires": 2,
+        "actual_public_nonrecent_groups": 14,
+        "actual_allocation_failures": 2,
+        "valid_common_emit_failures": 2,
+        "coverage": [
+          "same-last-on-off-accepted-rejected",
+          "cold-warm-count-emission-wire-stat-equality",
+          "command-cache-below-above-128",
+          "suffix-bounded16-full64-contexts",
+          "ordinary-greedy-lazy",
+          "exact-and-mixed-exact-ordinary",
+          "static-dictionary-with-ordinary-copy",
+          "public-dickens-q10-q11",
+          "atomic-common-recoding-capture",
+          "mismatch-invalidate-reset-retry",
+          "metadata-window-disabled-context-fallback",
+          "special-distance-context-cold-fallback",
+          "nonrecent-no-explicit-context-early-return",
+          "emit-OOM-and-exact-heap-cap-minus-one-rollback"
+        ]
+      }
+    },
+    "wasm32-wasi": {
+      "path": "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/wasm32-wasi-receipt.json",
+      "sha256": "61d9a5af0ed87cf37e8bf0a4260a42e8daedb95e2f4e9e47ae961916402bf3a6",
+      "artifact": {
+        "path": "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/nonrecent-context-wasm32-wasi.wasm",
+        "sha256": "1b03b3644909e7753e98167268330a99abcb4fcf352a1aac165700fc833bddce",
+        "size_bytes": 8982640
+      },
+      "object_compile_command": [
+        "zig",
+        "build-obj",
+        "src/br/encoder/record_optimal_object.zig",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "wasm32-wasi",
+        "-femit-bin=/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/record-optimal-wasm32-wasi.o"
+      ],
+      "compile_command": [
+        "zig",
+        "test",
+        "src/br.zig",
+        "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/record-optimal-wasm32-wasi.o",
+        "-O",
+        "ReleaseSafe",
+        "-target",
+        "wasm32-wasi",
+        "--test-filter",
+        "Brotli nonrecent context",
+        "--test-no-exec",
+        "-femit-bin=/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/nonrecent-context-wasm32-wasi.wasm",
+        "--name",
+        "nonrecent-context-wasm32-wasi",
+        "--stack",
+        "16777216"
+      ],
+      "run_command": [
+        "node",
+        "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/run_wasi_receipt.mjs",
+        "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/nonrecent-context-wasm32-wasi.wasm",
+        "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/wasm32-wasi-execution.json",
+        "--seed=0x20261123"
+      ],
+      "mode": "ReleaseSafe",
+      "object_compile_exit_code": 0,
+      "compile_exit_code": 0,
+      "run_exit_code": 0,
+      "trap": null,
+      "wasi_stack_bytes": 16777216,
+      "proof": {
+        "tests_passed": 33,
+        "direct_cold_warm_count_emit_rows": 104,
+        "public_q10_q11_wires": 2,
+        "actual_public_nonrecent_groups": 14,
+        "actual_allocation_failures": 2,
+        "valid_common_emit_failures": 2,
+        "coverage": [
+          "same-last-on-off-accepted-rejected",
+          "cold-warm-count-emission-wire-stat-equality",
+          "command-cache-below-above-128",
+          "suffix-bounded16-full64-contexts",
+          "ordinary-greedy-lazy",
+          "exact-and-mixed-exact-ordinary",
+          "static-dictionary-with-ordinary-copy",
+          "public-dickens-q10-q11",
+          "atomic-common-recoding-capture",
+          "mismatch-invalidate-reset-retry",
+          "metadata-window-disabled-context-fallback",
+          "special-distance-context-cold-fallback",
+          "nonrecent-no-explicit-context-early-return",
+          "emit-OOM-and-exact-heap-cap-minus-one-rollback"
+        ]
+      }
+    }
+  },
+  "generic_wasi_execution": {
+    "path": "/tmp/vort-br-nonrecent-context-20261123/proof-artifacts/portability/wasm32-wasi-execution.json",
+    "sha256": "bb522fb6fd22a753399a35ff118ae61664735a92373bb6b594bb00db9222ff51"
+  },
+  "scripts_sha256": {
+    "run_portability.py": "eb7d3099fe007f0e78483bcba1ff839c9ef70af4b3da3d98dd2bd4266ac78257",
+    "run_wasi_receipt.mjs": "209a83bd47adcd22132abf2756a7a0bd4e286b7439b8f050e0f1130761641a87"
+  },
+  "counted_group_boundaries": [
+    "standard-window-only",
+    "complete-stream-prefix-final-meta-block",
+    "no-metadata",
+    "distance-alphabet-at-most-79",
+    "no-split-or-model-final-state-side-effects",
+    "exact-command-0-15-parameters",
+    "independent-distance-context-writer-not-shared"
+  ],
+  "wasi_stack_scope": "explicit16MiB automatic test-stack reservation; existing requested-heap quota proofs unchanged"
+}
