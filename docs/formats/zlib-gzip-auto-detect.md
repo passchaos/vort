@@ -17,6 +17,16 @@ trailing-prefix recovery. Zlib-only `requiredDictionaryId` and
 `InvalidStreamState` for gzip. Explicit `allow_concatenated` continues with the
 selected wrapper type only, while a different wrapper is trailing data.
 
+The direct zlib/gzip incremental decoders and the auto facade accept
+`max_members`, an independent logical-stream cap that includes empty members.
+It defaults to unlimited. Once a complete fixed wrapper header has been
+validated, an excess member returns `OutputLimitExceeded`, before zlib
+DICTID, gzip optional fields or events, or DEFLATE plaintext. The fixed
+header may have been consumed. Previously completed counts and output remain
+committed. A malformed or partial header keeps its existing error or
+input-wait behavior, and an unrecognized allowed tail is not a member.
+`reset` starts a new count. One-shot decoding is unchanged by this option.
+
 `stepWithHeaderEvents` and `stepToBlockBoundaryWithHeaderEvents` forward a
 per-call [gzip header observer](gzip-header-events.md) after detecting gzip.
 The two-byte detection prefix does not produce or duplicate events. `.complete`

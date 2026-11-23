@@ -579,6 +579,10 @@ test "zlib or gzip auto wrapper contracts for gzip header events" {
     try @import("deflate/tests/zlib_or_gzip_auto_header_events.zig").contracts(@This());
 }
 
+test "zlib or gzip auto wrapper contracts for incremental member limits" {
+    try @import("deflate/incremental/tests/member_limit_tests.zig").contracts(@This());
+}
+
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
     return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
 }

@@ -58,6 +58,8 @@ pub fn Decoder(comptime Codec: type) type {
         pub const HeaderObserver = header_events.Observer;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum gzip members per logical stream, including empty ones.
+            max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
             max_header_metadata_len: usize = 1 << 20,
             ignore_crc32: bool = false,
@@ -310,6 +312,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
+                    wrapper_count.admitMember(self.member_count, self.options.max_members) catch |err| return self.fail(.header, err);
                     self.flags = self.header[3];
                     if (observer) |sink| sink.emit(.{ .start = MemberHeader.fromFixed(
                         &self.header,

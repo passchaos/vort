@@ -32,6 +32,8 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Phase = enum { detecting, zlib, gzip };
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum members of the detected wrapper, including empty ones.
+            max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
             allow_concatenated: bool = false,
             allow_trailing_data: bool = false,
@@ -471,6 +473,7 @@ pub fn Decoder(comptime Codec: type) type {
         fn zlibOptions(options: Options) Codec.ZlibDecoder.Options {
             return .{
                 .max_output_len = options.max_output_len,
+                .max_members = options.max_members,
                 .expected_output_len = options.expected_output_len,
                 .allow_concatenated = options.allow_concatenated,
                 .ignore_adler = options.ignore_zlib_adler,
@@ -481,6 +484,7 @@ pub fn Decoder(comptime Codec: type) type {
         fn gzipOptions(options: Options) Codec.GzipDecoder.Options {
             return .{
                 .max_output_len = options.max_output_len,
+                .max_members = options.max_members,
                 .expected_output_len = options.expected_output_len,
                 .max_header_metadata_len = options.max_gzip_header_metadata_len,
                 .ignore_crc32 = options.ignore_gzip_crc32,

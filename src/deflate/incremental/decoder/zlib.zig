@@ -52,6 +52,8 @@ pub fn Decoder(comptime Codec: type) type {
         pub const CloneStorage = Codec.RawDecoder.CloneStorage;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum zlib members per logical stream, including empty ones.
+            max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
             allow_concatenated: bool = false,
             /// Ignore the Adler comparison while still reading a full footer
@@ -348,6 +350,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
+                    wrapper_count.admitMember(self.stream_count, self.options.max_members) catch |err| return self.fail(.header, err);
                     self.phase = if ((self.header[1] & 0x20) != 0) .dictid else .raw;
                 },
                 .dictid => {
