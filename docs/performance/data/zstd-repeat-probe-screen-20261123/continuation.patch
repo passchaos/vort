@@ -1,0 +1,42 @@
+diff --git a/src/zstd/match/double_fast.zig b/src/zstd/match/double_fast.zig
+index b5a4d0f2..fc356e17 100644
+--- a/src/zstd/match/double_fast.zig
++++ b/src/zstd/match/double_fast.zig
+@@ -2,6 +2,7 @@ const std = @import("std");
+ const lz77 = @import("../../lz77.zig");
+ const sequence_plan = @import("double_fast/sequence_plan.zig");
+ const sequence_parser = @import("double_fast/sequence_parser.zig");
++const repeat_probe = @import("double_fast/repeat_probe.zig");
+
+ // Upstream dfast gives both tables enough index bits to avoid letting common
+ // four-byte JSON/source prefixes continuously evict useful candidates. These
+@@ -63,7 +64,7 @@ pub fn planReuse(
+         // upstream's position+1 probe avoids the special zero-literal repcode
+         // mapping and cheaply captures a match after one pending literal.
+         const rep_position = if (position == anchor and
+-            matchAtDistance(input, position, reps[0], options).length == options.max_match)
++            repeat_probe.atLeast(input, position, reps[0], options, options.max_match).length == options.max_match)
+             position
+         else
+             position + 1;
+diff --git a/src/zstd/match/double_fast/sequence_parser.zig b/src/zstd/match/double_fast/sequence_parser.zig
+index 8882dbeb..4cfbbd23 100644
+--- a/src/zstd/match/double_fast/sequence_parser.zig
++++ b/src/zstd/match/double_fast/sequence_parser.zig
+@@ -2,6 +2,7 @@ const std = @import("std");
+ const builtin = @import("builtin");
+ const lz77 = @import("../../../lz77.zig");
+ const sequence_plan = @import("sequence_plan.zig");
++const repeat_probe = @import("repeat_probe.zig");
+
+ const text_section = switch (builtin.object_format) {
+     .elf => ".vort_zstd_fast_records",
+@@ -73,7 +74,7 @@ fn planReuseImpl(
+
+     while (position + 4 <= input.len) {
+         const rep_position = if (position == anchor and
+-            matchAtDistance(input, position, reps[0], options).length == options.max_match)
++            repeat_probe.atLeast(input, position, reps[0], options, options.max_match).length == options.max_match)
+             position
+         else
+             position + 1;

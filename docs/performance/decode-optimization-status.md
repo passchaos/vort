@@ -2929,3 +2929,15 @@ the next concrete encoder target: losing candidates rebuild the Huffman plan
 and stream length instead of costing once. The next encode step is a matched-
 strategy or equal-ratio comparison plus removal of repeated candidate costing,
 each with the full paired matrix and wire checks.
+
+## Zstd repeat-probe pruning screen (2026-11-23)
+
+Three exact-decision double-fast variants were rejected after paired whole-
+frame screens: rank-before-rep0 1.0068x, replacement endpoint filtering 0.9945x,
+and max-length continuation filtering 0.9999x over four 64 KiB Silesia prefixes
+at levels 1/2/3. Each had at least one row below the 0.98x control floor.
+All measured paired wire hashes/sizes matched; the latter two also passed
+36 wide 128 KiB cross-library/identity rows each. Production sources were
+restored. Raw rounds, source patches, hashes and reproduction scripts are in
+[data/zstd-repeat-probe-screen-20261123](data/zstd-repeat-probe-screen-20261123/README.md).
+These short unpinned screens carry no industry ranking or RSS claim.

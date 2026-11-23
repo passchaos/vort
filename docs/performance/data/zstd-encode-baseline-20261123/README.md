@@ -232,3 +232,9 @@ Order of work:
    (64 KiB/1 MiB, alternating pairs, 0.98x control floor). Only then consider
    the level-9 lookahead budget (512 to 256) and the controlled-search
    candidate loop.
+
+Follow-up: the rank, replacement endpoint and maximum-continuation pruning
+screens are now [recorded and rejected](../zstd-repeat-probe-screen-20261123/README.md).
+They retain exact measured wires but fail whole-operation throughput controls;
+future work should target shared analysis or repeated parser work rather than
+retrying these scalar checks.
