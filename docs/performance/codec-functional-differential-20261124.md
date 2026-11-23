@@ -35,3 +35,31 @@ screen. No compared pair that both accepted disagreed on plaintext.
 
 - Generated wire digest: `a0aa0970e844f2039eff114f41b9773612410da8b622b9a72e21d081cedfffe4`
 - Mutation sequence digest: `c7298bf5b0693261144eeabf3f35b2f08629355051a8fd252de0de9ce2afdc4f`
+
+## Brotli capacity follow-up
+
+Repeat the same seed, patterns, wire generation and mutations with the
+ordinary 4,097-byte reference destination and a 65,537-byte Brotli-only
+destination. Use system libbrotli 1.0.9 and repeat with local libbrotli 1.2.0
+(`558fc64`, its decoder and common libraries loaded together):
+
+```sh
+zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- --max-size=256
+zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --max-size=256 --brotli-reference-floor=65536
+# Repeat both commands with LD_LIBRARY_PATH=$HOME/Work/brotli/build-vort.
+```
+
+Both versions produce the same result:
+
+| Brotli reference destination | Both accept | Reference only | Vort only | Output mismatch |
+| ---: | ---: | ---: | ---: | ---: |
+| 4,097 | 4,912 | 747 | 14 | 0 |
+| 65,537 | 4,926 | 747 | 0 | 0 |
+
+All 14 observations become equal-output accepts with a larger buffer. The
+wire and mutation digests, valid and truncation results, and every other
+codec's classification stay unchanged. This explains the 14 Vort-only
+observations in this screen as capacity effects, not a confirmed Brotli
+wire-acceptance bug. The 747 reference-only observations were not separately
+adjudicated here.

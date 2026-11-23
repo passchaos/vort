@@ -181,6 +181,7 @@ const Harness = struct {
     deep: bool,
     max_mutation_wire: usize = 2048,
     hq_br_limit: usize = 1024,
+    brotli_reference_floor: usize = 0,
 
     fn fail(
         self: *Harness,
@@ -428,9 +429,13 @@ const Harness = struct {
         // overrun-prone implementations fail loudly instead of aliasing. The
         // 4x headroom tolerates RLE-style expansion in mutated wires while a
         // fixed ceiling bounds every reference allocation.
-        const target_cap = @min(@max(capacity *% 4, 4096), 1 << 20);
-        self.last_reference = .{ .output_capacity = target_cap + 1 };
-        const dst = a.alloc(u8, target_cap + 1) catch return null;
+        const default_capacity = reporting.referenceCapacity(capacity);
+        const output_capacity = if (codec == .br)
+            @max(default_capacity, self.brotli_reference_floor + 1)
+        else
+            default_capacity;
+        self.last_reference = .{ .output_capacity = output_capacity };
+        const dst = a.alloc(u8, output_capacity) catch return null;
         switch (codec) {
             .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary, &self.last_reference),
             .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary, &self.last_reference),
@@ -1701,6 +1706,7 @@ pub fn main(init: std.process.Init) !void {
     var only: ?Codec = null;
     var deep = false;
     var max_size: usize = 8192;
+    var brotli_reference_floor: usize = 0;
     var divergence_directory: ?[]const u8 = null;
     var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
@@ -1711,6 +1717,10 @@ pub fn main(init: std.process.Init) !void {
             max_size = 65536;
         } else if (std.mem.startsWith(u8, arg, "--max-size=")) {
             max_size = try std.fmt.parseInt(usize, arg["--max-size=".len..], 0);
+        } else if (std.mem.startsWith(u8, arg, "--brotli-reference-floor=")) {
+            brotli_reference_floor = try std.fmt.parseInt(usize, arg["--brotli-reference-floor=".len..], 0);
+            if (brotli_reference_floor < 4096 or brotli_reference_floor > 1 << 20)
+                return error.InvalidBrotliReferenceFloor;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
             const name = arg["--only=".len..];
             inline for (codecs) |codec| {
@@ -1730,6 +1740,8 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (replay_directory != null and divergence_directory != null) return error.ConflictingArtifactModes;
+    if (brotli_reference_floor != 0 and (replay_directory != null or divergence_directory != null))
+        return error.ConflictingBrotliReferenceFloorArtifactModes;
 
     // The C reference libraries allocate through libc; use the same allocator
     // so cross-allocator ownership never enters the comparison.
@@ -1741,6 +1753,7 @@ pub fn main(init: std.process.Init) !void {
         .failures = .empty,
         .only = only,
         .deep = deep,
+        .brotli_reference_floor = brotli_reference_floor,
     };
     defer {
         for (harness.failures.items) |failure| allocator.free(failure.detail);
@@ -1784,7 +1797,7 @@ pub fn main(init: std.process.Init) !void {
         .zlib = std.mem.span(c.zlibVersion()),
         .zstd = std.mem.span(c.ZSTD_versionString()),
         .brotli_decoder_version_encoded = c.BrotliDecoderVersion(),
-    });
+    }, brotli_reference_floor);
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
             failure.codec.label(),
@@ -1814,6 +1827,7 @@ fn printUsage(init: std.process.Init) !void {
     try stdout.print(
         \\Usage: vort-codec-differential-fuzz [--seed=N] [--deep] [--max-size=N]
         \\                                   [--only=raw-deflate|zlib|gzip|zstd|brotli]
+        \\                                   [--brotli-reference-floor=BYTES]
         \\                                   [--divergence-dir=NEW_DIRECTORY]
         \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\

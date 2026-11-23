@@ -98,6 +98,11 @@ mutation-sequence digests in the current seed.
 A later [bounded three-format screen](performance/codec-functional-differential-20261124.md)
 records reference parity for generated valid wires and the regression for
 incremental zlib completion with an allowed tail and a short output pledge.
+Its Brotli follow-up uses `--brotli-reference-floor=BYTES` to distinguish
+reference destination limits from acceptance differences without changing
+the generated cases. This summary-only option accepts 4,096 through 1 MiB
+(before the one-byte slack), applies only to Brotli, and cannot be combined
+with artifact capture or replay. Omit it to use the historical capacity.
 
 `tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
 complements the raw-byte target with generated valid wires. A deterministic

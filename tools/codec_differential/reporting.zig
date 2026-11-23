@@ -134,6 +134,7 @@ pub const Sample = struct {
     reference_output: ?File = null,
 };
 pub const References = struct { zlib: []const u8, zstd: []const u8, brotli_decoder_version_encoded: u32 };
+const default_reference_capacity_scope = "Reference destination request is min(max(source.len *% 4,4096),1048576)+1. Vort one-shot routes are mostly unbounded. zlib inflate single-stream routes require Z_STREAM_END but do not require avail_in==0; consumed/remaining observations never change that verdict.";
 pub const Manifest = struct {
     schema: []const u8 = "vort.codec-differential.classification.v1",
     seed: u64,
@@ -149,7 +150,7 @@ pub const Manifest = struct {
     artifacts: ArtifactCounts,
     samples: []const Sample,
     counter_scope: []const u8 = "Legacy reference_ok includes Vort-only contracts. External counts require an actual reference decoder call. Mutation one-sided acceptance is a protocol observation, not proof of incompatible valid wire.",
-    reference_capacity_scope: []const u8 = "Reference destination request is min(max(source.len *% 4,4096),1048576)+1. Vort one-shot routes are mostly unbounded. zlib inflate single-stream routes require Z_STREAM_END but do not require avail_in==0; consumed/remaining observations never change that verdict.",
+    reference_capacity_scope: []const u8 = default_reference_capacity_scope,
     artifact_scope: []const u8 = "First empty-source and first non-empty-source representative per codec/direction in unchanged traversal order. All accepting outputs are complete. Budget reserves max_manifest_bytes from max_total_bytes; no blob is truncated.",
 };
 
@@ -349,7 +350,7 @@ pub const Reporter = struct {
         return .{ .path = name, .bytes = bytes.len, .sha256 = try self.allocator.dupe(u8, &hex) };
     }
 
-    pub fn finish(self: *Reporter, writer: *std.Io.Writer, stats: Stats, seed: u64, deep: bool, only: []const u8, references: References) !void {
+    pub fn finish(self: *Reporter, writer: *std.Io.Writer, stats: Stats, seed: u64, deep: bool, only: []const u8, references: References, brotli_reference_floor: usize) !void {
         var wires = self.wire_hash;
         var mutations = self.mutation_hash;
         var wire_digest: [32]u8 = undefined;
@@ -358,7 +359,12 @@ pub const Reporter = struct {
         mutations.final(&mutation_digest);
         const wire_hex = std.fmt.bytesToHex(wire_digest, .lower);
         const mutation_hex = std.fmt.bytesToHex(mutation_digest, .lower);
-        const manifest: Manifest = .{ .seed = seed, .deep = deep, .only = only, .reference_versions = references, .stats = stats, .classified = stats.classified(), .generated_wire_digest_sha256 = &wire_hex, .mutation_sequence_digest_sha256 = &mutation_hex, .bounds = self.bounds, .artifacts = self.counts, .samples = self.samples.items };
+        const capacity_scope: ?[]u8 = if (brotli_reference_floor != 0)
+            try std.fmt.allocPrint(self.allocator, "{s} Brotli only: destination is raised to at least {d}+1 bytes.", .{ default_reference_capacity_scope, brotli_reference_floor })
+        else
+            null;
+        defer if (capacity_scope) |scope| self.allocator.free(scope);
+        const manifest: Manifest = .{ .seed = seed, .deep = deep, .only = only, .reference_versions = references, .stats = stats, .classified = stats.classified(), .generated_wire_digest_sha256 = &wire_hex, .mutation_sequence_digest_sha256 = &mutation_hex, .bounds = self.bounds, .artifacts = self.counts, .samples = self.samples.items, .reference_capacity_scope = if (capacity_scope) |scope| scope else default_reference_capacity_scope };
         const body = try std.json.Stringify.valueAlloc(self.allocator, manifest, .{});
         defer self.allocator.free(body);
         try printLegacy(writer, stats, seed, deep, only);
