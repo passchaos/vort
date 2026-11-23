@@ -124,7 +124,9 @@ fn append() !void {
         try require(memory.live_requested_bytes == 0);
         if (pass == 0) {
             peak = memory.peak_requested_bytes;
-            try require(peak >= capacity + input.len);
+            // Spare capacity admits direct decode; only the caller capacity
+            // and small accounting overhead should be charged, not staging.
+            try require(peak >= capacity and peak - capacity < input.len);
         } else try require(memory.peak_requested_bytes == peak);
     }
     values[12] = capacity;
