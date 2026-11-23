@@ -72,6 +72,44 @@ into Deflate64-style sticky failures. A caller must use the encoder's reported
 progress/snapshot and preserve the event body across retry; already accepted
 plaintext or delivered output is not rolled back by an entire-call guarantee.
 
+## Streamed body encoding
+
+Stored, planned and static-dictionary incremental encoders also support
+`beginMetadata(len)` followed by `stepMetadata(body, output)`. Use this for
+known-length metadata that is produced or delivered in pieces. The request
+first emits any earlier plaintext and the same aligned metadata header as
+`writeMetadata`. Then the encoder copies each consumed body prefix directly
+into caller output. It borrows nothing across calls and does not allocate or
+stage a metadata-sized body. Ordinary block and header workspace may still
+be allocated under the existing encoder policy.
+
+- Admit one block of 0 to 16 MiB. `beginMetadata` only declares the length;
+  even an empty block must be driven through `stepMetadata` to emit its wire.
+- Use `progress.input_read` to release or reoffer the body prefix, and
+  `progress.output_written` to deliver wire bytes. A call may report
+  `need_output` after draining preceding wire or the header, even with spare
+  capacity; the next call resumes without replay. `need_input` may mean more
+  body is required. The request is complete when `metadata_pending` clears;
+  while pending, `metadata_bytes` is the remaining body length.
+- The offered body must not exceed that remaining length (`SizeMismatch`).
+  Body and output must be disjoint and independent of encoder storage.
+  `step` and `finish` refuse an active streamed request with
+  `InvalidStreamState`; complete it first, then continue plaintext or finish.
+  `reset` abandons the current stream, including an unfinished request;
+  previously emitted bytes cannot be withdrawn.
+- Snapshot source totals and `max_input_len` still count only plaintext.
+  Encoded totals include header and body. Keep legacy `writeMetadata` when
+  the complete body is available and its existing drain/finish behavior is
+  desired.
+
+`check-encoder-lifecycle` exercises legacy wire equality at the metadata
+length-width transitions, tiny output slices, and quota/backing-allocation
+refusal and retry. All three encoders pass a full 16 MiB body through reused
+4 KiB input with a 4 KiB allocator and a zero plaintext quota. The independent
+libbrotli 1.2.0 decoder described below consumed a 271-byte wire from the new
+stored-encoder path on three input partitions, recovering an empty metadata
+event, all 257 bytes of the second metadata event, and `ABC` plaintext.
+
 ## Incremental decode observation
 
 `IncrementalStreamDecoder`, `IncrementalCopyStreamDecoder`,

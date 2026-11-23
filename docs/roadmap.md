@@ -56,6 +56,9 @@ checksum, truncation, and trailing-input controls. The
 [incremental Brotli metadata observer](formats/brotli-metadata.md#incremental-decode-observation)
 now delivers complete metadata by fragment even when fixed capture is disabled
 or full, without consuming plaintext quota or retaining metadata-sized storage.
+[Streamed metadata encoding](formats/brotli-metadata.md#streamed-body-encoding)
+now writes a declared-length body directly from caller input to output without
+body-sized pending storage, through the same wire header as legacy metadata.
 
 The [incremental encoder borrow contracts](formats/incremental-encode-borrows.md)
 close header-before-input and pending-drain corruption across Deflate, Brotli

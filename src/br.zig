@@ -1837,6 +1837,7 @@ const IncrementalStoredEncoderCodec = struct {
         try writeMetadataMetaBlock(allocator, &writer, metadata);
         state.bit_index = writer.bit_index;
     }
+    pub const writeMetadataHeader = writeIncrementalMetadataHeader;
     pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writer.writeBits(allocator, 1, 1);
@@ -2107,6 +2108,7 @@ const IncrementalPlannedEncoderCodec = struct {
         try writeMetadataMetaBlock(allocator, &writer, metadata);
         state.bit_index = writer.bit_index;
     }
+    pub const writeMetadataHeader = writeIncrementalMetadataHeader;
 
     pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
@@ -2258,6 +2260,8 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
         try writeMetadataMetaBlock(allocator, &writer, metadata);
         state.bit_index = writer.bit_index;
     }
+
+    pub const writeMetadataHeader = writeIncrementalMetadataHeader;
 
     pub fn writeFinal(
         allocator: std.mem.Allocator,
@@ -15371,9 +15375,19 @@ fn addStoredUncompressedMetaBlockBitsLen(bit_count: BitCount, block_len: usize) 
     return stored_bit_bound.uncompressed(bit_count, block_len);
 }
 
-fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: anytype, metadata: []const u8) Error!void {
-    const header = try metadata_header.plan(metadata.len);
+fn writeIncrementalMetadataHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: anytype, len: usize) Error!void {
+    var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+    try writeMetadataMetaBlockHeader(allocator, &writer, len);
+    state.bit_index = writer.bit_index;
+}
+
+fn writeMetadataMetaBlockHeader(allocator: std.mem.Allocator, writer: anytype, len: usize) Error!void {
+    const header = try metadata_header.plan(len);
     try header.write(allocator, writer);
+}
+
+fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: anytype, metadata: []const u8) Error!void {
+    try writeMetadataMetaBlockHeader(allocator, writer, metadata.len);
     try writer.writeAlignedBytes(allocator, metadata);
 }
 
