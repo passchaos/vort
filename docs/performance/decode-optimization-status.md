@@ -2962,3 +2962,10 @@ ReleaseSafe compile was cancelled after the required gates completed.
 [Final receipt and logs](data/codec-history-errors-20261123/validation.json)
 and the [next recent-distance evidence boundary](brotli-recent-match-evidence-20261123.md)
 are retained for continuation.
+
+Brotli recent-distance evidence follow-up: an isolated, unadopted prototype
+passes Debug/ReleaseSafe 25/25 selected tests, 65,400 scalar/cached length
+queries and 699 exact parser/command pairs per mode, with unchanged logical
+counters and heap/failure contracts. [Proof, patch and sources](data/brotli-recent-evidence-proof-20261123/README.md)
+are archived. Complete wire identity, generated stack/text and matched full-API
+performance gates remain required before adopting encoder changes.

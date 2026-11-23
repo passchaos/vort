@@ -77,3 +77,9 @@ memory scope. Use the existing 8 KiB command-state benchmark control before
 separately measuring the explicit 64/32 KiB override cliff. A source-level
 reduction in comparisons is insufficient for adoption without the codec's
 whole-operation throughput, wire and resource gates.
+
+An [isolated correctness prototype](data/brotli-recent-evidence-proof-20261123/README.md)
+now passes Debug/ReleaseSafe scalar length and exact parser/command comparisons,
+including allocator and logical-counter contracts. Its patch and source/proof
+hashes are archived. Complete wire, generated stack/text and measured full-codec
+performance remain unverified, so main encoder source is unchanged.

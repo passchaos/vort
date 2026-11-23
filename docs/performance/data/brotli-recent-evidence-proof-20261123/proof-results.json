@@ -1,0 +1,54 @@
+{
+  "status": "prototype_proof_passed_not_adopted",
+  "snapshot_revision": "b1656a4e338833064b0ba5fb47166b96f218b73c",
+  "compiler": "0.16.0",
+  "captured_at_utc": "2026-11-23T04:32:38.098557+00:00",
+  "proofs": {
+    "Debug": {
+      "command": "zig test src/br.zig -O Debug --test-filter 'recent evidence proof' --name recent-evidence-debug",
+      "exit_code": 0,
+      "tests_passed": 25,
+      "match_query_pairs": 65400,
+      "parser_token_command_pairs": 699,
+      "log": "debug-proof-direct.log",
+      "log_sha256": "6957bf9782a51fbc2388106615363501007b2f30158e99c53faed714c8f00433"
+    },
+    "ReleaseSafe": {
+      "command": "zig test src/br.zig -O ReleaseSafe --test-filter 'recent evidence proof' --name recent-evidence-safe",
+      "exit_code": 0,
+      "tests_passed": 25,
+      "match_query_pairs": 65400,
+      "parser_token_command_pairs": 699,
+      "log": "releasesafe-proof-direct.log",
+      "log_sha256": "6957bf9782a51fbc2388106615363501007b2f30158e99c53faed714c8f00433"
+    }
+  },
+  "allocation_failure_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "entry_bytes_by_beam": {
+    "2": 512,
+    "4": 1024,
+    "8": 2048
+  },
+  "automatic_owner_bytes_x86_64_by_beam": {
+    "2": 560,
+    "4": 1072,
+    "8": 2096
+  },
+  "performance_claim": null,
+  "wire_materialization_verified": false,
+  "parser_minimum_two": "existing InvalidBlockPlan preserved; helper minimum two differential verified",
+  "heap_budget_scope": "parser allocator calls and live/peak requested bytes unchanged; generated stack peak not measured"
+}
