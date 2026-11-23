@@ -53,7 +53,9 @@ preserve Brotli's final-metadata termination across decoder and inspection
 routes. `test-codec-member-boundaries`, its `-x86` variant, and its `-wasm`
 variant exercise these zero-output boundaries alongside exact-length,
 checksum, truncation, and trailing-input controls. The
-[incremental Brotli metadata observer](formats/brotli-metadata.md#incremental-decode-observation)
+[incremental Zstd skippable observer](formats/zstd-skippable-observer.md)
+delivers admitted headers and body fragments even after fixed capture fills.
+The [incremental Brotli metadata observer](formats/brotli-metadata.md#incremental-decode-observation)
 now delivers complete metadata by fragment even when fixed capture is disabled
 or full, without consuming plaintext quota or retaining metadata-sized storage.
 [Streamed metadata encoding](formats/brotli-metadata.md#streamed-body-encoding)

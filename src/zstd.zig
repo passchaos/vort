@@ -77,6 +77,7 @@ const known_size_frame = @import("zstd/frame/known_size.zig");
 const count_frame = @import("zstd/frame/count.zig");
 const frame_block_wire = @import("zstd/frame/block.zig");
 const frame_skippable_wire = @import("zstd/frame/skippable.zig");
+const skippable_observation = @import("zstd/incremental/skippable_observer.zig");
 
 test "Zstd decoded counts wide raw RLE options concat and chunks" {
     try @import("tests/zstd_decoded_count/queries.zig").contracts(@This());
@@ -6627,8 +6628,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// Maximum compressed bytes retained while waiting for validation.
         /// Data frames may exceed this value because consumed input prefixes are
         /// released block-by-block; each compressed block must still fit. A
-        /// skippable frame retains only its eight-byte header while its payload
-        /// is discarded or copied into caller-owned capture storage.
+        /// skippable frame needs only its eight-byte header buffered; payload
+        /// can be skipped, captured or observed as it arrives.
         max_compressed_buffer_len: usize = std.math.maxInt(usize),
         /// Maximum decoded bytes allowed for one complete data frame. Direct
         /// and block-streaming paths retain less than this when possible; this
@@ -6641,6 +6642,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         expected_output_len: ?Count = null,
         skippable_output: []u8 = &.{},
         skippable_events: []SkippableEvent = &.{},
+        /// Observe admitted skippable frames and payload spans synchronously,
+        /// independently of the fixed capture slices.
+        skippable_observer: ?SkippableObserver = null,
         /// Stop after the first validated data frame and retain already-
         /// accepted suffix bytes for an outer container such as ZIP.
         stop_after_first_frame: bool = false,
@@ -6652,6 +6656,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
     };
     pub const SkippableEvent = struct { id: u4, payload_len: usize };
+    pub const SkippableObserver = skippable_observation.Observer;
+    pub const SkippableObservation = skippable_observation.Observation;
 
     pub const Snapshot = struct {
         phase: Phase,
@@ -8074,10 +8080,9 @@ pub const NativeIncrementalFrameDecoder = struct {
                         }
                         const n = @min(self.skippable_stream_remaining, input.len - input_read);
                         const next_received = try stream_count.addLocal(self.input_received, n);
-                        self.captureSkippableStreamBytes(input[input_read..][0..n]);
+                        self.acceptSkippableStreamBytes(input[input_read..][0..n]);
                         input_read += n;
                         self.input_received = next_received;
-                        self.skippable_stream_remaining -= n;
                     }
                     try self.finishSkippableStream();
                     self.phase = .frame;
@@ -8195,31 +8200,46 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn beginSkippableStreamIfHeaderAvailable(self: *NativeIncrementalFrameDecoder) Error!bool {
-        if (self.options.format != .standard) return false;
-        if (self.frame_scratch.items.len < 8) return false;
-        const magic = std.mem.readInt(u32, self.frame_scratch.items[0..4], .little);
-        if (magic < skippable_magic_min or magic > skippable_magic_max) return false;
+        const header_len = frame_skippable_wire.encoded_len;
+        if (self.options.format != .standard or self.frame_scratch.items.len < header_len) return false;
+        const header = frame_skippable_wire.parse(self.frame_scratch.items) catch |err| switch (err) {
+            error.InvalidMagic => return false,
+            else => return err,
+        };
+        const payload_len: usize = header.payload_len;
+        _ = try stream_count.add(self.skippable_total, header.payload_len);
+        _ = try stream_count.add(self.skippable_event_count, 1);
         _ = self.prefix_state.activate(.skippable);
         self.prefix_state.busy = true;
-        const payload_len: usize = @intCast(std.mem.readInt(u32, self.frame_scratch.items[4..8], .little));
-        _ = std.math.add(Count, self.skippable_total, payload_len) catch return error.IntegerOverflow;
-        _ = std.math.add(Count, self.skippable_event_count, 1) catch return error.IntegerOverflow;
         self.resetSkippableStream();
-        self.skippable_stream_id = @intCast(magic - skippable_magic_min);
+        self.skippable_stream_id = header.id;
         self.skippable_stream_payload_len = payload_len;
         self.skippable_stream_remaining = payload_len;
-        const buffered_payload_len = @min(payload_len, self.frame_scratch.items.len - 8);
-        self.captureSkippableStreamBytes(self.frame_scratch.items[8..][0..buffered_payload_len]);
-        self.skippable_stream_remaining -= buffered_payload_len;
-        self.discardFrameScratchPrefix(8 + buffered_payload_len);
+        if (self.options.skippable_observer) |observer| observer.emit(.{ .start = .{
+            .skippable_index = self.skippable_event_count,
+            .id = header.id,
+            .frame_offset = self.input_received - stream_count.fromLocal(self.frame_scratch.items.len),
+            .payload_len = header.payload_len,
+        } });
+        const buffered_payload_len = @min(payload_len, self.frame_scratch.items.len - header_len);
+        self.acceptSkippableStreamBytes(self.frame_scratch.items[header_len..][0..buffered_payload_len]);
+        self.discardFrameScratchPrefix(header_len + buffered_payload_len);
         return true;
     }
 
-    fn captureSkippableStreamBytes(self: *NativeIncrementalFrameDecoder, bytes: []const u8) void {
+    fn acceptSkippableStreamBytes(self: *NativeIncrementalFrameDecoder, bytes: []const u8) void {
+        if (bytes.len == 0) return;
+        if (self.options.skippable_observer) |observer| observer.emit(.{ .chunk = .{
+            .skippable_index = self.skippable_event_count,
+            .id = self.skippable_stream_id,
+            .offset = @intCast(self.skippable_stream_payload_len - self.skippable_stream_remaining),
+            .bytes = bytes,
+        } });
         const capture_offset = self.skippable_written + self.skippable_stream_captured;
         const copy_len = @min(bytes.len, self.skippable_output.len -| capture_offset);
         if (copy_len != 0) @memcpy(self.skippable_output[capture_offset..][0..copy_len], bytes[0..copy_len]);
         self.skippable_stream_captured += copy_len;
+        self.skippable_stream_remaining -= bytes.len;
     }
 
     fn finishSkippableStream(self: *NativeIncrementalFrameDecoder) Error!void {
@@ -8511,7 +8531,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
         if (self.frame_scratch.items.len < minimum_prefix or input_read.* == input.len) return;
         if (frame_format.skippableMagic(self.frame_scratch.items, self.options.format) != null) {
-            try self.appendFramePrefix(input, input_read, 8);
+            try self.appendFramePrefix(input, input_read, frame_skippable_wire.encoded_len);
             return;
         }
         // Parse only the header before resolving dictionary policy in either
@@ -8560,21 +8580,12 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!?usize {
-        while (true) {
-            if (self.frame_scratch.items.len < frame_format.minimumPrefixLen(self.options.format)) return null;
-            if (frame_format.skippableMagic(self.frame_scratch.items, self.options.format)) |magic| {
-                if (self.frame_scratch.items.len < 8) return null;
-                const skip_len: usize = @intCast(std.mem.readInt(u32, self.frame_scratch.items[4..8], .little));
-                const total = checkedAdd(8, skip_len) catch |err| {
-                    self.recordError(.frame, err);
-                    return err;
-                };
-                if (self.frame_scratch.items.len < total) return null;
-                try self.captureSkippable(magic, self.frame_scratch.items[8..total]);
-                self.discardFrameScratchPrefix(total);
-                continue;
-            }
-            break;
+        if (self.frame_scratch.items.len < frame_format.minimumPrefixLen(self.options.format)) return null;
+        // The streaming dispatcher handles every complete skippable header,
+        // including any lookahead from an earlier prevalidated data frame.
+        if (frame_format.skippableMagic(self.frame_scratch.items, self.options.format) != null) {
+            std.debug.assert(self.frame_scratch.items.len < frame_skippable_wire.encoded_len);
+            return null;
         }
         const end = findNativeFrameEndWithFormat(self.frame_scratch.items, 0, self.options.format) catch |err| switch (err) {
             error.TruncatedFrame => return null,
@@ -8636,19 +8647,6 @@ pub const NativeIncrementalFrameDecoder = struct {
         } else {
             _ = try decodeRawOrRleFrameAppendLimited(self.budget.allocator(), &self.decoded_scratch, frame, frame_limit);
         }
-    }
-
-    fn captureSkippable(self: *NativeIncrementalFrameDecoder, magic: u32, payload: []const u8) Error!void {
-        const next_total = try stream_count.addLocal(self.skippable_total, payload.len);
-        const next_event = try stream_count.add(self.skippable_event_count, 1);
-        const copy_len = @min(payload.len, self.skippable_output.len -| self.skippable_written);
-        if (copy_len != 0)
-            @memcpy(self.skippable_output[self.skippable_written..][0..copy_len], payload[0..copy_len]);
-        self.skippable_written += copy_len;
-        self.skippable_total = next_total;
-        if (self.skippable_event_count < self.skippable_events.len)
-            self.skippable_events[@intCast(self.skippable_event_count)] = .{ .id = @intCast(magic - skippable_magic_min), .payload_len = payload.len };
-        self.skippable_event_count = next_event;
     }
 
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
@@ -8929,6 +8927,10 @@ pub const NativeIncrementalFrameDecoder = struct {
 };
 
 pub const IncrementalFrameDecoder = NativeIncrementalFrameDecoder;
+
+test "Zstd incremental skippable observer contracts" {
+    try @import("zstd/incremental/skippable_observer_tests.zig").contracts(@This());
+}
 
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
