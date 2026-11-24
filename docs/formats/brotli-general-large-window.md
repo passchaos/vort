@@ -10,7 +10,12 @@ True accepts window bits 10...30 and writes the 14-bit extension identity even
 when the requested width is at most 24. False retains the established RFC
 window validation, defaults and wire. General decoders still require
 `allow_large_window = true`; strict default decoding rejects the extension
-independently of how small the chosen window is.
+independently of how small the chosen window is. The `decode-br-hex`,
+`decode-br-file-to` and `size-br-file` commands opt in with `--large-window`;
+the optional positional output limit still applies. The
+`test-br-large-window-decode-cli` gate uses a verified libbrotli 1.2.0 fixture
+and checks default rejection, successful opt-in, and failed-decode output
+preservation.
 
 ## Declared window and actual search
 

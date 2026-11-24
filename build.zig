@@ -4103,6 +4103,11 @@ pub fn build(b: *std.Build) void {
     const br_literal_cli_diff_step = b.step("run-br-literal-cli-diff", "Run black-box smoke for minimal dependency-free Brotli literal blocks against Node Brotli");
     br_literal_cli_diff_step.dependOn(&br_literal_cli_diff.step);
 
+    const br_large_decode_cli = b.addSystemCommand(&.{ "python3", "tools/br/large_window_decode_cli.py" });
+    br_large_decode_cli.addArtifactArg(cli_exe);
+    const br_large_decode_cli_step = b.step("test-br-large-window-decode-cli", "Verify explicit Brotli Large Window CLI decoding against an upstream fixture");
+    br_large_decode_cli_step.dependOn(&br_large_decode_cli.step);
+
     const br_rle_probe_exe = b.addExecutable(.{
         .name = "vort-br-rle-probe",
         .root_module = b.createModule(.{
@@ -8414,6 +8419,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(cab_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
+    ci_smoke_step.dependOn(br_large_decode_cli_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);

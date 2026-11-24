@@ -138,6 +138,29 @@ pub fn encodeStoredHex(init: std.process.Init, args: *std.process.Args.Iterator,
     if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
 
-pub fn parseLocalOutputLimit(value: ?[]const u8) !?usize {
-    return controls.localLimit(try controls.parseLogicalLimit(value));
+pub const DecodeArguments = struct {
+    max_output_len: ?vort.StreamCount = null,
+    options: vort.BrotliDecodeOptions = .{},
+};
+
+pub fn parseDecodeArguments(args: *std.process.Args.Iterator) !DecodeArguments {
+    var parsed: DecodeArguments = .{};
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--large-window")) {
+            if (parsed.options.allow_large_window) return error.DuplicateBrotliOption;
+            parsed.options.allow_large_window = true;
+        } else if (std.mem.startsWith(u8, arg, "--")) {
+            return error.UnknownBrotliOption;
+        } else {
+            if (parsed.max_output_len != null) return error.DuplicateBrotliOption;
+            parsed.max_output_len = try controls.parseLogicalLimit(arg);
+        }
+    }
+    return parsed;
+}
+
+pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8, arguments: DecodeArguments) ![]u8 {
+    if (try controls.localLimit(arguments.max_output_len)) |limit|
+        return vort.brDecodeStreamAllocLimitedWithOptions(allocator, input, limit, arguments.options);
+    return vort.brDecodeStreamAllocWithOptions(allocator, input, arguments.options);
 }

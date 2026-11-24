@@ -56,3 +56,20 @@ LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort" \
   --real-brotli-wide --real-limit=67108864 --real-file="$corpus/reymont" \
   --real-file="$corpus/x-ray" --real-file="$corpus/nci"
 ```
+
+## Remaining workflow gaps checked separately
+
+Libbrotli 1.2.0 generated a valid 42-byte Large Window stream at quality 6
+and `lgwin=25`, independently decoded with its Large Window opt-in. Vort's
+library already accepted it with the equivalent option, but the baseline
+CLI rejected it and offered no decode opt-in. `test-br-large-window-decode-cli`
+retains the fixture and distinguishes explicit opt-in from default rejection.
+
+GNU gzip 1.10 has a separate `--rsyncable` encoding workflow not exposed by
+Vort's gzip encoder. This is not a wire-decode difference. For the first
+4 MiB of `nci` with `VORT_RSYNCPROBE` inserted at byte 4096, `gzip -n -6`
+and local rsync 3.2.7 with `-I --no-whole-file --stats` produced 359,973
+literal bytes transferred. Adding `--rsyncable` reduced that to 4,079 bytes,
+with edited compressed size changing from 418,073 to 434,579 bytes. Both
+streams decode exactly with GNU gzip. These reference workflow measurements
+are not a Vort throughput or compression-ratio comparison.
