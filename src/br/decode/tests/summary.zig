@@ -59,6 +59,7 @@ pub fn contracts(comptime B: type) !void {
     try preflightContracts(B, wire.items, plain, history);
     try @import("chunk_preflight.zig").contracts(B, wire.items, plain, history);
     try @import("direct_chunk_preflight.zig").contracts(B, wire.items, plain, history);
+    try @import("source_preflight.zig").contracts(B, wire.items, plain, history);
     const decoded = try B.decodeStreamAllocExactSize(h.a, wire.items, plain.len);
     defer h.a.free(decoded);
     try std.testing.expectEqualSlices(u8, plain, decoded);
