@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const decoded_output = @import("decode_output.zig");
 const controls = @import("zstd_controls.zig");
+const stdio = @import("zstd_stdio.zig");
 
 const Mode = enum { hex, file, file_to, size_hex, size_file };
 const modes = std.StaticStringMap(Mode).initComptime(.{
@@ -83,6 +84,20 @@ pub fn dispatch(command: []const u8, init: std.process.Init, args: *std.process.
     const input = args.next() orelse return if (is_hex) error.MissingHexInput else error.MissingCorpusPath;
     const output_path = if (mode == .file_to) args.next() orelse return error.MissingCorpusPath else null;
     const options = try Options.parse(args);
+    if (output_path) |path| {
+        if (stdio.isStdio(input) or stdio.isStdio(path)) {
+            const window = options.max_window_size orelse stdio.default_window_size;
+            stdio.decode(init, input, path, .{
+                .max_output_len = options.max_output orelse std.math.maxInt(vort.StreamCount),
+                .max_window_size = window,
+            }) catch |err| {
+                const pipe_options: Options = .{ .max_window_size = window, .max_output = options.max_output };
+                pipe_options.reportLimit(init.io, err);
+                return err;
+            };
+            return true;
+        }
+    }
     const legacy_limit = if (!is_size and options.max_window_size == null) try controls.localLimit(options.max_output) else null;
     const compressed = if (is_hex)
         try decoded_output.hexToOwnedBytes(init.gpa, input)

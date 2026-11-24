@@ -86,6 +86,10 @@ input policies. Incremental footer consumption, frame counts, trailing input,
 `nextStream` and reset retain the normal progress contract. Existing entry
 points without options remain strict.
 
+The [standard-stream CLI](zstd-stdio-cli.md) also uses this strict checksum
+policy. It accepts an explicit window limit and defaults to 128 MiB of
+advertised window when `-` selects stdin or stdout.
+
 ## Validation and references
 
 Run the focused codec and package contracts on the three execution targets:

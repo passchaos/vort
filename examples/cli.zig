@@ -2867,8 +2867,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-file [path] [max_output]
         \\                              Decode dependency-free native-subset Zstandard file
-        \\  decode-zstd-native-file-to <in> <out> [max_output]
-        \\                              Decode dependency-free native-subset Zstandard file to output
+        \\  decode-zstd-native-file-to <in|-> <out|-> [max_output]
+        \\                              Decode Zstandard; '-' selects streaming stdin or binary stdout
+        \\                              Streaming endpoints default to a 128 MiB decode window
         \\  size-zstd-native-hex [hex] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]

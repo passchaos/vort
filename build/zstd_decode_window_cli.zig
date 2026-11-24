@@ -23,10 +23,21 @@ pub fn register(
         }),
     });
     probe.stack_size = 8 * 1024 * 1024;
+    const runner = b.path("tools/zstd/decode_window_cli_wasi.js");
     const wasm = b.addSystemCommand(&.{ "python3", "tools/zstd/decode_window_cli_gate.py", "--cli" });
     wasm.addArtifactArg(probe);
     wasm.addArg("--wasi-runner");
-    wasm.addFileArg(b.path("tools/zstd/decode_window_cli_wasi.js"));
+    wasm.addFileArg(runner);
     gate.dependOn(&wasm.step);
+
+    const stdio_gate = b.step("test-zstd-stdio-cli", "Run Zstd binary streaming and atomic output contracts on native and WASI");
+    const stdio_native = b.addSystemCommand(&.{ "python3", "tools/zstd/stdio_cli_gate.py" });
+    stdio_native.addArtifactArg(native_cli);
+    stdio_gate.dependOn(&stdio_native.step);
+    const stdio_wasm = b.addSystemCommand(&.{ "python3", "tools/zstd/stdio_cli_gate.py" });
+    stdio_wasm.addArtifactArg(probe);
+    stdio_wasm.addArg("--wasi-runner");
+    stdio_wasm.addFileArg(runner);
+    stdio_gate.dependOn(&stdio_wasm.step);
     return &probe.step;
 }
