@@ -38,10 +38,17 @@ pub fn encodeGzipBestFile(init: std.process.Init, args: *std.process.Args.Iterat
     const output_path = args.next() orelse return error.MissingCorpusPath;
     var level: ?[]const u8 = null;
     var rsyncable = false;
+    var limits: stream_files.Limits = .{};
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--rsyncable")) {
             if (rsyncable) return error.DuplicateGzipOption;
             rsyncable = true;
+        } else if (try optionValue("--max-input-len", arg, args)) |value| {
+            if (limits.max_input != null) return error.DuplicateGzipOption;
+            limits.max_input = try std.fmt.parseInt(vort.StreamCount, value, 10);
+        } else if (try optionValue("--max-output-len", arg, args)) |value| {
+            if (limits.max_output != null) return error.DuplicateGzipOption;
+            limits.max_output = try std.fmt.parseInt(vort.StreamCount, value, 10);
         } else if (std.mem.startsWith(u8, arg, "--")) {
             return error.UnknownGzipOption;
         } else {
@@ -51,33 +58,57 @@ pub fn encodeGzipBestFile(init: std.process.Init, args: *std.process.Args.Iterat
     }
     const options = parseCompressionOptions(level);
     const dir = std.Io.Dir.cwd();
-    if (rsyncable) {
-        const totals = try encodeGzipRsyncable(init, dir, input_path, output_path, options);
-        try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ totals.input_read, totals.output_written, output_path });
-    } else {
-        const data = try dir.readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(data);
-        const encoded = try vort.encodeGzipBestAlloc(init.gpa, data, options);
-        defer init.gpa.free(encoded);
-        try dir.writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
+    const from_stdin = stream_files.isStdio(input_path);
+    const stdio = from_stdin or stream_files.isStdio(output_path);
+    if (stdio or rsyncable) {
+        var encoder = vort.GzipIncrementalBestEncoder.initWithOptions(init.gpa, .{ .raw = .{
+            .compression = options,
+            .rsyncable = rsyncable,
+        } });
+        defer encoder.deinit();
+        if (stdio) {
+            const input_file = if (from_stdin) std.Io.File.stdin() else try dir.openFile(init.io, input_path, .{});
+            defer if (!from_stdin) input_file.close(init.io);
+            if (!from_stdin) try preflightGzipInput(init.io, input_file, limits.max_input);
+            _ = try stream_files.pumpStdio(init.io, input_file, output_path, &encoder, limits);
+        } else {
+            const totals = try encodeGzipRsyncable(init, dir, input_path, output_path, &encoder, limits);
+            try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ totals.input_read, totals.output_written, output_path });
+        }
+        return;
+    }
+    if (limits.max_input != null or limits.max_output != null) return error.UnsupportedGzipStreamLimit;
+    const data = try dir.readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+    defer init.gpa.free(data);
+    const encoded = try vort.encodeGzipBestAlloc(init.gpa, data, options);
+    defer init.gpa.free(encoded);
+    try dir.writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
+}
+
+fn optionValue(comptime name: []const u8, arg: []const u8, args: *std.process.Args.Iterator) !?[]const u8 {
+    if (std.mem.eql(u8, arg, name)) return args.next() orelse error.MissingGzipOptionValue;
+    if (std.mem.startsWith(u8, arg, name ++ "=")) return arg[name.len + 1 ..];
+    return null;
+}
+
+fn preflightGzipInput(io: std.Io, input_file: std.Io.File, max_input: ?vort.StreamCount) !void {
+    if (max_input) |limit| {
+        const stat = try input_file.stat(io);
+        if (stat.kind == .file and try stream_files.fileSizeCounter(stat.size) > limit) return error.OutputLimitExceeded;
     }
 }
 
-fn encodeGzipRsyncable(init: std.process.Init, dir: std.Io.Dir, input_path: []const u8, output_path: []const u8, options: vort.CompressionOptions) !stream_files.Totals {
+fn encodeGzipRsyncable(init: std.process.Init, dir: std.Io.Dir, input_path: []const u8, output_path: []const u8, encoder: *vort.GzipIncrementalBestEncoder, limits: stream_files.Limits) !stream_files.Totals {
     const input_file = try dir.openFile(init.io, input_path, .{});
     var input_open = true;
     defer if (input_open) input_file.close(init.io);
+    try preflightGzipInput(init.io, input_file, limits.max_input);
     var atomic = try dir.createFileAtomic(init.io, output_path, .{ .replace = true });
     defer atomic.deinit(init.io);
     var buffer: [32 * 1024]u8 = undefined;
     var writer = atomic.file.writerStreaming(init.io, &buffer);
-    var encoder = vort.GzipIncrementalBestEncoder.initWithOptions(init.gpa, .{ .raw = .{
-        .compression = options,
-        .rsyncable = true,
-    } });
-    defer encoder.deinit();
-    const totals = try stream_files.pump(init, input_file, &writer.interface, &encoder, null, null);
+    const totals = try stream_files.pump(init, input_file, &writer.interface, encoder, limits.max_input, limits.max_output);
     input_file.close(init.io);
     input_open = false;
     try writer.interface.flush();

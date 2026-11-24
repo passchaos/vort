@@ -1,5 +1,7 @@
 # Gzip CLI standard streams
 
+## Decoding
+
 `decode-gzip-file` and its `decode-gzip-concat-file` alias accept `-` for
 stdin or stdout. Use `./-` for a file literally named `-`.
 
@@ -26,3 +28,26 @@ the original one-shot decoding and summary.
 
 `zig build test-gzip-stdio-cli` checks these contracts on the native CLI and
 the WASI decode probe, including progressive output and atomic replacement.
+
+## Encoding
+
+```sh
+vort encode-gzip-best-file - - < data.bin > data.gz
+vort encode-gzip-best-file - data.gz --rsyncable --max-input-len=1048576 < data.bin
+vort encode-gzip-best-file data.bin - fast > data.gz
+```
+
+With `-` on either endpoint, the command emits one gzip member incrementally
+without a whole-file input cap. `--rsyncable` uses content-defined boundaries
+in that member. `--max-input-len` and `--max-output-len` accept 64-bit byte
+limits on all streaming routes (either endpoint is `-`, or `--rsyncable`).
+The original two-path one-shot route does not accept stream limits.
+
+With either endpoint set to `-`, success summaries are suppressed. Stdout
+carries only compressed bytes when selected; if streaming subsequently fails,
+already written bytes cannot be withdrawn. A named output is replaced only
+after successful completion. Two named paths keep their existing default
+one-shot or explicit rsyncable behavior when no new limits are supplied.
+
+`zig build test-gzip-encode-stdio-cli` checks native and WASI encoding,
+including independent gzip decoding, rsyncable output, and atomic failure.

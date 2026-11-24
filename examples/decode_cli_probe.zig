@@ -14,6 +14,10 @@ pub fn main(init: std.process.Init) !void {
     const command = args.next() orelse return error.MissingCommand;
     if (std.mem.eql(u8, command, "decode-br-file-to")) {
         try brotli.decodeFile(init, &args, &writer.interface);
+    } else if (std.mem.eql(u8, command, "encode-br-stream-file")) {
+        try brotli.encodeFile(init, &args, &writer.interface, true);
+    } else if (std.mem.eql(u8, command, "encode-gzip-best-file")) {
+        try deflate.encodeGzipBestFile(init, &args, &writer.interface);
     } else if (deflate.isGzipDecodeFileCommand(command)) {
         try deflate.decodeGzipFile(init, &args, &writer.interface);
     } else if (!try zstd.dispatch(command, init, &args, &writer.interface) and

@@ -382,8 +382,9 @@ The library is under active development. Its current capabilities include:
   independent segment after payload corruption;
 - incremental gzip supports [rsync-friendly boundaries](docs/formats/gzip-rsyncable.md),
   also available as `encode-gzip-best-file <in> <out> [level] --rsyncable`;
-  `decode-gzip-file - -` provides [binary standard-stream decoding](docs/formats/gzip-stdio-cli.md)
-  with concatenated-member validation;
+  `decode-gzip-file - -` and `encode-gzip-best-file - -` provide
+  [binary standard-stream I/O](docs/formats/gzip-stdio-cli.md), with
+  concatenated-member validation when decoding;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
@@ -2365,9 +2366,10 @@ reported as skipped rather than passed.
 
 ### Brotli standard streams
 
-`vort decode-br-file-to - - < data.br > data.bin` streams decoded bytes to
-stdout. See the [Brotli CLI standard-stream contract](docs/formats/brotli-stdio-cli.md)
-for limits, Large Window opt-in, and failure behavior.
+Use `vort encode-br-stream-file - -` to compress and
+`vort decode-br-file-to - -` to decompress through a binary pipe. See the
+[Brotli CLI standard-stream contract](docs/formats/brotli-stdio-cli.md) for
+limits, Large Window opt-in, and failure behavior.
 
 ### Brotli HQ encoding
 

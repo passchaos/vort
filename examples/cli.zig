@@ -2599,7 +2599,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-bgzf-range <in> <out> <start_virtual> <end_virtual> [max_output]
         \\                              Decode an indexed BGZF virtual range
         \\  encode-br-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
-        \\  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+        \\  encode-br-stream-file <in|-> <out|-> [quality] [generic|text|font] [window_bits] [br_options]
+        \\    '-' selects streaming stdin or binary stdout; requested profiles go to stderr
         \\  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
         \\    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
         \\    --block-len=BYTES selects a one-shot quality-scheduled meta-block target
@@ -2995,8 +2996,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode a zlib-compatible file with adaptive block splitting
         \\  encode-raw-best-file <in> <out> [level]
         \\                              Encode raw deflate file bytes with best-block selection
-        \\  encode-gzip-best-file <in> <out> [level] [--rsyncable]
-        \\                              Encode gzip; --rsyncable streams with content-defined boundaries
+        \\  encode-gzip-best-file <in|-> <out|-> [level] [--rsyncable] [gzip_stream_options]
+        \\                              '-' selects streaming stdin or binary stdout
+        \\                              --rsyncable streams with content-defined boundaries
+        \\    gzip_stream_options: --max-input-len=BYTES --max-output-len=BYTES (with '-' or --rsyncable)
         \\  encode-raw-dict-best-file <in> <out> <dict> [level]
         \\                              Encode raw deflate file bytes using preset dictionary history
         \\  encode-raw-dict-best-split-file <in> <out> <dict> <block_len> [level]

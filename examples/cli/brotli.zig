@@ -27,13 +27,7 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     defer init.gpa.free(encoded);
     try writeAtomic(init, output_path, encoded);
     try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, input.len, output_path });
-    if (parsed.profile) {
-        try controls.printProfile(stdout, profile);
-        try controls.printFormatProfile(stdout, profile);
-        try controls.printParseProfile(stdout, parsed.parse_mode, profile);
-        try controls.printLengthProfile(stdout, parsed.copy_lengths, profile);
-    }
-    if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
+    try printEncodeProfiles(stdout, parsed, profile, memory_profile);
 }
 
 pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
@@ -59,41 +53,61 @@ pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdou
     if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
 
-const StreamTotals = stream_files.Totals;
-
 pub fn fileSizeCounter(size: u64) !vort.StreamCount {
     return stream_files.fileSizeCounter(size);
 }
 
 fn encodeStreamingFile(init: std.process.Init, input_path: []const u8, output_path: []const u8, parsed: controls.Controls, options: vort.br.PlannedStreamChunksOptions, profile: *vort.BrotliHqProfile, memory_profile: *vort.BrotliEncodeMemoryProfile, stdout: *std.Io.Writer) !void {
-    const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
-    var input_open = true;
+    const from_stdin = stream_files.isStdio(input_path);
+    const use_stdio = from_stdin or stream_files.isStdio(output_path);
+    const input_file = if (from_stdin) std.Io.File.stdin() else try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    var input_open = !from_stdin;
     defer if (input_open) input_file.close(init.io);
-    const input_size = try fileSizeCounter((try input_file.stat(init.io)).size);
-    if (parsed.max_input_len) |limit| if (input_size > limit) return error.OutputLimitExceeded;
-    var atomic = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
-    defer atomic.deinit(init.io);
-    var write_buffer: [32 * 1024]u8 = undefined;
-    var writer = atomic.file.writerStreaming(init.io, &write_buffer);
-    const totals = try pumpStream(init, input_file, &writer.interface, options, parsed.max_input_len, parsed.max_output_len);
-    input_file.close(init.io);
-    input_open = false;
-    try writer.interface.flush();
-    try atomic.replace(init.io);
-    try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ totals.output_written, totals.input_read, output_path });
-    if (parsed.profile) {
-        try controls.printProfile(stdout, profile.*);
-        try controls.printFormatProfile(stdout, profile.*);
-        try controls.printParseProfile(stdout, parsed.parse_mode, profile.*);
-        try controls.printLengthProfile(stdout, parsed.copy_lengths, profile.*);
+    if (!from_stdin) {
+        const input_size = try fileSizeCounter((try input_file.stat(init.io)).size);
+        if (parsed.max_input_len) |limit| if (input_size > limit) return error.OutputLimitExceeded;
     }
-    if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile.*);
+    {
+        var encoder = vort.br.IncrementalPlannedStreamEncoder.initWithOptions(init.gpa, .{
+            .stream = options,
+            .max_input_len = parsed.max_input_len orelse std.math.maxInt(vort.StreamCount),
+        });
+        defer encoder.deinit();
+        if (use_stdio) {
+            _ = try stream_files.pumpStdio(init.io, input_file, output_path, &encoder, .{
+                .max_input = parsed.max_input_len,
+                .max_output = parsed.max_output_len,
+            });
+        } else {
+            var atomic = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
+            defer atomic.deinit(init.io);
+            var write_buffer: [32 * 1024]u8 = undefined;
+            var writer = atomic.file.writerStreaming(init.io, &write_buffer);
+            const totals = try stream_files.pump(init, input_file, &writer.interface, &encoder, parsed.max_input_len, parsed.max_output_len);
+            input_file.close(init.io);
+            input_open = false;
+            try writer.interface.flush();
+            try atomic.replace(init.io);
+            try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ totals.output_written, totals.input_read, output_path });
+        }
+    }
+    if (!use_stdio) return printEncodeProfiles(stdout, parsed, profile.*, memory_profile.*);
+    if (parsed.profile or parsed.memory_profile) {
+        var buffer: [2048]u8 = undefined;
+        var diagnostic = std.Io.File.stderr().writerStreaming(init.io, &buffer);
+        try printEncodeProfiles(&diagnostic.interface, parsed, profile.*, memory_profile.*);
+        try diagnostic.interface.flush();
+    }
 }
 
-fn pumpStream(init: std.process.Init, input_file: std.Io.File, writer: *std.Io.Writer, options: vort.br.PlannedStreamChunksOptions, max_input: ?vort.StreamCount, max_output: ?vort.StreamCount) !StreamTotals {
-    var encoder = vort.br.IncrementalPlannedStreamEncoder.initWithOptions(init.gpa, .{ .stream = options, .max_input_len = max_input orelse std.math.maxInt(vort.StreamCount) });
-    defer encoder.deinit();
-    return stream_files.pump(init, input_file, writer, &encoder, max_input, max_output);
+fn printEncodeProfiles(writer: *std.Io.Writer, parsed: controls.Controls, profile: vort.BrotliHqProfile, memory_profile: vort.BrotliEncodeMemoryProfile) !void {
+    if (parsed.profile) {
+        try controls.printProfile(writer, profile);
+        try controls.printFormatProfile(writer, profile);
+        try controls.printParseProfile(writer, parsed.parse_mode, profile);
+        try controls.printLengthProfile(writer, parsed.copy_lengths, profile);
+    }
+    if (parsed.memory_profile) try controls.printMemoryProfile(writer, memory_profile);
 }
 
 fn writeAtomic(init: std.process.Init, path: []const u8, data: []const u8) !void {

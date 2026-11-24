@@ -39,9 +39,10 @@ vort encode-gzip-best-file input.bin output.gz fast --rsyncable
 
 The flag can appear before or after the optional level or strategy. It selects
 bounded-memory incremental encoding, with no whole-file size cap; the output
-path is replaced only after the gzip member finishes successfully. Without
-`--rsyncable`, the command keeps the original one-shot encoding path and its
-128 MiB input limit.
+path is replaced only after the gzip member finishes successfully. The flag
+also works with [standard-stream endpoints](gzip-stdio-cli.md#encoding). With
+two named paths and no `--rsyncable`, the original one-shot path and its
+128 MiB input limit still apply.
 
 ## Verification
 
