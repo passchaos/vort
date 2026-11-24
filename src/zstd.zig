@@ -52,6 +52,7 @@ const builtin = @import("builtin");
 const test_atomic_counter = if (builtin.is_test) @import("testing/atomic_counter.zig") else struct {};
 const core = @import("core.zig");
 const byte_source = @import("io/source.zig");
+const byte_sink = @import("io/sink.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const incremental_counts = @import("zstd/incremental/counts.zig");
@@ -5571,6 +5572,41 @@ pub const openSourceSeekTable = source_seek_table.open;
 pub const sourceSeekableRangeRequirements = source_seek_decode.requirements;
 pub const decodeSourceSeekableRangeInto = source_seek_decode.decodeInto;
 pub const decodeSourceSeekableRangeIntoWithProgress = source_seek_decode.decodeIntoWithProgress;
+
+const source_seek_encode = @import("zstd/source/seek_encode.zig");
+const SourceSeekableEncodeCodec = struct {
+    pub const Error = zstd.Error;
+    pub const Options = NativeSeekableOptions;
+    pub const Dictionary = NativeDictionary;
+    pub const FrameEncoder = NativeFrameEncoder;
+    pub const validateOptions = validateNativeSeekableOptions;
+    pub const validateDictionary = validatePrefixDictionary;
+    pub const frameSize = nativeSeekableFrameSize;
+};
+pub const SourceSeekableEncodeRequirements = source_seek_encode.Requirements;
+pub const SourceSeekableEncodeWorkspace = source_seek_encode.Workspace;
+pub const SourceSeekableEncodeResult = source_seek_encode.Result;
+pub const SourceSeekableEncodeError = source_seek_encode.Error(SourceSeekableEncodeCodec);
+
+/// Size the caller-owned plaintext frame and entry-log storage without I/O.
+pub fn sourceSeekableEncodeRequirements(input_len: u64, options: NativeSeekableOptions) Error!SourceSeekableEncodeRequirements {
+    return source_seek_encode.requirements(SourceSeekableEncodeCodec, input_len, options);
+}
+
+/// Publish consecutive independent frames and finish the sink only after the
+/// terminal seek table is written. A failure may leave a partial sink prefix.
+pub fn encodeSourceSeekableTo(allocator: std.mem.Allocator, source: byte_source.Source, sink: byte_sink.Sink, workspace: SourceSeekableEncodeWorkspace, options: NativeSeekableOptions) SourceSeekableEncodeError!SourceSeekableEncodeResult {
+    return source_seek_encode.encode(SourceSeekableEncodeCodec, allocator, source, sink, workspace, options, null);
+}
+
+/// With prefix dictionary usage, the dictionary applies to the first frame only.
+pub fn encodeSourceSeekableToWithDictionary(allocator: std.mem.Allocator, source: byte_source.Source, sink: byte_sink.Sink, workspace: SourceSeekableEncodeWorkspace, options: NativeSeekableOptions, dictionary: NativeDictionary) SourceSeekableEncodeError!SourceSeekableEncodeResult {
+    return source_seek_encode.encode(SourceSeekableEncodeCodec, allocator, source, sink, workspace, options, dictionary);
+}
+
+test "Zstd source seekable encode contracts" {
+    try @import("tests/zstd_source_seekable_encode.zig").contracts(@This());
+}
 
 pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;
 pub const decodeConcatenatedFrameAllocExactSize = decodeNativeConcatenatedFrameAllocExactSize;

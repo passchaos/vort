@@ -2536,6 +2536,13 @@ pub const zstdDecodeSourceSeekableRangeInto = zstd.decodeSourceSeekableRangeInto
 pub const ZstdSourceSeekableRangeProgress = zstd.SourceSeekableRangeProgress;
 pub const ZstdSourceSeekableRangeOutcome = zstd.SourceSeekableRangeOutcome;
 pub const zstdDecodeSourceSeekableRangeIntoWithProgress = zstd.decodeSourceSeekableRangeIntoWithProgress;
+pub const ZstdSourceSeekableEncodeRequirements = zstd.SourceSeekableEncodeRequirements;
+pub const ZstdSourceSeekableEncodeWorkspace = zstd.SourceSeekableEncodeWorkspace;
+pub const ZstdSourceSeekableEncodeResult = zstd.SourceSeekableEncodeResult;
+pub const ZstdSourceSeekableEncodeError = zstd.SourceSeekableEncodeError;
+pub const zstdSourceSeekableEncodeRequirements = zstd.sourceSeekableEncodeRequirements;
+pub const zstdEncodeSourceSeekableTo = zstd.encodeSourceSeekableTo;
+pub const zstdEncodeSourceSeekableToWithDictionary = zstd.encodeSourceSeekableToWithDictionary;
 
 test "root Zstd source seekable consumer contracts" {
     try @import("tests/zstd_source_decode/seekable.zig").contracts(@This());
