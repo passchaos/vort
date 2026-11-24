@@ -15,6 +15,7 @@ pub fn Decoder(comptime Codec: type) type {
         active: Active = .detecting,
         prefix: [2]u8 = undefined,
         prefix_received: u2 = 0,
+        detection_input_finished: bool = false,
         detection_error_name: []const u8 = "",
         detection_error_input_offset: ?Count = null,
         last_step_progress: core.Progress = .{},
@@ -97,6 +98,7 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn reset(self: *Self) void {
             self.active = .detecting;
             self.prefix_received = 0;
+            self.detection_input_finished = false;
             self.detection_error_name = "";
             self.detection_error_input_offset = null;
             self.last_step_progress = .{};
@@ -219,7 +221,10 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn finish(self: *Self) Error!void {
             self.last_step_progress = .{};
             return switch (self.active) {
-                .detecting => self.failDetection(error.TruncatedFrame),
+                .detecting => blk: {
+                    self.detection_input_finished = true;
+                    break :blk self.failDetection(error.TruncatedFrame);
+                },
                 .zlib => |*decoder| decoder.finish(),
                 .gzip => |*decoder| decoder.finish(),
             };
@@ -246,6 +251,10 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn stepInternal(self: *Self, input: []const u8, output: []u8, block_boundary: bool, observer: ?HeaderObserver) Error!core.StepResult {
+            if (self.detection_input_finished) {
+                self.last_step_progress = .{};
+                return self.failDetection(if (input.len == 0) error.TruncatedFrame else error.TrailingData);
+            }
             const semantic_admitted = try self.admitStep(input, output);
             const workspace = switch (self.active) {
                 .detecting => null,

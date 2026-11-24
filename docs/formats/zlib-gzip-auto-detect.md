@@ -16,6 +16,12 @@ trailing-prefix recovery. Zlib-only `requiredDictionaryId` and
 `provideDictionary` preserve resumable FDICT behavior; they return null or
 `InvalidStreamState` for gzip. Explicit `allow_concatenated` continues with the
 selected wrapper type only, while a different wrapper is trailing data.
+Calling `finish` before the two-byte detector selects a wrapper returns
+`TruncatedFrame` and seals input, like a truncated header in either child.
+Later nonempty input returns `TrailingData` without consumption or output.
+`cloneInto` preserves the seal; `reset` starts detection again. A selected zlib
+member waiting on a complete DICTID still returns `NeedDictionary` without
+sealing input, so dictionary recovery remains possible.
 When an allowed tail ends the logical stream, `step` verifies the cumulative
 `expected_output_len` before reporting `.done`, even if the tail was split
 across calls. A short pledge returns `SizeMismatch` with prior member output
