@@ -59,6 +59,41 @@ eager decoder's object must also be separate; its prior decoded bytes cannot
 be used as history during reset. The prior output storage can be reused as
 the new destination. The normal heap profile excludes caller-owned buffers.
 
+## Direct reads from borrowed chunks
+
+`BrotliDirectChunkPreflightWorkspace` offers `decodedSize`, `decodedPrefixSize`,
+`decodeInto`, and `decodePrefixInto` without `compressed_scratch`. It feeds
+borrowed chunks to the same progressive decoder used for streaming. The size
+operations do one pass; the into operations first validate into a bounded
+internal discard buffer, check the physical capacity, then replay the same
+immutable chunks directly into caller output. Prefix offsets include the
+stream's validated padding but not any lookahead bytes from the next stream.
+
+```zig
+const workspace = try allocator.create(vort.BrotliDirectChunkPreflightWorkspace);
+defer allocator.destroy(workspace);
+const decoded = try workspace.decodePrefixInto(chunks, output, .{
+    .preflight = .{ .history = history_scratch, .max_output_len = limit },
+});
+```
+
+The explicit workspace holds the progressive decoder and a 4 KiB discard
+buffer; allocate it once and reuse it. Initialization is not required. An
+optional `compressed_header_scratch` in `Workspace.Options` can replace the
+embedded bounded header buffer, not stage the whole compressed stream. The
+mutable workspace, optional header scratch, history, output and profile must
+be disjoint from one another and from the chunks, descriptor table and
+dictionary storage. A borrow refusal writes none of them. Preflight may overwrite history and header/workspace scratch, but a
+validation or capacity error leaves decoded output unchanged. Neither pass uses
+an allocator; the heap profile excludes these caller-owned buffers.
+
+Because it validates using the progressive history ring, the direct variant
+requires nonempty history for nonempty data and enough history for the actual
+farthest backward copy, even when the fixed-summary path could skip replaying
+that copy. A short ring is `PreflightHistoryTooSmall`. There is no change to
+existing contiguous, join-scratch or eager APIs. This path trades a second
+progressive pass for removing whole-input staging; it is not a throughput claim.
+
 The focused decode-memory contracts cover a valid 65,537-byte copy followed by
 a context-selected literal, exactly sufficient and one-byte-short history,
 strict/prefix boundaries, output guard bytes, late-block cap refusal, an exact

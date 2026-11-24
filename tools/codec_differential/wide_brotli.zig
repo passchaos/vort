@@ -85,6 +85,7 @@ pub fn verify(a: std.mem.Allocator, wire: []const u8, plain: []const u8) !Receip
         return error.PreflightSizeMismatch;
     try checkOutput(guarded, plain);
     try verifyChunks(wire, plain, guarded, joined, options);
+    try verifyDirectChunks(a, wire, plain, guarded, options);
     if (!profile.available or profile.peak_requested_bytes != 0 or profile.live_requested_bytes != 0)
         return error.UnexpectedPreflightAllocation;
     return .{
@@ -114,6 +115,30 @@ fn verifyChunks(wire: []const u8, plain: []const u8, guarded: []u8, scratch: []u
     try checkOutput(guarded, plain);
     @memset(output, sentinel);
     if (try vort.brDecodeStreamChunksIntoWithPreflight(stream_chunks, scratch, output, options) != plain.len)
+        return error.PreflightSizeMismatch;
+    try checkOutput(guarded, plain);
+}
+
+fn verifyDirectChunks(a: std.mem.Allocator, wire: []const u8, plain: []const u8, guarded: []u8, preflight: vort.BrotliDecodePreflightOptions) !void {
+    const stride = 257;
+    const chunk_count = std.math.divCeil(usize, wire.len, stride) catch unreachable;
+    const chunks = try a.alloc([]const u8, chunk_count + 2);
+    defer a.free(chunks);
+    chunks[0] = &.{};
+    for (chunks[1..][0..chunk_count], 0..) |*chunk, i| {
+        const start = i * stride;
+        chunk.* = wire[start..][0..@min(stride, wire.len - start)];
+    }
+    chunks[chunks.len - 1] = "transport-tail";
+
+    const workspace = try a.create(vort.BrotliDirectChunkPreflightWorkspace);
+    defer a.destroy(workspace);
+    const options: vort.BrotliDirectChunkPreflightWorkspace.Options = .{ .preflight = preflight };
+    const output = guarded[1 .. guarded.len - 1];
+    @memset(output, sentinel);
+    try expectRefusal(workspace.decodeInto(chunks, output, options), error.TrailingData, guarded);
+    const decoded = try workspace.decodePrefixInto(chunks, output, options);
+    if (decoded.input_read != wire.len or decoded.output_written != plain.len)
         return error.PreflightSizeMismatch;
     try checkOutput(guarded, plain);
 }

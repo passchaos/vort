@@ -1341,6 +1341,15 @@ pub const DecodedPrefixSize = struct {
     decoded_bytes: Counter,
 };
 
+/// Reusable caller-owned state for preflight without a contiguous compressed copy.
+pub const DirectChunkPreflightWorkspace = @import("br/decode/direct_chunk_preflight.zig").Workspace(struct {
+    pub const Decoder = IncrementalCopyStreamDecoder;
+    pub const Error = DecodePreflightError;
+    pub const PreflightOptions = DecodePreflightOptions;
+    pub const PrefixSize = DecodedPrefixSize;
+    pub const PrefixResult = DecodePrefixResult;
+});
+
 /// Owned counterpart of `DecodePrefixResult`. `bytes` belongs to the caller.
 pub const DecodedPrefix = struct {
     bytes: []u8,

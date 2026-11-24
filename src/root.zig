@@ -1193,6 +1193,7 @@ pub const brDecodedStreamPrefixSizeLimitedWithOptions = br.decodedStreamPrefixSi
 
 pub const BrotliDecodePreflightOptions = br.DecodePreflightOptions;
 pub const BrotliDecodePreflightError = br.DecodePreflightError;
+pub const BrotliDirectChunkPreflightWorkspace = br.DirectChunkPreflightWorkspace;
 pub const brDecodedStreamSizeWithPreflight = br.decodedStreamSizeWithPreflight;
 pub const brDecodedStreamPrefixSizeWithPreflight = br.decodedStreamPrefixSizeWithPreflight;
 pub const brDecodeStreamIntoWithPreflight = br.decodeStreamIntoWithPreflight;
