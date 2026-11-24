@@ -93,7 +93,7 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_wasm_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-wasm-tests",
         .root_module = deflate_relaxed_wasm_mod,
-        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart", "Gzip source index" },
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart", "Gzip source index", "Deflate rsyncable" },
     });
     deflate_wide_wasm_tests.stack_size = 8 * 1024 * 1024;
     const deflate_wide_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/wide_decode/wasm_gate.js" });
@@ -1205,7 +1205,7 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-tests",
         .root_module = zlib_stream_tests.root_module,
-        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart", "Gzip source index" },
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart", "Gzip source index", "Deflate rsyncable" },
     });
     b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 counters, overflow and bit-checkpoint contracts")
         .dependOn(&b.addRunArtifact(deflate_wide_tests).step);
@@ -2259,6 +2259,24 @@ pub fn build(b: *std.Build) void {
     }
     const deflate_checkpoint_interop_step = b.step("run-deflate-checkpoint-interop", "Compare block checkpoint positions with libz across flushes and output caps");
     deflate_checkpoint_interop_step.dependOn(&b.addRunArtifact(deflate_checkpoint_interop_exe).step);
+    const gzip_rsyncable_probe = b.addExecutable(.{
+        .name = "vort-gzip-rsyncable-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/gzip_rsyncable_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "codec", .module = b.createModule(.{
+                .root_source_file = b.path("src/deflate.zig"),
+                .target = target,
+                .optimize = optimize,
+            }) }},
+        }),
+    });
+    const gzip_rsyncable_diff = b.addSystemCommand(&.{ "python3", "tools/deflate/gzip_rsyncable_diff.py" });
+    gzip_rsyncable_diff.addArtifactArg(gzip_rsyncable_probe);
+    if (b.args) |args| gzip_rsyncable_diff.addArgs(args);
+    b.step("run-gzip-rsyncable-diff", "Check incremental gzip round trips and local rsync reuse for a supplied file")
+        .dependOn(&gzip_rsyncable_diff.step);
     const deflate_split_history_interop_exe = b.addExecutable(.{
         .name = "vort-deflate-split-history-interop",
         .root_module = b.createModule(.{

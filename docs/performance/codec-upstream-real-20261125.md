@@ -66,7 +66,7 @@ CLI rejected it and offered no decode opt-in. `test-br-large-window-decode-cli`
 retains the fixture and distinguishes explicit opt-in from default rejection.
 
 GNU gzip 1.10 has a separate `--rsyncable` encoding workflow not exposed by
-Vort's gzip encoder. This is not a wire-decode difference. For the first
+the audited Vort baseline. This is not a wire-decode difference. For the first
 4 MiB of `nci` with `VORT_RSYNCPROBE` inserted at byte 4096, `gzip -n -6`
 and local rsync 3.2.7 with `-I --no-whole-file --stats` produced 359,973
 literal bytes transferred. Adding `--rsyncable` reduced that to 4,079 bytes,

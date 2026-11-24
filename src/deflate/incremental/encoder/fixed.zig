@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const rolling_hash = @import("match_finder/rolling_hash.zig");
 const step_borrows = @import("step_borrows.zig");
+const content_boundary = @import("content_boundary.zig");
 
 /// Incremental block-planned raw-DEFLATE encoder. Blocks share up to 32 KiB of
 /// history and hash-parser levels additionally share a persistent match index;
@@ -27,6 +28,8 @@ pub fn Encoder(comptime Codec: type) type {
         final_written: bool = false,
         done: bool = false,
         low_entropy_expanded: bool = false,
+        rsync_hash: u64 = 0,
+        rsync_boundary_pending: bool = false,
         total_input: core.StreamCount = 0,
         total_output: core.StreamCount = 0,
         expected_input_len: ?core.StreamCount = null,
@@ -82,6 +85,9 @@ pub fn Encoder(comptime Codec: type) type {
             /// begin near the boundary can be planned with next-call lookahead.
             /// Flush and finish still publish every accepted byte immediately.
             lookahead_len: usize = 0,
+            /// Use content-defined, byte-aligned full-flush boundaries.
+            /// Incompatible with adaptive sizing, coalescing, or lookahead.
+            rsyncable: bool = false,
         };
 
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -183,6 +189,8 @@ pub fn Encoder(comptime Codec: type) type {
             self.final_written = false;
             self.done = false;
             self.low_entropy_expanded = false;
+            self.rsync_hash = 0;
+            self.rsync_boundary_pending = false;
             self.total_input = 0;
             self.total_output = 0;
             self.expected_input_len = expected;
@@ -241,6 +249,7 @@ pub fn Encoder(comptime Codec: type) type {
                 .params_boundary_pending = managed_valid and self.params_boundary_pending,
                 .params_change_count = self.params_change_count,
                 .stored_only = self.stored_only,
+                // Wrapper admission treats this as an explicit input barrier.
                 .flushing = self.flush_mode != .none or (managed_valid and self.params_boundary_pending),
                 .finishing = self.finishing,
                 .done = self.done,
@@ -364,7 +373,7 @@ pub fn Encoder(comptime Codec: type) type {
             // Bound all drains together, so a later block cannot overflow
             // after earlier bytes or input have already been committed.
             if (output_len != 0 and self.total_output == std.math.maxInt(core.StreamCount)) {
-                const will_publish = input_len != 0 or (self.finishing and !self.final_written) or
+                const will_publish = input_len != 0 or self.rsync_boundary_pending or (self.finishing and !self.final_written) or
                     (self.managedParamsValid() and self.params_boundary_pending and self.plain.items.len != 0) or
                     (self.flush_mode != .none and
                         (self.plain.items.len != 0 or
@@ -407,6 +416,20 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output_limit and output.len != 0) return result(input_read, output_written, .need_output);
                 }
 
+                // Unlike a requested flush, an automatic cut must accept
+                // a retry with the unconsumed input suffix after backpressure.
+                if (self.rsync_boundary_pending) {
+                    if (self.plain.items.len != 0) {
+                        try self.writeDataBlock(false);
+                        continue;
+                    }
+                    try Codec.writeSyncFlush(self.allocator, &self.pending, &self.state);
+                    self.resetMatchHistory();
+                    self.flush_boundary = .sync;
+                    self.rsync_boundary_pending = false;
+                    continue;
+                }
+
                 if (self.params_boundary_pending) {
                     if (self.plain.items.len != 0)
                         try self.writeDataBlock(false);
@@ -435,13 +458,22 @@ pub fn Encoder(comptime Codec: type) type {
                     self.total_input = total_input;
                     continue;
                 }
-                const n = @min(room, input.len - input_read);
-                if (n != 0) {
-                    const total_input = try core.stream_count.addLocal(self.total_input, n);
-                    try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
+                const offered = input[input_read..][0..@min(room, input.len - input_read)];
+                if (offered.len != 0) {
+                    const scan = if (self.options.rsyncable)
+                        content_boundary.scan(self.rsync_hash, self.plain.items.len, block_target, offered)
+                    else
+                        content_boundary.Scan{ .take = offered.len };
+                    const total_input = try core.stream_count.addLocal(self.total_input, scan.take);
+                    try self.plain.appendSlice(self.allocator, offered[0..scan.take]);
                     self.flush_boundary = .none;
-                    input_read += n;
+                    input_read += scan.take;
                     self.total_input = total_input;
+                    if (self.options.rsyncable) {
+                        self.rsync_hash = scan.hash;
+                        self.rsync_boundary_pending = scan.boundary;
+                        if (scan.boundary) continue;
+                    }
                 }
                 const active_capacity = std.math.add(usize, self.activeBlockTarget(base_block_target), self.options.lookahead_len) catch return error.IntegerOverflow;
                 if (self.plain.items.len >= active_capacity and
@@ -496,6 +528,7 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn canWriteDirectBlock(self: *Self, input: []const u8, base_target: usize, block_capacity: usize) bool {
             if (self.plain.items.len != 0 or
+                self.options.rsyncable or
                 self.options.adaptive_blocks or
                 self.options.lookahead_len != 0 or
                 block_capacity != base_target or
@@ -656,6 +689,8 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         fn baseBlockTarget(options: Options) Error!usize {
+            if (options.rsyncable and (options.adaptive_blocks or
+                options.low_entropy_block_len != 0 or options.lookahead_len != 0)) return error.InvalidBlockPlan;
             if (!options.adaptive_blocks) {
                 if (options.block_len == 0) return error.InvalidBlockPlan;
                 if (options.lookahead_len >= options.block_len) return error.InvalidBlockPlan;
