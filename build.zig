@@ -2274,8 +2274,9 @@ pub fn build(b: *std.Build) void {
     });
     const gzip_rsyncable_diff = b.addSystemCommand(&.{ "python3", "tools/deflate/gzip_rsyncable_diff.py" });
     gzip_rsyncable_diff.addArtifactArg(gzip_rsyncable_probe);
+    gzip_rsyncable_diff.addArtifactArg(cli_exe);
     if (b.args) |args| gzip_rsyncable_diff.addArgs(args);
-    b.step("run-gzip-rsyncable-diff", "Check incremental gzip round trips and local rsync reuse for a supplied file")
+    b.step("run-gzip-rsyncable-diff", "Check incremental gzip CLI round trips and local rsync reuse after edits")
         .dependOn(&gzip_rsyncable_diff.step);
     const deflate_split_history_interop_exe = b.addExecutable(.{
         .name = "vort-deflate-split-history-interop",

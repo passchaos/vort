@@ -380,6 +380,8 @@ The library is under active development. Its current capabilities include:
   changes through `DeflateParams` and `requestParams()`; raw recovery APIs scan
   full-flush `00 00 ff ff` markers and decode or incrementally resume the next
   independent segment after payload corruption;
+- incremental gzip supports [rsync-friendly boundaries](docs/formats/gzip-rsyncable.md),
+  also available as `encode-gzip-best-file <in> <out> [level] --rsyncable`;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range

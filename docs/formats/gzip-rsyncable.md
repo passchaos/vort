@@ -30,20 +30,50 @@ callers to withdraw unconsumed input. The unmodified fixed-block policy remains
 the default. This mode does not claim GNU gzip's exact byte output or a
 particular compressed-size cost on other inputs.
 
+## Command line
+
+```sh
+vort encode-gzip-best-file input.bin output.gz --rsyncable
+vort encode-gzip-best-file input.bin output.gz fast --rsyncable
+```
+
+The flag can appear before or after the optional level or strategy. It selects
+bounded-memory incremental encoding, with no whole-file size cap; the output
+path is replaced only after the gzip member finishes successfully. Without
+`--rsyncable`, the command keeps the original one-shot encoding path and its
+128 MiB input limit.
+
 ## Verification
 
 ```sh
-zig build -Doptimize=ReleaseFast run-gzip-rsyncable-diff -- \
+zig build run-gzip-rsyncable-diff -- \
   "$HOME/Work/corpora/silesia-20261025/files/nci"
 ```
 
-The gate compares Vort's plain and rsyncable incremental encodes of the first
-4 MiB of `nci`, before and after inserting `VORT_RSYNCPROBE` at byte 4096. GNU
-gzip 1.10 independently decodes every wire. Local rsync 3.2.7
-(`-I --no-whole-file --stats`) reconstructs the edited gzip file byte-for-byte.
-On this fixture the edited wire grows from 446,980 to 550,376 bytes (+23.1%),
-while literal bytes transferred fall from 430,880 to 2,792. These are
-workflow-specific wire and reuse counts, not a throughput comparison.
+The gate compares the plain incremental library path with the rsyncable CLI
+at the same default compression level. It also checks that different buffer
+sizes in the CLI and library probe produce the same rsyncable basis bytes.
+GNU gzip 1.10 decodes every wire, and local rsync 3.2.7
+(`-I --no-whole-file --stats`) reconstructs each edited gzip byte-for-byte.
+
+The reference source is the first 4 MiB of Silesia `nci` (SHA-256
+`2c98cbb056dfda7d28ef56c612e48a0ae11fb8cf5d23a6918d35c78db1573134`).
+Each edit starts at byte 4096: insert `VORT_RSYNCPROBE`, replace the same
+number of bytes with that marker, or delete the same number of bytes.
+
+| Edit | Plain gzip bytes | Rsyncable gzip bytes | Plain rsync literal bytes | Rsyncable rsync literal bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Insertion | 446,980 | 550,376 | 430,880 | 2,792 |
+| Replacement | 447,015 | 550,374 | 447,015 | 2,790 |
+| Deletion | 447,016 | 550,357 | 430,216 | 2,773 |
+
+On this fixture the edited gzip grows by about 23.1%, while rsync literal bytes
+fall by factors of about 154–160. The gate requires at least a fivefold reduction
+on all three rows for this fingerprint. As a separate reference point on the
+same edits, GNU gzip `-n -6 -c --rsyncable` emits 434,579–434,623 bytes and
+requires 3,383–4,823 literal bytes. Vort sends fewer literals here but writes
+a larger file. These are fixture-specific size and reuse counts, not throughput
+measurements.
 
 The wide decode gate also executes the encoder contracts: byte-for-byte
 partition and reset determinism, independent suffix recovery, unchanged

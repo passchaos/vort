@@ -51,6 +51,47 @@ def gzip_decompress(frame: bytes) -> bytes:
     return result.stdout
 
 
+def check_rsyncable_encode_file() -> None:
+    command = "encode-gzip-best-file"
+    data = (b"abcdefghijklmnopqrstuvwxyz" * 4096) + b"tail"
+    with tempfile.TemporaryDirectory(prefix="vort-gzip-encode-") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        source, encoded = str(tmp / "input"), str(tmp / "output.gz")
+        for payload in (b"", data):
+            pathlib.Path(source).write_bytes(payload)
+            output = run_cli(command, source, encoded, "--rsyncable")
+            wire = pathlib.Path(encoded).read_bytes()
+            assert int(parse_field(output, "input_bytes")) == len(payload), output
+            assert int(parse_field(output, "output_bytes")) == len(wire), output
+            assert gzip_decompress(wire) == payload
+
+        default_rsyncable = wire
+        run_cli(command, source, encoded)
+        plain = pathlib.Path(encoded).read_bytes()
+        assert plain == bytes.fromhex(run_cli("encode-gzip-best-file-hex", source))
+        assert plain != default_rsyncable
+        run_cli(command, source, encoded, "fast")
+        assert pathlib.Path(encoded).read_bytes() == bytes.fromhex(run_cli("encode-gzip-best-file-hex", source, "fast"))
+
+        run_cli(command, source, encoded, "huffman-only", "--rsyncable")
+        strategy_wire = pathlib.Path(encoded).read_bytes()
+        assert strategy_wire != default_rsyncable
+        assert gzip_decompress(strategy_wire) == data
+        run_cli(command, source, encoded, "--rsyncable", "huffman-only")
+        assert pathlib.Path(encoded).read_bytes() == strategy_wire
+
+        for args, name in (
+            (("default", "--rsyncabl"), "UnknownGzipOption"),
+            (("--rsyncable", "--rsyncable"), "DuplicateGzipOption"),
+            (("--rsyncable", "fast", "best"), "UnexpectedArgument"),
+        ):
+            expect_cli_failure(command, source, encoded, *args, error_name=name)
+            assert pathlib.Path(encoded).read_bytes() == strategy_wire
+
+        run_cli(command, source, source, "--rsyncable")
+        assert pathlib.Path(source).read_bytes() == default_rsyncable
+
+
 def main() -> int:
     if not GZIP:
         print("gzip cli differential smoke: gzip=missing")
@@ -191,7 +232,8 @@ def main() -> int:
         adaptive = bytes.fromhex(run_cli("encode-gzip-best-adaptive-hex", text, "best"))
         assert gzip_decompress(adaptive) == data
 
-    print(f"gzip cli differential smoke: payloads={len(payloads)} split_payloads={len(split_payloads)} dynamic_payloads={len(dynamic_payloads)} gzip={GZIP} cli={CLI}")
+    check_rsyncable_encode_file()
+    print(f"gzip cli differential smoke: payloads={len(payloads)} split_payloads={len(split_payloads)} dynamic_payloads={len(dynamic_payloads)} rsyncable=ok gzip={GZIP} cli={CLI}")
     return 0
 
 

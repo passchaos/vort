@@ -59,6 +59,8 @@ const zstd_decode_cli = @import("cli/zstd_decode.zig");
 const decoded_output = @import("cli/decode_output.zig");
 const fast_cover_cli = @import("cli/fast_cover.zig");
 const brotli_cli = @import("cli/brotli.zig");
+const deflate_cli = @import("cli/deflate.zig");
+const parseCompressionOptions = deflate_cli.parseCompressionOptions;
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -1832,15 +1834,7 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
         try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-gzip-best-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(data);
-        const options = parseCompressionOptions(args.next());
-        const encoded = try vort.encodeGzipBestAlloc(init.gpa, data, options);
-        defer init.gpa.free(encoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
+        try deflate_cli.encodeGzipBestFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-raw-dict-best-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -3016,8 +3010,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode a zlib-compatible file with adaptive block splitting
         \\  encode-raw-best-file <in> <out> [level]
         \\                              Encode raw deflate file bytes with best-block selection
-        \\  encode-gzip-best-file <in> <out> [level]
-        \\                              Encode a gzip-compatible file with best-block selection
+        \\  encode-gzip-best-file <in> <out> [level] [--rsyncable]
+        \\                              Encode gzip; --rsyncable streams with content-defined boundaries
         \\  encode-raw-dict-best-file <in> <out> <dict> [level]
         \\                              Encode raw deflate file bytes using preset dictionary history
         \\  encode-raw-dict-best-split-file <in> <out> <dict> <block_len> [level]
@@ -3874,22 +3868,6 @@ fn parseHeaderInspectOutputFormat(text: ?[]const u8) !HeaderInspectOutputFormat 
     if (std.mem.eql(u8, value, "text")) return .text;
     if (std.mem.eql(u8, value, "json")) return .json;
     return error.InvalidSidecarValidationMode;
-}
-
-fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
-    const value = text orelse return vort.optionsForCompressionLevel(.default);
-    if (std.mem.eql(u8, value, "fastest")) return vort.optionsForCompressionLevel(.fastest);
-    if (std.mem.eql(u8, value, "fast")) return vort.optionsForCompressionLevel(.fast);
-    if (std.mem.eql(u8, value, "hash")) return .{ .parser = .hash };
-    if (std.mem.eql(u8, value, "default")) return vort.optionsForCompressionLevel(.default);
-    if (std.mem.eql(u8, value, "best")) return vort.optionsForCompressionLevel(.best);
-    if (std.mem.eql(u8, value, "filtered")) return .{ .strategy = .filtered };
-    if (std.mem.eql(u8, value, "huffman") or std.mem.eql(u8, value, "huffman-only")) return .{ .strategy = .huffman_only };
-    if (std.mem.eql(u8, value, "rle")) return .{ .strategy = .rle };
-    if (std.mem.eql(u8, value, "greedy")) return .{ .parser = .greedy };
-    if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
-    if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
-    return vort.optionsForCompressionLevel(.default);
 }
 
 fn parseOptionalBool(text: ?[]const u8, default: bool) !bool {
