@@ -180,6 +180,9 @@ const SourceSeekableTestSupport = struct {
     pub const zstdOpenSourceSeekTable = openSourceSeekTable;
     pub const zstdSourceSeekableRangeRequirements = sourceSeekableRangeRequirements;
     pub const zstdDecodeSourceSeekableRangeInto = decodeSourceSeekableRangeInto;
+    pub const ZstdSourceSeekableRangeProgress = SourceSeekableRangeProgress;
+    pub const ZstdSourceSeekableRangeOutcome = SourceSeekableRangeOutcome;
+    pub const zstdDecodeSourceSeekableRangeIntoWithProgress = decodeSourceSeekableRangeIntoWithProgress;
 };
 
 test "Zstd source seekable range contracts" {
@@ -188,6 +191,10 @@ test "Zstd source seekable range contracts" {
 
 test "Zstd source seekable dictionary rotation" {
     try @import("tests/zstd_source_decode/seekable_dictionary.zig").contracts(SourceSeekableTestSupport);
+}
+
+test "Zstd source seekable progress retains wide retry offsets" {
+    try @import("tests/zstd_source_decode/seekable_progress_wide.zig").contracts(SourceSeekableTestSupport);
 }
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
@@ -5533,14 +5540,18 @@ pub const decodeSourceStreamAppend = source_decode_facade.decodeStreamAppend;
 pub const decodeSourceStreamAlloc = source_decode_facade.decodeStreamAlloc;
 
 const source_seek_table = @import("zstd/source/seek_table.zig");
-const source_seek_decode = @import("zstd/source/seek_decode.zig").Facade(source_decode_facade);
+const source_seek_range = @import("zstd/source/seek_decode.zig");
+const source_seek_decode = source_seek_range.Facade(source_decode_facade);
 pub const SourceSeekTable = source_seek_table.Table;
 pub const SourceSeekIndex = source_seek_table.Index;
 pub const SourceSeekableDecodeOptions = source_seek_decode.Options;
-pub const SourceSeekableRangeRequirements = @import("zstd/source/seek_decode.zig").Requirements;
+pub const SourceSeekableRangeRequirements = source_seek_range.Requirements;
+pub const SourceSeekableRangeProgress = source_seek_range.RangeProgress;
+pub const SourceSeekableRangeOutcome = source_seek_range.RangeOutcome;
 pub const openSourceSeekTable = source_seek_table.open;
 pub const sourceSeekableRangeRequirements = source_seek_decode.requirements;
 pub const decodeSourceSeekableRangeInto = source_seek_decode.decodeInto;
+pub const decodeSourceSeekableRangeIntoWithProgress = source_seek_decode.decodeIntoWithProgress;
 
 pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;
 pub const decodeConcatenatedFrameAllocExactSize = decodeNativeConcatenatedFrameAllocExactSize;

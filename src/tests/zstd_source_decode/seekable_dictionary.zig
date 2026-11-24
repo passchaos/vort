@@ -210,4 +210,37 @@ pub fn contracts(comptime Support: type) !void {
     try std.testing.expectEqualStrings(a_tail ++ b_head, output);
     try std.testing.expectEqual(sentinel, storage[0]);
     try std.testing.expectEqual(sentinel, storage[storage.len - 1]);
+
+    // Progress exposes both the missing dictionary and the retry coordinates.
+    const decode_progress = Support.zstdDecodeSourceSeekableRangeIntoWithProgress;
+    @memset(&storage, sentinel);
+    guarded.allowed = &missing_selection;
+    const failure = switch (decode_progress(index, crossing, output, workspace, &scratch, missing)) {
+        .failed => |rejected| rejected,
+        .complete => return error.TestUnexpectedResult,
+    };
+    try std.testing.expectEqual(error.NeedDictionary, failure.err);
+    try std.testing.expectEqual(a_tail.len, failure.progress.output_written);
+    try std.testing.expectEqual(@as(u64, plain_b.len + plain_a.len), failure.progress.next_decoded_offset);
+    try std.testing.expectEqual(@as(usize, 1), failure.progress.frames_committed);
+    const failed_frame = failure.frame orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u32, 2), failed_frame.frame_index);
+    try std.testing.expectEqual(@as(u64, spans[2].start), failed_frame.compressed_offset);
+    try std.testing.expectEqual(@as(?u32, b.id), failed_frame.dictionary_id);
+    try std.testing.expectEqualStrings(a_tail, output[0..a_tail.len]);
+    try std.testing.expect(std.mem.allEqual(u8, output[a_tail.len..], sentinel));
+    try std.testing.expectEqual(sentinel, storage[0]);
+    try std.testing.expectEqual(sentinel, storage[storage.len - 1]);
+
+    guarded.allowed = selected[1..];
+    const resumed = switch (decode_progress(index, failure.progress.next_decoded_offset, output[failure.progress.output_written..], workspace, &scratch, with_fallback)) {
+        .complete => |progress| progress,
+        .failed => |rejected| return rejected.err,
+    };
+    try std.testing.expectEqual(b_head.len, resumed.output_written);
+    try std.testing.expectEqual(@as(u64, crossing + output.len), resumed.next_decoded_offset);
+    try std.testing.expectEqual(@as(usize, 1), resumed.frames_committed);
+    try std.testing.expectEqualStrings(a_tail ++ b_head, output);
+    try std.testing.expectEqual(sentinel, storage[0]);
+    try std.testing.expectEqual(sentinel, storage[storage.len - 1]);
 }

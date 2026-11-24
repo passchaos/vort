@@ -56,6 +56,33 @@ verifying its complete frame; if a later frame fails, earlier verified ranges
 remain written, and the failing frame's output stays untouched. Scratch and
 workspace contents are unspecified after a failure.
 
+## Resume after a partial range failure
+
+`zstdDecodeSourceSeekableRangeIntoWithProgress` takes the same arguments and
+returns `ZstdSourceSeekableRangeOutcome`. Both `.complete` and
+`.failed.progress` give the verified `output_written` prefix, the absolute
+`next_decoded_offset`, and `frames_committed` for this call. An intersection is
+counted only after the complete selected frame passes size and checksum checks
+and its requested bytes have been copied. Skipped and zero-output entries do
+not count.
+
+A failure includes `err` and, if a selected frame was being processed,
+`frame.frame_index` and `frame.compressed_offset`. `frame.dictionary_id` is
+null when the header could not be validated, zero for an ID-less frame, and
+otherwise the wire ID (useful for `NeedDictionary` and `DictionaryMismatch`).
+Range, scratch, alias, and index-derived frame-limit admission errors identify
+no frame and report zero progress at the original requested offset.
+
+After resolving a transient source failure or supplying the correct dictionary,
+reuse the stable source and index. Retry with `failure.progress.next_decoded_offset`
+and `output[failure.progress.output_written..]`. The retry starts at the
+unwritten intersection and verifies its frame from the beginning; it does not
+reread previously committed frames. The result describes publication, not
+compressed bytes consumed or scratch state. The simpler error-union API is
+unchanged for callers that do not need this information.
+
+## Admission and verification
+
 `frame_decoded_max` applies to each full selected frame and is checked against
 the index before frame reads; `max_window_size` is checked at each selected
 frame's header before dictionary lookup or block reads. Supply a dictionary
@@ -82,3 +109,5 @@ its content is wrong. The Vort range crosses adjacent entries with different
 IDs, without reading either surrounding frame. Tests verify catalog precedence,
 fallback, header-only refusal of a missing dictionary, and retry of only the
 unwritten suffix after the preceding frame has already been published.
+The progress contracts also inject I/O and checksum errors and model a sparse
+source whose selected frames' compressed and decoded offsets exceed 4 GiB.

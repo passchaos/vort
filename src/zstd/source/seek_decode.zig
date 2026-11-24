@@ -7,6 +7,40 @@ const Range = @import("input.zig").Range;
 const output_alias = @import("output_alias.zig");
 const minimum_page_len = @import("reverse_bit_reader.zig").minimum_page_len;
 const seek_table = @import("seek_table.zig");
+const Error = @import("decode_api.zig").Error;
+
+pub const RangeProgress = struct {
+    /// Verified plaintext published to the caller's output prefix.
+    output_written: usize = 0,
+    /// The requested offset plus `output_written`, including on rejection.
+    next_decoded_offset: u64,
+    /// Selected data frames whose intersections have been published.
+    frames_committed: usize = 0,
+};
+
+pub const RangeOutcome = union(enum) {
+    complete: RangeProgress,
+    failed: Failure,
+
+    pub const Failure = struct {
+        err: Error,
+        progress: RangeProgress,
+        /// Null when the range or buffers were rejected before frame execution.
+        frame: ?Frame,
+    };
+
+    pub const Frame = struct {
+        frame_index: u32,
+        compressed_offset: u64,
+        /// The encoded ID, including 0, or null before header validation.
+        dictionary_id: ?u32,
+    };
+};
+
+const RangeObservation = struct {
+    progress: RangeProgress,
+    failed_frame: ?RangeOutcome.Frame = null,
+};
 
 const Selection = struct {
     entry: seekable.Entry,
@@ -87,8 +121,6 @@ pub const Requirements = struct {
 
 pub fn Facade(comptime Decode: type) type {
     return struct {
-        const Error = @import("decode_api.zig").Error;
-
         pub const Options = struct {
             /// ID-less binding or fallback when the catalog does not contain a declared ID.
             dictionary: @FieldType(Decode.Options, "dictionary") = null,
@@ -110,7 +142,7 @@ pub fn Facade(comptime Decode: type) type {
                 .range_scratch = scratch_len,
             };
             while (try selections.next()) |part| {
-                const parsed = try prepare(index.table, part, frameOptions(part, options));
+                const parsed = try admit(part, try part.frameLayout(index.table), frameOptions(part, options));
                 needed.staging = @max(needed.staging, parsed.frame.header.block_size_max);
                 needed.history = @max(needed.history, try history_workspace.requiredLen(
                     parsed.frame.header.window_size,
@@ -130,6 +162,34 @@ pub fn Facade(comptime Decode: type) type {
             range_scratch: []u8,
             options: Options,
         ) Error!usize {
+            return decodeIntoObserved(index, offset, output, workspace, range_scratch, options, null);
+        }
+
+        /// Report the exact published prefix on success or failure. Retry a
+        /// refused frame at `next_decoded_offset` with the unwritten output.
+        pub fn decodeIntoWithProgress(
+            index: seek_table.Index,
+            offset: u64,
+            output: []u8,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+        ) RangeOutcome {
+            var observation: RangeObservation = .{ .progress = .{ .next_decoded_offset = offset } };
+            _ = decodeIntoObserved(index, offset, output, workspace, range_scratch, options, &observation) catch |err|
+                return .{ .failed = .{ .err = err, .progress = observation.progress, .frame = observation.failed_frame } };
+            return .{ .complete = observation.progress };
+        }
+
+        fn decodeIntoObserved(
+            index: seek_table.Index,
+            offset: u64,
+            output: []u8,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+            observation: ?*RangeObservation,
+        ) Error!usize {
             var selections = try Selections.init(index, offset, output.len);
             if (output.len == 0) return 0;
             const scratch_len = try selections.scratchLen(options.frame_decoded_max);
@@ -139,9 +199,22 @@ pub fn Facade(comptime Decode: type) type {
             var written: usize = 0;
             while (try selections.next()) |part| {
                 const scratch = range_scratch[0..part.len()];
-                try decodeSelection(index.table, part, workspace, scratch, frameOptions(part, options));
+                var dictionary_id: ?u32 = null;
+                decodeSelection(index.table, part, workspace, scratch, frameOptions(part, options), if (observation != null) &dictionary_id else null) catch |err| {
+                    if (observation) |observed| observed.failed_frame = .{
+                        .frame_index = part.entry.frame_index,
+                        .compressed_offset = part.entry.compressed_offset,
+                        .dictionary_id = dictionary_id,
+                    };
+                    return err;
+                };
                 @memcpy(output[written..][0..scratch.len], scratch);
                 written += scratch.len;
+                if (observation) |observed| {
+                    observed.progress.output_written = written;
+                    observed.progress.next_decoded_offset = offset + written;
+                    observed.progress.frames_committed += 1;
+                }
             }
             return written;
         }
@@ -171,8 +244,7 @@ pub fn Facade(comptime Decode: type) type {
             };
         }
 
-        fn prepare(table: seek_table.Table, part: Selection, options: Decode.Options) Error!Decode.Parsed {
-            const layout = try part.frameLayout(table);
+        fn admit(part: Selection, layout: frame.DataFrameLayout, options: Decode.Options) Error!Decode.Parsed {
             if (layout.header.window_size > options.max_window_size) return error.OutputLimitExceeded;
             if (layout.header.content_size) |size| {
                 if (size != part.entry.decompressed_size) return error.SizeMismatch;
@@ -186,8 +258,11 @@ pub fn Facade(comptime Decode: type) type {
             workspace: Decode.Workspace,
             scratch: []u8,
             options: Decode.Options,
+            dictionary_id: ?*?u32,
         ) Error!void {
-            const parsed = try prepare(table, part, options);
+            const layout = try part.frameLayout(table);
+            if (dictionary_id) |id| id.* = layout.header.dictionary_id;
+            const parsed = try admit(part, layout, options);
             var history: history_workspace.Binding = undefined;
             var state: Decode.FrameState = undefined;
             var executor = try Decode.openFrame(parsed, workspace, options, &history, &state);

@@ -139,6 +139,8 @@ pub fn contracts(comptime Support: type) !void {
     try std.testing.expectEqual(sentinel, guarded_output[guarded_output.len - 1]);
     try std.testing.expectEqual(@as(usize, 0), guarded.denied);
 
+    try progressContracts(Support, &guarded, index, workspace, scratch[0..needed.range_scratch]);
+
     // Starting just after the empty entry selects only bravo. A second read
     // begins halfway through bravo and crosses both of its compressed blocks.
     guarded.allow(&.{bravo});
@@ -155,6 +157,66 @@ pub fn contracts(comptime Support: type) !void {
     try failureContracts(Support, workspace, &scratch);
 }
 
+fn progressContracts(comptime Support: type, guarded: *GuardedSource, index: anytype, workspace: Support.ZstdSourceFrameWorkspace, scratch: []u8) !void {
+    const decode = Support.zstdDecodeSourceSeekableRangeIntoWithProgress;
+    const untouched: Support.ZstdSourceSeekableRangeProgress = .{ .output_written = 0, .next_decoded_offset = cross_offset, .frames_committed = 0 };
+    var storage: [cross_plain.len + 2]u8 = @splat(sentinel);
+    const output = storage[1 .. storage.len - 1];
+
+    // Preflight rejects these calls using only the index and buffer bounds.
+    guarded.allow(&.{});
+    try expectFailure(Support, decode(index, cross_offset, output, workspace, scratch[0 .. scratch.len - 1], .{}), .{
+        .err = error.OutputTooSmall,
+        .progress = untouched,
+        .frame = null,
+    });
+    try expectFailure(Support, decode(index, cross_offset, output, workspace, output, .{}), .{
+        .err = error.InvalidBlockPlan,
+        .progress = untouched,
+        .frame = null,
+    });
+    try expectFailure(Support, decode(index, cross_offset, output, workspace, scratch, .{ .frame_decoded_max = frame_size - 1 }), .{
+        .err = error.OutputLimitExceeded,
+        .progress = untouched,
+        .frame = null,
+    });
+    try std.testing.expectEqual(@as(usize, 0), guarded.calls);
+    try expectSentinel(&storage);
+
+    // A callback error before alpha's header is validated has no dictionary ID.
+    try expectFailure(Support, decode(index, cross_offset, output, workspace, scratch, .{}), .{
+        .err = error.SourceReadFailed,
+        .progress = untouched,
+        .frame = .{ .frame_index = 0, .compressed_offset = alpha.start, .dictionary_id = null },
+    });
+    try std.testing.expectEqual(@as(usize, 1), guarded.denied);
+    try expectSentinel(&storage);
+
+    // Bravo's header and first block header are readable, but no payload bytes.
+    const bravo_block_header = Span{ .start = bravo.start, .end = bravo_header.end + 3 };
+    guarded.allow(&.{ alpha, bravo_block_header });
+    try expectFailure(Support, decode(index, cross_offset, output, workspace, scratch, .{}), .{
+        .err = error.SourceReadFailed,
+        .progress = .{ .output_written = 3, .next_decoded_offset = frame_size, .frames_committed = 1 },
+        .frame = .{ .frame_index = 2, .compressed_offset = bravo.start, .dictionary_id = 0 },
+    });
+    try std.testing.expectEqual(@as(usize, 1), guarded.denied);
+    try std.testing.expectEqualStrings("ha-", output[0..3]);
+    try expectSentinel(storage[4..]);
+    try std.testing.expectEqual(sentinel, storage[0]);
+
+    guarded.allow(&.{ alpha, bravo });
+    try expectComplete(Support, decode(index, cross_offset, output, workspace, scratch, .{}), .{
+        .output_written = output.len,
+        .next_decoded_offset = cross_offset + cross_plain.len,
+        .frames_committed = 2,
+    });
+    try std.testing.expectEqualStrings(cross_plain, output);
+    try std.testing.expectEqual(sentinel, storage[0]);
+    try std.testing.expectEqual(sentinel, storage[storage.len - 1]);
+    try std.testing.expectEqual(@as(usize, 0), guarded.denied);
+}
+
 fn emptyAndBounds(comptime Support: type, guarded: *GuardedSource, index: anytype) !void {
     guarded.allow(&.{});
     const workspace: Support.ZstdSourceFrameWorkspace = .{ .history = &.{}, .staging = &.{}, .literal_page = &.{}, .sequence_page = &.{} };
@@ -163,6 +225,11 @@ fn emptyAndBounds(comptime Support: type, guarded: *GuardedSource, index: anytyp
         const needed = try Support.zstdSourceSeekableRangeRequirements(index, offset, 0, .{ .frame_decoded_max = 0, .max_window_size = 0 });
         try std.testing.expectEqual(@as(usize, 0), needed.history | needed.staging | needed.literal_page | needed.sequence_page | needed.range_scratch);
         try std.testing.expectEqual(@as(usize, 0), try Support.zstdDecodeSourceSeekableRangeInto(index, offset, &.{}, workspace, &.{}, .{ .frame_decoded_max = 0, .max_window_size = 0 }));
+        try expectComplete(Support, Support.zstdDecodeSourceSeekableRangeIntoWithProgress(index, offset, &.{}, workspace, &.{}, .{ .frame_decoded_max = 0, .max_window_size = 0 }), .{
+            .output_written = 0,
+            .next_decoded_offset = offset,
+            .frames_committed = 0,
+        });
     }
 
     try std.testing.expectError(error.RangeOutOfBounds, Support.zstdSourceSeekableRangeRequirements(index, end + 1, 0, .{}));
@@ -170,6 +237,11 @@ fn emptyAndBounds(comptime Support: type, guarded: *GuardedSource, index: anytyp
     try std.testing.expectError(error.RangeOutOfBounds, Support.zstdDecodeSourceSeekableRangeInto(index, end + 1, &.{}, workspace, &.{}, .{}));
     var output: [2]u8 = @splat(sentinel);
     try std.testing.expectError(error.RangeOutOfBounds, Support.zstdDecodeSourceSeekableRangeInto(index, end - 1, &output, workspace, &.{}, .{}));
+    try expectFailure(Support, Support.zstdDecodeSourceSeekableRangeIntoWithProgress(index, end - 1, &output, workspace, &.{}, .{}), .{
+        .err = error.RangeOutOfBounds,
+        .progress = .{ .output_written = 0, .next_decoded_offset = end - 1, .frames_committed = 0 },
+        .frame = null,
+    });
     try expectSentinel(&output);
     try std.testing.expectEqual(@as(usize, 0), guarded.calls);
 }
@@ -250,9 +322,34 @@ fn failureContracts(comptime Support: type, workspace: Support.ZstdSourceFrameWo
                 try std.testing.expectError(expected, Support.zstdDecodeSourceSeekableRangeInto(index, cross_offset, &output, workspace, scratch, .{}));
                 try std.testing.expectEqualStrings("ha-", output[0..3]);
                 try expectSentinel(output[3..]);
+
+                if (fault == .frame_checksum or fault == .table_checksum) {
+                    @memset(&output, sentinel);
+                    try expectFailure(Support, Support.zstdDecodeSourceSeekableRangeIntoWithProgress(index, cross_offset, &output, workspace, scratch, .{}), .{
+                        .err = error.ChecksumMismatch,
+                        .progress = .{ .output_written = 3, .next_decoded_offset = frame_size, .frames_committed = 1 },
+                        .frame = .{ .frame_index = 2, .compressed_offset = bravo.start, .dictionary_id = 0 },
+                    });
+                    try std.testing.expectEqualStrings("ha-", output[0..3]);
+                    try expectSentinel(output[3..]);
+                }
             },
         }
         try std.testing.expectEqual(@as(usize, 0), guarded.denied);
+    }
+}
+
+fn expectComplete(comptime Support: type, outcome: Support.ZstdSourceSeekableRangeOutcome, expected: Support.ZstdSourceSeekableRangeProgress) !void {
+    switch (outcome) {
+        .complete => |progress| try std.testing.expectEqualDeep(expected, progress),
+        .failed => |failure| return failure.err,
+    }
+}
+
+fn expectFailure(comptime Support: type, outcome: Support.ZstdSourceSeekableRangeOutcome, expected: Support.ZstdSourceSeekableRangeOutcome.Failure) !void {
+    switch (outcome) {
+        .failed => |failure| try std.testing.expectEqualDeep(expected, failure),
+        .complete => return error.TestUnexpectedResult,
     }
 }
 
