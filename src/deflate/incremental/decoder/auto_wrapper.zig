@@ -38,6 +38,8 @@ pub fn Decoder(comptime Codec: type) type {
             allow_concatenated: bool = false,
             allow_trailing_data: bool = false,
             ignore_zlib_adler: bool = false,
+            /// Limit the declared window only when zlib is selected.
+            max_zlib_window_bits: u4 = 15,
             ignore_gzip_crc32: bool = false,
             ignore_gzip_isize: bool = false,
             max_gzip_header_metadata_len: usize = 1 << 20,
@@ -477,6 +479,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .expected_output_len = options.expected_output_len,
                 .allow_concatenated = options.allow_concatenated,
                 .ignore_adler = options.ignore_zlib_adler,
+                .max_window_bits = options.max_zlib_window_bits,
                 .allow_trailing_data = options.allow_trailing_data,
             };
         }

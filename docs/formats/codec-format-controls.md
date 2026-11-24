@@ -50,6 +50,26 @@ header around the existing distance-one encoder.
 `ZlibEncodeError` owns the new framing error; generic raw encoders and decoders
 retain their existing error set.
 
+## zlib decoder window admission
+
+`ZlibDecodeOptions.max_window_bits` and `ZlibIncrementalDecoder.Options.max_window_bits`
+accept limits from 8 through 15 (default 15). Auto decoding forwards
+`ZlibOrGzipDecodeOptions.zlib.max_window_bits` or the incremental
+`max_zlib_window_bits` to the zlib child only. Raw Deflate and gzip are unchanged.
+
+Each zlib member first validates its complete CMF/FLG bytes. A declared window
+above the configured limit returns `OutputLimitExceeded` before reading DICTID
+or decoding that member. A limit below 8 returns `InvalidBlockPlan` after fixed
+header validation. A recognized next member cannot be ignored as trailing data
+when its window exceeds the limit. This is a limit on the declaration, not a
+change to match-distance compatibility or the size of caller-owned history.
+
+`test-zlib-or-gzip-auto`, `test-zlib-or-gzip-auto-x86`, and
+`test-zlib-or-gzip-auto-wasm` exercise this policy on the three execution targets.
+For the same small stored payload, system libz 1.2.11 and local zlib-ng 1.3.2
+both accepted exactly the declarations at or below the selected 8-, 9-, or
+15-bit cap, in `inflateInit2` direct and auto modes (`wbits` and `32 + wbits`).
+
 ## Zstd content checksum policy
 
 `ZstdFrameDecodeOptions.ignore_content_checksum` and

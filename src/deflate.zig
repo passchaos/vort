@@ -14,6 +14,7 @@ const BitCount = bit_geometry.BitCount;
 const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
+const zlib_header_wire = @import("deflate/zlib_header.zig");
 const wrapper_count = @import("deflate/incremental/decoder/wrapper_count.zig");
 const png_ultrafast = @import("png_ultrafast.zig");
 const png_windowed_history =
@@ -588,6 +589,10 @@ test "zlib or gzip auto wrapper contracts for one-shot member limits" {
     try @import("deflate/tests/wrapper_member_limits.zig").contracts(@This());
 }
 
+test "zlib or gzip auto wrapper contracts for zlib window admission" {
+    try @import("deflate/tests/zlib_window_limit.zig").contracts(@This());
+}
+
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
     return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
 }
@@ -1061,6 +1066,8 @@ pub const ZlibDecodeOptions = struct {
     /// Stop after a complete stream or an unrecognized concatenated suffix.
     /// A valid CMF/FLG prefix commits the next member, including its DICTID.
     allow_trailing_data: bool = false,
+    /// Maximum CMF/CINFO-declared window (8 through 15 bits).
+    max_window_bits: u4 = 15,
     /// Maximum zlib members in this call, including empty ones.
     max_members: core.StreamCount = std.math.maxInt(core.StreamCount),
 };
@@ -1106,10 +1113,7 @@ pub const ZlibOrGzipDecodeOptions = struct {
 pub fn detectZlibOrGzip(input: []const u8) Error!ZlibOrGzipFormat {
     if (input.len < 2) return error.TruncatedFrame;
     if (input[0] == 0x1f and input[1] == 0x8b) return .gzip;
-    const cmf = input[0];
-    const flg = input[1];
-    const combined = (@as(u16, cmf) << 8) | flg;
-    if (cmf & 0x0f == 8 and cmf >> 4 <= 7 and combined % 31 == 0) return .zlib;
+    if (zlib_header_wire.recognizes(input[0], input[1])) return .zlib;
     return error.InvalidMagic;
 }
 
@@ -8792,12 +8796,8 @@ const ChunkCursor = struct {
 fn parseZlibHeaderFromChunks(chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!ZlibHeader {
     const cmf = chunkByteAt(chunks, 0) orelse return error.TruncatedFrame;
     const flg = chunkByteAt(chunks, 1) orelse return error.TruncatedFrame;
-    if ((cmf & 0x0f) != 8) return error.BadZlibHeader;
-    const cinfo = cmf >> 4;
-    if (cinfo > 7) return error.BadZlibHeader;
-    const combined: u16 = (@as(u16, cmf) << 8) | flg;
-    if (combined % 31 != 0) return error.BadZlibHeader;
-
+    const window_bits = try zlib_header_wire.windowBits(cmf, flg);
+    try zlib_header_wire.admitWindow(window_bits, options.max_window_bits);
     try wrapper_count.admitMember(0, options.max_members);
     const uses_dictionary = (flg & 0x20) != 0;
     if (!uses_dictionary) return .{ .data_offset = 2, .uses_dictionary = false };
@@ -17555,11 +17555,8 @@ fn parseZlibDecodeHeaderInfo(input: []const u8, options: ZlibDecodeOptions, comp
     if (input.len < 2) return error.TruncatedFrame;
     const cmf = input[0];
     const flg = input[1];
-    if ((cmf & 0x0f) != 8) return error.BadZlibHeader;
-    const cinfo = cmf >> 4;
-    if (cinfo > 7) return error.BadZlibHeader;
-    const combined: u16 = (@as(u16, cmf) << 8) | flg;
-    if (combined % 31 != 0) return error.BadZlibHeader;
+    const window_bits = try zlib_header_wire.windowBits(cmf, flg);
+    try zlib_header_wire.admitWindow(window_bits, options.max_window_bits);
     try wrapper_count.admitMember(core.stream_count.fromLocal(completed), options.max_members);
 
     const uses_dictionary = (flg & 0x20) != 0;
@@ -17568,8 +17565,8 @@ fn parseZlibDecodeHeaderInfo(input: []const u8, options: ZlibDecodeOptions, comp
         .cmf = cmf,
         .flg = flg,
         .compression_method = cmf & 0x0f,
-        .window_bits = cinfo + 8,
-        .window_size = @as(usize, 1) << @intCast(cinfo + 8),
+        .window_bits = window_bits,
+        .window_size = @as(usize, 1) << window_bits,
         .fcheck = flg & 0x1f,
         .uses_dictionary = uses_dictionary,
         .flevel = @intCast(flg >> 6),

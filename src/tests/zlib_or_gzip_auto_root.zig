@@ -20,6 +20,11 @@ pub fn contracts(comptime V: type) !void {
         try std.testing.expectEqualStrings(plain, owned.bytes);
     }
 
+    const capped: V.ZlibOrGzipDecodeOptions = .{ .zlib = .{ .max_window_bits = 9 } };
+    try std.testing.expectError(error.OutputLimitExceeded, V.decodeZlibOrGzipWithOptions(zlib, &output, capped));
+    try std.testing.expectEqual(plain.len, try V.decodeZlibOrGzipWithOptions(gzip, &output, capped));
+    try std.testing.expectEqualStrings(plain, &output);
+
     const Auto = V.ZlibOrGzipIncrementalDecoder;
     const Observe = struct {
         start_count: usize = 0,

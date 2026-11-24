@@ -1,6 +1,7 @@
 //! Bounded recognition of a subsequent wrapper member. At most one byte is
 //! accepted speculatively; a rejected current suffix stays with the caller.
 const std = @import("std");
+const zlib_header = @import("../../zlib_header.zig");
 
 pub const Kind = enum { zlib, gzip };
 pub const Decision = enum { need_input, member, trailing };
@@ -9,15 +10,14 @@ pub const Result = struct { accepted: usize = 0, decision: Decision };
 pub fn recognizes(kind: Kind, input: []const u8) bool {
     if (input.len < 2) return false;
     return switch (kind) {
-        .zlib => plausibleFirst(.zlib, input[0]) and
-            ((@as(u16, input[0]) << 8) | input[1]) % 31 == 0,
+        .zlib => zlib_header.recognizes(input[0], input[1]),
         .gzip => input[0] == 0x1f and input[1] == 0x8b,
     };
 }
 
 fn plausibleFirst(kind: Kind, byte: u8) bool {
     return switch (kind) {
-        .zlib => byte & 0x0f == 8 and byte >> 4 <= 7,
+        .zlib => zlib_header.plausibleCmf(byte),
         .gzip => byte == 0x1f,
     };
 }

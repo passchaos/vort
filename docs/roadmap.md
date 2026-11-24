@@ -111,6 +111,9 @@ whole-input and chunk gzip decode, including concatenated and auto routes;
 existing whole-input defaults remain unlimited. Direct and auto-detected
 incremental and one-shot zlib/gzip can independently cap the number of
 members, including empty members that do not use the plaintext budget.
+The [zlib declaration limit](formats/codec-format-controls.md#zlib-decoder-window-admission)
+also rejects a valid member that advertises a window above the caller's cap,
+without changing gzip or raw Deflate behavior.
 The [Zstd frame-count limit](formats/zstd-frame-count-limit.md) likewise
 bounds the combined count of data and skippable frames across one-shot,
 chunked, reusable, incremental and random-access source decoding.

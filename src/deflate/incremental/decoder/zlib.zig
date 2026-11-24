@@ -3,6 +3,7 @@ const core = @import("../../../core.zig");
 const count = core.stream_count;
 const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
+const zlib_header = @import("../../zlib_header.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
 const step_borrows = @import("step_borrows.zig");
@@ -52,6 +53,8 @@ pub fn Decoder(comptime Codec: type) type {
         pub const CloneStorage = Codec.RawDecoder.CloneStorage;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum CMF/CINFO-declared window (8 through 15 bits).
+            max_window_bits: u4 = 15,
             /// Maximum zlib members per logical stream, including empty ones.
             max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
@@ -467,10 +470,8 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn validateHeader(self: *Self) Error!void {
-            const cmf = self.header[0];
-            const flg = self.header[1];
-            if ((cmf & 0x0f) != 8 or (cmf >> 4) > 7) return self.fail(.header, error.BadZlibHeader);
-            if ((@as(u16, cmf) << 8 | flg) % 31 != 0) return self.fail(.header, error.BadZlibHeader);
+            const window_bits = zlib_header.windowBits(self.header[0], self.header[1]) catch |err| return self.fail(.header, err);
+            zlib_header.admitWindow(window_bits, self.options.max_window_bits) catch |err| return self.fail(.header, err);
         }
         fn beginStream(self: *Self) void {
             self.raw.reset();
