@@ -90,6 +90,12 @@ pub const Decoder = struct {
             .metadata_block_lengths = options.metadata_block_lengths,
         };
     }
+    /// Change the observer between calls to step. Only future events are
+    /// delivered; null detaches without changing decode state or captures.
+    pub fn setMetadataObserver(self: *Decoder, observer: ?MetadataObserver) void {
+        self.options.metadata_observer = observer;
+    }
+
     pub fn reset(self: *Decoder) void {
         self.* = .{
             .options = self.options,

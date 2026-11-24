@@ -212,6 +212,12 @@ pub fn Decoder(comptime Codec: type) type {
             };
         }
 
+        /// Change the observer between calls to step. Only future events are
+        /// delivered; null detaches without changing decode state or captures.
+        pub fn setMetadataObserver(self: *Self, observer: ?MetadataObserver) void {
+            self.options.metadata_observer = observer;
+        }
+
         pub fn reset(self: *Self) void {
             self.resetWithOptions(self.options);
         }

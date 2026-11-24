@@ -145,10 +145,16 @@ wire order: an earlier plaintext block may still require output space before
 the decoder reaches subsequent metadata. Callback state is caller-owned and
 must remain independent of the decoder and all active input, output, history,
 scratch and capture storage. Callbacks must not reenter the decoder or mutate
-that storage. Copy any chunk bytes needed after the callback. The observer
-is retained with the options; resetting with the same options keeps it, and
-reconfiguring or starting a next stream with new options may replace it.
-Metadata indices restart at zero for each stream.
+that storage. Copy any chunk bytes needed after the callback.
+
+All four decoders support `setMetadataObserver(observer)` between calls to
+`step`; pass `null` to detach. The change takes effect only for future events.
+When changing observers after a block has started, the new observer may receive
+chunks without a `.start`, with the original block index and byte offsets.
+Events observed or skipped before the change are not replayed. Captures,
+metadata quotas and progress are unaffected. A plain `reset` keeps the current
+observer; reconfiguring or starting the next stream with explicit options uses
+that observer instead. Metadata indices restart at zero for each stream.
 
 `max_metadata_bytes` and `max_metadata_blocks` independently bound metadata
 body bytes and block count per Brotli stream. Both default to unlimited. The
@@ -170,6 +176,10 @@ blocks, and exactly three plaintext bytes on four input partitions. Nonzero
 alignment padding produced no event. The reference used the local decoder
 build with SHA-256 `3acf45976e96498b954bb104b06ef5b8e1cd08b5e0d8d6826c233ed1f07c0469`
 and matching common library `3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739`.
+On the upstream metadata fixture `01 0b 00 2a 03`, split `2 / 1 / 2`, the
+same reference accepted installation after the first split and replacement
+after the start event. The replacement received only `2a`, with no prior
+start replay and no plaintext. The four Vort decoders cover the same switch.
 
 ## Evidence scope
 

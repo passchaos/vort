@@ -163,6 +163,13 @@ pub fn Decoder(comptime Codec: type) type {
             };
         }
 
+        /// Change the observer between calls to step. Only future events are
+        /// delivered; null detaches without changing decode state or captures.
+        pub fn setMetadataObserver(self: *Self, observer: ?MetadataObserver) void {
+            self.options.metadata_observer = observer;
+            if (self.progressive) |*decoder| decoder.setMetadataObserver(observer);
+        }
+
         /// Retain allocations and start a new operation with the current caps.
         pub fn reset(self: *Self) void {
             self.total_compressed = 0;
