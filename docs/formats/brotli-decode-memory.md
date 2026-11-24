@@ -168,8 +168,9 @@ requested-byte peak with the profile. Exact measured peak `D` succeeds and
 output and boundary identity, stored/RLE/entropy/multiple meta-blocks, Large
 Window, borrowed RAW and parsed serialized dictionaries, true OOM, aliases,
 existing capacity, prefix tails, truncation, malformed input, and output
-publication. The WASI gate executes the actual 32-bit Zig test artifact and
-writes `zig-out/br-decode-memory-wasm.json` with artifact/source identities.
+publication. The WASI gate executes the actual 32-bit Zig test artifact, including the
+owned-history and stream lifecycle contracts, and writes
+`zig-out/br-decode-memory-wasm.json` with artifact/source identities.
 Reference verification records its concrete library versions and native/x86
 receipts under `zig-out/br-decode-memory-reference/`.
 
