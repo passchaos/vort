@@ -7101,7 +7101,9 @@ pub const NativeIncrementalFrameDecoder = struct {
     /// Resume the current frame with borrowed content and optional standard
     /// entropy metadata. They must remain alive until the frame completes,
     /// terminates with a fatal error, or this decoder is reset/deinitialized.
-    /// The override is discarded at that boundary; it never replaces
+    /// The override must be disjoint from bound output and workspaces. A
+    /// refusal leaves the request pending so the caller can retry.
+    /// The override is discarded at the frame boundary; it never replaces
     /// configured dictionaries for later frames.
     pub fn provideDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
         const required = self.required_dictionary_id orelse return error.InvalidStreamState;
@@ -7123,6 +7125,12 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.recordError(.frame, err);
             return err;
         };
+        if (self.stable_binding.buffer) |output| {
+            stable_driver.validateDictionary(output, dictionary) catch |err| {
+                self.recordError(.frame, err);
+                return err;
+            };
+        }
         self.frame_dictionary = dictionary;
         self.required_dictionary_id = null;
         self.last_error_name = "";

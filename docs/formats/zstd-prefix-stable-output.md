@@ -77,6 +77,10 @@ history, and older addressable caller bytes cannot enlarge legal distances.
 Reads that reach before current-frame output use the selected prefix/dictionary
 span. A prefix that would be overwritten by the output binding is rejected;
 an earlier frame used as the next prefix requires nonoverlapping output storage.
+After `NeedDictionary`, both `provideDictionary` and `provideDictionarySet`
+reject overlap between the bound output and either borrowed history or the
+serialized dictionary (including metadata). Refusal leaves the original
+request, accepted input, and published output intact for a disjoint retry.
 
 Known content size is checked against capacity before payload writes. Unknown
 sizes use block admission and preserve correct failure progress. A buffer filled
