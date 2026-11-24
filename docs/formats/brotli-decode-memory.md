@@ -145,7 +145,7 @@ history-capacity failure cause.
 provide `attachRawDictionary(prefix)`. Call it before the current frame
 accepts compressed input, including after a zero-input poll or a successful
 `nextFrame`. Repeated calls append borrowed prefix bytes after configured RAW
-prefixes and before any RAW tail in the configured serialized dictionary.
+prefixes and before any RAW tail in the serialized dictionary.
 Only the descriptors are copied; attaching allocates no heap and leaves
 retained workspace, quotas and stream counters unchanged. An eligible empty
 attachment is a no-op, unlike an explicit empty slot in the configured slice.
@@ -157,8 +157,8 @@ length arithmetic overflow returns `IntegerOverflow`. A refusal keeps the prior
 binding and consumes no slot. After accepting input, completing a frame, or
 failing decoding, the method returns `InvalidStreamState`. Reset and next-frame
 transitions discard these attachments; dictionary options retain their normal
-lifetimes. These rules extend only incremental decoder attachment, not the
-serialized dictionary configuration API.
+lifetimes. See [serialized attachment](brotli-serialized-dictionary.md#attaching-before-stream-input)
+for adding a parsed view at the same boundary.
 
 ## Validation
 

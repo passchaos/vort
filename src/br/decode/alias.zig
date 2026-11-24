@@ -82,6 +82,27 @@ pub fn protect(allocator: std.mem.Allocator, allocation: []const u8, source: []c
     return result;
 }
 
+pub fn serializedCountsSafe(view: *const serialized.Dictionary) bool {
+    return view.word_list_count <= view.word_lists.len and
+        view.transform_list_count <= view.transform_lists.len and
+        view.dictionary_count <= view.dictionaries.len;
+}
+
+pub fn serializedDictionaryOverlaps(span: []const u8, view: *const serialized.Dictionary) bool {
+    if (overlaps(span, std.mem.asBytes(view)) or overlaps(span, view.encoded) or overlaps(span, view.raw_prefix)) return true;
+    // Protect each bounded table even when another count is malformed.
+    if (view.word_list_count <= view.word_lists.len) {
+        for (view.word_lists[0..view.word_list_count]) |words| if (overlaps(span, words.data)) return true;
+    }
+    if (view.transform_list_count <= view.transform_lists.len) {
+        for (view.transform_lists[0..view.transform_list_count]) |transforms| {
+            if (overlaps(span, transforms.prefix_suffix) or overlaps(span, transforms.transforms)) return true;
+            if (transforms.params) |params| if (overlaps(span, params)) return true;
+        }
+    }
+    return false;
+}
+
 /// Compare half-open ranges without adding lengths to addresses.
 pub fn overlaps(left: []const u8, right: []const u8) bool {
     if (left.len == 0 or right.len == 0) return false;

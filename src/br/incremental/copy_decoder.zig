@@ -3,7 +3,8 @@ const core = @import("../../core.zig");
 const stream_count = core.stream_count;
 const progressive_bits = @import("bit_reader.zig");
 const shared_dictionary = @import("../shared_dictionary.zig");
-const raw_attachments = @import("raw_attachments.zig");
+const dictionary_attachments = @import("dictionary_attachments.zig");
+const SerializedDictionary = @import("../serialized_dictionary.zig").Dictionary;
 const empty_reference = @import("../summary/empty_reference.zig");
 const metadata_events = @import("metadata_events.zig");
 const metadata_limits = @import("metadata_limits.zig");
@@ -70,7 +71,7 @@ pub fn Decoder(comptime Codec: type) type {
         update_distance_ring: bool = false,
         shared_dictionary_validated: bool = false,
         shared_dictionary_size: usize = 0,
-        raw_dictionary_attachments: raw_attachments.State = .{},
+        attachments: dictionary_attachments.State = .{},
         dictionary_source: DictionarySource = .static,
         compound_cursor: shared_dictionary.Cursor = undefined,
         dictionary_scratch: [shared_dictionary.max_static_output_len]u8 = undefined,
@@ -180,18 +181,35 @@ pub fn Decoder(comptime Codec: type) type {
         /// An empty poll does not lock the dictionary. Empty attachments use
         /// no slot; rejected attachments leave the old binding unchanged.
         pub fn attachRawDictionary(self: *Self, prefix: []const u8) Error!void {
-            if (self.phase != .window or self.total_input != 0 or self.finished or self.fatal_error != null)
-                return error.InvalidStreamState;
+            try self.checkAttachmentBoundary();
             if (prefix.len == 0) return;
             if (@hasDecl(Codec, "validateDecodeOptions")) try Codec.validateDecodeOptions(self.options.decode);
-            self.shared_dictionary_size = try self.raw_dictionary_attachments.append(self.options.decode.shared_dictionary, prefix, &.{
+            self.shared_dictionary_size = try self.attachments.append(self.options.decode.shared_dictionary, prefix, &self.attachmentWriters());
+            self.shared_dictionary_validated = true;
+        }
+
+        /// Borrow one parsed serialized dictionary for the current frame.
+        /// The view and all backing bytes stay immutable until the frame ends.
+        pub fn attachSerializedDictionary(self: *Self, dictionary: *const SerializedDictionary) Error!void {
+            try self.checkAttachmentBoundary();
+            if (@hasDecl(Codec, "validateDecodeOptions")) try Codec.validateDecodeOptions(self.options.decode);
+            self.shared_dictionary_size = try self.attachments.attachSerialized(self.options.decode.shared_dictionary, dictionary, &self.attachmentWriters());
+            self.shared_dictionary_validated = true;
+        }
+
+        fn checkAttachmentBoundary(self: *const Self) Error!void {
+            if (self.phase != .window or self.total_input != 0 or self.finished or self.fatal_error != null)
+                return error.InvalidStreamState;
+        }
+
+        fn attachmentWriters(self: *const Self) [5][]const u8 {
+            return .{
                 std.mem.asBytes(self),
                 self.history,
                 self.options.compressed_header_scratch,
                 self.metadata_output,
                 std.mem.sliceAsBytes(self.metadata_block_lengths),
-            });
-            self.shared_dictionary_validated = true;
+            };
         }
 
         pub fn reset(self: *Self) void {
@@ -959,11 +977,11 @@ pub fn Decoder(comptime Codec: type) type {
             return true;
         }
         fn effectiveDictionary(self: *const Self) shared_dictionary.Dictionary {
-            return self.raw_dictionary_attachments.view(self.options.decode.shared_dictionary);
+            return self.attachments.view(self.options.decode.shared_dictionary);
         }
 
         fn copyCompound(self: *Self, output: []u8) usize {
-            if (self.raw_dictionary_attachments.len == 0) return self.compound_cursor.copyInto(output);
+            if (self.attachments.len == 0) return self.compound_cursor.copyInto(output);
             self.compound_cursor.raw_prefixes = self.effectiveDictionary().raw_prefixes;
             defer self.compound_cursor.raw_prefixes = &.{};
             return self.compound_cursor.copyInto(output);
@@ -1002,7 +1020,7 @@ pub fn Decoder(comptime Codec: type) type {
                     self.compound_cursor = cursor;
                     // Only cursor progress crosses a call when prefix descriptors
                     // are inline. A moved decoder must reborrow its own array.
-                    if (self.raw_dictionary_attachments.len != 0) self.compound_cursor.raw_prefixes = &.{};
+                    if (self.attachments.len != 0) self.compound_cursor.raw_prefixes = &.{};
                     self.dictionary_source = .compound;
                     self.phase = .dictionary;
                 },
@@ -1014,7 +1032,7 @@ pub fn Decoder(comptime Codec: type) type {
                         self.previous[1],
                         self.previous[0],
                     );
-                    const word = self.options.decode.shared_dictionary.staticWord(
+                    const word = self.effectiveDictionary().staticWord(
                         context,
                         address,
                         self.pending_copy,
