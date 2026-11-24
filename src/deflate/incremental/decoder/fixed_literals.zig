@@ -398,13 +398,6 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 self.total_output < self.options.max_output_len or
                 self.phase == .fast_dynamic_block)
             {
-                if (self.pause_requested and self.phase == .block_header and
-                    (input_read != 0 or output_written != 0))
-                {
-                    var paused = result(input_read, output_written, .need_input);
-                    paused.block_boundary = true;
-                    return paused;
-                }
                 switch (self.phase) {
                     .block_header => {
                         const header = (try self.readBits(input, &input_read, 3)) orelse return result(input_read, output_written, .need_input);
@@ -446,7 +439,10 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         self.stored_remaining = len;
                         self.stored_length_received = 0;
                         self.phase = .stored_payload;
-                        if (self.stored_remaining == 0) self.completeBlock();
+                        if (self.stored_remaining == 0) {
+                            self.completeBlock();
+                            if (self.pause_requested and !self.final_block) return boundaryResult(input_read, output_written);
+                        }
                     },
                     .stored_payload => {
                         if (output_written == output.len) return result(input_read, output_written, .need_output);
@@ -489,7 +485,10 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                                 self.stored_remaining -= n;
                             }
                         }
-                        if (self.stored_remaining == 0) self.completeBlock();
+                        if (self.stored_remaining == 0) {
+                            self.completeBlock();
+                            if (self.pause_requested and !self.final_block) return boundaryResult(input_read, output_written);
+                        }
                     },
                     .dynamic_counts => {
                         const counts = (try self.readBits(input, &input_read, 14)) orelse return result(input_read, output_written, .need_input);
@@ -593,11 +592,14 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                                 if (output_written == 0) continue;
                                 return result(input_read, output_written, .need_output);
                             },
-                            // End the raw step at the semantic block boundary. Its
-                            // delivered bytes are already the retained history;
-                            // starting a compact block with the same step-local
-                            // output would count that prefix twice as match history.
-                            .block_end => return result(input_read, output_written, .need_output),
+                            .block_end => {
+                                if (self.pause_requested) return boundaryResult(input_read, output_written);
+                                // End the ordinary step here: semantic output is
+                                // already in retained history. Reusing the same
+                                // step-local output in a compact block would count
+                                // that prefix twice as match history.
+                                return result(input_read, output_written, .need_output);
+                            },
                             .done => {
                                 if (input_read != input.len and !self.options.allow_trailing_data)
                                     return self.fail(.done, error.TrailingData);
@@ -609,7 +611,13 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         switch (try self.decodeSymbolRun(input, output, &input_read, &output_written)) {
                             .need_input => return result(input_read, output_written, .need_input),
                             .need_output => return result(input_read, output_written, .need_output),
-                            .block_end, .done => continue,
+                            .block_end => {
+                                // A buffered EOB can complete a block without
+                                // consuming input or producing output this call.
+                                if (self.pause_requested) return boundaryResult(input_read, output_written);
+                                continue;
+                            },
+                            .done => continue,
                         }
                     },
                     .length_extra => {
@@ -1413,6 +1421,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             self.last_error_name = @errorName(err);
             self.last_error_phase = phase;
             return err;
+        }
+        fn boundaryResult(input_read: usize, output_written: usize) core.StepResult {
+            return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = .need_input, .block_boundary = true };
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
