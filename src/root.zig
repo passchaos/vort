@@ -1190,6 +1190,13 @@ pub const brDecodedStreamPrefixSize = br.decodedStreamPrefixSize;
 pub const brDecodedStreamPrefixSizeWithOptions = br.decodedStreamPrefixSizeWithOptions;
 pub const brDecodedStreamPrefixSizeLimited = br.decodedStreamPrefixSizeLimited;
 pub const brDecodedStreamPrefixSizeLimitedWithOptions = br.decodedStreamPrefixSizeLimitedWithOptions;
+
+pub const BrotliDecodePreflightOptions = br.DecodePreflightOptions;
+pub const BrotliDecodePreflightError = br.DecodePreflightError;
+pub const brDecodedStreamSizeWithPreflight = br.decodedStreamSizeWithPreflight;
+pub const brDecodedStreamPrefixSizeWithPreflight = br.decodedStreamPrefixSizeWithPreflight;
+pub const brDecodeStreamIntoWithPreflight = br.decodeStreamIntoWithPreflight;
+pub const brDecodeStreamPrefixIntoWithPreflight = br.decodeStreamPrefixIntoWithPreflight;
 pub const brSummarizeStream = br.summarizeStream;
 pub const brSummarizeStreamWithOptions = br.summarizeStreamWithOptions;
 pub const brSummarizeStreamLimited = br.summarizeStreamLimited;

@@ -1072,11 +1072,12 @@ pub fn main(init: std.process.Init) !void {
         const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
-        const decoded_len = if (max_output_len) |limit|
-            try vort.brDecodedStreamSizeLimited(compressed, limit)
-        else
-            try vort.brDecodedStreamSize(compressed);
-        try stdout.print("br_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+        const summary = try vort.brSummarizeStreamAllocLimited(
+            init.gpa,
+            compressed,
+            max_output_len orelse std.math.maxInt(vort.StreamCount),
+        );
+        try stdout.print("br_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, summary.decoded_bytes });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());

@@ -1316,6 +1316,18 @@ pub const DecodeOptions = struct {
     shared_dictionary: SharedDictionary = .{},
 };
 
+/// Explicit mutable scratch and size policy for transactionally preflighting
+/// a complete Brotli stream. The history is borrowed only during the call;
+/// keep it disjoint from compressed input, dictionaries, output and observers.
+pub const DecodePreflightOptions = struct {
+    history: []u8,
+    max_output_len: Counter = std.math.maxInt(Counter),
+    expected_output_len: ?Counter = null,
+    decode: DecodeOptions = .{},
+};
+
+pub const DecodePreflightError = Error || error{PreflightHistoryTooSmall};
+
 /// Progress for decoding exactly the first Brotli stream in a larger byte
 /// sequence. `input_read` ends after the stream's validated zero padding;
 /// `output_written` is the decoded byte count published to caller storage.
@@ -16001,6 +16013,31 @@ noinline fn decodeLargeStreamPrefixIntoWithOptions(stream: []const u8, output: [
     }
 }
 
+/// Transactionally validate the whole stream, its limits and physical output
+/// capacity using caller-owned history, then decode into `output`.
+pub fn decodeStreamIntoWithPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!usize {
+    try validateDecodePreflight(stream, output, options, null);
+    return (try decodeIntoAfterPreflight(stream, output, options, false)).output_written;
+}
+
+/// Decode the first validated stream; leave surrounding transport bytes unread.
+pub fn decodeStreamPrefixIntoWithPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!DecodePrefixResult {
+    try validateDecodePreflight(stream, output, options, null);
+    return decodeIntoAfterPreflight(stream, output, options, true);
+}
+
+fn decodeIntoAfterPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions, prefix: bool) DecodePreflightError!DecodePrefixResult {
+    const size = try preflightSize(stream, options, prefix);
+    const decoded_len = try stream_count.toLocal(size.decoded_bytes);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const written = decodeStreamIntoWithOptions(stream[0..size.input_read], output[0..decoded_len], options.decode) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return .{ .input_read = size.input_read, .output_written = written };
+}
+
 pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len: usize) Error!usize {
     const decoded_len = try stream_count.toLocal(try decodedStreamSizeLimited(stream, max_output_len));
     if (output.len < decoded_len) return error.OutputTooSmall;
@@ -16084,6 +16121,30 @@ pub fn decodeStreamPrefixIntoExactSizeWithOptions(stream: []const u8, output: []
     };
     if (result.output_written != expected_output_len) return error.SizeMismatch;
     return result;
+}
+
+/// Validate and measure one complete stream without allocating heap history.
+pub fn decodedStreamSizeWithPreflight(stream: []const u8, options: DecodePreflightOptions) DecodePreflightError!Counter {
+    try validateDecodePreflight(stream, &.{}, options, null);
+    return (try preflightSize(stream, options, false)).decoded_bytes;
+}
+
+/// Validate and measure the first stream, including its aligned input boundary.
+pub fn decodedStreamPrefixSizeWithPreflight(stream: []const u8, options: DecodePreflightOptions) DecodePreflightError!DecodedPrefixSize {
+    try validateDecodePreflight(stream, &.{}, options, null);
+    return preflightSize(stream, options, true);
+}
+
+fn preflightSize(stream: []const u8, options: DecodePreflightOptions, prefix: bool) DecodePreflightError!DecodedPrefixSize {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    var input_read = stream.len;
+    const summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, options.max_output_len, options.decode, &diagnostics, options.history, if (prefix) &input_read else null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => return error.PreflightHistoryTooSmall,
+        else => |public_err| return public_err,
+    };
+    if (options.expected_output_len) |expected|
+        if (summary.decoded_bytes != expected) return error.SizeMismatch;
+    return .{ .input_read = input_read, .decoded_bytes = summary.decoded_bytes };
 }
 
 pub fn decodedStreamSize(stream: []const u8) Error!Counter {
@@ -17249,6 +17310,13 @@ pub const StreamDecoder = struct {
         return self;
     }
 
+    /// Eagerly validate and decode using independent caller-owned history.
+    pub fn initWithPreflight(stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetWithPreflight(stream, output_scratch, options);
+        return self;
+    }
+
     pub fn initExactSize(stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!StreamDecoder {
         return initExactSizeWithOptions(stream, output_scratch, expected_output_len, .{});
     }
@@ -17311,6 +17379,17 @@ pub const StreamDecoder = struct {
         try validateDecodeProfile(stream, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
         return self.resetLimitedWithOptions(stream, output_scratch, std.math.maxInt(usize), options);
+    }
+
+    /// The history is not retained. Failed preflight leaves the previous
+    /// decoder position and destination unchanged, but records the error.
+    pub fn resetWithPreflight(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
+        try validateDecodePreflight(stream, output_scratch, options, self);
+        const result = decodeIntoAfterPreflight(stream, output_scratch, options, false) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.installDecoded(result.input_read, output_scratch, result.output_written);
     }
 
     pub fn resetExactSize(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
@@ -17457,11 +17536,11 @@ pub const StreamDecoder = struct {
         };
     }
 
-    fn recordError(self: *StreamDecoder, err: Error) void {
+    fn recordError(self: *StreamDecoder, err: DecodePreflightError) void {
         self.last_error_name = @errorName(err);
         self.last_recoverability_hint = switch (err) {
             error.TruncatedFrame => .truncated_input,
-            error.UnsupportedBrotliFeature => .unsupported_feature,
+            error.UnsupportedBrotliFeature, error.PreflightHistoryTooSmall => .unsupported_feature,
             else => .payload_corrupt,
         };
     }
@@ -17485,6 +17564,20 @@ fn validateChunkProfile(chunks: []const []const u8, scratch: []u8, options: Deco
 
 fn validateDecodeProfile(stream: []const u8, options: DecodeOptions, protected: []const []const u8) Error!void {
     try validateChunkProfile(&.{stream}, &.{}, options, protected);
+}
+
+fn validateDecodePreflight(stream: []const u8, output: []const u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) Error!void {
+    const object = if (eager) |state| std.mem.asBytes(state) else &.{};
+    const prior_output = if (eager) |state| state.decoded else &.{};
+    try validateDecodeProfile(stream, options.decode, &.{ options.history, output, object, prior_output });
+    // Like the profile, both writable borrows must stay disjoint from the
+    // input and dictionary backing. Reuse the complete geometry check,
+    // including RAW descriptors and detached serialized dictionary tables.
+    const borrow = @import("br/decode/chunk_join.zig");
+    try borrow.validateObserver(&.{stream}, &.{}, &.{ output, object, prior_output }, options.decode.shared_dictionary, options.history);
+    try borrow.validateObserver(&.{stream}, &.{}, &.{object}, options.decode.shared_dictionary, output);
+    if (eager != null)
+        try borrow.validateObserver(&.{stream}, &.{}, &.{prior_output}, options.decode.shared_dictionary, object);
 }
 
 fn joinDecodeChunks(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions, protected: []const []const u8) Error![]const u8 {

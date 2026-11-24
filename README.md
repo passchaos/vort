@@ -742,6 +742,9 @@ allocating summary history share the same budget; caller-buffer and fixed
 summary paths retain zero requested heap. Incremental decoders explicitly
 reject these one-shot policy fields and keep their independent resource options.
 See the [decode memory contract](docs/formats/brotli-decode-memory.md).
+[Caller-history preflight](docs/formats/brotli-long-distance-preflight.md)
+validates strict or prefix input, exact decoded sizes and logical caps for
+long-distance Brotli streams before publishing output, without heap allocation.
 
 Incremental Deflate, Brotli and Zstd encoders validate caller buffer borrows
 before publishing output or changing state. Conflicting input, output, retained
