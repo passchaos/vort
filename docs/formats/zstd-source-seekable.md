@@ -73,3 +73,12 @@ passed 2,662 range comparisons against known plaintext through the upstream
 `ZSTD_seekable_initFile` / `ZSTD_seekable_decompress` APIs. Vort's tests also
 check read isolation, exact-range sizing, and publication after checksum and
 size verification. The contiguous seekable APIs and wire format are unchanged.
+
+The same gate exercises rotation between two full dictionaries trained by
+upstream libzstd 1.6.0, with independently verified checksummed data frames.
+The [fixture oracle](../../tools/zstd/source_seekable_dictionary_fixture.c)
+also verifies refusal when the dictionary is missing or its ID is correct but
+its content is wrong. The Vort range crosses adjacent entries with different
+IDs, without reading either surrounding frame. Tests verify catalog precedence,
+fallback, header-only refusal of a missing dictionary, and retry of only the
+unwritten suffix after the preceding frame has already been published.

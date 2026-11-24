@@ -2527,6 +2527,10 @@ pub const zstdDecodeSourceSeekableRangeInto = zstd.decodeSourceSeekableRangeInto
 test "root Zstd source seekable consumer contracts" {
     try @import("tests/zstd_source_decode/seekable.zig").contracts(@This());
 }
+
+test "root Zstd source seekable dictionary rotation" {
+    try @import("tests/zstd_source_decode/seekable_dictionary.zig").contracts(@This());
+}
 pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;

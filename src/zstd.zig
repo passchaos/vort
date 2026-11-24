@@ -168,16 +168,26 @@ test "Zstd source output alias contracts" {
     try @import("zstd/source/decode_alias_tests.zig").contracts(@This());
 }
 
+const SourceSeekableTestSupport = struct {
+    pub const ByteSource = byte_source.Source;
+    pub const ZstdNativeDictionary = NativeDictionary;
+    pub const ZstdNativeDictionarySet = NativeDictionarySet;
+    pub const ZstdNativeSeekTableEntry = NativeSeekTableEntry;
+    pub const ZstdNativeSeekTableFrameSize = NativeSeekTableFrameSize;
+    pub const ZstdSourceFrameWorkspace = SourceFrameWorkspace;
+    pub const ZstdSourceSeekableDecodeOptions = SourceSeekableDecodeOptions;
+    pub const zstdEncodeNativeSeekTableInto = encodeNativeSeekTableInto;
+    pub const zstdOpenSourceSeekTable = openSourceSeekTable;
+    pub const zstdSourceSeekableRangeRequirements = sourceSeekableRangeRequirements;
+    pub const zstdDecodeSourceSeekableRangeInto = decodeSourceSeekableRangeInto;
+};
+
 test "Zstd source seekable range contracts" {
-    try @import("tests/zstd_source_decode/seekable.zig").contracts(struct {
-        pub const ByteSource = byte_source.Source;
-        pub const ZstdNativeSeekTableEntry = NativeSeekTableEntry;
-        pub const ZstdSourceFrameWorkspace = SourceFrameWorkspace;
-        pub const ZstdSourceSeekableDecodeOptions = SourceSeekableDecodeOptions;
-        pub const zstdOpenSourceSeekTable = openSourceSeekTable;
-        pub const zstdSourceSeekableRangeRequirements = sourceSeekableRangeRequirements;
-        pub const zstdDecodeSourceSeekableRangeInto = decodeSourceSeekableRangeInto;
-    });
+    try @import("tests/zstd_source_decode/seekable.zig").contracts(SourceSeekableTestSupport);
+}
+
+test "Zstd source seekable dictionary rotation" {
+    try @import("tests/zstd_source_decode/seekable_dictionary.zig").contracts(SourceSeekableTestSupport);
 }
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
