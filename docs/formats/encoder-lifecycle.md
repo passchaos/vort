@@ -56,6 +56,16 @@ these setters. A conflict leaves the previous binding intact and can be retried
 with independent storage; obvious busy states retain `InvalidStreamState`.
 Parallel stable-object checks precede queue locking.
 
+Both Zstd incremental encoders reject a call whose offered input would exceed
+the current frame's exact-size pledge. `stepWithDirective(..., .end)` must offer
+exactly the remaining pledged bytes; on output backpressure, reoffer only the
+unconsumed suffix. A mismatch is `SizeMismatch` with zero accepted or delivered
+bytes, no pending wire drain, and no change to an idle or active prefix. Supply
+a corrected slice on the same encoder. In parallel mode `failedProgress()`
+reports zero progress for that call. This does not undo an explicit `finish()`:
+a short pledge detected while draining `finish()` cannot accept more input and
+requires a reset. The refusal itself does not publish pending wire bytes.
+
 Zstd `writeSkippable` borrows payload only during the call and validates it
 before prefix activation, profile publication or output growth. Receiver,
 complete owned capacities and current observers must be independent of the

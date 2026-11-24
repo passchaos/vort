@@ -251,6 +251,17 @@ pub fn Owner(comptime Codec: type) type {
                 profiles.publish(Codec, self);
             }
             try self.applyStepLimits(current);
+            // Reject an invalid pledge before activating a prefix or doing
+            // any queue/output work. A corrected offer can use this receiver.
+            if (self.failure == null and !self.state.done and !self.state.finishing and
+                !self.state.skippable_only and (!self.state.flushing or input.len == 0))
+            {
+                self.validateOffer(input.len, current, directive) catch |err| {
+                    self.last_call_error = err;
+                    if (err != error.SizeMismatch and !prefix_errors.retryable(err) and self.prefix_state.phase == .active) return self.poison(err);
+                    return err;
+                };
+            }
             return self.stepInner(input, output, current, &progress, directive) catch |err| {
                 self.last_call_error = err;
                 if (!prefix_errors.retryable(err) and self.prefix_state.phase == .active) return self.poison(err);
@@ -277,9 +288,12 @@ pub fn Owner(comptime Codec: type) type {
             try self.queue.validateStepBorrows(&admission);
         }
 
-        fn validateOffer(self: *Self, input_len: usize, current: Limits) Error!void {
+        fn validateOffer(self: *Self, input_len: usize, current: Limits, directive: ?prefix.Directive) Error!void {
+            const offered_end = if (input_len == 0) self.state.frame_input else (try self.state.checkInput(input_len, current.max_input_len)).frame;
+            if (directive == .end) if (self.state.expected_input_len) |expected| {
+                if (offered_end != expected) return error.SizeMismatch;
+            };
             if (input_len == 0) return;
-            _ = try self.state.checkInput(input_len, current.max_input_len);
             const admitted = self.queue.copyProfile().accepted_jobs;
             if (self.config.parallel.rsyncable) {
                 // Content-defined Jobs can be as short as the minimum block,
@@ -309,7 +323,6 @@ pub fn Owner(comptime Codec: type) type {
             const activated = self.prefix_state.activate(if (self.state.skippable_only) .skippable else .frame);
             self.prefix_state.busy = true;
             if (activated and !self.state.skippable_only) Codec.resetStateRetainingCapacity(&self.actual_state, self.config.dictionary) catch |err| return self.poison(err);
-            try self.validateOffer(input.len, current);
             if (self.state.finishing) if (self.state.expected_input_len) |expected| {
                 if (self.state.frame_input != expected) return self.poison(error.SizeMismatch);
             };

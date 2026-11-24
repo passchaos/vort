@@ -424,16 +424,21 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 return .{ .status = .done };
             }
             if ((self.finishing or self.flush_requested or self.skippable_only) and input.len != 0) return error.TrailingData;
+            // A deterministic pledge refusal must not activate a prefix,
+            // accept a partial offer, or drain already pending wire bytes.
+            const offered_end = count.addLocal(self.total_input, input.len) catch |err| return self.failedPrefix(err);
+            _ = count.addLocal(self.stream_input, input.len) catch |err| return self.failedPrefix(err);
+            if (!self.skippable_only and !self.finishing) if (self.expected_input_len) |expected| {
+                if (offered_end > expected or (directive == .end and offered_end != expected)) return error.SizeMismatch;
+            };
             const activated = self.prefix_state.activate(if (self.skippable_only) .skippable else .frame);
             self.prefix_state.busy = true;
             if (activated and !self.skippable_only) if (@hasDecl(Codec, "validatePrefixMetadata")) {
                 if (self.dictionary) |dictionary| Codec.validatePrefixMetadata(dictionary) catch |err| return self.failedPrefix(err);
             };
-            // A call may accept input across several blocks. Refuse an
-            // unrepresentable offered slice before draining a frame header or
-            // pending block; commit counters only as bytes are accepted below.
-            _ = count.addLocal(self.total_input, input.len) catch |err| return self.failedPrefix(err);
-            _ = count.addLocal(self.stream_input, input.len) catch |err| return self.failedPrefix(err);
+            if (self.finishing and !self.skippable_only) if (self.expected_input_len) |expected| {
+                if (self.total_input != expected) return self.failedPrefix(error.SizeMismatch);
+            };
             self.bindAllocator(self.options) catch |err| return self.failedPrefix(err);
             return self.stepImpl(input, output, directive) catch |err| return self.failedPrefix(@errorCast(self.allocation.mapError(err)));
         }

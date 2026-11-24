@@ -113,8 +113,10 @@ history, frame hash and entropy state. `finish()` rejects further input and
 emits the final partial/full job. After an acknowledged flush with no new input,
 it adds an empty final job. The content XXH checksum is appended once, and `done`
 plus the data-frame count advance only after all terminal bytes are delivered.
-Finishing with fewer accepted bytes than the exact pledge produces sticky
-`SizeMismatch` until reset.
+Calling `finish()` with fewer accepted bytes than the exact pledge produces
+sticky `SizeMismatch` until reset. A `stepWithDirective(..., .end)` offer
+that cannot meet the pledge is instead refused before admission; a corrected
+slice is retryable on the same encoder.
 
 Surplus input, scalar input/job-admission caps and invalid offers are checked before
 sealing/delivery and are recoverable. Raising pending or cumulative output caps
