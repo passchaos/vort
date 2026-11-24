@@ -2682,6 +2682,10 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_codec_differential_fuzz.addArgs(args);
     const codec_differential_fuzz_step = b.step("run-codec-differential-fuzz", "Run structure-aware Deflate/Zstd/Brotli differential fuzzing against system references");
     codec_differential_fuzz_step.dependOn(&run_codec_differential_fuzz.step);
+    const run_codec_real_stream_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
+    run_codec_real_stream_smoke.addArg("--real-file=README.md");
+    const codec_real_stream_smoke_step = b.step("run-codec-real-stream-smoke", "Verify upstream multi-block README streams and late truncation across the codecs");
+    codec_real_stream_smoke_step.dependOn(&run_codec_real_stream_smoke.step);
 
     const checksum_diff_exe = b.addExecutable(.{
         .name = "vort-checksum-diff",
@@ -8334,6 +8338,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(libfuzzer_smoke_step);
     ci_smoke_step.dependOn(afl_smoke_step);
     ci_smoke_step.dependOn(codec_differential_fuzz_step);
+    ci_smoke_step.dependOn(codec_real_stream_smoke_step);
     ci_smoke_step.dependOn(checksum_bench_gate_step);
     ci_smoke_step.dependOn(checksum_diff_step);
     ci_smoke_step.dependOn(checksum_zlib_diff_step);

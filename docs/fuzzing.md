@@ -145,6 +145,32 @@ contracts. `incremental_valid_json` reports passes, failures, and successful
 step calls by codec. This mode skips truncation and mutation and cannot be used
 with divergence capture or replay; default runs are unchanged.
 
+For independent real-file streams, repeat `--real-file=PATH`. This replaces
+synthetic generation, reads whole files (never silent prefixes), and applies an
+8 MiB per-file default cap. `--real-limit=BYTES` changes the cap up to 64 MiB.
+Libz, libzstd and libbrotli encode with explicit flushes at 64 KiB intervals.
+Each complete wire must round-trip and finish through both incremental schedules,
+including periodic empty output buffers. The same schedules then replay the
+final-byte cut: the reference must reject it, and Vort must report truncation
+while every published byte still matches the original plaintext. For this
+single-frame case, prevalidated Zstd must withhold all bytes until validation;
+the other routes must publish at least the prefix before the last 64 KiB.
+The report separates
+full and cut cases and binds file/wire hashes, reference versions and settings.
+
+```sh
+zig build -Doptimize=ReleaseFast run-codec-real-stream-smoke
+corpus="$HOME/Work/corpora/silesia-20261025/files"
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-file="$corpus/xml" --real-file="$corpus/ooffice"
+```
+
+The README smoke is also part of `ci-smoke`; the full Silesia sweep is opt-in
+and is functionality evidence, not a timing result. The
+[full-file receipt](performance/codec-upstream-real-20261124.md) records the
+Brotli boundary defect found and the reference versions and corpus hashes.
+
 Every valid wire is checked three ways: Vort one-shot and exact-size decode
 must reproduce the source; the installed system references (zlib, libzstd,
 libbrotli via `@cImport`) must accept the same wire and reproduce the source;
