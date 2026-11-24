@@ -813,6 +813,19 @@ pub fn build(b: *std.Build) void {
     wasm_check_step.dependOn(zstd_history_workspace_gates.compile_wasm);
     const zstd_source_reverse_gates = @import("build/zstd_source_reverse.zig").register(b, target, optimize);
     wasm_check_step.dependOn(zstd_source_reverse_gates.compile_wasm);
+    const zstd_source_seekable_encode_probe = b.addExecutable(.{
+        .name = "vort-zstd-source-seekable-encode-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/source_seekable_encode_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const run_zstd_source_seekable_encode_probe = b.addRunArtifact(zstd_source_seekable_encode_probe);
+    if (b.args) |args| run_zstd_source_seekable_encode_probe.addArgs(args);
+    b.step("run-zstd-source-seekable-encode-probe", "Write a file-backed seekable archive for upstream verification")
+        .dependOn(&run_zstd_source_seekable_encode_probe.step);
     wasm_check_step.dependOn(@import("build/incremental_encode_borrows.zig").register(b, target, optimize));
     wasm_check_step.dependOn(@import("build/encoder_lifecycle.zig").register(b, target, optimize));
     wasm_check_step.dependOn(@import("build/deflate_dynamic_admission.zig").register(b, target, optimize));

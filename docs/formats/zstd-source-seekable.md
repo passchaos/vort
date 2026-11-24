@@ -4,7 +4,8 @@ Use `zstdOpenSourceSeekTable` to open a Zstd contrib seekable stream from
 `ByteSource` rather than a contiguous compressed slice. This supports files and
 other stable random-access sources, including compressed offsets above 4 GiB
 on 32-bit targets. The source covers exactly one complete seekable container;
-its terminal seek table must end at `source.len`.
+its terminal seek table must end at `source.len`. To create such an archive
+without buffering the full input or output, use the [source-backed writer](zstd-source-seekable-encode.md).
 
 1. `zstdOpenSourceSeekTable(source)` reads the terminal footer and the table's
    skippable header. It returns the entry count without reading compressed
