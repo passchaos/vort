@@ -55,6 +55,7 @@ const byte_source = @import("io/source.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const incremental_counts = @import("zstd/incremental/counts.zig");
+const incremental_block_limit = @import("zstd/incremental/block_limit.zig");
 /// Deterministic bounded fuzz driver for the incremental decoder; shared by
 /// the in-graph tests and the standalone smoke executable.
 pub const incremental_fuzz = @import("zstd/incremental/fuzz_driver.zig");
@@ -1265,6 +1266,10 @@ const large_sequence_record_values = @import("zstd/sequence/large/record_values.
 const large_state_handoff_test = if (builtin.is_test) @import("zstd/sequence/large/state_handoff_test.zig") else struct {};
 const single_beam_match = @import("zstd/match/single_beam.zig");
 const optimal_four_match = @import("zstd/match/optimal_four.zig");
+test "Zstd compressed workspace and incremental block size limit" {
+    try @import("tests/zstd_block_limit.zig").contracts(@This());
+}
+
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const incremental_decoder_tests = @import("zstd/incremental/decoder_tests.zig");
 const incremental_limits_tests = @import("zstd/incremental/limits_tests.zig");
@@ -6730,8 +6735,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// Reject a frame as soon as its complete header advertises a larger
         /// decode window. This window plus the largest configured dictionary
         /// content determines the caller history workspace requirement; the
-        /// window alone bounds caller compressed-block storage.
+        /// window and block limits jointly bound caller compressed storage.
         max_window_size: Count = std.math.maxInt(Count),
+        /// Maximum serialized and regenerated size of each data block, in
+        /// bytes (1 through 128 KiB). Does not change the history window.
+        max_block_size: usize = incremental_block_limit.maximum,
         /// Combined data and skippable frame limit for the logical stream.
         /// Empty frames count, and `nextStream` does not reset the quota.
         max_frames: Count = frame_count_limit.unlimited,
@@ -6763,6 +6771,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         stop_after_first_frame: bool = false,
 
         pub fn validate(self: Options) Error!void {
+            try incremental_block_limit.validate(self.max_block_size);
             if (self.expected_output_len) |expected| {
                 if (expected > self.max_output_len) return error.InvalidBlockPlan;
             }
@@ -6823,16 +6832,24 @@ pub const NativeIncrementalFrameDecoder = struct {
         return compressed_workspace.requiredLenForWindow(max_window_size);
     }
 
-    /// Borrow storage for every compressed block admitted by the configured
-    /// `max_window_size`. The binding is available only for block-stream input
+    /// Return the compressed-block storage required by both limits, with a
+    /// small floor for headers and checksums. The block limit does not reduce
+    /// required history capacity.
+    pub fn requiredCompressedBlockWorkspaceLenForLimits(max_window_size: Count, max_block_size: usize) usize {
+        return compressed_workspace.requiredLenForLimits(max_window_size, max_block_size);
+    }
+
+    /// Borrow storage for compressed blocks admitted by the configured window
+    /// and block size. The binding is available only for block-stream input
     /// and must remain alive, unmodified and exclusive to this decoder until
     /// cleared or deinitialized. The backing allocator must not return memory
     /// inside this slice. Reset keeps the binding; resetWithOptions keeps it
-    /// only when the new window policy fits the existing capacity.
+    /// only when the new limits fit the existing capacity.
     pub fn bindCompressedBlockWorkspace(self: *NativeIncrementalFrameDecoder, workspace: []u8) Error!void {
         if (!prefix_decode_stream.setterEligible(self) or self.frame_scratch.items.len != 0)
             return error.InvalidStreamState;
-        const binding = try compressed_workspace.Binding.initForWindow(workspace, self.options.max_window_size);
+        try self.options.validate();
+        const binding = try compressed_workspace.Binding.initForLimits(workspace, self.options.max_window_size, self.options.max_block_size);
         try self.validateCompressedBlockWorkspace(binding, self.options, self.history_workspace_binding.storage);
         try binding.validateSlice(self.direct_history.allocatedSlice());
         try binding.validateSlice(self.decoded_scratch.allocatedSlice());
@@ -6920,7 +6937,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     ) Error!void {
         if (!binding.active()) return;
         if (options.input_policy != .block_stream) return error.InvalidBlockPlan;
-        if (binding.capacity() < requiredCompressedBlockWorkspaceLenForWindow(options.max_window_size))
+        if (binding.capacity() < requiredCompressedBlockWorkspaceLenForLimits(options.max_window_size, options.max_block_size))
             return error.OutputTooSmall;
         try binding.validateSlice(options.skippable_output);
         try binding.validateSlice(std.mem.sliceAsBytes(options.skippable_events));
@@ -7260,7 +7277,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (self.stable_binding.buffer != null) return error.InvalidBlockPlan;
             break :blk try history_workspace.Binding.init(storage);
         } else self.history_workspace_binding;
-        const binding = try compressed_workspace.Binding.initForWindow(compressed_storage, next.max_window_size);
+        const binding = try compressed_workspace.Binding.initForLimits(compressed_storage, next.max_window_size, next.max_block_size);
         const retained = self.frame_scratch.items;
         if (retained.len > binding.capacity()) return error.OutputTooSmall;
         try self.validateCompressedBlockWorkspace(binding, next, history.storage);
@@ -7443,9 +7460,9 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     /// Capacity available for retained compressed input. Decoder-owned storage
-    /// never grows past `max_compressed_buffer_len`; a bound caller workspace
-    /// reports its fixed 128 KiB capacity while the policy cap still limits how
-    /// many of those bytes may be accepted.
+    /// never grows past `max_compressed_buffer_len`; a caller workspace reports
+    /// its bound capacity while that policy still limits how many bytes can be
+    /// accepted.
     pub fn compressedBufferCapacity(self: *const NativeIncrementalFrameDecoder) usize {
         return self.frame_scratch.capacity;
     }
@@ -7716,6 +7733,9 @@ pub const NativeIncrementalFrameDecoder = struct {
                     if (direct_supported) {
                         self.phase = .direct_output;
                     } else {
+                        // Only the direct preflight proves every regenerated
+                        // block respects the caller's additional limit.
+                        if (self.options.max_block_size != incremental_block_limit.maximum) return error.CorruptFrame;
                         self.decodeCompleteFrame(self.frame_scratch.items[0..frame_end]) catch |err| {
                             self.recordError(.frame, err);
                             return err;
@@ -7875,32 +7895,14 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     .status = .need_input,
                                 };
                             }
-                            const block_header = std.mem.readInt(u24, self.blockStreamInput()[0..3], .little);
-                            const block_type = (block_header >> 1) & 0x3;
-                            const block_len: usize = @intCast(block_header >> 3);
-                            validateBlockSize(.{
-                                .content_size = self.block_stream_frame_expected_len,
-                                .has_checksum = self.block_stream_content_checksum,
-                                .window_size = self.block_stream_block_size_max,
-                                .block_size_max = self.block_stream_block_size_max,
-                                .dictionary_id = 0,
-                                .payload_offset = 0,
-                            }, block_type, block_len) catch |err| {
-                                self.recordError(.block_stream, err);
-                                return err;
-                            };
-                            if (block_type == 3) {
-                                self.recordError(.block_stream, error.CorruptFrame);
-                                return error.CorruptFrame;
-                            }
-                            self.block_stream_block_remaining = block_len;
-                            self.block_stream_block_last = (block_header & 1) != 0;
+                            const block = try incremental_block_limit.parseHeader(self.blockStreamInput(), self.block_stream_block_size_max, self.options.max_block_size);
+                            self.block_stream_block_remaining = block.declared_len;
+                            self.block_stream_block_last = block.last;
                             self.consumeBlockStreamInput(3);
-                            self.block_stream_stage = switch (block_type) {
-                                0 => .raw_payload,
-                                1 => .rle_payload,
-                                2 => .compressed_payload,
-                                else => unreachable,
+                            self.block_stream_stage = switch (block.kind) {
+                                .raw => .raw_payload,
+                                .rle => .rle_payload,
+                                .compressed => .compressed_payload,
                             };
                             continue;
                         },
@@ -8006,6 +8008,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     self.recordError(.block_stream, err);
                                     return err;
                                 };
+                                try incremental_block_limit.admit(literal_section.regenerated_size, self.options.max_block_size);
                                 try self.ensureBlockStreamOutputFits(literal_section.regenerated_size);
                                 self.direct_sequence_state = literal_state;
                                 self.block_stream_literal_section = literal_section;
@@ -8029,6 +8032,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 self.recordError(.block_stream, err);
                                 return err;
                             };
+                            try incremental_block_limit.admit(decoded_len, self.options.max_block_size);
                             try self.ensureBlockStreamOutputFits(decoded_len);
                             self.block_stream_decoded_block_remaining = decoded_len;
                             self.direct_sequence_state = literal_state;
@@ -8546,11 +8550,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         const initial_sequence_state = try initialSequenceFrameState(dictionary);
         if (self.options.input_policy == .prevalidated_frame) {
             if (self.frame_scratch.items.len - header.payload_offset < 3) return false;
-            const first_block_header = std.mem.readInt(u24, self.frame_scratch.items[header.payload_offset..][0..3], .little);
-            const first_block_type = (first_block_header >> 1) & 0x3;
-            const first_block_len: usize = @intCast(first_block_header >> 3);
-            try validateBlockSize(header, first_block_type, first_block_len);
-            if (first_block_type == 3) return error.CorruptFrame;
+            _ = try incremental_block_limit.parseHeader(self.frame_scratch.items[header.payload_offset..], header.block_size_max, self.options.max_block_size);
         }
         const frame_expected_len: ?Count = if (header.content_size) |size| @intCast(size) else null;
         if (frame_expected_len) |expected| {
@@ -8850,9 +8850,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.compressed_workspace_binding.active()) return error.OutputTooSmall;
         const doubled = std.math.mul(usize, @max(self.frame_scratch.capacity, 8), 2) catch self.options.max_compressed_buffer_len;
         const policy_limit = if (self.options.input_policy == .block_stream)
-            @min(self.options.max_compressed_buffer_len, std.compress.zstd.block_size_max)
+            @min(self.options.max_compressed_buffer_len, requiredCompressedBlockWorkspaceLenForLimits(self.options.max_window_size, self.options.max_block_size))
         else
             self.options.max_compressed_buffer_len;
+        if (needed > policy_limit) return error.OutputLimitExceeded;
         const target = @min(policy_limit, @max(needed, doubled));
         try self.frame_scratch.ensureTotalCapacityPrecise(self.budget.allocator(), target);
     }
@@ -8865,7 +8866,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             std.debug.assert(self.frame_scratch.items.len < frame_skippable_wire.encoded_len);
             return null;
         }
-        const end = findNativeFrameEndWithFormat(self.frame_scratch.items, 0, self.options.format) catch |err| switch (err) {
+        const end = findNativeFrameEndWithBlockLimit(self.frame_scratch.items, 0, self.options.format, self.options.max_block_size) catch |err| switch (err) {
             error.TruncatedFrame => return null,
             else => {
                 self.recordError(.frame, err);
@@ -8933,7 +8934,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         try self.validateIncrementalWindow(header);
         const dictionary_history = try self.resolveDirectDictionaryHistory(header);
         const dictionary = self.resolveDirectDictionary(header);
-        const initial_sequence_state = initialSequenceFrameState(dictionary) catch return false;
+        const initial_sequence_state = initialSequenceFrameState(dictionary) catch |err| {
+            if (self.options.max_block_size != incremental_block_limit.maximum) return err;
+            return false;
+        };
         try self.validateIncrementalContentSize(header);
         const frame_expected_len: ?Count = if (header.content_size) |size| @intCast(size) else null;
         const pledged_limit = if (frame_expected_len) |len|
@@ -8979,6 +8983,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 const initial_history_len = try incremental_counts.historyLength(total, dictionary_history.len, header.window_size);
                 break :blk try compressedLiteralOnlyBlockDecodedSize(payload, header.block_size_max, initial_history_len, &preflight_state);
             } else block_len;
+            try incremental_block_limit.admit(decoded_block_len, self.options.max_block_size);
             total = incremental_counts.addWithinLimit(total, decoded_block_len, direct_limit) catch |err| switch (err) {
                 error.OutputLimitExceeded => {
                     if (direct_limit_from_expected) {
@@ -9140,39 +9145,30 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn advanceDirectOutputBlock(self: *NativeIncrementalFrameDecoder) Error!void {
-        var offset = self.direct_next_block_header_offset;
-        if (self.frame_scratch.items.len - offset < 3) return error.TruncatedFrame;
-        const block_header = std.mem.readInt(u24, self.frame_scratch.items[offset..][0..3], .little);
-        offset += 3;
-        const last = (block_header & 0x1) != 0;
-        const block_type = (block_header >> 1) & 0x3;
-        const block_len: usize = @intCast(block_header >> 3);
-        if (block_type == 2) {
-            if (block_len > std.compress.zstd.block_size_max) return error.CorruptFrame;
-        } else if (block_type == 0 or block_type == 1) {
-            if (block_len > self.direct_block_size_max) return error.CorruptFrame;
-        } else {
-            return error.CorruptFrame;
-        }
-        const payload_len: usize = if (block_type == 1) 1 else block_len;
-        if (self.frame_scratch.items.len - offset < payload_len) return error.TruncatedFrame;
-        self.direct_payload_offset = offset;
-        self.direct_payload_len = block_len;
-        self.direct_payload_read = 0;
-        self.direct_block_rle = block_type == 1;
-        self.direct_rle_byte = if (block_type == 1) self.frame_scratch.items[offset] else 0;
-        self.direct_block_compressed = block_type == 2;
-        self.direct_sequence_continuation = sequence_continuation.forLastBlock(last);
-        self.direct_block_decoded_len = if (block_type == 2) blk: {
+        const bytes = self.frame_scratch.items;
+        const header_offset = self.direct_next_block_header_offset;
+        const block = try incremental_block_limit.parseHeader(bytes[header_offset..], self.direct_block_size_max, self.options.max_block_size);
+        const offset = header_offset + 3;
+        if (bytes.len - offset < block.wire_len) return error.TruncatedFrame;
+        const decoded_len = if (block.kind == .compressed) blk: {
             var preflight_state = self.direct_sequence_state;
             break :blk try compressedLiteralOnlyBlockDecodedSize(
-                self.frame_scratch.items[offset..][0..block_len],
+                bytes[offset..][0..block.wire_len],
                 self.direct_block_size_max,
                 try self.visibleIncrementalHistoryLen(self.direct_decoded_read),
                 &preflight_state,
             );
-        } else block_len;
-        self.direct_next_block_header_offset = offset + payload_len;
+        } else block.declared_len;
+        try incremental_block_limit.admit(decoded_len, self.options.max_block_size);
+        self.direct_payload_offset = offset;
+        self.direct_payload_len = block.declared_len;
+        self.direct_payload_read = 0;
+        self.direct_block_rle = block.kind == .rle;
+        self.direct_rle_byte = if (block.kind == .rle) bytes[offset] else 0;
+        self.direct_block_compressed = block.kind == .compressed;
+        self.direct_sequence_continuation = sequence_continuation.forLastBlock(block.last);
+        self.direct_block_decoded_len = decoded_len;
+        self.direct_next_block_header_offset = offset + block.wire_len;
     }
 
     fn discardFrameScratchPrefix(self: *NativeIncrementalFrameDecoder, n: usize) void {
@@ -21040,14 +21036,20 @@ fn findNativeFrameEnd(frames: []const u8, frame_start: usize) Error!usize {
 }
 
 fn findNativeFrameEndWithFormat(frames: []const u8, frame_start: usize, format: FrameFormat) Error!usize {
+    return findNativeFrameEndWithBlockLimit(frames, frame_start, format, incremental_block_limit.maximum);
+}
+
+fn findNativeFrameEndWithBlockLimit(frames: []const u8, frame_start: usize, format: FrameFormat, max_block_size: usize) Error!usize {
     if (frame_start > frames.len) return error.TruncatedFrame;
     var offset = frame_start;
     const prefix = try frame_format.consumePrefix(frames, &offset, format);
     if (prefix != .data) return error.InvalidMagic;
     const header = try parseRawOrRleFrameHeaderWithOptions(frames, &offset, true);
     while (true) {
-        const block = try inspectNativeFrameBlockAtWithFormat(frames[frame_start..], offset - frame_start, format);
-        offset = frame_start + block.next_header_offset;
+        const block = try incremental_block_limit.parseHeader(frames[offset..], header.block_size_max, max_block_size);
+        offset += 3;
+        if (frames.len - offset < block.wire_len) return error.TruncatedFrame;
+        offset += block.wire_len;
         if (block.last) break;
     }
     if (header.has_checksum) {

@@ -2920,6 +2920,7 @@ pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const zstdNativeIncrementalCompressedBlockWorkspaceLen = zstd.NativeIncrementalFrameDecoder.compressed_block_workspace_len;
 pub const zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen = zstd.NativeIncrementalFrameDecoder.requiredCompressedBlockWorkspaceLenForWindow;
+pub const zstdNativeIncrementalCompressedBlockWorkspaceRequiredLenForLimits = zstd.NativeIncrementalFrameDecoder.requiredCompressedBlockWorkspaceLenForLimits;
 pub const zstdNativeIncrementalHistoryWorkspaceRequiredLen = zstd.NativeIncrementalFrameDecoder.requiredHistoryWorkspaceLen;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
 pub const ZstdPreparedDecodeDictionary = zstd.PreparedDecodeDictionary;
@@ -2942,6 +2943,7 @@ pub const ZstdNativeSkippableFrameHeader = zstd.NativeSkippableFrameHeader;
 
 test "root Zstd compressed workspace consumers" {
     try @import("tests/zstd_compressed_workspace_consumers.zig").contracts(@This());
+    try std.testing.expectEqual(@as(usize, 2048), zstdNativeIncrementalCompressedBlockWorkspaceRequiredLenForLimits(32768, 2048));
 }
 
 test "root Zstd history workspace consumers" {
@@ -5469,6 +5471,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeIncrementalFrameDecoder;
     _ = zstdNativeIncrementalCompressedBlockWorkspaceLen;
     _ = zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen;
+    _ = zstdNativeIncrementalCompressedBlockWorkspaceRequiredLenForLimits;
     _ = zstdNativeIncrementalHistoryWorkspaceRequiredLen;
     _ = ZstdNativeDictionary;
     _ = ZstdNativeDictionaryTrainOptions;

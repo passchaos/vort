@@ -19,10 +19,11 @@ pub const maximum_len: usize = std.compress.zstd.block_size_max;
 pub const required_len: usize = maximum_len;
 
 pub fn requiredLenForWindow(max_window_size: Count) usize {
-    const payload_len: usize = @intCast(@min(
-        max_window_size,
-        @as(Count, maximum_len),
-    ));
+    return requiredLenForLimits(max_window_size, maximum_len);
+}
+
+pub fn requiredLenForLimits(max_window_size: Count, max_block_size: usize) usize {
+    const payload_len: usize = @intCast(@min(max_window_size, @min(maximum_len, max_block_size)));
     return @max(control_len, payload_len);
 }
 
@@ -30,7 +31,11 @@ pub const Binding = struct {
     bytes: []u8 = &.{},
 
     pub fn initForWindow(storage: []u8, max_window_size: Count) core.Error!Binding {
-        const required = requiredLenForWindow(max_window_size);
+        return initForLimits(storage, max_window_size, maximum_len);
+    }
+
+    pub fn initForLimits(storage: []u8, max_window_size: Count, max_block_size: usize) core.Error!Binding {
+        const required = requiredLenForLimits(max_window_size, max_block_size);
         if (storage.len < required) return error.OutputTooSmall;
         return .{ .bytes = storage[0..required] };
     }
