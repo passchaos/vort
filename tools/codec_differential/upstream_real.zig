@@ -3,13 +3,19 @@
 const std = @import("std");
 const Zstd = @import("../zstd/libzstd_runtime.zig").Runtime;
 const Brotli = @import("../br/libbrotli_runtime.zig").Runtime;
+const wide_brotli = @import("wide_brotli.zig");
 
 pub const chunk_len = 64 * 1024;
 pub const default_file_limit = 8 * 1024 * 1024;
 pub const maximum_file_limit = 64 * 1024 * 1024;
-pub const Wire = struct { bytes: []u8, encoder: []const u8, level: u4 };
+pub const Wire = struct {
+    bytes: []u8,
+    encoder: []const u8,
+    level: u4,
+    flush_interval: ?usize = chunk_len,
+};
 
-pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: anytype) !Wire {
+pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: anytype, brotli_wide: bool) !Wire {
     return switch (codec) {
         .raw, .zlib, .gzip => .{
             .bytes = try deflate(c, a, input, switch (codec) {
@@ -41,6 +47,12 @@ pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: 
             var upstream = try Brotli.open();
             defer upstream.deinit();
             if (upstream.encoder_version() != c.BrotliDecoderVersion()) return error.ReferenceVersionMismatch;
+            if (brotli_wide) break :result .{
+                .bytes = try upstream.encodeWithOptionsAlloc(a, input, .{ .quality = wide_brotli.quality, .lgwin = wide_brotli.window_bits }),
+                .encoder = wide_brotli.encoder,
+                .level = wide_brotli.quality,
+                .flush_interval = null,
+            };
             const chunks = try a.alloc([]const u8, std.math.divCeil(usize, input.len, chunk_len) catch unreachable);
             defer a.free(chunks);
             for (chunks, 0..) |*chunk, i| {

@@ -36,6 +36,7 @@ const vort = @import("vort");
 const reporting = @import("codec_differential/reporting.zig");
 const incremental_valid = @import("codec_differential/incremental_valid.zig");
 const upstream_real = @import("codec_differential/upstream_real.zig");
+const wide_brotli = @import("codec_differential/wide_brotli.zig");
 
 const c = @cImport({
     @cInclude("zlib.h");
@@ -128,6 +129,7 @@ const WireCase = struct {
     source: []const u8,
     dictionary: ?[]const u8 = null,
     upstream_real: bool = false,
+    upstream_flush_interval: ?usize = null,
     /// Brotli Large Window extension: Vort must opt in and libbrotli only
     /// accepts the wire through a streaming decoder with the same parameter.
     brotli_large_window: bool = false,
@@ -209,7 +211,10 @@ const Harness = struct {
             };
             if (wire_case.upstream_real and outcome == .truncated) {
                 const prevalidated = codec == .zstd and schedule == .pledged;
-                const minimum = if (prevalidated) 0 else wire_case.source.len -| upstream_real.chunk_len;
+                const minimum = if (prevalidated) 0 else if (wire_case.upstream_flush_interval) |interval|
+                    wire_case.source.len -| interval
+                else
+                    0;
                 const maximum = if (prevalidated) 0 else wire_case.source.len;
                 if (progress.written < minimum or progress.written > maximum) {
                     counts.failed += 1;
@@ -1787,6 +1792,7 @@ pub fn main(init: std.process.Init) !void {
     var real_files: std.ArrayList([]const u8) = .empty;
     defer real_files.deinit(init.gpa);
     var real_limit: usize = upstream_real.default_file_limit;
+    var real_brotli_wide = false;
     var divergence_directory: ?[]const u8 = null;
     var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
@@ -1810,6 +1816,8 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.startsWith(u8, arg, "--real-limit=")) {
             real_limit = try std.fmt.parseInt(usize, arg["--real-limit=".len..], 0);
             if (real_limit == 0 or real_limit > upstream_real.maximum_file_limit) return error.InvalidRealLimit;
+        } else if (std.mem.eql(u8, arg, "--real-brotli-wide")) {
+            real_brotli_wide = true;
         } else if (std.mem.eql(u8, arg, "--incremental-valid-only")) {
             incremental_valid_only = true;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
@@ -1830,7 +1838,12 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    if (real_files.items.len != 0) {
+    if (real_brotli_wide) {
+        if (only != null and only != .br) return error.ConflictingRealBrotliFilter;
+        only = .br;
+    }
+    const real_mode = real_brotli_wide or real_files.items.len != 0;
+    if (real_mode) {
         if (deep) return error.ConflictingRealAndGeneratedModes;
         incremental_valid_only = true;
         brotli_audit.exact_input = true;
@@ -1872,9 +1885,19 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    if (real_files.items.len != 0) {
+    if (real_mode) {
         harness.real_output = stdout;
-        for (real_files.items) |path| try runRealFile(&harness, init.io, stdout, path, real_limit);
+        for (real_files.items) |path| {
+            const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, allocator, .limited(real_limit));
+            defer allocator.free(input);
+            try runRealInput(&harness, stdout, path, input, real_brotli_wide);
+        }
+        if (real_files.items.len == 0) {
+            const input = try wide_brotli.smokeInput(allocator);
+            defer allocator.free(input);
+            if (input.len > real_limit) return error.StreamTooLong;
+            try runRealInput(&harness, stdout, "builtin-wide-brotli-v1", input, true);
+        }
     } else {
         const input = try allocator.alloc(u8, max_size);
         defer allocator.free(input);
@@ -1939,15 +1962,13 @@ pub fn main(init: std.process.Init) !void {
     if (harness.failures.items.len != 0) return error.FuzzMismatch;
 }
 
-fn runRealFile(harness: *Harness, io: std.Io, stdout: *std.Io.Writer, path: []const u8, limit: usize) !void {
+fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, input: []const u8, brotli_wide: bool) !void {
     const a = harness.allocator;
-    const input = try std.Io.Dir.cwd().readFileAlloc(io, path, a, .limited(limit));
-    defer a.free(input);
     if (input.len == 0) return error.EmptyRealFile;
     const input_hash = upstream_real.digest(input);
     for (codecs) |codec| {
         if (harness.only) |only_codec| if (codec != only_codec) continue;
-        const wire = try upstream_real.encode(c, a, input, codec);
+        const wire = try upstream_real.encode(c, a, input, codec, brotli_wide);
         defer a.free(wire.bytes);
         const wire_hash = upstream_real.digest(wire.bytes);
         try stdout.writeAll("upstream_real_json: ");
@@ -1960,7 +1981,7 @@ fn runRealFile(harness: *Harness, io: std.Io, stdout: *std.Io.Writer, path: []co
             .wire_bytes = wire.bytes.len,
             .wire_sha256 = &wire_hash,
             .encoder = wire.encoder,
-            .flush_interval = upstream_real.chunk_len,
+            .flush_interval = wire.flush_interval,
         }, .{}, stdout);
         try stdout.writeByte('\n');
         try harness.checkWire(codec, .real_file, .{
@@ -1968,8 +1989,24 @@ fn runRealFile(harness: *Harness, io: std.Io, stdout: *std.Io.Writer, path: []co
             .wire = wire.bytes,
             .source = input,
             .upstream_real = true,
+            .upstream_flush_interval = wire.flush_interval,
             .zstd_stream_reference = codec == .zstd,
         }, wire.level);
+        if (brotli_wide and codec == .br) {
+            const receipt = wide_brotli.verify(a, wire.bytes, input) catch |err| {
+                if (err == error.OutOfMemory) return err;
+                try harness.fail(codec, .real_file, path, input.len, wire.bytes.len, "brotli-wide-preflight", "{s}", .{@errorName(err)});
+                continue;
+            };
+            try stdout.writeAll("upstream_brotli_preflight_json: ");
+            try std.json.Stringify.value(.{
+                .schema = "vort.codec-differential.brotli-wide-preflight.v1",
+                .path = path,
+                .wire_sha256 = &wire_hash,
+                .verification = receipt,
+            }, .{}, stdout);
+            try stdout.writeByte('\n');
+        }
     }
 }
 
@@ -1992,6 +2029,7 @@ fn printUsage(init: std.process.Init) !void {
         \\                                   [--zlib-reference-exact-input]
         \\                                   [--incremental-valid-only]
         \\                                   [--real-file=PATH ...] [--real-limit=BYTES]
+        \\                                   [--real-brotli-wide]
         \\                                   [--divergence-dir=NEW_DIRECTORY]
         \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\

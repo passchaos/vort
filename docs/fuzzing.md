@@ -171,6 +171,27 @@ and is functionality evidence, not a timing result. The
 [full-file receipt](performance/codec-upstream-real-20261124.md) records the
 Brotli boundary defect found and the reference versions and corpus hashes.
 
+`--real-brotli-wide` selects only Brotli and uses libbrotli's one-shot
+quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide
+window is not enough: the Vort summary must find an actual backward copy past
+65,520 bytes in each wire. The mode checks both incremental schedules, strict
+and prefix caller-history preflight, and an exact-size decode with zero
+requested codec heap. The one-byte-short logical limit, final-byte truncation,
+and trailing bytes must fail strict preflight without writing to the caller's
+output. Tail replay still checks the emitted prefix byte-for-byte; unlike the
+flushed mode, it does not assume the last 64 KiB is the only unpublished data.
+`upstream_brotli_preflight_json` records the observed window, maximum distance,
+legacy fixed-history outcome, and requested heap.
+
+```sh
+# Deterministic long-copy input, no corpus download (included in ci-smoke).
+zig build run-codec-brotli-wide-smoke
+# Optional real file, with the same size limit as --real-file.
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-brotli-wide --real-file="$corpus/xml"
+```
+
 Every valid wire is checked three ways: Vort one-shot and exact-size decode
 must reproduce the source; the installed system references (zlib, libzstd,
 libbrotli via `@cImport`) must accept the same wire and reproduce the source;

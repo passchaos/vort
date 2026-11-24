@@ -58,3 +58,14 @@ both measured 1,048,576 bytes with zero requested heap. `size-br-file`
 reported the same size at that limit and returned `OutputLimitExceeded` at
 1,048,575 bytes. The focused decode-memory gate passed on native, 32-bit
 x86 Linux, and executed WASI.
+
+The [wide upstream differential mode](../fuzzing.md) verifies both that
+1 MiB reproduction and the entire 5,345,280-byte XML file. With libbrotli
+1.2.0 the full-file wire is 506,129 bytes, SHA-256
+`803c10dae9fb558b5c4bef96db9870110154a2f8d644ccf917c2056044786091`, and reaches
+4,193,998 bytes back. Both XML wires exhaust the legacy fixed history but
+pass strict/prefix caller-history preflight with zero requested codec heap.
+Both incremental schedules decode each entire wire and reject its final-byte
+cut, publishing only the correct plaintext prefix. The no-download CI smoke
+reaches 229,376 bytes back with system libbrotli 1.0.9; it exercises the wide
+copy path even though this particular wire also fits the fixed summary logic.
