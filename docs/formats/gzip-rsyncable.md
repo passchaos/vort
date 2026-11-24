@@ -75,6 +75,12 @@ requires 3,383–4,823 literal bytes. Vort sends fewer literals here but writes
 a larger file. These are fixture-specific size and reuse counts, not throughput
 measurements.
 
+The same gate accepts multiple input paths and repeatable `--offset` values.
+`--gnu` adds both GNU gzip encodings; `--report-only` disables the reuse floor
+without disabling independent decode, byte-for-byte reconstruction, or rsync
+byte accounting. See the [cross-corpus receipt](../performance/gzip-rsyncable-edits-20261125/README.md)
+for reproduction and the measured limits of reuse on other inputs.
+
 The wide decode gate also executes the encoder contracts: byte-for-byte
 partition and reset determinism, independent suffix recovery, unchanged
 default behavior, unsupported option rejection before a gzip header is
