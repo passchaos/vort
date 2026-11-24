@@ -2,6 +2,7 @@
 const count = @import("../../core.zig").stream_count;
 const model = @import("types.zig");
 const Cursor = @import("../../io/source_page.zig").Cursor;
+const gzip_tail = @import("../decoder/gzip_tail.zig");
 
 pub fn build(
     comptime Codec: type,
@@ -26,6 +27,8 @@ pub fn build(
     var decoded: model.Count = 0;
     var members: model.Count = 0;
     while (cursor.offset < source.len) {
+        // A suffix is not a member and must not consume a member slot.
+        if (options.allow_trailing_zero_padding and members != 0 and try consumeTerminalPadding(&cursor)) break;
         if (members == options.max_members) return error.OutputLimitExceeded;
         if (members != 0) {
             decoder.options.max_output_len = options.max_output_len - decoded;
@@ -87,4 +90,15 @@ pub fn build(
         .members_verified = members,
         .max_header_metadata_len = options.max_header_metadata_len,
     };
+}
+
+fn consumeTerminalPadding(cursor: *Cursor) model.Error!bool {
+    var input = try cursor.current();
+    if (input.len == 0 or input[0] != 0) return false;
+    while (input.len != 0) {
+        try gzip_tail.validateZeros(input);
+        try cursor.advance(input.len);
+        input = try cursor.current();
+    }
+    return true;
 }

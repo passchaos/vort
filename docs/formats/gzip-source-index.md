@@ -3,8 +3,9 @@
 `buildGzipSourceIndex` builds a reusable plaintext index over a stable
 random-access `ByteSource`. It decodes all concatenated members once and
 validates each gzip header, CRC-32 and ISIZE before returning the index.
-It requires at least one complete member, and rejects an unrecognized or
-truncated suffix. Empty members are counted and verified but need no entry.
+It requires at least one complete member. By default, an unrecognized or
+truncated suffix is rejected. Empty members are counted and verified but need
+no entry.
 
 ```zig
 const workspace: vort.GzipSourceIndexWorkspace = .{
@@ -37,6 +38,14 @@ slots. The header metadata limit applies per member. A zero-byte source is
 truncated, whereas a valid empty member can produce a zero-entry index.
 Input reads are paged, honor `ByteSource.max_read_size`, and use explicit
 64-bit source offsets even on 32-bit targets.
+
+Set `GzipSourceIndexOptions.allow_trailing_zero_padding` to accept an all-zero
+suffix after the last verified member, including an empty member. Once the
+first padding byte is seen, any nonzero byte (including another gzip member)
+returns `TrailingData`. The builder checks padding through the declared source
+end using the same input page. The source length includes padding, but padding
+is not counted against the output or member limit and does not extend any
+entry's compressed extent. Neither range-read mode visits the suffix.
 
 ## Range reads and integrity
 
@@ -99,4 +108,6 @@ member reads, and exact failure progress. Corrupt CRC/ISIZE and insufficient
 workspace, history, entries or policy allowances cannot publish an index.
 Verified-range tests also cover a one-byte request with a bad trailing CRC,
 late-member read faults, exact scratch sizing, and valid replacement members
-that fail the original indexed compressed or decoded extent checks.
+that fail the original indexed compressed or decoded extent checks. Padding
+contracts cover cross-page suffixes, exact member and output limits, late
+nonzero bytes and source errors, and range reads bounded by the real footer.

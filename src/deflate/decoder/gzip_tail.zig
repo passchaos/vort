@@ -1,4 +1,4 @@
-//! Terminal policy for gzip whole-input decode facades.
+//! Terminal policy shared by gzip buffer and source decoders.
 const std = @import("std");
 
 pub fn validateOptions(options: anytype) error{InvalidBlockPlan}!void {

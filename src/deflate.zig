@@ -530,21 +530,26 @@ pub const GzipSourceRangeOutcome = gzip_index.Outcome;
 pub const GzipSourceRangeProgress = gzip_index.Progress;
 pub const buildGzipSourceIndex = GzipSourceIndex.build;
 
+const GzipSourceIndexTestSupport = struct {
+    pub const ByteSource = @import("io/source.zig").Source;
+    pub const StreamCount = core.StreamCount;
+    pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
+    pub const encodeGzipStoredWithHeaderAlloc = deflate.encodeGzipStoredWithHeaderAlloc;
+    pub const GzipSourceIndex = deflate.GzipSourceIndex;
+    pub const GzipSourceIndexEntry = deflate.GzipSourceIndexEntry;
+    pub const GzipSourceRangeOutcome = deflate.GzipSourceRangeOutcome;
+    pub const GzipSourceIndexWorkspace = deflate.GzipSourceIndexWorkspace;
+    pub const GzipSourceIndexOptions = deflate.GzipSourceIndexOptions;
+    pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
+};
+
 test "Gzip source index contracts" {
-    const Support = struct {
-        pub const ByteSource = @import("io/source.zig").Source;
-        pub const StreamCount = core.StreamCount;
-        pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
-        pub const encodeGzipStoredWithHeaderAlloc = deflate.encodeGzipStoredWithHeaderAlloc;
-        pub const GzipSourceIndex = deflate.GzipSourceIndex;
-        pub const GzipSourceIndexEntry = deflate.GzipSourceIndexEntry;
-        pub const GzipSourceRangeOutcome = deflate.GzipSourceRangeOutcome;
-        pub const GzipSourceIndexWorkspace = deflate.GzipSourceIndexWorkspace;
-        pub const GzipSourceIndexOptions = deflate.GzipSourceIndexOptions;
-        pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
-    };
-    try @import("tests/gzip_source_index.zig").contracts(Support);
-    try @import("tests/gzip_verified_range_extents.zig").contracts(Support);
+    try @import("tests/gzip_source_index.zig").contracts(GzipSourceIndexTestSupport);
+    try @import("tests/gzip_verified_range_extents.zig").contracts(GzipSourceIndexTestSupport);
+}
+
+test "Gzip source index terminal zero padding" {
+    try @import("tests/gzip_source_index_padding.zig").contracts(GzipSourceIndexTestSupport);
 }
 
 const ZlibOrGzipIncrementalDecoderCodec = struct {

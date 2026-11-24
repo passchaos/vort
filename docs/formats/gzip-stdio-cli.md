@@ -43,7 +43,8 @@ For whole-input decoding, set `GzipDecodeOptions.allow_trailing_zero_padding`
 single and concatenated gzip decoding, including chunked inputs. Both options
 default to `false` and cannot be enabled alongside `allow_trailing_data`.
 Auto-detect prefix decoders still stop at the end of the first member without
-validating or counting its suffix.
+validating or counting its suffix. The [source-backed range index](gzip-source-index.md)
+can opt in separately with `GzipSourceIndexOptions.allow_trailing_zero_padding`.
 
 `zig build test-gzip-stdio-cli` checks these contracts on the native CLI and
 the WASI decode probe, including progressive output and atomic replacement.

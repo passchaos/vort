@@ -25,6 +25,9 @@ pub const Options = struct {
     max_output_len: Count = std.math.maxInt(Count),
     max_members: Count = std.math.maxInt(Count),
     max_header_metadata_len: usize = 1 << 20,
+    /// Accept an all-zero suffix after at least one validated member.
+    /// Padding does not contribute to any member's indexed extent.
+    allow_trailing_zero_padding: bool = false,
 };
 
 pub const Entry = struct {
