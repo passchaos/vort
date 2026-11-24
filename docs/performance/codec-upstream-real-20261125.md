@@ -73,3 +73,25 @@ literal bytes transferred. Adding `--rsyncable` reduced that to 4,079 bytes,
 with edited compressed size changing from 418,073 to 434,579 bytes. Both
 streams decode exactly with GNU gzip. These reference workflow measurements
 are not a Vort throughput or compression-ratio comparison.
+
+## Larger-file recheck after workspace and lifecycle changes
+
+On clean `6270d488`, Zig 0.16.0 ReleaseFast and the same local upstream
+libraries produced 15 flushed wires from the following complete files.
+Both incremental schedules passed all 30 complete runs and all 30 final-byte
+truncation checks. The `mozilla` input alone is 51,220,480 bytes. This checks
+wire and stream contracts, not throughput or library-wide feature parity.
+
+| File | Plaintext bytes | SHA-256 |
+| --- | ---: | --- |
+| mozilla | 51,220,480 | `657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b` |
+| dickens | 10,192,446 | `b24c37886142e11d0ee687db6ab06f936207aa7f2ea1fd1d9a36763c7a507e6a` |
+| xml | 5,345,280 | `0e82e54e695c1938e4193448022543845b33020c8be6bf3bf3ead2224903e08c` |
+
+```sh
+corpus="$HOME/Work/corpora/silesia-20261025/files"
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -j4 -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-limit=67108864 --real-file="$corpus/mozilla" \
+  --real-file="$corpus/dickens" --real-file="$corpus/xml"
+```
