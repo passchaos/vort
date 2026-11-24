@@ -2451,6 +2451,7 @@ test {
     _ = @import("br/incremental/fuzz_driver.zig");
     _ = incremental_copy_tests;
     _ = incremental_contracts_tests;
+    _ = @import("br/incremental/raw_attachment_tests.zig");
     _ = incremental_history_error_tests;
     _ = @import("br/incremental/history_growth_tests.zig");
     _ = incremental_rle_tests;

@@ -139,6 +139,27 @@ undersized ring as before. Both decoders preserve actual failed-call progress
 and sticky errors; reset and next-frame initialization clear the internal
 history-capacity failure cause.
 
+### Attaching RAW prefixes before input
+
+`IncrementalCopyStreamDecoder` and the owned `IncrementalStreamDecoder`
+provide `attachRawDictionary(prefix)`. Call it before the current frame
+accepts compressed input, including after a zero-input poll or a successful
+`nextFrame`. Repeated calls append borrowed prefix bytes after configured RAW
+prefixes and before any RAW tail in the configured serialized dictionary.
+Only the descriptors are copied; attaching allocates no heap and leaves
+retained workspace, quotas and stream counters unchanged. An eligible empty
+attachment is a no-op, unlike an explicit empty slot in the configured slice.
+
+Prefix bytes must remain valid and unchanged for the frame. An attachment
+overlapping decoder-owned or configured writable storage returns
+`InvalidBlockPlan`. Excess prefixes or total RAW bytes return `CorruptFrame`;
+length arithmetic overflow returns `IntegerOverflow`. A refusal keeps the prior
+binding and consumes no slot. After accepting input, completing a frame, or
+failing decoding, the method returns `InvalidStreamState`. Reset and next-frame
+transitions discard these attachments; dictionary options retain their normal
+lifetimes. These rules extend only incremental decoder attachment, not the
+serialized dictionary configuration API.
+
 ## Validation
 
 The upstream stream differential also covers unpledged owned and caller-history

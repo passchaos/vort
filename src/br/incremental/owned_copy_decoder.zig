@@ -4,6 +4,7 @@ const counts = core.stream_count;
 const working = @import("../../io/working_allocator.zig");
 const metadata_events = @import("metadata_events.zig");
 const history_growth = @import("history_growth.zig");
+const raw_attachments = @import("raw_attachments.zig");
 
 /// Allocator-owning facade for the true symbol-progressive Brotli decoder.
 /// It owns the bounded history ring and, only for an entropy header larger than
@@ -21,6 +22,7 @@ pub fn Decoder(comptime Codec: type) type {
         window_prefix_len: u2 = 0,
         window_prefix_offset: u2 = 0,
         decode_options_validated: bool = false,
+        raw_dictionary_attachments: raw_attachments.State = .{},
         history_capped: bool = false,
         history_limit: usize = 0,
         phase: Phase = .input,
@@ -125,6 +127,23 @@ pub fn Decoder(comptime Codec: type) type {
             self.history.deinit(self.budget.allocator());
             self.compressed_header.deinit(self.budget.allocator());
             std.debug.assert(self.budget.live == 0);
+        }
+
+        /// Append a borrowed RAW prefix for this frame before accepting input.
+        /// Does not reset counters or release retained decoder allocations.
+        pub fn attachRawDictionary(self: *Self, prefix: []const u8) Error!void {
+            if (self.phase != .input or self.progressive != null or self.frame_input_read != 0 or
+                self.input_finished or self.fatal_error != null) return error.InvalidStreamState;
+            if (prefix.len == 0) return;
+            try Codec.validateDecodeOptions(self.options.decode);
+            _ = try self.raw_dictionary_attachments.append(self.options.decode.shared_dictionary, prefix, &.{
+                std.mem.asBytes(self),
+                self.history.allocatedSlice(),
+                self.compressed_header.allocatedSlice(),
+                self.options.compressed_header_scratch,
+                self.options.metadata_output,
+                std.mem.sliceAsBytes(self.options.metadata_block_lengths),
+            });
         }
 
         /// Retain allocations and start a new operation with the current caps.
@@ -434,11 +453,16 @@ pub fn Decoder(comptime Codec: type) type {
                 self.options.expected_output_len orelse self.options.max_output_len,
                 self.options.max_total_output_len -| self.total_output,
             );
+            const decode = if (@hasField(Codec.DecodeOptions, "shared_dictionary")) blk: {
+                var configured = self.options.decode;
+                configured.shared_dictionary = self.raw_dictionary_attachments.view(configured.shared_dictionary);
+                break :blk configured;
+            } else self.options.decode;
             const plan = (try Codec.historyPlanFromPrefix(
                 self.window_prefix[0..self.window_prefix_len],
                 output_bound,
                 self.options.max_history_len,
-                self.options.decode,
+                decode,
             )) orelse return false;
             if (!self.growsHistoryOnDemand()) {
                 if (plan.capped and plan.allocation_len == 0) return error.OutputLimitExceeded;
@@ -475,6 +499,8 @@ pub fn Decoder(comptime Codec: type) type {
                 .metadata_observer = self.options.metadata_observer,
                 .allow_trailing_data = self.options.allow_trailing_data,
             });
+            if (@hasField(Codec.ProgressiveDecoder, "raw_dictionary_attachments"))
+                self.progressive.?.raw_dictionary_attachments = self.raw_dictionary_attachments;
             return true;
         }
 
