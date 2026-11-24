@@ -202,6 +202,22 @@ def main():
     if ref.dictionaries:
         dict_data = dictionary[-3072:] + b"\0" * 41 + dictionary[-819:]
         add("raw-shared-dictionary", ref.encode([(2, dict_data)], dictionary=dictionary), dict_data, dictionary=dictionary)
+
+        # Flush a short block first so unpledged owned decoding grows its
+        # history. Then wrap WBITS=16 before the dictionary-dependent tail.
+        first = b"prehistory at flush"
+        filler = random.Random(0xB8071108).randbytes(65536 + 2048)
+        prefix, tail = first + filler, dictionary[-3072:]
+        window = (1 << 16) - 16
+        wrap = ref.encode([(0, first), (1, b""), (0, filler), (1, b""), (2, tail)], dictionary=dictionary)
+        require(wrap[0] & 1 == 0 and len(prefix) > window, "reference WBITS=16 history wrap")
+        wrong = bytes(b ^ 0xFF for b in dictionary)
+        substituted, status, unused = ref.decode(wrap, dictionary=wrong)
+        require(status == 1 and unused == 0 and len(substituted) == len(prefix) + len(tail)
+                and substituted[:len(prefix)] == prefix and substituted[len(prefix):] != tail,
+                "only the post-wrap tail must depend on the RAW dictionary")
+        add("raw-shared-dictionary-after-window-wrap", wrap, prefix + tail, dictionary=dictionary, lgwin=16,
+            expected_output_len=None, max_history_len=window, max_working_memory=2 * window)
     else:
         skipped.append({"feature": "RAW dictionaries", "reason": "loaded reference does not export prepared encoder/decoder dictionary APIs"})
     upstream = Path.home() / "Work/brotli/tests/testdata"
@@ -239,12 +255,16 @@ def main():
 
     if not args.prepare_only:
         for name, wire, expected_data, options in cases:
-            cfg = {k: v for k, v in options.items() if k in ("allow_large_window",)}
+            cfg = {k: v for k, v in options.items() if k in ("allow_large_window", "expected_output_len",
+                                                          "max_history_len", "max_working_memory")}
             if "dictionary" in options:
                 cfg["dictionary_path"] = str(dictionary_path)
             for kind in ("owned", "caller"):
                 for pattern in ("one", "mixed", "wide"):
                     row = check(name, wire, expected_data, pattern, kind, **cfg)
+                    if "max_history_len" in options:
+                        require(row["input_read"] == len(wire) and row["max_history_capacity"] == options["max_history_len"],
+                                (name, kind, "complete input and saturated history"))
                     if "metadata" in options:
                         require(row["metadata_hex"] == options["metadata"].hex() and sum(row["metadata_lengths"]) == len(options["metadata"])
                                 and row["metadata_lengths"].count(0) >= 1, (name, kind, "metadata capture including empty flush blocks"))

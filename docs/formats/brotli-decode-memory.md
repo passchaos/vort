@@ -141,6 +141,18 @@ history-capacity failure cause.
 
 ## Validation
 
+The upstream stream differential also covers unpledged owned and caller-history
+Brotli decoding with a RAW dictionary after the advertised 65,520-byte history
+has wrapped. It encodes a short flushed block, enough filler to wrap the ring,
+and a dictionary-dependent tail. Substituting a different same-length RAW
+attachment must change the tail while preserving the whole preceding prefix.
+All three schedules check complete input, exact output and the history cap:
+
+```sh
+zig build -Doptimize=ReleaseFast run-br-stream-contract-diff -- \
+  --brotli-lib-dir "$HOME/Work/brotli/build-vort"
+```
+
 Run the focused public contracts with:
 
 ```sh
