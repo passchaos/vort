@@ -1,6 +1,7 @@
-//! Focused executable for testing the actual Zstd CLI dispatcher on WASI.
+//! Focused executable for testing the actual decode CLI adapters on WASI.
 const std = @import("std");
-const decoder = @import("cli/zstd_decode.zig");
+const brotli = @import("cli/brotli.zig");
+const zstd = @import("cli/zstd_decode.zig");
 
 pub fn main(init: std.process.Init) !void {
     var buffer: [2048]u8 = undefined;
@@ -9,6 +10,10 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const command = args.next() orelse return error.MissingCommand;
-    if (!try decoder.dispatch(command, init, &args, &writer.interface)) return error.UnknownCommand;
+    if (std.mem.eql(u8, command, "decode-br-file-to")) {
+        try brotli.decodeFile(init, &args, &writer.interface);
+    } else if (!try zstd.dispatch(command, init, &args, &writer.interface)) {
+        return error.UnknownCommand;
+    }
     try writer.interface.flush();
 }

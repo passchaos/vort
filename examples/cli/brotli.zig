@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const controls = @import("brotli_controls.zig");
 const stream_files = @import("stream_files.zig");
+const decode_stdio = @import("decode_stdio.zig");
 
 pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer, streaming: bool) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
@@ -157,6 +158,31 @@ pub fn parseDecodeArguments(args: *std.process.Args.Iterator) !DecodeArguments {
         }
     }
     return parsed;
+}
+
+pub fn decodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const arguments = try parseDecodeArguments(args);
+    if (decode_stdio.isStdio(input_path) or decode_stdio.isStdio(output_path)) {
+        const Decoder = vort.BrotliIncrementalStreamDecoder;
+        var options: Decoder.Options = .{
+            .decode = arguments.options,
+            .max_output_len = arguments.max_output_len orelse std.math.maxInt(vort.StreamCount),
+        };
+        if (options.decode.allow_large_window) options.max_history_len = (@as(usize, 1) << 30) - 16;
+        var decoder = Decoder.initWithOptions(init.gpa, options);
+        defer decoder.deinit();
+        return decode_stdio.decode(init.io, input_path, output_path, &decoder);
+    }
+
+    const dir = std.Io.Dir.cwd();
+    const compressed = try dir.readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+    defer init.gpa.free(compressed);
+    const decoded = try decodeAlloc(init.gpa, compressed, arguments);
+    defer init.gpa.free(decoded);
+    try dir.writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
 }
 
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8, arguments: DecodeArguments) ![]u8 {

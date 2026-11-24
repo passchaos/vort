@@ -500,15 +500,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "encode-br-stored-file")) {
         try brotli_cli.encodeStoredFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-file-to")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const arguments = try brotli_cli.parseDecodeArguments(&args);
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = try brotli_cli.decodeAlloc(init.gpa, compressed, arguments);
-        defer init.gpa.free(decoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-        try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+        try brotli_cli.decodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bzip2-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -2650,8 +2642,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\    stored_memory_options: --max-total-memory=BYTES --memory-profile
         \\                              Total budget covers encoder-owned requested heap; 0 rejects allocated wire
         \\                              Memory profile reports released encoder heap after output handoff
-        \\  decode-br-file-to <in> <out> [max_output] [--large-window]
-        \\                              Decode dependency-free Brotli stored stream file
+        \\  decode-br-file-to <in|-> <out|-> [max_output] [--large-window]
+        \\                              Decode Brotli; '-' selects streaming stdin or binary stdout
         \\  encode-bzip2-file <in> <out> [block_size_100k]
         \\                              Encode a deterministic Bzip2 stream
         \\  decode-bzip2-file <in> <out> [max_output]

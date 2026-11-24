@@ -2,7 +2,9 @@ const std = @import("std");
 const vort = @import("vort");
 const decoded_output = @import("decode_output.zig");
 const controls = @import("zstd_controls.zig");
-const stdio = @import("zstd_stdio.zig");
+const stdio = @import("decode_stdio.zig");
+
+const default_stdio_window: vort.StreamCount = 128 * 1024 * 1024;
 
 const Mode = enum { hex, file, file_to, size_hex, size_file };
 const modes = std.StaticStringMap(Mode).initComptime(.{
@@ -86,11 +88,13 @@ pub fn dispatch(command: []const u8, init: std.process.Init, args: *std.process.
     const options = try Options.parse(args);
     if (output_path) |path| {
         if (stdio.isStdio(input) or stdio.isStdio(path)) {
-            const window = options.max_window_size orelse stdio.default_window_size;
-            stdio.decode(init, input, path, .{
+            const window = options.max_window_size orelse default_stdio_window;
+            var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(init.gpa, .{
                 .max_output_len = options.max_output orelse std.math.maxInt(vort.StreamCount),
                 .max_window_size = window,
-            }) catch |err| {
+            });
+            defer decoder.deinit();
+            stdio.decode(init.io, input, path, &decoder) catch |err| {
                 const pipe_options: Options = .{ .max_window_size = window, .max_output = options.max_output };
                 pipe_options.reportLimit(init.io, err);
                 return err;

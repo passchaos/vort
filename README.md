@@ -2360,6 +2360,12 @@ The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
 
+### Brotli standard streams
+
+`vort decode-br-file-to - - < data.br > data.bin` streams decoded bytes to
+stdout. See the [Brotli CLI standard-stream contract](docs/formats/brotli-stdio-cli.md)
+for limits, Large Window opt-in, and failure behavior.
+
 ### Brotli HQ encoding
 
 Quality 10 and 11 can opt into standard-window HQ command parsing. Null `hq`
