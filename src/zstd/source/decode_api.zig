@@ -595,7 +595,7 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: StreamOptions,
         ) Error!StreamResult {
-            const complete = (try decodeStreamFromCheckpoint(source, destination, workspace, options, .{ .format = options.format }, null)).checkpoint;
+            const complete = (try decodeStreamFromCheckpoint(source, destination, workspace, options, .{ .format = options.format }, null, null)).checkpoint;
             return .{
                 .decoded_len = complete.decoded_len,
                 .stream_end_offset = complete.compressed_offset,
@@ -614,9 +614,33 @@ pub fn Facade(comptime Support: type) type {
             options: StreamOptions,
             checkpoint: ?StreamCheckpoint,
         ) StreamOutcome {
+            return decodeStreamIntoOutcome(source, destination, workspace, options, checkpoint, null);
+        }
+
+        /// Stage each complete frame in separate caller-owned scratch before
+        /// publishing. A failed frame never changes its destination bytes.
+        pub fn decodeVerifiedStreamIntoWithProgress(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            frame_scratch: []u8,
+            options: StreamOptions,
+            checkpoint: ?StreamCheckpoint,
+        ) StreamOutcome {
+            return decodeStreamIntoOutcome(source, destination, workspace, options, checkpoint, frame_scratch);
+        }
+
+        fn decodeStreamIntoOutcome(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            options: StreamOptions,
+            checkpoint: ?StreamCheckpoint,
+            frame_scratch: ?[]u8,
+        ) StreamOutcome {
             const start = checkpoint orelse StreamCheckpoint{ .format = options.format };
             var observation: StreamObservation = .{ .progress = .{ .checkpoint = start } };
-            const complete = decodeStreamFromCheckpoint(source, destination, workspace, options, start, &observation) catch |err|
+            const complete = decodeStreamFromCheckpoint(source, destination, workspace, options, start, &observation, frame_scratch) catch |err|
                 return .{ .failed = .{ .err = err, .progress = observation.progress, .frame = observation.frame } };
             return .{ .complete = complete };
         }
@@ -628,12 +652,18 @@ pub fn Facade(comptime Support: type) type {
             options: StreamOptions,
             start: StreamCheckpoint,
             observation: ?*StreamObservation,
+            frame_scratch: ?[]u8,
         ) Error!StreamProgress {
             var progress: StreamProgress = .{ .checkpoint = start };
             errdefer if (observation) |observed| {
                 observed.progress = progress;
             };
             try output_alias.validateOperation(destination, workspace, options);
+            if (frame_scratch) |scratch| {
+                if (options.ignore_checksum) return error.InvalidBlockPlan;
+                try output_alias.validateRegions(scratch, &.{destination});
+                try output_alias.validateOperation(scratch, workspace, options);
+            }
             if (start.format != options.format) return error.InvalidBlockPlan;
             if (start.compressed_offset > source.len) return error.RangeOutOfBounds;
             _ = try remainingCap(start.decoded_len, options.total_decoded_max);
@@ -649,21 +679,38 @@ pub fn Facade(comptime Support: type) type {
                         if (observation) |observed| observed.frame = frameInfo(frame);
                         const parsed = try admitFrame(frame, options);
                         const cap = try remainingCap(progress.checkpoint.decoded_len, options.total_decoded_max);
+                        const frame_options = frameOptions(options, @min(options.frame_decoded_max, cap));
+                        const offered = destination[progress.output_written..];
+                        const frame_destination = if (frame_scratch) |scratch|
+                            scratch[0..@min(scratch.len, offered.len)]
+                        else
+                            offered;
+                        if (frame_scratch != null) {
+                            if (frame.header.content_size) |expected| {
+                                if (expected > frame_options.frame_decoded_max) return error.OutputLimitExceeded;
+                                if (expected > frame_destination.len) return error.OutputTooSmall;
+                            }
+                        }
                         var partial: usize = 0;
                         const result = decodeFrameIntoObserved(
                             parsed,
-                            destination[progress.output_written..],
+                            frame_destination,
                             workspace,
-                            frameOptions(options, @min(options.frame_decoded_max, cap)),
-                            if (observation != null) &partial else null,
+                            frame_options,
+                            if (observation != null and frame_scratch == null) &partial else null,
                         ) catch |err| {
                             progress.output_written += partial;
                             return err;
                         };
-                        progress.output_written += try count.toLocal(result.decoded_len);
+                        const len = try count.toLocal(result.decoded_len);
+                        if (frame_scratch == null) progress.output_written += len;
                         const decoded = try count.add(progress.checkpoint.decoded_len, result.decoded_len);
                         const frames = try count.add(progress.checkpoint.data_frames, 1);
                         try cursor.finishData(result.frame_end_offset);
+                        if (frame_scratch != null) {
+                            @memcpy(offered[0..len], frame_destination[0..len]);
+                            progress.output_written += len;
+                        }
                         progress.checkpoint.decoded_len = decoded;
                         progress.checkpoint.data_frames = frames;
                         progress.complete_output_written = progress.output_written;

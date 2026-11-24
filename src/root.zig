@@ -2522,6 +2522,7 @@ pub const zstdDecodeSourceFrameAlloc = zstd.decodeSourceFrameAlloc;
 pub const zstdInspectSourceStream = zstd.inspectSourceStream;
 pub const zstdDecodeSourceStreamInto = zstd.decodeSourceStreamInto;
 pub const zstdDecodeSourceStreamIntoWithProgress = zstd.decodeSourceStreamIntoWithProgress;
+pub const zstdDecodeVerifiedSourceStreamIntoWithProgress = zstd.decodeVerifiedSourceStreamIntoWithProgress;
 pub const zstdDecodeSourceStreamAppend = zstd.decodeSourceStreamAppend;
 pub const zstdDecodeSourceStreamAlloc = zstd.decodeSourceStreamAlloc;
 

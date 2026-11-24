@@ -200,6 +200,10 @@ test "Zstd source seekable progress retains wide retry offsets" {
 test "Zstd source stream progress contracts" {
     try @import("zstd/source/decode_progress_tests.zig").contracts(@This());
 }
+
+test "Zstd source verified stream publication contracts" {
+    try @import("zstd/source/verified_stream_tests.zig").contracts(@This());
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -5544,6 +5548,7 @@ pub const SourceStreamCursor = source_decode_facade.Cursor;
 pub const inspectSourceStream = source_decode_facade.inspectStream;
 pub const decodeSourceStreamInto = source_decode_facade.decodeStreamInto;
 pub const decodeSourceStreamIntoWithProgress = source_decode_facade.decodeStreamIntoWithProgress;
+pub const decodeVerifiedSourceStreamIntoWithProgress = source_decode_facade.decodeVerifiedStreamIntoWithProgress;
 pub const decodeSourceStreamAppend = source_decode_facade.decodeStreamAppend;
 pub const decodeSourceStreamAlloc = source_decode_facade.decodeStreamAlloc;
 

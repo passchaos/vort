@@ -44,8 +44,8 @@ The random-access `Source` has an opaque context and read callback. Its context
 and backing bytes must remain independent of mutable output/workspaces and
 stable for the complete operation. The facade cannot infer those ranges from
 the callback. Existing partial-output behavior for source, format, output-size
-and checksum errors remains block based; callers requiring atomic whole-frame
-publication supply their own independent destination staging.
+and checksum errors remains block based. Use the verified stream mode below
+when the destination must not expose an incomplete frame.
 
 ## Resume an interrupted source stream
 
@@ -83,6 +83,38 @@ the offset, format and cumulative policy bounds; it does not revalidate the
 preceding bytes or authenticate the checkpoint. Validation follows the decode
 options including `ignore_checksum`. The existing error-union and append
 interfaces retain their block-publication semantics.
+
+## Publish only complete, verified frames
+
+`zstdDecodeVerifiedSourceStreamIntoWithProgress` adds a separate
+`frame_scratch` argument before the options and checkpoint. The decoder
+stages one complete frame in that caller-provided buffer and copies it into
+the destination only after the frame's structure, size and any advertised
+checksum are valid. No frame is reread for publication. Skippable payloads
+are still not read, and the frame and total limits still apply on resume.
+
+```zig
+const outcome = vort.zstdDecodeVerifiedSourceStreamIntoWithProgress(
+    source, output, workspace, frame_scratch, options, checkpoint,
+);
+```
+
+Size `frame_scratch` for the largest decoded frame to be published, separate
+from the destination, block workspace and dictionary storage. There is no
+codec allocation. A known frame size exceeding the available destination or
+scratch is rejected before its body is read; an unknown size can instead be
+rejected during decode. Either refusal leaves the failing frame's destination
+unchanged. Scratch contents on failure are unspecified. An empty frame can
+complete without decoded-frame scratch space.
+
+Checksum bypass (`ignore_checksum`) and overlapping buffers are rejected with
+`InvalidBlockPlan` before source reads. `output_written` and
+`complete_output_written` are always equal in this mode: both count only this
+call's verified frames. A failure retains those frames and the checkpoint at
+the next element for retry. Earlier elements are not reverified when a
+checkpoint is supplied; this is validation of newly read frames, not
+cryptographic authentication. Use the block-publication API to stream frames
+that do not fit a decoded-frame buffer.
 
 The [regression evidence](../performance/zstd-source-output-alias-20261111/README.md)
 includes the frozen successful-but-corrupt counterexample, rejected aliases,

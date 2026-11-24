@@ -206,4 +206,14 @@ fn wideCheckpoint(comptime Z: type, tail: []const u8, expected: []const u8, work
         .complete_output_written = expected.len,
     }, outcome.complete);
     try t.expectEqualSlices(u8, expected, output);
+
+    var frame_scratch: [storage.len]u8 = undefined;
+    @memset(output, 0xa5);
+    const verified = Z.decodeVerifiedSourceStreamIntoWithProgress(source, output, workspace, &frame_scratch, .{
+        .total_decoded_max = start.decoded_len + expected.len,
+        .max_frames = WideSource.base + 1,
+    }, start);
+    try t.expect(verified == .complete);
+    try t.expectEqualDeep(outcome.complete, verified.complete);
+    try t.expectEqualSlices(u8, expected, output);
 }
