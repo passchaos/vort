@@ -141,7 +141,31 @@ fn verifyDirectChunks(a: std.mem.Allocator, wire: []const u8, plain: []const u8,
     if (decoded.input_read != wire.len or decoded.output_written != plain.len)
         return error.PreflightSizeMismatch;
     try checkOutput(guarded, plain);
+
+    var short: ShortSource = .{ .bytes = wire };
+    var input_page: [257]u8 = undefined;
+    @memset(output, sentinel);
+    if (try workspace.decodeSourceInto(.{ .source = .{
+        .context = &short,
+        .len = wire.len,
+        .max_read_size = 251,
+        .read_at = ShortSource.readAt,
+    } }, output, &input_page, options) != plain.len) return error.PreflightSizeMismatch;
+    try checkOutput(guarded, plain);
 }
+
+const ShortSource = struct {
+    bytes: []const u8,
+
+    fn readAt(raw: *anyopaque, offset: u64, output: []u8) error{SourceReadFailed}!usize {
+        const self: *ShortSource = @ptrCast(@alignCast(raw));
+        if (offset >= self.bytes.len) return 0;
+        const rest = self.bytes[@intCast(offset)..];
+        const len = @min(rest.len, output.len, 97);
+        @memcpy(output[0..len], rest[0..len]);
+        return len;
+    }
+};
 
 fn expectRefusal(result: anyerror!usize, expected: anyerror, guarded: []const u8) !void {
     if (result) |_| return error.PreflightAcceptedInvalidInput else |err| {

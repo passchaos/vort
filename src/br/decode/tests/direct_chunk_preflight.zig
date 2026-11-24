@@ -85,6 +85,36 @@ pub fn contracts(comptime B: type, wire: []u8, plain: []const u8, history: []u8)
     try t.expectEqual(@as(u8, guard), output[n]);
     try h.zeroProfile(profile, 0);
     try formatContracts(B, workspace);
+    try sourceReplayFault(B, workspace, wire, plain, output, opts);
+}
+
+const ReplayFault = struct {
+    bytes: []const u8,
+    passes: usize = 0,
+
+    fn readAt(raw: *anyopaque, offset: u64, output: []u8) error{SourceReadFailed}!usize {
+        const self: *ReplayFault = @ptrCast(@alignCast(raw));
+        if (offset == 0) self.passes += 1;
+        if (self.passes > 1 and offset >= 512) return error.SourceReadFailed;
+        const remaining = self.bytes[@intCast(offset)..];
+        const len = @min(remaining.len, output.len);
+        @memcpy(output[0..len], remaining[0..len]);
+        return len;
+    }
+};
+
+fn sourceReplayFault(comptime B: type, workspace: *B.DirectChunkPreflightWorkspace, wire: []const u8, plain: []const u8, output: []u8, options: B.DirectChunkPreflightWorkspace.Options) !void {
+    var fault: ReplayFault = .{ .bytes = wire };
+    var page: [64]u8 = undefined;
+    @memset(output, guard);
+    try t.expectError(error.SourceReadFailed, workspace.decodeSourceInto(.{ .source = .{
+        .context = &fault,
+        .len = wire.len,
+        .read_at = ReplayFault.readAt,
+    } }, output, &page, options));
+    try t.expectEqual(@as(usize, 2), fault.passes);
+    try t.expectEqualSlices(u8, plain[0..256], output[0..256]);
+    try t.expect(std.mem.allEqual(u8, output[1024..], guard));
 }
 
 fn formatContracts(comptime B: type, workspace: *B.DirectChunkPreflightWorkspace) !void {

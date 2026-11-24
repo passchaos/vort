@@ -176,8 +176,9 @@ quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide
 window is not enough: the Vort summary must find an actual backward copy past
 65,520 bytes in each wire. The mode checks both incremental schedules, strict
 and prefix caller-history preflight with contiguous and joined chunk input,
-plus direct validation and replay over 257-byte pieces without a compressed
-join buffer. All preflight routes use zero requested codec heap. A one-byte-short
+plus direct validation and replay over 257-byte pieces and over a short-read
+random-access source, without a compressed join buffer. All preflight routes
+use zero requested codec heap. A one-byte-short
 logical limit, final-byte truncation, and trailing bytes must fail strict preflight
 without writing to caller output. Tail replay still checks the emitted prefix
 byte-for-byte; unlike the flushed mode, it does not assume the last 64 KiB is

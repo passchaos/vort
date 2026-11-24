@@ -94,6 +94,36 @@ that copy. A short ring is `PreflightHistoryTooSmall`. There is no change to
 existing contiguous, join-scratch or eager APIs. This path trades a second
 progressive pass for removing whole-input staging; it is not a throughput claim.
 
+## Short reads from a ByteSource
+
+The same workspace can read a `SourceRange` from a stable `ByteSource` using
+one caller-owned input page. `decodedSourceSize` and `decodedSourcePrefixSize`
+measure a full range or its first stream; `decodeSourceInto` and
+`decodeSourcePrefixInto` validate first, then replay into the destination.
+
+```zig
+const decoded = try workspace.decodeSourcePrefixInto(
+    .{ .source = source, .offset = stream_start },
+    output,
+    input_page,
+    .{ .preflight = .{ .history = history_scratch, .max_output_len = limit } },
+);
+```
+
+`SourceRange.offset` and optional `length` are 64-bit. `decoded.input_read`
+counts compressed bytes **relative to that offset**, including validated
+padding. The nonempty input page completes short callback reads and respects
+`ByteSource.max_read_size`. Preflight can read ahead within the specified
+range; replay reads only the measured prefix. No full compressed buffer or
+codec allocation is needed.
+
+The input page must be separate from the workspace, optional header scratch,
+history, output, dictionary storage and telemetry. The opaque source context
+and backing storage must also be independent and stay unchanged across both
+passes. Source bounds, borrow and preflight failures do not publish output.
+A read failure during replay can leave a plaintext prefix in the destination;
+a failed into call does not return usable output or a resume position.
+
 The focused decode-memory contracts cover a valid 65,537-byte copy followed by
 a context-selected literal, exactly sufficient and one-byte-short history,
 strict/prefix boundaries, output guard bytes, late-block cap refusal, an exact
@@ -113,8 +143,9 @@ The [wide upstream differential mode](../fuzzing.md) verifies both that
 1.2.0 the full-file wire is 506,129 bytes, SHA-256
 `803c10dae9fb558b5c4bef96db9870110154a2f8d644ccf917c2056044786091`, and reaches
 4,193,998 bytes back. Both XML wires exhaust the legacy fixed history but
-pass strict/prefix caller-history preflight with zero requested codec heap,
-with both contiguous input and compressed chunks. The chunked tests also
+pass caller-history preflight with zero requested codec heap, using contiguous
+input, compressed chunks, and a 257-byte source page whose callback returns
+at most 97 bytes at a time. The chunked tests also
 exercise empty chunks, a suffix across transport boundaries, aliased borrows,
 short scratch, and failed eager reset followed by a disjoint retry.
 Both incremental schedules decode each entire wire and reject its final-byte
