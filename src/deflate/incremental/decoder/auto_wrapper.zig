@@ -5,6 +5,7 @@ const core = @import("../../../core.zig");
 const Count = core.StreamCount;
 const clone_storage = @import("../clone_storage.zig");
 const block_position = @import("../block_boundary_position.zig");
+const block_restart = @import("../block_restart.zig");
 const step_borrows = @import("step_borrows.zig");
 const dictionary_borrows = @import("dictionary_borrows.zig");
 
@@ -213,6 +214,15 @@ pub fn Decoder(comptime Codec: type) type {
                 .detecting => null,
                 .zlib => |*decoder| decoder.blockBoundaryPosition(),
                 .gzip => |*decoder| decoder.blockBoundaryPosition(),
+            };
+        }
+
+        pub fn captureBlockRestart(self: *const Self, history_output: []u8) Error!block_restart.Point {
+            const receiver = std.mem.asBytes(self);
+            return switch (self.active) {
+                .detecting => error.InvalidStreamState,
+                .zlib => |*decoder| block_restart.captureWrapper(decoder, receiver, history_output),
+                .gzip => |*decoder| block_restart.captureWrapper(decoder, receiver, history_output),
             };
         }
 

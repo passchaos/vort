@@ -7,6 +7,7 @@ const zlib_header = @import("../../zlib_header.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
 const block_position = @import("../block_boundary_position.zig");
+const block_restart = @import("../block_restart.zig");
 const step_borrows = @import("step_borrows.zig");
 const dictionary_borrows = @import("dictionary_borrows.zig");
 
@@ -310,6 +311,11 @@ pub fn Decoder(comptime Codec: type) type {
                 .done => block_position.atByte(self.member_end_offset orelse return null, self.total_output),
                 else => null,
             };
+        }
+
+        /// Capture the next payload block for raw restart, not wrapper replay.
+        pub fn captureBlockRestart(self: *const Self, history_output: []u8) Error!block_restart.Point {
+            return block_restart.captureWrapper(self, std.mem.asBytes(self), history_output);
         }
 
         /// Resume raw-DEFLATE decoding after an external scanner consumed the

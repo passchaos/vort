@@ -492,6 +492,7 @@ pub const GzipIncrementalBestEncoder = incremental_gzip_fixed_encoder.Encoder(In
 pub const RawDeflateIncrementalStoredDecoder = incremental_stored_decoder.Decoder;
 pub const RawDeflateIncrementalFixedLiteralDecoder = incremental_fixed_literal_decoder.Decoder;
 pub const BlockBoundaryPosition = @import("deflate/incremental/block_boundary_position.zig").Position;
+pub const BlockRestartPoint = @import("deflate/incremental/block_restart.zig").Point;
 
 const IncrementalZlibDecoderCodec = struct {
     pub const Error = deflate.Error;

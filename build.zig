@@ -93,7 +93,7 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_wasm_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-wasm-tests",
         .root_module = deflate_relaxed_wasm_mod,
-        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary" },
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart" },
     });
     deflate_wide_wasm_tests.stack_size = 8 * 1024 * 1024;
     const deflate_wide_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/wide_decode/wasm_gate.js" });
@@ -1205,7 +1205,7 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-tests",
         .root_module = zlib_stream_tests.root_module,
-        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary" },
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart" },
     });
     b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 counters, overflow and bit-checkpoint contracts")
         .dependOn(&b.addRunArtifact(deflate_wide_tests).step);

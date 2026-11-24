@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const clone_storage = @import("../clone_storage.zig");
 const block_position = @import("../block_boundary_position.zig");
+const block_restart = @import("../block_restart.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const huffman = @import("../../../huffman.zig");
@@ -367,6 +368,17 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         pub fn blockBoundaryPosition(self: *const Self) ?block_position.Position {
             if (!self.atBlockBoundary() or self.last_error_name.len != 0) return null;
             return block_position.fromReservoir(self.total_input, self.bit_count, self.total_output);
+        }
+
+        /// Save the usable history at the next block header, not at final EOB.
+        pub fn captureBlockRestart(self: *const Self, history_output: []u8) Error!block_restart.Point {
+            return block_restart.captureRaw(self, history_output);
+        }
+
+        /// Restart a raw payload at a trusted checkpoint. Supply the original
+        /// byte containing a partial header, and offer input at the returned offset.
+        pub fn restartAtBlockBoundary(self: *Self, point: block_restart.Point, initial_byte: ?u8, options: Options) Error!Count {
+            return block_restart.restore(self, point, initial_byte, options);
         }
 
         pub fn finish(self: *Self) Error!void {

@@ -22,6 +22,8 @@ const Counts = struct {
     zero_progress_checkpoints: usize = 0,
     exact_limit_checkpoints: usize = 0,
     semantic_blocks: u64 = 0,
+    restarts: usize = 0,
+    nonaligned_restarts: usize = 0,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -93,13 +95,13 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
-    if (counts.zero_progress_checkpoints == 0 or counts.exact_limit_checkpoints == 0 or counts.semantic_blocks == 0)
+    if (counts.zero_progress_checkpoints == 0 or counts.exact_limit_checkpoints == 0 or counts.semantic_blocks == 0 or counts.nonaligned_restarts == 0)
         return error.MissingCheckpointCoverage;
     var buffer: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "deflate_checkpoint_interop_ok zlib={s} wires={d} runs={d} checkpoints={d} zero_progress={d} at_output_limit={d} semantic_blocks={d}\n",
-        .{ std.mem.span(C.zlibVersion()), counts.reference_wires, counts.runs, counts.checkpoints, counts.zero_progress_checkpoints, counts.exact_limit_checkpoints, counts.semantic_blocks },
+        "deflate_checkpoint_interop_ok zlib={s} wires={d} runs={d} checkpoints={d} zero_progress={d} at_output_limit={d} semantic_blocks={d} restarts={d} nonaligned_restarts={d}\n",
+        .{ std.mem.span(C.zlibVersion()), counts.reference_wires, counts.runs, counts.checkpoints, counts.zero_progress_checkpoints, counts.exact_limit_checkpoints, counts.semantic_blocks, counts.restarts, counts.nonaligned_restarts },
     );
     try stdout.interface.flush();
 }
@@ -160,6 +162,11 @@ fn check(
                 std.log.err("checkpoint {d}: expected bits={d} output={d}, got bits={d} output={d}", .{ checkpoint, expected[checkpoint].bits, expected[checkpoint].output, bits, written });
                 return error.CheckpointMismatch;
             }
+            if (schedule.output_max == std.math.maxInt(usize) and written < plain.len) {
+                try verifyRestart(a, &decoder, wire, plain, written, position);
+                counts.restarts += 1;
+                counts.nonaligned_restarts += @intFromBool(position.compressed_bit_offset != 0);
+            }
             checkpoint += 1;
             counts.checkpoints += 1;
             if (p.input_read == 0 and p.output_written == 0) counts.zero_progress_checkpoints += 1;
@@ -188,6 +195,38 @@ fn check(
         }
     }
     return error.DecoderStepLimit;
+}
+
+fn verifyRestart(a: std.mem.Allocator, decoder: anytype, wire: []const u8, plain: []const u8, written: usize, at: codec.BlockBoundaryPosition) !void {
+    const saved = try a.alloc(u8, Raw.required_history_len);
+    defer a.free(saved);
+    const point = try decoder.captureBlockRestart(saved);
+    if (!std.meta.eql(point.position, at) or point.window_size != Raw.required_history_len or
+        !std.mem.eql(u8, point.history, plain[written -| point.max_distance..written]))
+        return error.RestartCaptureMismatch;
+
+    const output = try a.alloc(u8, plain.len - written + 1);
+    defer a.free(output);
+    const byte_offset: usize = @intCast(at.compressed_byte_offset);
+    try ref.verifyRestart(wire, byte_offset, at.compressed_bit_offset, point.history, plain[written..], output);
+    @memset(output, sentinel);
+
+    const history = try a.alloc(u8, Raw.required_history_len);
+    defer a.free(history);
+    var restored = try Raw.initWithHistory(.{}, history);
+    const initial_byte = if (at.compressed_bit_offset == 0) null else wire[byte_offset];
+    const next = try restored.restartAtBlockBoundary(point, initial_byte, .{
+        .max_output_len = plain.len,
+        .expected_output_len = plain.len,
+        .allow_trailing_data = true,
+    });
+    if (next != byte_offset + @intFromBool(initial_byte != null) or
+        !std.meta.eql(restored.blockBoundaryPosition().?, at)) return error.RestartPositionMismatch;
+    const step = try restored.step(wire[@intCast(next)..], output);
+    if (step.status != .done or step.progress.output_written != plain.len - written or
+        !std.mem.eql(u8, output[0 .. output.len - 1], plain[written..]) or output[output.len - 1] != sentinel)
+        return error.RestartPlaintextMismatch;
+    try restored.finish();
 }
 
 fn logFailure(wrapper: ref.Wrapper, flush: ref.Flush, strategy: c_int, bytes: usize, schedule: Schedule, mode: []const u8) void {

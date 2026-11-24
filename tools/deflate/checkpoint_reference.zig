@@ -119,3 +119,24 @@ pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plai
             return error.LibzNoProgress;
     }
 }
+
+pub fn verifyRestart(wire: []const u8, byte_offset: usize, bit_offset: u3, history: []const u8, expected: []const u8, output: []u8) !void {
+    var stream: C.z_stream = std.mem.zeroes(C.z_stream);
+    if (C.inflateInit2_(&stream, ref.bits(.raw), C.ZLIB_VERSION, @sizeOf(C.z_stream)) != C.Z_OK)
+        return error.LibzInit;
+    defer _ = C.inflateEnd(&stream);
+    var next = byte_offset;
+    if (bit_offset != 0) {
+        if (C.inflatePrime(&stream, 8 - @as(c_int, bit_offset), wire[byte_offset] >> bit_offset) != C.Z_OK)
+            return error.LibzPrime;
+        next += 1;
+    }
+    if (history.len != 0 and C.inflateSetDictionary(&stream, history.ptr, @intCast(history.len)) != C.Z_OK)
+        return error.LibzDictionary;
+    stream.next_in = @constCast(wire[next..].ptr);
+    stream.avail_in = @intCast(wire.len - next);
+    stream.next_out = output.ptr;
+    stream.avail_out = @intCast(output.len);
+    if (C.inflate(&stream, C.Z_FINISH) != C.Z_STREAM_END or stream.total_out != expected.len or
+        !std.mem.eql(u8, output[0..expected.len], expected)) return error.LibzRestartMismatch;
+}

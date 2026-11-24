@@ -50,8 +50,47 @@ It works after ordinary stepping too and produces no new pause events. Raw
 Deflate64 uses the same position representation.
 
 Keep both compressed fields: a full-width byte offset can overflow if multiplied
-by eight. The coordinate does not contain window history or dictionary state;
-use the existing state-clone or recovery APIs where that state is needed.
+by eight. A coordinate alone does not contain window history or dictionary state.
+
+## Capture and restart a payload
+
+At the next block header, `captureBlockRestart(history_output)` saves a
+`DeflateBlockRestartPoint` from raw Deflate/Deflate64 and from zlib, gzip or
+auto-detect decoders. The result borrows the written prefix of `history_output`,
+with usable window bytes in oldest-to-newest order. The position remains
+absolute even in a later concatenated member; the history is member-local.
+A final EOB or a partially decoded block is not a restart point.
+
+Restore a point in a raw decoder of the matching format. For an unaligned
+checkpoint supply the original compressed byte containing that bit position;
+for an aligned checkpoint supply `null`. Then start issuing input at the
+returned absolute byte offset:
+
+```zig
+const point = try decoder.captureBlockRestart(saved_history);
+const initial_byte: ?u8 = if (point.position.compressed_bit_offset == 0)
+    null
+else
+    try readAt(point.position.compressed_byte_offset);
+const next_input = try raw.restartAtBlockBoundary(point, initial_byte, .{
+    .max_output_len = absolute_output_limit,
+    .allow_trailing_data = true,
+});
+```
+
+Restoration seeds caller-owned history and restores absolute compressed and
+plaintext counters. Output limits and expected lengths use those absolute
+coordinates. Restore cannot relax the saved distance cap, and rejects an
+incompatible window, insufficient storage, counter overflow or overlapping
+borrow **before** resetting the decoder or touching history. Capture likewise
+checks its actual output span before copying. Neither operation allocates.
+
+Store the numeric fields and history bytes explicitly if persisting an index;
+there is no serialized format for the Zig struct. Use only trusted checkpoints
+from the same compressed data. A restart decodes a raw payload suffix, leaving
+any wrapper footer unconsumed when configured to allow trailing data. It does
+not reconstruct the prefix checksum or validate a zlib/gzip member's footer;
+use a full wrapper decode or state clone when that validation is required.
 
 ## Validation
 
@@ -104,6 +143,12 @@ earlier internal-state oracle linked to pre-fix Vort `f9dc91d7` rejected the
 first raw `Z_BLOCK` case with `UnexpectedCompletion` after the checkpoint was
 skipped; the fix and the current public-position oracle pass. These are conformance counts, not performance data.
 
-This establishes the decoder-side checkpoint contract. It does not add an
-encoder checkpoint, a whole-stream save/restore format, or a
-streaming/dictionary performance comparison.
+The same oracle checks suffix replay from captured histories against libz
+`inflatePrime` and `inflateSetDictionary`. On system libz 1.2.11 it verified
+256 restarts (136 non-byte-aligned) across raw, wrapped and auto consumers.
+The focused wide tests also cover actual cross-block matches, restarting at
+modeled offsets above 4 GiB, circular history order, cross-member isolation,
+and transactional refusal of invalid or aliased restart data.
+
+This does not add an encoder checkpoint, a whole-stream save/restore format,
+or a streaming/dictionary performance comparison.
