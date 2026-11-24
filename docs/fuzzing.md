@@ -123,6 +123,28 @@ through 8 KiB (`--deep` extends the schedule to 64 KiB) into:
 - standard Zstd frames at levels 1/3/9;
 - RFC Brotli qualities 0/5/11 (q11 only for inputs up to 1 KiB in smoke).
 
+For a valid-wire-only incremental campaign, pass `--incremental-valid-only`:
+
+```sh
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --deep --incremental-valid-only --brotli-reference-exact-input --zlib-reference-exact-input
+```
+
+The flag preserves the ordinary one-shot, exact-size and applicable reference
+checks, then drives the same wire through two incremental schedules. The
+unpledged schedule uses one-byte input on small wires and bounded fragments on
+long wires. The second applies an exact output pledge with a different chunk
+schedule. Zstd also exercises its block-stream and prevalidated-frame input
+policies respectively. In both schedules, every step checks progress bounds,
+exact plaintext as it is published, and output canaries. EOF requires complete
+wire consumption, a successful `finish`, and the exact plaintext length. Deep
+runs include dictionary, concatenation, and format variants; the existing
+classification report still distinguishes external checks from Vort-only
+contracts. `incremental_valid_json` reports passes, failures, and successful
+step calls by codec. This mode skips truncation and mutation and cannot be used
+with divergence capture or replay; default runs are unchanged.
+
 Every valid wire is checked three ways: Vort one-shot and exact-size decode
 must reproduce the source; the installed system references (zlib, libzstd,
 libbrotli via `@cImport`) must accept the same wire and reproduce the source;

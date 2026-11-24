@@ -34,6 +34,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const reporting = @import("codec_differential/reporting.zig");
+const incremental_valid = @import("codec_differential/incremental_valid.zig");
 
 const c = @cImport({
     @cInclude("zlib.h");
@@ -183,6 +184,25 @@ const Harness = struct {
     brotli_audit: reporting.BrotliReferenceAudit = .{},
     zlib_exact_input: bool = false,
     zlib_trailing_rejections: usize = 0,
+    incremental_valid_only: bool = false,
+    incremental_runs: [codecs.len]struct { passed: usize = 0, failed: usize = 0, calls: usize = 0 } = @splat(.{}),
+
+    fn checkIncremental(self: *Harness, codec: Codec, pattern: Pattern, wire_case: WireCase) !void {
+        const counts = &self.incremental_runs[@intFromEnum(codec)];
+        for (incremental_valid.schedules) |schedule| {
+            var progress: incremental_valid.Progress = .{};
+            incremental_valid.check(self.allocator, codec, wire_case, schedule, &progress) catch |err| {
+                if (err == error.OutOfMemory) return err;
+                counts.failed += 1;
+                try self.fail(codec, pattern, wire_case.label, wire_case.source.len, wire_case.wire.len, "vort-incremental", "schedule={s} level={d} read={d} written={d} calls={d}: {s}", .{
+                    @tagName(schedule), self.active_level, progress.read, progress.written, progress.calls, @errorName(err),
+                });
+                continue;
+            };
+            counts.passed += 1;
+            counts.calls += progress.calls;
+        }
+    }
 
     fn fail(
         self: *Harness,
@@ -1396,6 +1416,7 @@ const Harness = struct {
         }
 
         if (!reporting.hasReference(wire_case)) self.stats.by_codec[@intFromEnum(codec)].vort_only_valid_contracts += 1;
+        if (self.incremental_valid_only) return self.checkIncremental(codec, pattern, wire_case);
 
         // 4. Truncation with cross-decoder agreement. Every prefix is fed to
         //    both Vort and the system reference. Both rejecting is the normal
@@ -1719,6 +1740,7 @@ pub fn main(init: std.process.Init) !void {
     var max_size: usize = 8192;
     var brotli_audit: reporting.BrotliReferenceAudit = .{};
     var zlib_exact_input = false;
+    var incremental_valid_only = false;
     var divergence_directory: ?[]const u8 = null;
     var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
@@ -1737,6 +1759,8 @@ pub fn main(init: std.process.Init) !void {
             brotli_audit.exact_input = true;
         } else if (std.mem.eql(u8, arg, "--zlib-reference-exact-input")) {
             zlib_exact_input = true;
+        } else if (std.mem.eql(u8, arg, "--incremental-valid-only")) {
+            incremental_valid_only = true;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
             const name = arg["--only=".len..];
             inline for (codecs) |codec| {
@@ -1757,6 +1781,7 @@ pub fn main(init: std.process.Init) !void {
 
     if (replay_directory != null and divergence_directory != null) return error.ConflictingArtifactModes;
     if (replay_directory != null or divergence_directory != null) {
+        if (incremental_valid_only) return error.ConflictingIncrementalValidArtifactModes;
         if (brotli_audit.output_floor != 0) return error.ConflictingBrotliReferenceFloorArtifactModes;
         if (brotli_audit.exact_input) return error.ConflictingBrotliReferenceInputArtifactModes;
         if (zlib_exact_input) return error.ConflictingZlibReferenceInputArtifactModes;
@@ -1774,6 +1799,7 @@ pub fn main(init: std.process.Init) !void {
         .deep = deep,
         .brotli_audit = brotli_audit,
         .zlib_exact_input = zlib_exact_input,
+        .incremental_valid_only = incremental_valid_only,
     };
     defer {
         for (harness.failures.items) |failure| allocator.free(failure.detail);
@@ -1818,6 +1844,16 @@ pub fn main(init: std.process.Init) !void {
         .zstd = std.mem.span(c.ZSTD_versionString()),
         .brotli_decoder_version_encoded = c.BrotliDecoderVersion(),
     }, harness.brotli_audit, if (harness.zlib_exact_input) harness.zlib_trailing_rejections else null);
+    if (harness.incremental_valid_only) {
+        try stdout.writeAll("incremental_valid_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.incremental-valid.v1",
+            .schedules = incremental_valid.schedules,
+            .codec_order = codecs,
+            .by_codec = harness.incremental_runs,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
             failure.codec.label(),
@@ -1850,6 +1886,7 @@ fn printUsage(init: std.process.Init) !void {
         \\                                   [--brotli-reference-floor=BYTES]
         \\                                   [--brotli-reference-exact-input]
         \\                                   [--zlib-reference-exact-input]
+        \\                                   [--incremental-valid-only]
         \\                                   [--divergence-dir=NEW_DIRECTORY]
         \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\
