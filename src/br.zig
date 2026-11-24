@@ -2412,6 +2412,10 @@ test "Brotli final metadata public decode contracts" {
     try @import("br/incremental/final_metadata_tests.zig").contracts(@This());
 }
 
+test "Brotli stream contracts preserve aligned Huffman lookahead" {
+    try @import("br/incremental/aligned_reservoir_tests.zig").contracts(@This());
+}
+
 test "Brotli metadata observer contracts" {
     try @import("br/incremental/metadata_event_tests.zig").contracts(@This());
 }

@@ -703,7 +703,10 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
+                            if (value != 0 or self.staged_bit_count % 8 != 0) return self.fail(.trailer, error.CorruptFrame);
+                            // Huffman lookahead can leave complete bytes after
+                            // the padding. They belong to the aligned body or
+                            // the next meta-block, not to the padding.
                             if (self.metadata) {
                                 metadata_limits.validate(
                                     self.metadata_total,
@@ -728,6 +731,11 @@ pub fn Decoder(comptime Codec: type) type {
                     };
                 },
                 .stored => {
+                    while (self.staged_bit_count != 0 and self.stored_remaining != 0 and output_written < output.len) {
+                        try self.emit(output, &output_written, @truncate(self.staged_bits));
+                        self.dropAlignedBytes(1);
+                        self.stored_remaining -= 1;
+                    }
                     const n = @min(self.stored_remaining, @min(input.len - input_read, output.len - output_written));
                     for (input[input_read..][0..n]) |value| {
                         try self.emit(output, &output_written, value);
@@ -739,23 +747,25 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = .trailer;
                 },
                 .metadata => {
+                    const retained = @min(self.metadata_remaining, self.staged_bit_count / 8);
+                    if (retained != 0) {
+                        var staged: [@sizeOf(u128)]u8 = undefined;
+                        for (staged[0..retained], 0..) |*byte, index|
+                            byte.* = @truncate(self.staged_bits >> @intCast(index * 8));
+                        const next_count = try self.acceptMetadataBytes(staged[0..retained]);
+                        self.dropAlignedBytes(retained);
+                        if (next_count) |count| {
+                            try self.finishMetadataBlock(count);
+                            continue;
+                        }
+                    }
                     const n = @min(self.metadata_remaining, input.len - input_read);
-                    const next_metadata_total = stream_count.addLocal(self.metadata_total, n) catch
-                        return self.fail(.metadata, error.IntegerOverflow);
-                    const next_count = if (n == self.metadata_remaining) try self.nextMetadataBlockCount() else null;
-                    const bytes = input[input_read..][0..n];
-                    if (self.options.metadata_observer) |observer|
-                        observer.emitChunk(self.metadata_block_count, self.current_metadata_len, bytes);
-                    const capture = @min(n, self.metadata_output.len -| self.metadata_written);
-                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], bytes[0..capture]);
-                    self.metadata_written += capture;
-                    self.metadata_total = next_metadata_total;
-                    self.current_metadata_len += n;
-                    input_read += n;
-                    self.metadata_remaining -= n;
-                    if (next_count) |count| {
-                        try self.finishMetadataBlock(count);
-                    } else return result(input_read, output_written, .need_input);
+                    if (n != 0) {
+                        const next_count = try self.acceptMetadataBytes(input[input_read..][0..n]);
+                        input_read += n;
+                        if (next_count) |count| try self.finishMetadataBlock(count);
+                    }
+                    if (self.phase == .metadata) return result(input_read, output_written, .need_input);
                 },
                 .dictionary => {
                     if (self.dictionary_source == .compound) {
@@ -1115,6 +1125,27 @@ pub fn Decoder(comptime Codec: type) type {
         fn validateFinalOutputSize(self: *Self) Error!void {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(.trailer, error.SizeMismatch);
+        }
+        fn dropAlignedBytes(self: *Self, length: usize) void {
+            std.debug.assert(self.stream_bits % 8 == 0 and self.staged_bit_count % 8 == 0);
+            std.debug.assert(length <= self.staged_bit_count / 8);
+            self.staged_bits = if (length == @sizeOf(u128)) 0 else self.staged_bits >> @intCast(length * 8);
+            self.staged_bit_count -= @intCast(length * 8);
+        }
+        fn acceptMetadataBytes(self: *Self, bytes: []const u8) Error!?Counter {
+            const n = bytes.len;
+            const next_total = stream_count.addLocal(self.metadata_total, n) catch
+                return self.fail(.metadata, error.IntegerOverflow);
+            const next_count = if (n == self.metadata_remaining) try self.nextMetadataBlockCount() else null;
+            if (self.options.metadata_observer) |observer|
+                observer.emitChunk(self.metadata_block_count, self.current_metadata_len, bytes);
+            const capture = @min(n, self.metadata_output.len -| self.metadata_written);
+            if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], bytes[0..capture]);
+            self.metadata_written += capture;
+            self.metadata_total = next_total;
+            self.current_metadata_len += n;
+            self.metadata_remaining -= n;
+            return next_count;
         }
         fn nextMetadataBlockCount(self: *Self) Error!Counter {
             return stream_count.add(self.metadata_block_count, 1) catch

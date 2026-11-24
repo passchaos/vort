@@ -133,7 +133,11 @@ the same index, a byte offset within the body and a transient read-only slice.
 Chunk boundaries may vary with input fragmentation. The block has arrived in
 full when its chunks cover the announced length; a truncated block can emit
 a start and an incomplete prefix. An event does not certify later stream
-bytes or the stream's decoded-size check.
+bytes or the stream's decoded-size check. A Huffman lookup in a preceding
+compressed meta-block can already have accepted a whole aligned byte. The
+copy/progressive decoder delivers such body bytes in order before reading new
+input, without charging them again to input progress. An empty metadata block
+preserves any retained bytes for the next meta-block.
 
 Metadata delivery does not use plaintext output space or quotas and does not
 retain the body or allocate memory for it. It observes the decoder's normal
