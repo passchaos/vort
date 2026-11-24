@@ -26,6 +26,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const byte_source = @import("../../io/source.zig");
 const history_workspace = @import("../decode/history_workspace.zig");
+const frame_count_limit = @import("../frame/count_limit.zig");
 const frame_executor = @import("frame_executor.zig");
 const source_frame = @import("frame.zig");
 const source_input = @import("input.zig");
@@ -72,6 +73,11 @@ pub fn Facade(comptime Support: type) type {
             dictionary_set: ?Support.DecodeDictionarySet = null,
             frame_decoded_max: Count = std.math.maxInt(Count),
             total_decoded_max: Count = std.math.maxInt(Count),
+            /// Limit on the combined number of data and skippable frames,
+            /// including empty frames. The first excess valid header returns
+            /// `OutputLimitExceeded` before its frame body is processed.
+            /// For cursor traversal, set the limit at cursor initialization.
+            max_frames: Count = frame_count_limit.unlimited,
             ignore_checksum: bool = false,
             /// Maximum advertised window of each inspected or decoded data
             /// frame. Header-only cursor traversal and `skipData` ignore it.
@@ -492,7 +498,11 @@ pub fn Facade(comptime Support: type) type {
             options: StreamOptions,
         ) Error!StreamInfo {
             const range = try streamRange(source);
-            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var cursor = stream_cursor.Cursor.initWithFrameLimit(
+                range,
+                options.format,
+                options.max_frames,
+            );
             var total_min: Count = 0;
             var total_known = true;
             var data_frames: usize = 0;
@@ -541,7 +551,11 @@ pub fn Facade(comptime Support: type) type {
         ) Error!StreamResult {
             try output_alias.validateOperation(destination, workspace, options);
             const range = try streamRange(source);
-            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var cursor = stream_cursor.Cursor.initWithFrameLimit(
+                range,
+                options.format,
+                options.max_frames,
+            );
             var total: Count = 0;
             var written: usize = 0;
             var data_frames: usize = 0;
@@ -588,7 +602,11 @@ pub fn Facade(comptime Support: type) type {
         ) Error!StreamResult {
             try validateAppend(out, workspace, options);
             const range = try streamRange(source);
-            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var cursor = stream_cursor.Cursor.initWithFrameLimit(
+                range,
+                options.format,
+                options.max_frames,
+            );
             var total: Count = 0;
             var data_frames: usize = 0;
             var skippable_frames: usize = 0;
@@ -657,15 +675,29 @@ pub fn Facade(comptime Support: type) type {
                 source: byte_source.Source,
                 format: stream_cursor.FrameFormat,
             ) Error!Cursor {
-                return .{ .inner = stream_cursor.Cursor.init(
+                return initWithFrameLimit(source, format, frame_count_limit.unlimited);
+            }
+
+            /// Limit the combined number of data and skippable frames returned
+            /// by `next`. Options passed to pending-frame actions do not change
+            /// this traversal limit or count a frame again.
+            pub fn initWithFrameLimit(
+                source: byte_source.Source,
+                format: stream_cursor.FrameFormat,
+                max_frames: Count,
+            ) Error!Cursor {
+                return .{ .inner = stream_cursor.Cursor.initWithFrameLimit(
                     try streamRange(source),
                     format,
+                    max_frames,
                 ) };
             }
 
             /// Parse the next element header. Data frames stay pending until a
             /// completion method runs; skippable frames advance immediately
-            /// and expose their checked payload range without reading it.
+            /// and expose their checked payload range without reading it. An
+            /// excess valid header returns `OutputLimitExceeded` without
+            /// changing the current offset or pending state.
             pub fn next(self: *Cursor) Error!?StreamElement {
                 if (self.pending_frame != null) return error.InvalidStreamState;
                 const element = (try self.inner.next()) orelse return null;

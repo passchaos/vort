@@ -6,6 +6,7 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 const frame_block = @import("../frame/block.zig");
+const frame_count_limit = @import("../frame/count_limit.zig");
 const frame_format = @import("../frame/format.zig");
 const frame_header = @import("../frame/header.zig");
 const frame_skippable = @import("../frame/skippable.zig");
@@ -13,6 +14,7 @@ const source_input = @import("input.zig");
 
 pub const Error = core.Error || source_input.Error;
 pub const FrameFormat = frame_format.FrameFormat;
+const Count = core.StreamCount;
 
 pub const DataFrameLayout = struct {
     format: FrameFormat,
@@ -71,6 +73,7 @@ fn parseDataAfterPrefix(
     available: source_input.Range,
     format: FrameFormat,
     prefix_range: source_input.Range,
+    remaining_frames: Count,
 ) Error!DataFrameLayout {
     const descriptor_offset = prefix_range.len;
     const descriptor = try available.byte(descriptor_offset);
@@ -83,6 +86,7 @@ fn parseDataAfterPrefix(
     if (encoded_len > 1)
         try wire_header_range.readExact(1, bytes[1..encoded_len]);
     const header = try frame_header.parse(bytes[0..encoded_len]);
+    try frame_count_limit.requireSlot(remaining_frames);
 
     const header_len = std.math.add(u64, descriptor_offset, encoded_len_u64) catch
         return error.IntegerOverflow;
@@ -108,12 +112,13 @@ pub fn parseDataFrameHeader(
 ) Error!DataFrameLayout {
     const prefix = try parsePrefix(available, format);
     if (prefix.kind != .data) return error.InvalidMagic;
-    return parseDataAfterPrefix(available, format, prefix.range);
+    return parseDataAfterPrefix(available, format, prefix.range, frame_count_limit.unlimited);
 }
 
 fn parseSkippableAfterPrefix(
     available: source_input.Range,
     magic: u32,
+    remaining_frames: Count,
 ) Error!SkippableFrameLayout {
     var length_bytes: [4]u8 = undefined;
     try available.readExact(4, &length_bytes);
@@ -121,6 +126,8 @@ fn parseSkippableAfterPrefix(
     std.mem.writeInt(u32, bytes[0..4], magic, .little);
     @memcpy(bytes[4..], &length_bytes);
     const header = try frame_skippable.parse(&bytes);
+    try frame_count_limit.requireSlot(remaining_frames);
+
     const payload_len: u64 = header.payload_len;
     const header_range = try available.subrange(0, frame_skippable.encoded_len);
     const payload = try available.subrange(8, payload_len);
@@ -143,10 +150,20 @@ pub fn parseStreamElementHeader(
     available: source_input.Range,
     format: FrameFormat,
 ) Error!StreamElement {
+    return parseStreamElementHeaderWithFrameLimit(available, format, frame_count_limit.unlimited);
+}
+
+/// Validate the next wire header before enforcing the frame limit. A refusal
+/// does not parse a data block or check the skippable payload's bounds.
+pub fn parseStreamElementHeaderWithFrameLimit(
+    available: source_input.Range,
+    format: FrameFormat,
+    remaining_frames: Count,
+) Error!StreamElement {
     const prefix = try parsePrefix(available, format);
     return switch (prefix.kind) {
-        .data => .{ .data = try parseDataAfterPrefix(available, format, prefix.range) },
-        .skippable => |magic| .{ .skippable = try parseSkippableAfterPrefix(available, magic) },
+        .data => .{ .data = try parseDataAfterPrefix(available, format, prefix.range, remaining_frames) },
+        .skippable => |magic| .{ .skippable = try parseSkippableAfterPrefix(available, magic, remaining_frames) },
     };
 }
 

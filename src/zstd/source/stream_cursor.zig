@@ -10,8 +10,8 @@
 //! A failed parse leaves the next offset unchanged, which makes retryable
 //! source failures resumable at element granularity. Calling `next` while a
 //! data frame is pending, or `finishData` without one, is a state error.
-const std = @import("std");
 const core = @import("../../core.zig");
+const frame_count_limit = @import("../frame/count_limit.zig");
 const frame_format = @import("../frame/format.zig");
 const source_frame = @import("frame.zig");
 const source_input = @import("input.zig");
@@ -20,24 +20,32 @@ pub const Error = core.Error || source_input.Error;
 pub const FrameFormat = frame_format.FrameFormat;
 
 pub const Element = source_frame.StreamElement;
+const Count = core.StreamCount;
 
 pub const Cursor = struct {
     stream: source_input.Range,
     format: FrameFormat,
     next_offset: u64,
     pending_data_start: ?u64 = null,
+    remaining_frames: Count = frame_count_limit.unlimited,
 
     pub fn init(stream: source_input.Range, format: FrameFormat) Cursor {
+        return initWithFrameLimit(stream, format, frame_count_limit.unlimited);
+    }
+
+    pub fn initWithFrameLimit(stream: source_input.Range, format: FrameFormat, max_frames: Count) Cursor {
         return .{
             .stream = stream,
             .format = format,
             .next_offset = stream.offset,
+            .remaining_frames = max_frames,
         };
     }
 
     /// Parse the next element header. A skippable element advances the cursor
     /// immediately because its full range is known. A data element remains
-    /// pending until `finishData` publishes its exact end.
+    /// pending until `finishData` publishes its exact end. Admission consumes
+    /// one slot per element; a refusal leaves the cursor unchanged.
     pub fn next(self: *Cursor) Error!?Element {
         if (self.pending_data_start != null) return error.InvalidStreamState;
         const end = try self.stream.end();
@@ -48,9 +56,10 @@ pub const Cursor = struct {
         const relative = self.next_offset - self.stream.offset;
         const remaining = end - self.next_offset;
         const element_range = try self.stream.subrange(relative, remaining);
-        const element = try source_frame.parseStreamElementHeader(
+        const element = try source_frame.parseStreamElementHeaderWithFrameLimit(
             element_range,
             self.format,
+            self.remaining_frames,
         );
         switch (element) {
             .data => |frame| {
@@ -64,6 +73,7 @@ pub const Cursor = struct {
                 self.next_offset = skippable.next_element_offset;
             },
         }
+        frame_count_limit.consume(&self.remaining_frames);
         return element;
     }
 

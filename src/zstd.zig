@@ -82,7 +82,8 @@ const count_frame = @import("zstd/frame/count.zig");
 const frame_block_wire = @import("zstd/frame/block.zig");
 const frame_skippable_wire = @import("zstd/frame/skippable.zig");
 const frame_window_limit = @import("zstd/frame/window_limit.zig");
-const chunk_window = @import("zstd/frame/chunk_window.zig");
+const chunk_admission = @import("zstd/frame/chunk_admission.zig");
+const frame_count_limit = @import("zstd/frame/count_limit.zig");
 const skippable_observation = @import("zstd/incremental/skippable_observer.zig");
 
 test "Zstd decoded counts wide raw RLE options concat and chunks" {
@@ -1306,6 +1307,10 @@ test "Zstd frame window limit contracts" {
     try @import("zstd/frame/window_limit_tests.zig").contracts(@This());
 }
 
+test "Zstd frame count limit contracts" {
+    try @import("zstd/frame/count_limit_tests.zig").contracts(@This());
+}
+
 pub const FrameDecodeOptions = struct {
     format: FrameFormat = .standard,
     dictionary: ?NativeDictionary = null,
@@ -1317,6 +1322,9 @@ pub const FrameDecodeOptions = struct {
     /// Maximum advertised window for each data frame, before dictionary or
     /// block admission. Independent of output and requested-heap limits.
     max_window_size: Count = std.math.maxInt(Count),
+    /// Maximum combined number of data and skippable frames, including empty
+    /// frames. Checked after each complete header, before its body.
+    max_frames: Count = frame_count_limit.unlimited,
     expected_output_len: ?Count = null,
     /// Accept a mismatched content checksum while still consuming its full
     /// four-byte footer. Frame structure, sizes and memory limits stay strict.
@@ -1340,7 +1348,8 @@ pub const FrameDecodeOptions = struct {
     fn isDefault(self: FrameDecodeOptions) bool {
         return self.format == .standard and self.dictionary == null and self.dictionary_set == null and
             self.max_output_len == std.math.maxInt(Count) and self.max_window_size == std.math.maxInt(Count) and
-            self.expected_output_len == null and self.max_total_working_memory == null and self.memory_profile == null and
+            self.max_frames == frame_count_limit.unlimited and self.expected_output_len == null and
+            self.max_total_working_memory == null and self.memory_profile == null and
             !self.ignore_content_checksum and self.dictionary_usage == .persistent;
     }
 };
@@ -5212,25 +5221,25 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: Count) Error!C
 }
 
 /// Options-based chunk facades coalesce into caller-owned scratch, but
-/// preflight a finite window policy before copying any compressed bytes.
+/// preflight finite window or frame-count limits before copying bytes.
 pub fn decodeFrameChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: FrameDecodeOptions) Error![]u8 {
     try options.validate();
-    return decodeFrameAllocWithOptions(allocator, try joinChunksWithinWindow(chunks, compressed_scratch, options), options);
+    return decodeFrameAllocWithOptions(allocator, try joinChunksWithinAdmission(chunks, compressed_scratch, options), options);
 }
 
 pub fn decodeFrameChunksIntoWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: FrameDecodeOptions) Error!usize {
     try options.validate();
-    return decodeFrameIntoWithOptions(allocator, try joinChunksWithinWindow(chunks, compressed_scratch, options), output, options);
+    return decodeFrameIntoWithOptions(allocator, try joinChunksWithinAdmission(chunks, compressed_scratch, options), output, options);
 }
 
 pub fn decodeFrameChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: FrameDecodeOptions) Error!usize {
     try options.validate();
-    return decodeFrameAppendWithOptions(allocator, out, try joinChunksWithinWindow(chunks, compressed_scratch, options), options);
+    return decodeFrameAppendWithOptions(allocator, out, try joinChunksWithinAdmission(chunks, compressed_scratch, options), options);
 }
 
 pub fn decodedFrameChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: FrameDecodeOptions) Error!Count {
     try options.validate();
-    return decodedFrameSizeWithOptions(try joinChunksWithinWindow(chunks, compressed_scratch, options), options);
+    return decodedFrameSizeWithOptions(try joinChunksWithinAdmission(chunks, compressed_scratch, options), options);
 }
 
 pub fn decodeFrameChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
@@ -6310,8 +6319,8 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
     return compressed_scratch[0..total];
 }
 
-fn joinChunksWithinWindow(chunks: []const []const u8, compressed_scratch: []u8, options: FrameDecodeOptions) Error![]const u8 {
-    try chunk_window.validate(chunks, options.format, options.max_window_size);
+fn joinChunksWithinAdmission(chunks: []const []const u8, compressed_scratch: []u8, options: FrameDecodeOptions) Error![]const u8 {
+    try chunk_admission.validate(chunks, options.format, options.max_window_size, options.max_frames);
     return joinChunks(chunks, compressed_scratch);
 }
 
@@ -6665,6 +6674,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// content determines the caller history workspace requirement; the
         /// window alone bounds caller compressed-block storage.
         max_window_size: Count = std.math.maxInt(Count),
+        /// Combined data and skippable frame limit for the logical stream.
+        /// Empty frames count, and `nextStream` does not reset the quota.
+        max_frames: Count = frame_count_limit.unlimited,
         /// Maximum compressed bytes retained while waiting for validation.
         /// Data frames may exceed this value because consumed input prefixes are
         /// released block-by-block; each compressed block must still fit. A
@@ -8246,6 +8258,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.InvalidMagic => return false,
             else => return err,
         };
+        try frame_count_limit.requireNext(self.options.max_frames, self.data_frame_count, self.skippable_event_count);
         const payload_len: usize = header.payload_len;
         _ = try stream_count.add(self.skippable_total, header.payload_len);
         _ = try stream_count.add(self.skippable_event_count, 1);
@@ -8860,6 +8873,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.TruncatedFrame => return,
             else => return err,
         };
+        try frame_count_limit.requireNext(self.options.max_frames, self.data_frame_count, self.skippable_event_count);
         try self.validateIncrementalWindow(header);
         if (!self.prefix_header_selected) {
             if (self.stable_binding.buffer) |output| {
@@ -9398,7 +9412,7 @@ pub const NativeFrameDecoder = struct {
     }
 
     fn joinConfiguredChunks(self: *const NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
-        return joinChunksWithinWindow(chunks, compressed_scratch, self.options);
+        return joinChunksWithinAdmission(chunks, compressed_scratch, self.options);
     }
 
     pub fn decodeChunksAlloc(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
@@ -14334,7 +14348,7 @@ const SequenceDecodeWorkspace = struct {
 
 comptime {
     const option_fields = @sizeOf(FrameFormat) + @sizeOf(?NativeDictionary) +
-        @sizeOf(?NativeDictionarySet) + 2 * @sizeOf(Count) + @sizeOf(?Count) +
+        @sizeOf(?NativeDictionarySet) + 3 * @sizeOf(Count) + @sizeOf(?Count) +
         @sizeOf(?usize) + @sizeOf(?*DecodeMemoryProfile) + @sizeOf(bool) + @sizeOf(DictionaryUsage);
     std.debug.assert(@sizeOf(FrameDecodeOptions) <= std.mem.alignForward(usize, option_fields, @alignOf(FrameDecodeOptions)));
     // Keep the original 64-byte handle budget, plus only the actual inline

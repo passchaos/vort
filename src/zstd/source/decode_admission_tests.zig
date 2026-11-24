@@ -320,10 +320,152 @@ fn mixedFrameLowerBound(comptime Support: type) !void {
     try std.testing.expect(!mismatch.forbidden_read);
 }
 
+fn frameCountWirePrecedence(comptime Support: type) !void {
+    const cases: []const struct { format: Format, bytes: []const u8, err: anyerror } = &.{
+        .{ .format = .standard, .bytes = "not zstd", .err = error.InvalidMagic },
+        .{ .format = .standard, .bytes = "\x28\xb5\x2f", .err = error.TruncatedFrame },
+        .{ .format = .standard, .bytes = "\x28\xb5\x2f\xfd\x08", .err = error.CorruptFrame },
+        .{ .format = .standard, .bytes = "\x28\xb5\x2f\xfd\x20", .err = error.TruncatedFrame },
+        .{ .format = .magicless, .bytes = "\x08", .err = error.CorruptFrame },
+        .{ .format = .magicless, .bytes = "\x20", .err = error.TruncatedFrame },
+        .{ .format = .standard, .bytes = "\x50\x2a\x4d\x18\x03\x00\x00", .err = error.TruncatedFrame },
+        .{ .format = .standard, .bytes = "\x50\x2a\x4d\x18\x03\x00\x00\x00", .err = error.OutputLimitExceeded },
+    };
+    for (cases) |case| {
+        var source = common.TrackingSource{ .bytes = case.bytes };
+        const range = try common.streamRange(&source);
+        var cursor = common.stream_cursor.Cursor.initWithFrameLimit(range, case.format, 0);
+        try std.testing.expectError(case.err, cursor.next());
+        try std.testing.expectEqual(@as(u64, 0), cursor.offset());
+        try std.testing.expect(!cursor.pending());
+        try std.testing.expectError(case.err, Support.inspectStream(source.source(), .{
+            .format = case.format,
+            .max_frames = 0,
+        }));
+    }
+    // The unlimited parser still checks the advertised skippable payload range.
+    var truncated = common.TrackingSource{ .bytes = cases[cases.len - 1].bytes };
+    try std.testing.expectError(error.TruncatedFrame, common.source_frame.parseStreamElementHeader(
+        try common.streamRange(&truncated),
+        .standard,
+    ));
+    var empty = common.TrackingSource{ .bytes = "" };
+    const info = try Support.inspectStream(empty.source(), .{ .max_frames = 0 });
+    try std.testing.expectEqual(@as(u64, 0), info.stream_end_offset);
+    try std.testing.expectEqual(@as(usize, 0), empty.calls);
+}
+
+fn streamFrameCountAdmission(comptime Support: type) !void {
+    try std.testing.expectEqual(std.math.maxInt(Count), (Support.StreamOptions{}).max_frames);
+    var fixture: common.Fixture = .{};
+    common.appendDataHeader(&fixture, 0x20, null, narrow_payload.len);
+    common.appendRawBlock(&fixture, narrow_payload, true);
+    const skip_offset = common.appendSkippable(&fixture, 3, "skip");
+    const empty_skip = common.appendSkippable(&fixture, 4, "");
+    const empty_data = fixture.len;
+    common.appendDataHeader(&fixture, 0x20, null, 0);
+    common.appendRawBlock(&fixture, "", true);
+    const wide_start = fixture.len;
+    const wide_blocks = appendWideFrame(&fixture, .standard);
+    const forbidden = [_]common.Span{
+        span(skip_offset + 8, "skip".len),
+        span(wide_blocks, fixture.len - wide_blocks),
+    };
+    var source = common.TrackingSource{ .bytes = fixture.bytes(), .forbidden = &forbidden };
+    // Empty skippable and data frames each need a slot. The limited traversal
+    // refuses at their headers, not after their payload or block is handled.
+    var cursor = try Support.StreamCursor.initWithFrameLimit(source.source(), .standard, 2);
+    _ = try cursor.next();
+    _ = try cursor.skipData(.{ .max_frames = 0 });
+    _ = try cursor.next();
+    try std.testing.expectError(error.OutputLimitExceeded, cursor.next());
+    try std.testing.expectEqual(@as(u64, @intCast(empty_skip)), cursor.offset());
+    cursor = try Support.StreamCursor.initWithFrameLimit(source.source(), .standard, 3);
+    _ = try cursor.next();
+    _ = try cursor.skipData(.{ .max_frames = 0 });
+    _ = try cursor.next();
+    _ = try cursor.next();
+    try std.testing.expectError(error.OutputLimitExceeded, cursor.next());
+    try std.testing.expectEqual(@as(u64, @intCast(empty_data)), cursor.offset());
+
+    const options: Support.StreamOptions = .{ .max_frames = 4 };
+    var prefix_source = common.TrackingSource{ .bytes = fixture.bytes()[0..wide_start], .forbidden = forbidden[0..1] };
+    const info = try Support.inspectStream(prefix_source.source(), options);
+    try std.testing.expectEqual(@as(usize, 2), info.data_frames);
+    try std.testing.expectEqual(@as(usize, 2), info.skippable_frames);
+    try std.testing.expectEqual(@as(?Count, narrow_payload.len), info.total_decoded);
+    try std.testing.expectEqual(@as(u64, @intCast(wide_start)), info.stream_end_offset);
+    try std.testing.expect(!prefix_source.forbidden_read);
+
+    // A valid header advertising an unavailable dictionary must be refused
+    // before either dictionary lookup or any read in the rejected frame body.
+    const view = source.source();
+    var storage: Storage = .{};
+    const workspace = storage.workspace(Support);
+    var output: [narrow_payload.len + wide_payload.len]u8 = @splat(canary);
+    try std.testing.expectError(error.OutputLimitExceeded, Support.inspectStream(view, options));
+    try std.testing.expectError(error.OutputLimitExceeded, Support.decodeStreamInto(view, &output, workspace, options));
+    try std.testing.expectEqualStrings(narrow_payload, output[0..narrow_payload.len]);
+    try std.testing.expect(std.mem.allEqual(u8, output[narrow_payload.len..], canary));
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+    try out.ensureTotalCapacityPrecise(allocator, "seed".len + narrow_payload.len);
+    out.appendSliceAssumeCapacity("seed");
+    var failing = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 0, .resize_fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, Support.decodeStreamAppend(failing.allocator(), view, workspace, &out, options));
+    try std.testing.expectEqualStrings("seed" ++ narrow_payload, out.items);
+    try std.testing.expect(!failing.has_induced_failure);
+    try std.testing.expectError(error.OutputLimitExceeded, Support.decodeStreamAlloc(allocator, view, workspace, options));
+    try std.testing.expect(!source.forbidden_read);
+}
+
+fn magiclessCursorFrameCount(comptime Support: type) !void {
+    var fixture: common.Fixture = .{};
+    common.appendMagiclessHeader(&fixture, 0x20, null, narrow_payload.len);
+    common.appendRawBlock(&fixture, narrow_payload, true);
+    const wide_start = fixture.len;
+    const wide_blocks = appendWideFrame(&fixture, .magicless);
+    const forbidden = [_]common.Span{span(wide_blocks, fixture.len - wide_blocks)};
+    var source = common.TrackingSource{ .bytes = fixture.bytes(), .forbidden = &forbidden };
+    const view = source.source();
+    try std.testing.expectError(error.OutputLimitExceeded, Support.inspectStream(view, .{ .format = .magicless, .max_frames = 1 }));
+
+    inline for (.{ .decode, .inspect, .skip }) |action| {
+        var cursor = try Support.StreamCursor.initWithFrameLimit(view, .magicless, 1);
+        try std.testing.expectEqual(@as(?u64, narrow_payload.len), (try cursor.next()).?.data.content_size);
+        try std.testing.expectError(error.InvalidStreamState, cursor.next());
+        // A failed pending action leaves the frame pending and retryable.
+        try std.testing.expectError(error.OutputLimitExceeded, cursor.inspectPending(.{ .frame_decoded_max = 0 }));
+        try std.testing.expect(cursor.pending());
+        switch (action) {
+            .decode => {
+                var storage: Storage = .{};
+                var output: [narrow_payload.len]u8 = undefined;
+                _ = try cursor.decodeInto(&output, storage.workspace(Support), .{ .max_frames = 0 });
+                try std.testing.expectEqualStrings(narrow_payload, &output);
+            },
+            .inspect => _ = try cursor.inspectPending(.{ .max_frames = 0 }),
+            .skip => _ = try cursor.skipData(.{ .max_frames = 0 }),
+            else => unreachable,
+        }
+        for (0..2) |_| {
+            try std.testing.expectError(error.OutputLimitExceeded, cursor.next());
+            try std.testing.expectEqual(@as(u64, @intCast(wide_start)), cursor.offset());
+            try std.testing.expect(!cursor.pending());
+            try std.testing.expectEqual(@as(Count, if (action == .decode) narrow_payload.len else 0), cursor.totalDecoded());
+        }
+    }
+    try std.testing.expect(!source.forbidden_read);
+}
+
 pub fn contracts(comptime Support: type) !void {
     try frameAndStreamWindowAdmission(Support);
     try windowAfterValidMember(Support);
     try cursorWindowAdmission(Support);
     try streamLowerBoundAcrossUnknown(Support);
     try mixedFrameLowerBound(Support);
+    try frameCountWirePrecedence(Support);
+    try streamFrameCountAdmission(Support);
+    try magiclessCursorFrameCount(Support);
 }

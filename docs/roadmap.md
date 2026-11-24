@@ -107,6 +107,9 @@ whole-input and chunk gzip decode, including concatenated and auto routes;
 existing whole-input defaults remain unlimited. Direct and auto-detected
 incremental and one-shot zlib/gzip can independently cap the number of
 members, including empty members that do not use the plaintext budget.
+The [Zstd frame-count limit](formats/zstd-frame-count-limit.md) likewise
+bounds the combined count of data and skippable frames across one-shot,
+chunked, reusable, incremental and random-access source decoding.
 
 The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
 malformed trees before ordinary, compact incremental and Deflate64 decoding.

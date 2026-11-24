@@ -36,7 +36,7 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute Zstd source-backed decode and frame/chunk window admission contracts on native, x86 and WASI",
+        "Execute Zstd source-backed decode, frame-count and window admission contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",
@@ -52,7 +52,7 @@ pub fn register(
         const implementation_tests = b.addTest(.{
             .name = b.fmt("vort-zstd-source-reverse{s}-tests", .{suffix}),
             .root_module = codecModule(b, variant, optimize),
-            .filters = &.{ "Zstd source", "Zstd frame window limit", "Zstd chunk window", "Zstd seekable window limit" },
+            .filters = &.{ "Zstd source", "Zstd frame window limit", "Zstd frame count limit", "Zstd chunk window", "Zstd seekable window limit" },
         });
         if (index == 2) {
             implementation_tests.stack_size = 8 * 1024 * 1024;

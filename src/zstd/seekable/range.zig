@@ -2,7 +2,8 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 const seekable = @import("../seekable.zig");
-const chunk_window = @import("../frame/chunk_window.zig");
+const chunk_admission = @import("../frame/chunk_admission.zig");
+const count_limit = @import("../frame/count_limit.zig");
 
 pub const Plan = struct {
     end: u64,
@@ -75,5 +76,5 @@ fn rangeEnd(table: seekable.Table, offset: u64, length: usize) core.Error!u64 {
 
 fn validateEntryWindow(table: seekable.Table, entry: seekable.Entry, max_window_size: core.StreamCount) core.Error!void {
     if (max_window_size == std.math.maxInt(core.StreamCount)) return;
-    try chunk_window.validate(&.{try entryBytes(table, entry)}, .standard, max_window_size);
+    try chunk_admission.validate(&.{try entryBytes(table, entry)}, .standard, max_window_size, count_limit.unlimited);
 }
