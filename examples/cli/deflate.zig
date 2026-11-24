@@ -1,6 +1,37 @@
 const std = @import("std");
 const vort = @import("vort");
 const stream_files = @import("stream_files.zig");
+const decode_stdio = @import("decode_stdio.zig");
+
+pub fn isGzipDecodeFileCommand(command: []const u8) bool {
+    return std.mem.eql(u8, command, "decode-gzip-file") or std.mem.eql(u8, command, "decode-gzip-concat-file");
+}
+
+pub fn decodeGzipFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = args.next();
+    if (decode_stdio.isStdio(input_path) or decode_stdio.isStdio(output_path)) {
+        var history: [vort.lz77.default_window_len]u8 = undefined;
+        var decoder = try vort.GzipIncrementalDecoder.init(.{
+            .allow_concatenated = true,
+            .max_output_len = if (limit) |value| try std.fmt.parseInt(vort.StreamCount, value, 10) else std.math.maxInt(vort.StreamCount),
+        }, &history);
+        return decode_stdio.decode(init.io, input_path, output_path, &decoder);
+    }
+
+    const max_output_len = if (limit) |value| try std.fmt.parseInt(usize, value, 10) else null;
+    const dir = std.Io.Dir.cwd();
+    const compressed = try dir.readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+    defer init.gpa.free(compressed);
+    const decoded = if (max_output_len) |max|
+        try vort.decodeGzipConcatenatedAllocLimited(init.gpa, compressed, max)
+    else
+        try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
+    defer init.gpa.free(decoded);
+    try dir.writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+}
 
 pub fn encodeGzipBestFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;

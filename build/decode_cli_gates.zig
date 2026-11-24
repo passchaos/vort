@@ -22,6 +22,7 @@ pub fn register(
     registerGate(b, native_cli, probe, runner, "test-zstd-decode-window-cli", "Run Zstd window limit CLI contracts on native and actual WASI", &.{ "python3", "tools/zstd/decode_window_cli_gate.py", "--cli" });
     registerGate(b, native_cli, probe, runner, "test-zstd-stdio-cli", "Run Zstd binary streaming and atomic output contracts on native and WASI", &.{ "python3", "tools/zstd/stdio_cli_gate.py" });
     registerGate(b, native_cli, probe, runner, "test-br-stdio-cli", "Run Brotli binary streaming and atomic output contracts on native and WASI", &.{ "python3", "tools/br/stdio_cli_gate.py" });
+    registerGate(b, native_cli, probe, runner, "test-gzip-stdio-cli", "Run gzip member streaming and atomic output contracts on native and WASI", &.{ "python3", "tools/deflate/stdio_cli_gate.py" });
     return &probe.step;
 }
 

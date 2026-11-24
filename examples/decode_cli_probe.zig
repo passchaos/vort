@@ -1,6 +1,7 @@
 //! Focused executable for testing the actual decode CLI adapters on WASI.
 const std = @import("std");
 const brotli = @import("cli/brotli.zig");
+const deflate = @import("cli/deflate.zig");
 const zstd = @import("cli/zstd_decode.zig");
 
 pub fn main(init: std.process.Init) !void {
@@ -12,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     const command = args.next() orelse return error.MissingCommand;
     if (std.mem.eql(u8, command, "decode-br-file-to")) {
         try brotli.decodeFile(init, &args, &writer.interface);
+    } else if (deflate.isGzipDecodeFileCommand(command)) {
+        try deflate.decodeGzipFile(init, &args, &writer.interface);
     } else if (!try zstd.dispatch(command, init, &args, &writer.interface)) {
         return error.UnknownCommand;
     }
