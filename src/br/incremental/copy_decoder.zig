@@ -6,6 +6,13 @@ const shared_dictionary = @import("../shared_dictionary.zig");
 const empty_reference = @import("../summary/empty_reference.zig");
 const metadata_events = @import("metadata_events.zig");
 const metadata_limits = @import("metadata_limits.zig");
+const history_growth = @import("history_growth.zig");
+
+/// Internal bridge used by the allocator-owning facade. Do not retain the
+/// reservation, which borrows the owner for this call only.
+pub fn stepOwned(decoder: anytype, input: []const u8, output: []u8, reservation: history_growth.Reservation) @TypeOf(decoder.*).Error!core.StepResult {
+    return decoder.stepInternal(input, output, reservation);
+}
 
 /// Progressive decoder for compressed Brotli streams with explicit distances.
 /// History is caller-owned, which makes memory use visible and lets overlapping
@@ -87,6 +94,8 @@ pub fn Decoder(comptime Codec: type) type {
         last_error_phase: Phase = .window,
 
         const Self = @This();
+        const owned_history = @hasDecl(Codec, "owned_history");
+        const Reservation = if (owned_history) ?history_growth.Reservation else @TypeOf(null);
         pub const Error = Codec.Error;
         pub const Counter = core.StreamCount;
         pub const MetadataEvent = metadata_events.Event;
@@ -283,13 +292,17 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            return self.stepInternal(input, output, null);
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, output: []u8, reservation: Reservation) Error!core.StepResult {
             self.last_step_progress = .{};
             if (self.fatal_error) |err| return err;
             self.header_storage_exhausted = false;
             const before_input = self.total_input;
             const before_output = self.total_output;
             var accepted_input: usize = 0;
-            const outcome = self.stepImpl(input, output, &accepted_input);
+            const outcome = self.stepImpl(input, output, &accepted_input, reservation);
             // stepImpl preflights the full offered input before parsing. Its
             // accepted prefix therefore fits, including when parsing failed.
             self.total_input = stream_count.addLocal(self.total_input, accepted_input) catch unreachable;
@@ -319,7 +332,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.shared_dictionary_validated = true;
         }
 
-        fn stepImpl(self: *Self, input: []const u8, output: []u8, accepted_input: *usize) Error!core.StepResult {
+        fn stepImpl(self: *Self, input: []const u8, output: []u8, accepted_input: *usize, reservation: Reservation) Error!core.StepResult {
             if (self.options.expected_output_len) |expected| {
                 if (expected > self.outputLimit()) return self.fail(self.phase, error.OutputLimitExceeded);
             }
@@ -664,8 +677,9 @@ pub fn Decoder(comptime Codec: type) type {
                             if (self.total_output > self.outputLimit() or self.stored_remaining > self.outputLimit() - self.total_output) return self.fail(.trailer, error.OutputLimitExceeded);
                             if (self.options.expected_output_len) |expected|
                                 if (self.total_output > expected or self.stored_remaining > expected - self.total_output) return self.fail(.trailer, error.SizeMismatch);
-                            if (self.history.len == 0) return self.fail(.trailer, error.OutputTooSmall);
+                            if (reservation == null and self.history.len == 0) return self.fail(.trailer, error.OutputTooSmall);
                             if (self.final_meta_block) {
+                                try self.admitHistory(reservation);
                                 try self.beginCompressedHeader();
                                 break;
                             }
@@ -677,6 +691,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.trailer, err),
                             };
                             if (value == 0) {
+                                try self.admitHistory(reservation);
                                 try self.beginCompressedHeader();
                                 break;
                             }
@@ -703,7 +718,10 @@ pub fn Decoder(comptime Codec: type) type {
                                 if (next_count) |count| {
                                     try self.finishMetadataBlock(count);
                                 } else self.phase = .metadata;
-                            } else self.phase = .stored;
+                            } else {
+                                try self.admitHistory(reservation);
+                                self.phase = .stored;
+                            }
                             self.next_header_state = .is_last;
                             break;
                         },
@@ -802,6 +820,13 @@ pub fn Decoder(comptime Codec: type) type {
                     return result(input_read, output_written, .done);
                 },
             };
+        }
+
+        fn admitHistory(self: *Self, reservation: Reservation) Error!void {
+            if (owned_history) {
+                if (reservation) |storage| self.history = storage.admit(self.total_output, self.stored_remaining) catch |err|
+                    return self.fail(.trailer, err);
+            }
         }
 
         fn emit(self: *Self, output: []u8, output_written: *usize, value: u8) Error!void {

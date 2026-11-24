@@ -63,6 +63,10 @@ now delivers complete metadata by fragment even when fixed capture is disabled
 or full, without consuming plaintext quota or retaining metadata-sized storage.
 Per-stream metadata byte and block limits reject excess at the validated header,
 before body reads or observer events, including when metadata is discarded.
+The [owned incremental history contract](formats/brotli-decode-memory.md#incremental-option-reuse)
+now grows history at data meta-block admission when no output length is
+pledged. Empty and metadata-only streams need no heap history, and cross-block
+references survive budgeted growth.
 [Streamed metadata encoding](formats/brotli-metadata.md#streamed-body-encoding)
 now writes a declared-length body directly from caller input to output without
 body-sized pending storage, through the same wire header as legacy metadata.
@@ -19875,8 +19879,9 @@ reuse, so production keeps the simpler independently owned plans.
   prefix state parses standard or Large Window WBITS under one-byte input
   fragmentation, replays those exact bits into the existing progressive core,
   and allocates `min(reachable output, advertised window, max_history_len)`.
-  Unknown-size default WBITS=16 streams now own exactly 65,520 history bytes;
-  pledged tiny streams retain only their reachable output. Caller caps smaller
+  At this checkpoint unknown-size default WBITS=16 streams reserved 65,520
+  history bytes; the later on-demand policy supersedes that reservation.
+  Pledged tiny streams retain only their reachable output. Caller caps smaller
   than the advertised window remain useful when actual distances fit. If a
   valid match crosses the cap, the facade maps the core's bounded-ring
   `InvalidMatch` to `OutputLimitExceeded`, preserving the distinction from a

@@ -4,6 +4,7 @@ const public_build = @import("wide_sizes.zig");
 const filters: []const []const u8 = &.{
     "Brotli decode total memory",
     "Brotli incremental decode policy",
+    "Brotli owned history growth",
 };
 
 fn codecModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {

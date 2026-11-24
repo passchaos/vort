@@ -116,6 +116,20 @@ and the copy decoder's void reset keep their established signatures, so those
 paths surface invalid options on the first step or finish. Dictionary errors
 retain precedence over the policy rejection.
 
+Without `expected_output_len`, the owned incremental decoder validates the
+window without allocating history. It reserves history when it admits a data
+meta-block, before any of that block's output, up to the advertised window,
+reachable output and `max_history_len`. Fresh empty and metadata-only streams
+need no history allocation, including Large Window streams; they can decode
+with both `max_working_memory` and `max_history_len` set to zero. Compressed
+header scratch remains a separate part of the working-memory budget.
+
+History growth preserves all earlier bytes needed by subsequent meta-blocks.
+The decoder can reserve geometric spare capacity within the frame's history
+limit; moving growth charges old and new allocations simultaneously. An exact
+output pledge still allows one upfront reservation. `reset` and `nextFrame`
+retain existing capacity, while `resetWithOptions` releases it.
+
 The owned incremental decoder's `max_history_len` may retain a smaller history
 ring than the format window. A valid history reference beyond that ring reports
 `OutputLimitExceeded`. Malformed zero distances, invalid static dictionary

@@ -3,6 +3,7 @@ const core = @import("../../core.zig");
 const counts = core.stream_count;
 const working = @import("../../io/working_allocator.zig");
 const metadata_events = @import("metadata_events.zig");
+const history_growth = @import("history_growth.zig");
 
 /// Allocator-owning facade for the true symbol-progressive Brotli decoder.
 /// It owns the bounded history ring and, only for an entropy header larger than
@@ -21,6 +22,7 @@ pub fn Decoder(comptime Codec: type) type {
         window_prefix_offset: u2 = 0,
         decode_options_validated: bool = false,
         history_capped: bool = false,
+        history_limit: usize = 0,
         phase: Phase = .input,
         last_status: core.StepResult.Status = .need_input,
         frame_input_read: Counter = 0,
@@ -422,6 +424,10 @@ pub fn Decoder(comptime Codec: type) type {
             return if (self.progressive) |*decoder| decoder.trailingInput() else &.{};
         }
 
+        fn growsHistoryOnDemand(self: *const Self) bool {
+            return @hasDecl(Codec, "stepWithHistory") and self.options.expected_output_len == null;
+        }
+
         fn prepareProgressive(self: *Self) Error!bool {
             if (self.progressive != null) return true;
             const output_bound = @min(
@@ -434,9 +440,13 @@ pub fn Decoder(comptime Codec: type) type {
                 self.options.max_history_len,
                 self.options.decode,
             )) orelse return false;
-            try self.history.ensureTotalCapacityPrecise(self.budget.allocator(), plan.allocation_len);
-            self.history.items.len = plan.allocation_len;
+            if (!self.growsHistoryOnDemand()) {
+                if (plan.capped and plan.allocation_len == 0) return error.OutputLimitExceeded;
+                try self.history.ensureTotalCapacityPrecise(self.budget.allocator(), plan.allocation_len);
+            }
+            self.history.items.len = @min(plan.allocation_len, self.history.capacity);
             self.history_capped = plan.capped;
+            self.history_limit = plan.allocation_len;
             const header_limit = self.compressedHeaderLimit();
             const header_scratch: []u8 = if (self.options.compressed_header_scratch.len >
                 Codec.ProgressiveDecoder.embedded_compressed_header_capacity)
@@ -451,7 +461,7 @@ pub fn Decoder(comptime Codec: type) type {
                     header_limit,
                 )]
             else
-                self.history.items[0..0];
+                &.{};
             self.progressive = Codec.ProgressiveDecoder.initWithOptions(self.history.items, .{
                 .max_output_len = self.options.max_output_len,
                 .max_total_output_len = self.options.max_total_output_len -| self.total_output,
@@ -510,8 +520,17 @@ pub fn Decoder(comptime Codec: type) type {
             const operation_output = try counts.add(self.total_output, frame_output);
             const remaining = @min(std.math.maxInt(Counter) - frame_output, std.math.maxInt(Counter) - operation_output);
             const bounded_output = output[0..counts.bounded(remaining, output.len)];
-            const before = self.progressive.?.snapshot();
-            const stepped = self.progressive.?.step(input, bounded_output) catch |err| {
+            const decoder = &self.progressive.?;
+            const before = decoder.snapshot();
+            const outcome = if (@hasDecl(Codec, "stepWithHistory") and self.growsHistoryOnDemand())
+                Codec.stepWithHistory(decoder, input, bounded_output, history_growth.Reservation{
+                    .storage = &self.history,
+                    .budget = &self.budget,
+                    .limit = self.history_limit,
+                })
+            else
+                decoder.step(input, bounded_output);
+            const stepped = outcome catch |err| {
                 const after = self.progressive.?.snapshot();
                 self.recordInnerProgress(.{
                     .input_read = localDelta(after.input_read, before.input_read, input.len),

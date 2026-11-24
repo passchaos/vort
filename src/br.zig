@@ -1451,6 +1451,7 @@ const IncrementalOwnedCodec = struct {
     pub const Error = br.Error;
     pub const DecodeOptions = br.DecodeOptions;
     pub const ProgressiveDecoder = br.IncrementalCopyStreamDecoder;
+    pub const stepWithHistory = incremental_copy.stepOwned;
     pub const HistoryPlan = struct { allocation_len: usize, capped: bool };
 
     pub fn validateDecodeOptions(options: br.DecodeOptions) br.Error!void {
@@ -1469,8 +1470,6 @@ const IncrementalOwnedCodec = struct {
         };
         const advertised = (@as(usize, 1) << window.bits) - 16;
         const required = stream_count.bounded(output_bound, advertised);
-        if (required == 0) return .{ .allocation_len = 0, .capped = false };
-        if (max_history_len == 0) return error.OutputLimitExceeded;
         return .{
             .allocation_len = @min(required, max_history_len),
             .capped = max_history_len < required,
@@ -1535,6 +1534,7 @@ const IncrementalLiteralCodec = struct {
 const IncrementalCopyCodec = struct {
     pub const Error = br.Error;
     pub const DecodeOptions = br.DecodeOptions;
+    pub const owned_history = true;
 
     pub fn validateDecodeOptions(options: br.DecodeOptions) br.Error!void {
         try validateIncrementalDecodeOptions(options);
@@ -2427,6 +2427,7 @@ test {
     _ = incremental_copy_tests;
     _ = incremental_contracts_tests;
     _ = incremental_history_error_tests;
+    _ = @import("br/incremental/history_growth_tests.zig");
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = incremental_stored_encoder;
