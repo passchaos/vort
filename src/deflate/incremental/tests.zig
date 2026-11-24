@@ -26,6 +26,7 @@ test {
     _ = @import("tests/block_restart.zig");
     _ = @import("tests/rsyncable.zig");
     _ = @import("tests/dictionary_append.zig");
+    _ = @import("tests/semantic_handoff.zig");
     _ = compact_tables_tests;
     _ = gzip_concatenated_tests;
     _ = full_flush_tests;

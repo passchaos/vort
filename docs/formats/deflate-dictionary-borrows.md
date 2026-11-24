@@ -54,10 +54,10 @@ does. An empty append is a no-op.
 A nonempty append needs caller-owned history and a live, compact decoder.
 Missing history returns `OutputTooSmall`. A completed or finished stream,
 a recorded decode error, or an active semantic generation returns
-`InvalidStreamState`. For a decoder with semantic scratch, use
-`stepToBlockBoundary` and append after it acknowledges a non-final block end.
-An append can also resume a compact mid-block or pending-match state; the
-next match bytes use the amended history.
+`InvalidStreamState`. For a decoder with semantic scratch, either stop at a
+non-final block boundary with `stepToBlockBoundary` or explicitly hand off to
+the compact path as described below. An append can also resume a compact
+mid-block or pending-match state; the next match bytes use the amended history.
 
 The two possible history write spans must be independent of the receiver
 and any attached semantic workspace. A partial append also needs its source
@@ -71,6 +71,30 @@ window sizes, partial matches and ring wrapping. `run-deflate-checkpoint-interop
 checks the decoded bytes and unchanged checkpoint on a raw stream whose second
 block requires both prior output and an appended byte. The same fixture is
 accepted by libz and zlib-ng using `inflateSetDictionary`.
+
+### Handing off inside a semantic block
+
+Call `drainSemanticToCompact(output)` to stop at the end of the current
+semantic generation rather than waiting for the whole block. It takes no
+compressed input, emits only bytes already generated and does not change
+the compressed bit reservoir. `need_output` asks for another output slice;
+`need_input` acknowledges compact state, where `appendDictionary` can be
+called before resuming `step` with the original unconsumed input suffix.
+A committed non-final block end sets `block_boundary`; a committed final
+block end returns `done` without consuming any trailing input. Expected-size
+validation still applies at a final block end.
+
+The handoff does not rewind already decoded tokens. A dictionary added after
+the handoff affects future matches, not bytes already delivered or queued in
+the semantic generation. Output admission and stop-at-limit clipping follow
+the ordinary step contract. An active failed or prematurely finished decoder
+cannot hand off. An already compact decoder returns `need_input` with zero
+progress (or `done` if it has finished).
+
+The handoff regression appends a byte at decoded offset 32,513 in one dynamic
+block; the next distance-one match reproduces that byte. On the same fixture,
+system zlib 1.2.11 and zlib-ng 1.3.2 using `inflateSetDictionary` at that offset
+produced the same 32,835 bytes as the Vort handoff.
 
 ## Wrapper dictionary provision
 
