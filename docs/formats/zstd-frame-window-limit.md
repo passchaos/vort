@@ -62,7 +62,9 @@ There is no need to replay a header or any other accepted bytes. A dictionary
 request after retry uses the ordinary `provideDictionary` contract. A
 block-stream decoder with insufficient compressed workspace can use
 [`retryFrameAdmissionWithCompressedBlockWorkspace`](zstd-compressed-workspace.md#replacing-the-workspace-on-admission-retry)
-to move accepted bytes and change the limits together.
+to move accepted bytes and change the limits together. When both caller
+workspaces need to grow, `retryFrameAdmissionWithWorkspaces` replaces them
+and the limits atomically.
 
 Skippable admission, unknown-size payload limits, heap failures and malformed
 frames are not made resumable by this option. A frame that still exceeds a

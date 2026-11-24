@@ -6833,7 +6833,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (!prefix_decode_stream.setterEligible(self) or self.frame_scratch.items.len != 0)
             return error.InvalidStreamState;
         const binding = try compressed_workspace.Binding.initForWindow(workspace, self.options.max_window_size);
-        try self.validateCompressedBlockWorkspace(binding, self.options);
+        try self.validateCompressedBlockWorkspace(binding, self.options, self.history_workspace_binding.storage);
         try binding.validateSlice(self.direct_history.allocatedSlice());
         try binding.validateSlice(self.decoded_scratch.allocatedSlice());
         if (!self.compressed_workspace_binding.active()) {
@@ -6878,7 +6878,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (storage.len < required) return error.OutputTooSmall;
         var binding = try history_workspace.Binding.init(storage);
         try binding.validateSlice(std.mem.asBytes(self));
-        try self.validateHistoryWorkspace(binding, self.options);
+        try self.validateHistoryWorkspace(binding, self.options, self.frame_scratch.allocatedSlice());
         try binding.validateSlice(self.direct_history.allocatedSlice());
         self.direct_history.deinit(self.budget.allocator());
         self.direct_history = .empty;
@@ -6916,6 +6916,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self: *const NativeIncrementalFrameDecoder,
         binding: compressed_workspace.Binding,
         options: Options,
+        history_storage: []const u8,
     ) Error!void {
         if (!binding.active()) return;
         if (options.input_policy != .block_stream) return error.InvalidBlockPlan;
@@ -6931,22 +6932,22 @@ pub const NativeIncrementalFrameDecoder = struct {
             for (dictionary_set.dictionaries) |dictionary|
                 try binding.validateDictionary(dictionary);
         }
-        try binding.validateSlice(self.history_workspace_binding.storage);
+        try binding.validateSlice(history_storage);
     }
 
     fn validateHistoryWorkspace(
         self: *const NativeIncrementalFrameDecoder,
         binding: history_workspace.Binding,
         options: Options,
+        compressed_storage: []const u8,
     ) Error!void {
         if (!binding.active()) return;
         const required = try requiredHistoryWorkspaceLen(options.max_window_size, self.configuredHistoryDictionaryLen());
         if (binding.storage.len < required) return error.OutputTooSmall;
         try binding.validateSlice(options.skippable_output);
         try binding.validateSlice(std.mem.sliceAsBytes(options.skippable_events));
-        try binding.validateSlice(self.frame_scratch.allocatedSlice());
+        try binding.validateSlice(compressed_storage);
         try binding.validateSlice(self.decoded_scratch.allocatedSlice());
-        try binding.validateSlice(self.compressed_workspace_binding.bytes);
         if (self.stable_binding.buffer) |output| try binding.validateSlice(output);
         if (self.dictionary) |dictionary| try binding.validateDictionary(dictionary);
         if (self.frame_dictionary) |dictionary| try binding.validateDictionary(dictionary);
@@ -7176,8 +7177,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         try options.validate();
         const compressed_binding = self.compressed_workspace_binding;
         const history_binding = self.history_workspace_binding;
-        try self.validateCompressedBlockWorkspace(compressed_binding, options);
-        try self.validateHistoryWorkspace(history_binding, options);
+        try self.validateCompressedBlockWorkspace(compressed_binding, options, history_binding.storage);
+        try self.validateHistoryWorkspace(history_binding, options, self.frame_scratch.allocatedSlice());
         const allocator = self.allocator;
         const dictionary = if (self.prefix_state.phase == .none) self.dictionary else null;
         const dictionary_set = if (self.prefix_state.phase == .none) self.dictionary_set else null;
@@ -7216,8 +7217,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     /// An incompatible change leaves the paused decoder untouched.
     pub fn retryFrameAdmission(self: *NativeIncrementalFrameDecoder, limits: FrameAdmissionLimits) Error!void {
         const next = try self.frameAdmissionRetryOptions(limits);
-        try self.validateCompressedBlockWorkspace(self.compressed_workspace_binding, next);
-        try self.validateHistoryWorkspace(self.history_workspace_binding, next);
+        try self.validateCompressedBlockWorkspace(self.compressed_workspace_binding, next, self.history_workspace_binding.storage);
+        try self.validateHistoryWorkspace(self.history_workspace_binding, next, self.frame_scratch.allocatedSlice());
         self.options = next;
         self.frame_admission_paused = false;
     }
@@ -7231,26 +7232,66 @@ pub const NativeIncrementalFrameDecoder = struct {
         limits: FrameAdmissionLimits,
         workspace: []u8,
     ) Error!void {
+        return self.retryFrameAdmissionReplacingWorkspaces(limits, workspace, null);
+    }
+
+    /// Replace both caller workspaces and rearm a paused block-stream header
+    /// in one operation. Only retained compressed bytes are copied: the next
+    /// frame starts with empty output history. The new workspaces must be
+    /// disjoint, but may reuse either of the old caller buffers.
+    pub fn retryFrameAdmissionWithWorkspaces(
+        self: *NativeIncrementalFrameDecoder,
+        limits: FrameAdmissionLimits,
+        compressed_storage: []u8,
+        history_storage: []u8,
+    ) Error!void {
+        return self.retryFrameAdmissionReplacingWorkspaces(limits, compressed_storage, history_storage);
+    }
+
+    fn retryFrameAdmissionReplacingWorkspaces(
+        self: *NativeIncrementalFrameDecoder,
+        limits: FrameAdmissionLimits,
+        compressed_storage: []u8,
+        history_storage: ?[]u8,
+    ) Error!void {
         const next = try self.frameAdmissionRetryOptions(limits);
         if (next.input_policy != .block_stream) return error.InvalidBlockPlan;
-        const binding = try compressed_workspace.Binding.initForWindow(workspace, next.max_window_size);
+        const history = if (history_storage) |storage| blk: {
+            if (self.stable_binding.buffer != null) return error.InvalidBlockPlan;
+            break :blk try history_workspace.Binding.init(storage);
+        } else self.history_workspace_binding;
+        const binding = try compressed_workspace.Binding.initForWindow(compressed_storage, next.max_window_size);
         const retained = self.frame_scratch.items;
         if (retained.len > binding.capacity()) return error.OutputTooSmall;
-        try self.validateCompressedBlockWorkspace(binding, next);
-        try self.validateHistoryWorkspace(self.history_workspace_binding, next);
+        try self.validateCompressedBlockWorkspace(binding, next, history.storage);
+        try self.validateHistoryWorkspace(history, next, binding.bytes);
         try binding.validateSlice(std.mem.asBytes(self));
         try binding.validateSlice(self.direct_history.allocatedSlice());
         try binding.validateSlice(self.decoded_scratch.allocatedSlice());
         try binding.validateSlice(self.skippable_output);
         try binding.validateSlice(std.mem.sliceAsBytes(self.skippable_events));
+        if (history_storage != null) {
+            try history.validateSlice(std.mem.asBytes(self));
+            try history.validateSlice(self.direct_history.allocatedSlice());
+            try history.validateSlice(self.skippable_output);
+            try history.validateSlice(std.mem.sliceAsBytes(self.skippable_events));
+        }
         const old_owned = !self.compressed_workspace_binding.active();
-        if (old_owned) try binding.validateSlice(self.frame_scratch.allocatedSlice());
+        if (old_owned) {
+            try binding.validateSlice(self.frame_scratch.allocatedSlice());
+            try history.validateSlice(self.frame_scratch.allocatedSlice());
+        }
 
         const len = retained.len;
         @memmove(binding.bytes[0..len], retained);
         if (old_owned) self.frame_scratch.deinit(self.budget.allocator());
         self.installCompressedBlockWorkspace(binding);
         self.frame_scratch.items.len = len;
+        if (history_storage != null) {
+            self.direct_history.deinit(self.budget.allocator());
+            self.direct_history = .empty;
+            self.history_workspace_binding = history;
+        }
         self.options = next;
         self.frame_admission_paused = false;
     }

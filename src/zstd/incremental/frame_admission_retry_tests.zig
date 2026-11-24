@@ -185,6 +185,99 @@ test "Zstd frame admission retry can migrate retained input to a larger compress
     }
 }
 
+test "Zstd frame admission retry replaces both workspaces without replaying accepted input" {
+    const window = 2048;
+    const header = magic ++ "\x01\x08\x07";
+    const frame = header ++ last_block;
+    const prefix_bytes = "borrowed prefix";
+    const prefix = zstd.NativeDictionary.init(7, prefix_bytes);
+    const history_len = window + prefix_bytes.len;
+    for ([_]bool{ false, true }) |swap| {
+        var left: [history_len + 1]u8 = @splat(canary);
+        var right: [history_len + 1]u8 = @splat(canary);
+        var decoder = Decoder.initWithOptions(testing.allocator, .{
+            .max_window_size = 1024,
+            .max_working_memory = 0,
+            .stop_after_first_frame = true,
+            .retry_frame_admission_limits = true,
+        });
+        defer decoder.deinit();
+        try decoder.bindCompressedBlockWorkspace(left[0..1024]);
+        try decoder.bindHistoryWorkspace(right[0 .. 1024 + prefix_bytes.len]);
+        var prior_output: [first_payload.len]u8 = undefined;
+        try decodeSuffix(&decoder, first_frame, &prior_output);
+        try testing.expectEqualSlices(u8, first_payload, &prior_output);
+        try decoder.setPrefixWithDictionary(prefix);
+        try decoder.nextStream();
+
+        var output: [last_payload.len]u8 = @splat(canary);
+        try testing.expectError(error.OutputLimitExceeded, decoder.step(frame, &output));
+        try expectPaused(&decoder, first_frame.len + header.len, first_payload.len, .{ .input_read = header.len });
+        const paused = decoder.snapshot();
+        const borrowed = decoder.prefixSnapshot();
+        const saved_left = left;
+        const saved_right = right;
+        const compressed = if (swap) right[1..] else left[1..];
+        const history = if (swap) left[1..] else right[1..];
+        const limits: Decoder.FrameAdmissionLimits = .{ .max_window_size = window };
+        if (!swap)
+            try testing.expectError(error.OutputTooSmall, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(limits, compressed));
+        try testing.expectError(error.OutputTooSmall, decoder.retryFrameAdmissionWithWorkspaces(limits, compressed, history[0 .. history_len - 1]));
+        try testing.expectError(error.InvalidBlockPlan, decoder.retryFrameAdmissionWithWorkspaces(limits, compressed, compressed));
+        try testing.expectError(error.InvalidBlockPlan, decoder.retryFrameAdmissionWithWorkspaces(limits, compressed, std.mem.asBytes(&decoder)[0..history_len]));
+        try testing.expectEqualDeep(paused, decoder.snapshot());
+        try testing.expectEqualDeep(borrowed, decoder.prefixSnapshot());
+        try testing.expectEqual(@as(Count, 1024), decoder.options.max_window_size);
+        try testing.expectEqualSlices(u8, &saved_left, &left);
+        try testing.expectEqualSlices(u8, &saved_right, &right);
+
+        try decoder.retryFrameAdmissionWithWorkspaces(limits, compressed, history);
+        const resumed = decoder.snapshot();
+        try testing.expect(!resumed.frame_admission_paused);
+        try testing.expectEqualDeep(borrowed, decoder.prefixSnapshot());
+        try testing.expectEqual(paused.input_received, resumed.input_received);
+        try testing.expectEqual(paused.output_written, resumed.output_written);
+        try testing.expectEqual(paused.last_step_progress, resumed.last_step_progress);
+        try testing.expectEqual(window, decoder.compressedBlockWorkspaceCapacity());
+        try testing.expectEqual(history_len, decoder.historyWorkspaceCapacity());
+        const expected_compressed = if (swap) &saved_right else &saved_left;
+        const expected_history = if (swap) &saved_left else &saved_right;
+        try testing.expectEqual(expected_compressed[0], if (swap) right[0] else left[0]);
+        try testing.expectEqualSlices(u8, header, compressed[0..header.len]);
+        try testing.expectEqualSlices(u8, expected_compressed[1 + header.len ..], compressed[header.len..]);
+        try testing.expectEqualSlices(u8, expected_history[1..], history);
+        try testing.expect(std.mem.allEqual(u8, &output, canary));
+        try decodeSuffix(&decoder, frame[header.len..], &output);
+        try testing.expectEqualSlices(u8, last_payload, &output);
+        try testing.expectEqualSlices(u8, first_payload, &prior_output);
+        try testing.expectEqual(@as(Count, first_frame.len + frame.len), decoder.snapshot().input_received);
+        try testing.expectEqual(@as(Count, 2), decoder.snapshot().data_frame_count);
+        try testing.expectEqual(@as(usize, 0), decoder.peakWorkingMemoryBytes());
+    }
+}
+
+test "Zstd frame admission retry cannot replace stable output with history workspace implicitly" {
+    const header = magic ++ "\x00\x08";
+    var decoder = Decoder.initWithOptions(testing.allocator, .{
+        .max_window_size = 1024,
+        .retry_frame_admission_limits = true,
+    });
+    defer decoder.deinit();
+    var output: [last_payload.len]u8 = @splat(canary);
+    var compressed: [2048]u8 = @splat(canary);
+    var history: [2048]u8 = @splat(canary);
+    try decoder.bindStableOutput(&output);
+    try testing.expectError(error.OutputLimitExceeded, decoder.stepStable(header ++ last_block));
+    const paused = decoder.snapshot();
+    try testing.expectError(error.InvalidBlockPlan, decoder.retryFrameAdmissionWithWorkspaces(.{ .max_window_size = 2048 }, &compressed, &history));
+    try testing.expectEqualDeep(paused, decoder.snapshot());
+    try testing.expectEqual(@as(Count, 1024), decoder.options.max_window_size);
+    try testing.expectEqual(@as(usize, 0), decoder.stableOutput().len);
+    try testing.expect(std.mem.allEqual(u8, &output, canary));
+    try testing.expect(std.mem.allEqual(u8, &compressed, canary));
+    try testing.expect(std.mem.allEqual(u8, &history, canary));
+}
+
 test "Zstd frame admission retry cannot bind a block workspace to prevalidated input" {
     const header = magic ++ "\x00\x08"; // Non-single-segment, 2 KiB window.
     const frame = header ++ last_block;

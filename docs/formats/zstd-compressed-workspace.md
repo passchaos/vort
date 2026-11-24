@@ -87,6 +87,15 @@ before any copy or ownership change. On refusal the old limits, pause, and
 storage remain intact. On success, the new workspace stays borrowed and the
 next `step` takes only the unaccepted input suffix.
 
+If the history ring also needs to grow, call
+`retryFrameAdmissionWithWorkspaces(limits, compressed, history)`. The two new
+workspaces must be disjoint, but either may reuse previous caller storage,
+including swapping the old roles. Only accepted compressed bytes
+are copied. The new history ring starts empty at the new frame; previous
+plaintext already delivered to callers is unaffected. This form is for
+ordinary output, not stable-output bindings. Both geometries and all borrow
+checks are validated together before either binding or the limits change.
+
 ## Validation
 
 Native, x86 and wasm32-wasi tests cover zero/small/large-window requirement
