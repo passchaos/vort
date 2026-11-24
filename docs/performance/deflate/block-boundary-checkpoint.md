@@ -91,6 +91,8 @@ from the same compressed data. A restart decodes a raw payload suffix, leaving
 any wrapper footer unconsumed when configured to allow trailing data. It does
 not reconstruct the prefix checksum or validate a zlib/gzip member's footer;
 use a full wrapper decode or state clone when that validation is required.
+The [gzip source index](../../formats/gzip-source-index.md) verifies members
+at build time and uses these points for bounded plaintext range reads.
 
 ## Validation
 

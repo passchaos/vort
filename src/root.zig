@@ -4063,6 +4063,17 @@ pub const GzipDecodeOptions = deflate.GzipDecodeOptions;
 pub const GzipHeaderOptions = deflate.GzipHeaderOptions;
 pub const GzipHeaderInfo = deflate.GzipHeaderInfo;
 pub const GzipMemberInfo = deflate.GzipMemberInfo;
+pub const GzipSourceIndex = deflate.GzipSourceIndex;
+pub const GzipSourceIndexEntry = deflate.GzipSourceIndexEntry;
+pub const GzipSourceIndexOptions = deflate.GzipSourceIndexOptions;
+pub const GzipSourceIndexWorkspace = deflate.GzipSourceIndexWorkspace;
+pub const GzipSourceRangeOutcome = deflate.GzipSourceRangeOutcome;
+pub const GzipSourceRangeProgress = deflate.GzipSourceRangeProgress;
+pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
+
+test "root Gzip source index contracts" {
+    try @import("tests/gzip_source_index.zig").contracts(@This());
+}
 pub const parseGzipHeaderInfo = deflate.parseGzipHeaderInfo;
 pub const parseGzipHeaderInfoFromChunks = deflate.parseGzipHeaderInfoFromChunks;
 pub const inspectGzipMemberAlloc = deflate.inspectGzipMemberAlloc;

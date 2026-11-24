@@ -517,6 +517,31 @@ const IncrementalGzipDecoderCodec = struct {
 
 pub const GzipIncrementalDecoder = incremental_gzip_decoder.Decoder(IncrementalGzipDecoderCodec);
 
+const gzip_index = @import("deflate/gzip_index.zig");
+pub const GzipSourceIndex = gzip_index.Index(struct {
+    pub const RawDecoder = RawDeflateIncrementalFixedLiteralDecoder;
+    pub const GzipDecoder = GzipIncrementalDecoder;
+});
+pub const GzipSourceIndexEntry = gzip_index.Entry;
+pub const GzipSourceIndexOptions = gzip_index.Options;
+pub const GzipSourceIndexWorkspace = gzip_index.Workspace;
+pub const GzipSourceRangeOutcome = gzip_index.Outcome;
+pub const GzipSourceRangeProgress = gzip_index.Progress;
+pub const buildGzipSourceIndex = GzipSourceIndex.build;
+
+test "Gzip source index contracts" {
+    try @import("tests/gzip_source_index.zig").contracts(struct {
+        pub const ByteSource = @import("io/source.zig").Source;
+        pub const StreamCount = core.StreamCount;
+        pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
+        pub const encodeGzipStoredWithHeaderAlloc = deflate.encodeGzipStoredWithHeaderAlloc;
+        pub const GzipSourceIndexEntry = deflate.GzipSourceIndexEntry;
+        pub const GzipSourceIndexWorkspace = deflate.GzipSourceIndexWorkspace;
+        pub const GzipSourceIndexOptions = deflate.GzipSourceIndexOptions;
+        pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
+    });
+}
+
 const ZlibOrGzipIncrementalDecoderCodec = struct {
     pub const Error = deflate.Error;
     pub const Format = deflate.ZlibOrGzipFormat;
