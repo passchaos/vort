@@ -124,6 +124,18 @@ pub fn contracts(comptime Support: type) !void {
     try std.testing.expectEqual(@as(usize, 1), stream_result.skippable_frames);
     try std.testing.expectEqualStrings("roottail", &stream_output);
 
+    const outcome: Support.ZstdSourceStreamOutcome = Support.zstdDecodeSourceStreamIntoWithProgress(
+        stream_view,
+        &stream_output,
+        workspace,
+        .{},
+        null,
+    );
+    try std.testing.expect(outcome == .complete);
+    try std.testing.expectEqual(@as(u64, @intCast(stream.len)), outcome.complete.checkpoint.compressed_offset);
+    try std.testing.expectEqual(stream_output.len, outcome.complete.complete_output_written);
+    try std.testing.expectEqualStrings("roottail", &stream_output);
+
     const stream_allocated = try Support.zstdDecodeSourceStreamAlloc(
         std.testing.allocator,
         stream_view,

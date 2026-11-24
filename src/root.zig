@@ -2499,6 +2499,9 @@ pub const ZstdSourceFrameDecodeResult = zstd.SourceFrameDecodeResult;
 pub const ZstdSourceStreamDecodeOptions = zstd.SourceStreamDecodeOptions;
 pub const ZstdSourceStreamInfo = zstd.SourceStreamInfo;
 pub const ZstdSourceStreamDecodeResult = zstd.SourceStreamDecodeResult;
+pub const ZstdSourceStreamCheckpoint = zstd.SourceStreamCheckpoint;
+pub const ZstdSourceStreamProgress = zstd.SourceStreamProgress;
+pub const ZstdSourceStreamOutcome = zstd.SourceStreamOutcome;
 pub const ZstdSourceStreamElement = zstd.SourceStreamElement;
 pub const ZstdSourceStreamDataFrameInfo = zstd.SourceStreamDataFrameInfo;
 pub const ZstdSourceStreamSkippableFrameInfo = zstd.SourceStreamSkippableFrameInfo;
@@ -2518,6 +2521,7 @@ pub const zstdDecodeSourceFrameAppend = zstd.decodeSourceFrameAppend;
 pub const zstdDecodeSourceFrameAlloc = zstd.decodeSourceFrameAlloc;
 pub const zstdInspectSourceStream = zstd.inspectSourceStream;
 pub const zstdDecodeSourceStreamInto = zstd.decodeSourceStreamInto;
+pub const zstdDecodeSourceStreamIntoWithProgress = zstd.decodeSourceStreamIntoWithProgress;
 pub const zstdDecodeSourceStreamAppend = zstd.decodeSourceStreamAppend;
 pub const zstdDecodeSourceStreamAlloc = zstd.decodeSourceStreamAlloc;
 

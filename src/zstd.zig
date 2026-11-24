@@ -196,6 +196,10 @@ test "Zstd source seekable dictionary rotation" {
 test "Zstd source seekable progress retains wide retry offsets" {
     try @import("tests/zstd_source_decode/seekable_progress_wide.zig").contracts(SourceSeekableTestSupport);
 }
+
+test "Zstd source stream progress contracts" {
+    try @import("zstd/source/decode_progress_tests.zig").contracts(@This());
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -5530,12 +5534,16 @@ pub const decodeSourceFrameAlloc = source_decode_facade.decodeAlloc;
 pub const SourceStreamDecodeOptions = source_decode_facade.StreamOptions;
 pub const SourceStreamInfo = source_decode_facade.StreamInfo;
 pub const SourceStreamDecodeResult = source_decode_facade.StreamResult;
+pub const SourceStreamCheckpoint = source_decode_facade.StreamCheckpoint;
+pub const SourceStreamProgress = source_decode_facade.StreamProgress;
+pub const SourceStreamOutcome = source_decode_facade.StreamOutcome;
 pub const SourceStreamElement = source_decode_facade.StreamElement;
 pub const SourceStreamDataFrameInfo = source_decode_facade.DataFrameInfo;
 pub const SourceStreamSkippableFrameInfo = source_decode_facade.SkippableFrameInfo;
 pub const SourceStreamCursor = source_decode_facade.Cursor;
 pub const inspectSourceStream = source_decode_facade.inspectStream;
 pub const decodeSourceStreamInto = source_decode_facade.decodeStreamInto;
+pub const decodeSourceStreamIntoWithProgress = source_decode_facade.decodeStreamIntoWithProgress;
 pub const decodeSourceStreamAppend = source_decode_facade.decodeStreamAppend;
 pub const decodeSourceStreamAlloc = source_decode_facade.decodeStreamAlloc;
 

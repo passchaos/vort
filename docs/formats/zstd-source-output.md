@@ -47,6 +47,43 @@ the callback. Existing partial-output behavior for source, format, output-size
 and checksum errors remains block based; callers requiring atomic whole-frame
 publication supply their own independent destination staging.
 
+## Resume an interrupted source stream
+
+`decodeSourceStreamIntoWithProgress` takes the same source, destination,
+workspace and options plus an optional checkpoint (`null` for a fresh stream).
+Its `ZstdSourceStreamOutcome` distinguishes a complete result from failure.
+Both report two local output lengths:
+
+- `output_written`: all bytes actually drained into this invocation's
+  destination, including a failed frame's published prefix. A short
+  destination can contain part of an already decoded block.
+- `complete_output_written`: the prefix from complete data frames only. A frame
+  whose footer could not be read or whose checksum disagrees is incomplete,
+  even if all its plaintext has already been written.
+
+`progress.checkpoint` uses absolute compressed and decoded offsets, wide
+cumulative data/skippable counts, and the stream format. It advances only
+past complete data frames or range-checked skippable frames. A failure also
+reports the data-frame header, including its dictionary ID, when traversal
+had admitted that header. A header read or admission failure has no such
+metadata.
+
+To retry after a transient read error or a dictionary refusal, retain only
+`output[0..progress.complete_output_written]`. Invoke the same API with the
+**original full source**, the checkpoint, and
+`output[progress.complete_output_written..]` (or a new destination appended
+after the retained prefix). It replays the interrupted frame from its start,
+replacing the partial bytes; it does not read completed elements again or
+retain intra-frame history. Frame count and total decoded limits apply to the
+whole logical stream, including earlier checkpoint counts. A checkpoint at
+EOF returns zero local output without a source callback.
+
+Use a trusted checkpoint returned for the same stable source. The API checks
+the offset, format and cumulative policy bounds; it does not revalidate the
+preceding bytes or authenticate the checkpoint. Validation follows the decode
+options including `ignore_checksum`. The existing error-union and append
+interfaces retain their block-publication semantics.
+
 The [regression evidence](../performance/zstd-source-output-alias-20261111/README.md)
 includes the frozen successful-but-corrupt counterexample, rejected aliases,
 independent retries and native/x86/WASI validation.
