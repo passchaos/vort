@@ -1,7 +1,7 @@
 //! Decode a requested plaintext interval from the nearest indexed boundary.
 const count = @import("../../core.zig").stream_count;
 const model = @import("types.zig");
-const Cursor = @import("page.zig").Cursor;
+const Cursor = @import("../../io/source_page.zig").Cursor;
 
 pub fn decode(
     comptime Codec: type,

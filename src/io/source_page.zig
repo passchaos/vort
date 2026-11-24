@@ -1,21 +1,24 @@
 //! Reuse the unread part of a bounded random-access input page.
-const model = @import("types.zig");
+const core = @import("../core.zig");
+const byte_source = @import("source.zig");
 
 pub const Cursor = struct {
-    source: model.Source,
+    source: byte_source.Source,
     page: []u8,
     offset: u64,
     end: u64,
     read_len: usize = 0,
     used: usize = 0,
 
-    pub fn init(source: model.Source, page: []u8, start: u64, end: u64) model.Error!Cursor {
+    pub const Error = core.Error || byte_source.Error;
+
+    pub fn init(source: byte_source.Source, page: []u8, start: u64, end: u64) Error!Cursor {
         if (start > end or end > source.len) return error.InvalidBlockPlan;
         if (page.len == 0) return error.OutputTooSmall;
         return .{ .source = source, .page = page, .offset = start, .end = end };
     }
 
-    pub fn current(self: *Cursor) model.Error![]const u8 {
+    pub fn current(self: *Cursor) Error![]const u8 {
         if (self.used == self.read_len) {
             if (self.offset == self.end) return &.{};
             const len: usize = @intCast(@min(self.page.len, self.end - self.offset));
@@ -26,7 +29,7 @@ pub const Cursor = struct {
         return self.page[self.used..self.read_len];
     }
 
-    pub fn advance(self: *Cursor, amount: usize) model.Error!void {
+    pub fn advance(self: *Cursor, amount: usize) Error!void {
         if (amount > self.read_len - self.used) return error.InvalidStreamState;
         self.offset += amount;
         self.used += amount;

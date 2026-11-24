@@ -1,7 +1,7 @@
 //! Build an index only after validating every member with the gzip decoder.
 const count = @import("../../core.zig").stream_count;
 const model = @import("types.zig");
-const Cursor = @import("page.zig").Cursor;
+const Cursor = @import("../../io/source_page.zig").Cursor;
 
 pub fn build(
     comptime Codec: type,

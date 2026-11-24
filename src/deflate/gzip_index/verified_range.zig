@@ -1,7 +1,7 @@
 //! Verify each selected gzip member before publishing its plaintext intersection.
 const count = @import("../../core.zig").stream_count;
 const model = @import("types.zig");
-const Cursor = @import("page.zig").Cursor;
+const Cursor = @import("../../io/source_page.zig").Cursor;
 
 pub fn scratchLen(index: anytype, offset: model.Count, length: usize) model.Error!usize {
     return scratchLenChecked(index, offset, try model.rangeEnd(index.decoded_size, offset, length));
