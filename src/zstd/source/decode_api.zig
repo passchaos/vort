@@ -143,7 +143,10 @@ pub fn Facade(comptime Support: type) type {
             skippable: SkippableFrameInfo,
         };
 
-        const Parsed = struct {
+        // Shared with the seekable source adapter; public facades export only
+        // the caller-facing options and operations, not this prepared state.
+        pub const FrameState = Support.State;
+        pub const Parsed = struct {
             frame: source_frame.DataFrameLayout,
             dictionary: ?Support.DecodeDictionary,
             dictionary_id: u32,
@@ -163,7 +166,7 @@ pub fn Facade(comptime Support: type) type {
             return fallback;
         }
 
-        fn admitFrame(
+        pub fn admitFrame(
             frame: source_frame.DataFrameLayout,
             options: anytype,
         ) Error!Parsed {
@@ -274,7 +277,7 @@ pub fn Facade(comptime Support: type) type {
             return (try inspect(source, options)).decoded_size;
         }
 
-        fn openFrame(
+        pub fn openFrame(
             parsed: Parsed,
             workspace: Workspace,
             options: Options,

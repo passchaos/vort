@@ -167,6 +167,18 @@ test "Zstd source window and decoded size admission contracts" {
 test "Zstd source output alias contracts" {
     try @import("zstd/source/decode_alias_tests.zig").contracts(@This());
 }
+
+test "Zstd source seekable range contracts" {
+    try @import("tests/zstd_source_decode/seekable.zig").contracts(struct {
+        pub const ByteSource = byte_source.Source;
+        pub const ZstdNativeSeekTableEntry = NativeSeekTableEntry;
+        pub const ZstdSourceFrameWorkspace = SourceFrameWorkspace;
+        pub const ZstdSourceSeekableDecodeOptions = SourceSeekableDecodeOptions;
+        pub const zstdOpenSourceSeekTable = openSourceSeekTable;
+        pub const zstdSourceSeekableRangeRequirements = sourceSeekableRangeRequirements;
+        pub const zstdDecodeSourceSeekableRangeInto = decodeSourceSeekableRangeInto;
+    });
+}
 const frame_format = @import("zstd/frame/format.zig");
 const frame_checksum = @import("zstd/frame/checksum.zig");
 const frame_dictionary_id = @import("zstd/frame/dictionary_id.zig");
@@ -5509,6 +5521,16 @@ pub const inspectSourceStream = source_decode_facade.inspectStream;
 pub const decodeSourceStreamInto = source_decode_facade.decodeStreamInto;
 pub const decodeSourceStreamAppend = source_decode_facade.decodeStreamAppend;
 pub const decodeSourceStreamAlloc = source_decode_facade.decodeStreamAlloc;
+
+const source_seek_table = @import("zstd/source/seek_table.zig");
+const source_seek_decode = @import("zstd/source/seek_decode.zig").Facade(source_decode_facade);
+pub const SourceSeekTable = source_seek_table.Table;
+pub const SourceSeekIndex = source_seek_table.Index;
+pub const SourceSeekableDecodeOptions = source_seek_decode.Options;
+pub const SourceSeekableRangeRequirements = @import("zstd/source/seek_decode.zig").Requirements;
+pub const openSourceSeekTable = source_seek_table.open;
+pub const sourceSeekableRangeRequirements = source_seek_decode.requirements;
+pub const decodeSourceSeekableRangeInto = source_seek_decode.decodeInto;
 
 pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;
 pub const decodeConcatenatedFrameAllocExactSize = decodeNativeConcatenatedFrameAllocExactSize;

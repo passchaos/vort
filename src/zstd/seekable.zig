@@ -1,13 +1,15 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const wire = @import("seek_table_wire.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
-pub const table_skippable_magic: u32 = 0x184d2a5e;
-pub const footer_magic: u32 = 0x8f92eab1;
-pub const max_frames: usize = 0x0800_0000;
+pub const table_skippable_magic: u32 = wire.table_skippable_magic;
+pub const footer_magic: u32 = wire.footer_magic;
+pub const max_frames: usize = wire.max_frames;
 pub const max_frame_decompressed_size: usize = 0x4000_0000;
-const footer_len: usize = 9;
+const footer_len = wire.footer_len;
+const header_len = wire.header_len;
 
 /// Parsed metadata for the standardized terminal Zstandard seek table. The
 /// retained stream slice is borrowed from the caller and must remain alive and
@@ -45,14 +47,7 @@ pub const Table = struct {
     }
 };
 
-pub const Entry = struct {
-    frame_index: u32,
-    compressed_offset: u64,
-    decompressed_offset: u64,
-    compressed_size: u32,
-    decompressed_size: u32,
-    checksum: ?u32,
-};
+pub const Entry = wire.Entry;
 
 pub const FrameSize = struct {
     compressed_size: u32,
@@ -74,20 +69,7 @@ pub const Index = struct {
     }
 
     pub fn frameIndexForDecompressedOffset(self: Index, offset: u64) Error!u32 {
-        if (offset >= self.table.decompressed_size) return error.RangeOutOfBounds;
-        var low: usize = 0;
-        var high = self.entries.len;
-        while (low < high) {
-            const mid = low + (high - low) / 2;
-            const current = self.entries[mid];
-            const end = std.math.add(u64, current.decompressed_offset, current.decompressed_size) catch return error.IntegerOverflow;
-            if (end <= offset)
-                low = mid + 1
-            else
-                high = mid;
-        }
-        if (low >= self.entries.len) return error.RangeOutOfBounds;
-        return @intCast(low);
+        return wire.frameIndexForDecompressedOffset(self.entries, self.table.decompressed_size, offset);
     }
 };
 
@@ -99,27 +81,15 @@ pub const Iterator = struct {
 
     pub fn next(self: *Iterator) Error!?Entry {
         if (self.index >= self.table.entry_count) return null;
-        if (self.table.entry_size != 8 and self.table.entry_size != 12) return error.CorruptFrame;
+        if (self.table.entry_size != wire.entrySize(self.table.has_checksums)) return error.CorruptFrame;
         if (self.table.stream.len < footer_len) return error.TruncatedFrame;
         const relative = std.math.mul(usize, @as(usize, self.index), self.table.entry_size) catch return error.IntegerOverflow;
-        const entries_offset = std.math.add(usize, self.table.frame_offset, 8) catch return error.IntegerOverflow;
+        const entries_offset = std.math.add(usize, self.table.frame_offset, header_len) catch return error.IntegerOverflow;
         const offset = std.math.add(usize, entries_offset, relative) catch return error.IntegerOverflow;
         const entries_end = self.table.stream.len - footer_len;
         if (offset > entries_end or entries_end - offset < self.table.entry_size) return error.TruncatedFrame;
 
-        const compressed_size = std.mem.readInt(u32, self.table.stream[offset..][0..4], .little);
-        const decompressed_size = std.mem.readInt(u32, self.table.stream[offset + 4 ..][0..4], .little);
-        const checksum = if (self.table.has_checksums) std.mem.readInt(u32, self.table.stream[offset + 8 ..][0..4], .little) else null;
-        const entry_value = Entry{
-            .frame_index = self.index,
-            .compressed_offset = self.compressed_offset,
-            .decompressed_offset = self.decompressed_offset,
-            .compressed_size = compressed_size,
-            .decompressed_size = decompressed_size,
-            .checksum = checksum,
-        };
-        self.compressed_offset = std.math.add(u64, self.compressed_offset, compressed_size) catch return error.IntegerOverflow;
-        self.decompressed_offset = std.math.add(u64, self.decompressed_offset, decompressed_size) catch return error.IntegerOverflow;
+        const entry_value = try wire.readEntryAndAdvance(self.table.stream[offset..][0..self.table.entry_size], self.table.has_checksums, self.index, &self.compressed_offset, &self.decompressed_offset);
         self.index += 1;
         return entry_value;
     }
@@ -131,31 +101,19 @@ pub const Iterator = struct {
 /// skippable header. This rejects a valid-looking footer detached from the
 /// frames it claims to index.
 pub fn inspect(stream: []const u8) Error!Table {
-    if (stream.len < 8 + footer_len) return error.TruncatedFrame;
-    const footer = stream[stream.len - footer_len ..];
-    if (std.mem.readInt(u32, footer[5..9], .little) != footer_magic) return error.InvalidMagic;
-
-    const descriptor = footer[4];
-    if (descriptor & 0x7c != 0) return error.CorruptFrame;
-    const has_checksums = descriptor & 0x80 != 0;
-    const entry_size: u8 = if (has_checksums) 12 else 8;
-    const entry_count = std.mem.readInt(u32, footer[0..4], .little);
-    if (entry_count > max_frames) return error.CorruptFrame;
-    const entries_len = std.math.mul(usize, @as(usize, entry_count), entry_size) catch return error.IntegerOverflow;
-    const frame_len = std.math.add(usize, 8 + footer_len, entries_len) catch return error.IntegerOverflow;
-    if (frame_len > stream.len) return error.TruncatedFrame;
-    const frame_offset = stream.len - frame_len;
-    if (std.mem.readInt(u32, stream[frame_offset..][0..4], .little) != table_skippable_magic) return error.InvalidMagic;
-    const declared_payload_len: usize = @intCast(std.mem.readInt(u32, stream[frame_offset + 4 ..][0..4], .little));
-    if (declared_payload_len != frame_len - 8) return error.CorruptFrame;
+    if (stream.len < header_len + footer_len) return error.TruncatedFrame;
+    const layout = try wire.parseFooter(stream[stream.len - footer_len ..][0..footer_len]);
+    const frame_size = std.math.cast(usize, layout.frameSize()) orelse return error.IntegerOverflow;
+    const frame_offset: usize = @intCast(try layout.frameOffset(stream.len));
+    try wire.validateHeader(stream[frame_offset..][0..header_len], layout);
 
     var table = Table{
         .stream = stream,
         .frame_offset = frame_offset,
-        .frame_size = frame_len,
-        .entry_count = entry_count,
-        .has_checksums = has_checksums,
-        .entry_size = entry_size,
+        .frame_size = frame_size,
+        .entry_count = layout.entry_count,
+        .has_checksums = layout.has_checksums,
+        .entry_size = layout.entry_size,
         .compressed_size = 0,
         .decompressed_size = 0,
     };
@@ -187,11 +145,11 @@ pub fn buildIndex(table: Table, storage: []Entry) Error!Index {
 
 pub fn encodedTableBound(entry_count: usize, with_checksums: bool) Error!usize {
     if (entry_count > max_frames) return error.InvalidBlockPlan;
-    const entry_size: usize = if (with_checksums) 12 else 8;
+    const entry_size: usize = wire.entrySize(with_checksums);
     const entries_len = std.math.mul(usize, entry_count, entry_size) catch return error.IntegerOverflow;
     const payload_len = std.math.add(usize, entries_len, footer_len) catch return error.IntegerOverflow;
     _ = std.math.cast(u32, payload_len) orelse return error.IntegerOverflow;
-    return std.math.add(usize, 8, payload_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, header_len, payload_len) catch return error.IntegerOverflow;
 }
 
 pub fn encodeTableAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), entries: []const FrameSize, with_checksums: bool) Error!void {

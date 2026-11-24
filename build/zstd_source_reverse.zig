@@ -36,11 +36,11 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute Zstd source-backed decode, frame-count and window admission contracts on native, x86 and WASI",
+        "Execute Zstd source-backed and seekable decode, frame-count and window admission contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",
-        "Compile source-backed Zstd layout, literal-stream, compressed-block, frame-execution, stream-cursor, public frame/stream decode, resumable stream cursor and entropy primitive WASI contracts",
+        "Compile source-backed Zstd layout, entropy, frame/stream and seekable range WASI contracts",
     );
 
     for ([_]std.Build.ResolvedTarget{ target, x86, wasi }, 0..) |variant, index| {

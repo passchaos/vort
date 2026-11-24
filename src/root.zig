@@ -2508,6 +2508,18 @@ pub const zstdInspectSourceStream = zstd.inspectSourceStream;
 pub const zstdDecodeSourceStreamInto = zstd.decodeSourceStreamInto;
 pub const zstdDecodeSourceStreamAppend = zstd.decodeSourceStreamAppend;
 pub const zstdDecodeSourceStreamAlloc = zstd.decodeSourceStreamAlloc;
+
+pub const ZstdSourceSeekTable = zstd.SourceSeekTable;
+pub const ZstdSourceSeekIndex = zstd.SourceSeekIndex;
+pub const ZstdSourceSeekableDecodeOptions = zstd.SourceSeekableDecodeOptions;
+pub const ZstdSourceSeekableRangeRequirements = zstd.SourceSeekableRangeRequirements;
+pub const zstdOpenSourceSeekTable = zstd.openSourceSeekTable;
+pub const zstdSourceSeekableRangeRequirements = zstd.sourceSeekableRangeRequirements;
+pub const zstdDecodeSourceSeekableRangeInto = zstd.decodeSourceSeekableRangeInto;
+
+test "root Zstd source seekable consumer contracts" {
+    try @import("tests/zstd_source_decode/seekable.zig").contracts(@This());
+}
 pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;
