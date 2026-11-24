@@ -2654,6 +2654,7 @@ test {
     _ = @import("zstd/incremental/empty_member_tests.zig");
     _ = @import("zstd/incremental/fuzz_driver.zig");
     _ = incremental_limits_tests;
+    _ = @import("zstd/incremental/frame_admission_retry_tests.zig");
     _ = dictionary_resume_tests;
     _ = compressed_workspace_tests;
     _ = history_workspace_tests;
@@ -6695,6 +6696,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     last_error_name: []const u8 = "",
     last_error_phase: ?Phase = null,
     failure: ?Error = null,
+    frame_admission_paused: bool = false,
     error_input_offset: ?Count = null,
     error_output_offset: ?Count = null,
     last_step_progress: core.Progress = .{},
@@ -6733,6 +6735,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// Combined data and skippable frame limit for the logical stream.
         /// Empty frames count, and `nextStream` does not reset the quota.
         max_frames: Count = frame_count_limit.unlimited,
+        /// Retain a data header refused by window, frame-count or known
+        /// content-size limits so it can be retried without replay.
+        retry_frame_admission_limits: bool = false,
         /// Maximum compressed bytes retained while waiting for validation.
         /// Data frames may exceed this value because consumed input prefixes are
         /// released block-by-block; each compressed block must still fit. A
@@ -6767,6 +6772,14 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub const SkippableObserver = skippable_observation.Observer;
     pub const SkippableObservation = skippable_observation.Observation;
 
+    /// Only supplied limits change; all other decode policy stays in force.
+    pub const FrameAdmissionLimits = struct {
+        max_window_size: ?Count = null,
+        max_frames: ?Count = null,
+        max_output_len: ?Count = null,
+        max_decoded_buffer_len: ?Count = null,
+    };
+
     pub const Snapshot = struct {
         phase: Phase,
         input_received: Count,
@@ -6788,6 +6801,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         error_output_offset: ?Count,
         last_step_progress: core.Progress,
         required_dictionary_id: ?u32,
+        frame_admission_paused: bool = false,
     };
 
     pub fn init(allocator: std.mem.Allocator) NativeIncrementalFrameDecoder {
@@ -7140,6 +7154,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.last_error_name = "";
         self.last_error_phase = null;
         self.failure = null;
+        self.frame_admission_paused = false;
         self.error_input_offset = null;
         self.error_output_offset = null;
         self.last_step_progress = .{};
@@ -7194,6 +7209,24 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.last_error_phase = null;
         self.error_input_offset = null;
         self.error_output_offset = null;
+    }
+
+    /// Rearm a paused data header with revised limits. This does not decode
+    /// or consume anything; step with the original unaccepted input suffix.
+    /// An incompatible change leaves the paused decoder untouched.
+    pub fn retryFrameAdmission(self: *NativeIncrementalFrameDecoder, limits: FrameAdmissionLimits) Error!void {
+        if (!self.frame_admission_paused) return error.InvalidStreamState;
+        var next = self.options;
+        next.max_window_size = limits.max_window_size orelse next.max_window_size;
+        next.max_frames = limits.max_frames orelse next.max_frames;
+        next.max_output_len = limits.max_output_len orelse next.max_output_len;
+        next.max_decoded_buffer_len = limits.max_decoded_buffer_len orelse next.max_decoded_buffer_len;
+        try next.validate();
+        if (self.output_written > next.max_output_len) return error.OutputLimitExceeded;
+        try self.validateCompressedBlockWorkspace(self.compressed_workspace_binding, next);
+        try self.validateHistoryWorkspace(self.history_workspace_binding, next);
+        self.options = next;
+        self.frame_admission_paused = false;
     }
 
     pub fn requiredDictionaryId(self: *const NativeIncrementalFrameDecoder) ?u32 {
@@ -7307,6 +7340,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             .error_output_offset = self.error_output_offset,
             .last_step_progress = self.last_step_progress,
             .required_dictionary_id = self.required_dictionary_id,
+            .frame_admission_paused = self.frame_admission_paused,
         };
     }
 
@@ -7374,7 +7408,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             .error_input_offset = snap.error_input_offset,
             .error_output_offset = snap.error_output_offset,
             .last_step_progress = snap.last_step_progress,
-            .recoverability_hint_name = if (self.required_dictionary_id != null) "retry_with_dictionary" else if (self.failure) |err| switch (err) {
+            .recoverability_hint_name = if (self.frame_admission_paused) "retry_frame_admission" else if (self.required_dictionary_id != null) "retry_with_dictionary" else if (self.failure) |err| switch (err) {
                 error.WorkingMemoryLimitExceeded => "raise_working_memory_limit",
                 error.OutputLimitExceeded => "raise_output_limit",
                 error.OutOfMemory => "allocation_failure",
@@ -7385,6 +7419,7 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
         if (self.failure) |err| return err;
+        if (self.frame_admission_paused) return error.OutputLimitExceeded;
         if (self.required_dictionary_id != null) {
             self.recordError(.frame, error.NeedDictionary);
             return error.NeedDictionary;
@@ -7468,6 +7503,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.stable_binding.buffer != null and !self.stable_step_active) return error.InvalidStreamState;
         self.last_step_progress = .{};
         if (self.failure) |err| return err;
+        if (self.frame_admission_paused) return error.OutputLimitExceeded;
         if (self.required_dictionary_id != null) {
             self.recordError(.frame, error.NeedDictionary);
             return error.NeedDictionary;
@@ -7491,7 +7527,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.last_error_name = @errorName(err);
             self.error_input_offset = self.input_received;
             self.error_output_offset = self.output_written;
-            if (err != error.NeedDictionary or self.required_dictionary_id == null) {
+            if (!self.frame_admission_paused and (err != error.NeedDictionary or self.required_dictionary_id == null)) {
                 self.clearDictionaryRequest();
                 self.failure = err;
                 prefix_decode_stream.complete(self);
@@ -8983,8 +9019,9 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.TruncatedFrame => return,
             else => return err,
         };
-        try frame_count_limit.requireNext(self.options.max_frames, self.data_frame_count, self.skippable_event_count);
-        try self.validateIncrementalWindow(header);
+        frame_count_limit.requireNext(self.options.max_frames, self.data_frame_count, self.skippable_event_count) catch |err|
+            return self.refuseFrameAdmission(err);
+        self.validateIncrementalWindow(header) catch |err| return self.refuseFrameAdmission(err);
         if (!self.prefix_header_selected) {
             if (self.stable_binding.buffer) |output| {
                 if (self.resolveDirectDictionary(header)) |dictionary| try stable_driver.validateDictionary(output, dictionary);
@@ -8998,7 +9035,13 @@ pub const NativeIncrementalFrameDecoder = struct {
         // A data magic alone cannot distinguish an empty member from surplus
         // output. Only a complete header with a declared content size can
         // reject it here; unknown sizes remain subject to block preflight.
-        try self.validateIncrementalContentSize(header);
+        self.validateIncrementalContentSize(header) catch |err| return self.refuseFrameAdmission(err);
+    }
+
+    fn refuseFrameAdmission(self: *NativeIncrementalFrameDecoder, err: Error) Error {
+        if (err == error.OutputLimitExceeded and self.options.retry_frame_admission_limits)
+            self.frame_admission_paused = true;
+        return err;
     }
 
     fn validateIncrementalContentSize(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error!void {

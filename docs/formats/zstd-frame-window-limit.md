@@ -42,6 +42,29 @@ independent libzstd 1.4.8 streaming probe rejected a 2,048-byte declaration
 under a 1,024-byte window cap before producing output, and accepted it at an
 exact 2,048-byte cap. Vort's option is in bytes, not log2 units.
 
+## Incremental admission retry
+
+Set `NativeIncrementalFrameDecoder.Options.retry_frame_admission_limits` to
+retain a complete data header when admission returns `OutputLimitExceeded`
+for the window, frame count or declared content size. The default keeps the
+existing sticky-error behavior. A paused decoder reports
+`snapshot().frame_admission_paused` and preserves prior output, progress,
+buffered bytes and the pending or selected dictionary. `step` and `finish`
+return `OutputLimitExceeded` while paused; a further `step` makes no progress.
+
+Call `retryFrameAdmission(.{ .max_window_size = new_limit })` to rearm the
+header. Optional overrides also cover `max_frames`, `max_output_len` and
+`max_decoded_buffer_len`; omitted limits stay unchanged. Incompatible bound
+workspaces or invalid options leave the pause and previous limits intact.
+The next `step` rechecks the header using only input not already reported as
+accepted, which can be empty if prevalidated lookahead retained the suffix.
+There is no need to replay a header or any other accepted bytes. A dictionary
+request after retry uses the ordinary `provideDictionary` contract.
+
+Skippable admission, unknown-size payload limits, heap failures and malformed
+frames are not made resumable by this option. A frame that still exceeds a
+limit can pause again. Reset discards the pause with the rest of the frame.
+
 ## CLI
 
 The five native Zstd decode and size commands accept `--max-window-size=BYTES`
