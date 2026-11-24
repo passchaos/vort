@@ -84,6 +84,7 @@ pub fn verify(a: std.mem.Allocator, wire: []const u8, plain: []const u8) !Receip
     if (try vort.brDecodeStreamIntoWithPreflight(wire, output, options) != plain.len)
         return error.PreflightSizeMismatch;
     try checkOutput(guarded, plain);
+    try verifyChunks(wire, plain, guarded, joined, options);
     if (!profile.available or profile.peak_requested_bytes != 0 or profile.live_requested_bytes != 0)
         return error.UnexpectedPreflightAllocation;
     return .{
@@ -93,6 +94,28 @@ pub fn verify(a: std.mem.Allocator, wire: []const u8, plain: []const u8) !Receip
         .fixed_preflight = fixed_preflight,
         .peak_requested_bytes = profile.peak_requested_bytes,
     };
+}
+
+fn verifyChunks(wire: []const u8, plain: []const u8, guarded: []u8, scratch: []u8, options: vort.BrotliDecodePreflightOptions) !void {
+    const split = wire.len / 2;
+    const chunks = [_][]const u8{ wire[0..1], &.{}, wire[1..split], wire[split..], "transport-tail" };
+    const stream_chunks = chunks[0 .. chunks.len - 1];
+    const output = guarded[1 .. guarded.len - 1];
+    if (try vort.brDecodedStreamChunksSizeWithPreflight(stream_chunks, scratch, options) != plain.len)
+        return error.PreflightSizeMismatch;
+    const prefix = try vort.brDecodedStreamPrefixChunksSizeWithPreflight(&chunks, scratch, options);
+    if (prefix.input_read != wire.len or prefix.decoded_bytes != plain.len)
+        return error.PreflightSizeMismatch;
+    @memset(output, sentinel);
+    try expectRefusal(vort.brDecodeStreamChunksIntoWithPreflight(&chunks, scratch, output, options), error.TrailingData, guarded);
+    const decoded = try vort.brDecodeStreamPrefixChunksIntoWithPreflight(&chunks, scratch, output, options);
+    if (decoded.input_read != wire.len or decoded.output_written != plain.len)
+        return error.PreflightSizeMismatch;
+    try checkOutput(guarded, plain);
+    @memset(output, sentinel);
+    if (try vort.brDecodeStreamChunksIntoWithPreflight(stream_chunks, scratch, output, options) != plain.len)
+        return error.PreflightSizeMismatch;
+    try checkOutput(guarded, plain);
 }
 
 fn expectRefusal(result: anyerror!usize, expected: anyerror, guarded: []const u8) !void {

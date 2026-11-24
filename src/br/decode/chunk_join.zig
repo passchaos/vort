@@ -7,6 +7,25 @@ const serialized = @import("../serialized_dictionary.zig");
 
 pub const Error = error{ IntegerOverflow, OutputTooSmall, InvalidBlockPlan, CorruptFrame };
 
+pub const PreflightBorrows = struct {
+    history: []const u8,
+    output: []const u8,
+    profile: []const u8 = &.{},
+    decoder: []const u8 = &.{},
+    prior_output: []const u8 = &.{},
+};
+
+/// Check every writable preflight borrow before joining or recording progress.
+/// An eager reset may reuse its previous destination, but neither history nor
+/// the compressed join may overwrite previously published data.
+pub fn validatePreflight(chunks: []const []const u8, scratch: []u8, dictionary: shared.Dictionary, borrows: PreflightBorrows) Error!void {
+    const b = borrows;
+    try validateObserver(chunks, scratch, &.{ b.history, b.output, b.decoder, b.prior_output }, dictionary, b.profile);
+    try validateObserver(chunks, scratch, &.{ b.output, b.decoder, b.prior_output }, dictionary, b.history);
+    try validateObserver(chunks, scratch, &.{b.decoder}, dictionary, b.output);
+    try validateObserver(chunks, scratch, &.{b.prior_output}, dictionary, b.decoder);
+}
+
 pub fn join(chunks: []const []const u8, scratch: []u8, protected: []const []const u8, dictionary: shared.Dictionary) Error![]const u8 {
     // Check both table extents before reading their first descriptor. In
     // particular, sliceAsBytes must not perform an unchecked multiplication.

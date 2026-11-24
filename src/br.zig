@@ -16026,6 +16026,19 @@ pub fn decodeStreamPrefixIntoWithPreflight(stream: []const u8, output: []u8, opt
     return decodeIntoAfterPreflight(stream, output, options, true);
 }
 
+/// Join compressed chunks in caller scratch, then preflight before writing output.
+pub fn decodeStreamChunksIntoWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!usize {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, output, options, null);
+    return (try decodeIntoAfterPreflight(joined, output, options, false)).output_written;
+}
+
+/// Preflight and decode the first stream. Its input boundary is measured
+/// across all chunks and excludes bytes after the first stream.
+pub fn decodeStreamPrefixChunksIntoWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!DecodePrefixResult {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, output, options, null);
+    return decodeIntoAfterPreflight(joined, output, options, true);
+}
+
 fn decodeIntoAfterPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions, prefix: bool) DecodePreflightError!DecodePrefixResult {
     const size = try preflightSize(stream, options, prefix);
     const decoded_len = try stream_count.toLocal(size.decoded_bytes);
@@ -16133,6 +16146,18 @@ pub fn decodedStreamSizeWithPreflight(stream: []const u8, options: DecodePreflig
 pub fn decodedStreamPrefixSizeWithPreflight(stream: []const u8, options: DecodePreflightOptions) DecodePreflightError!DecodedPrefixSize {
     try validateDecodePreflight(stream, &.{}, options, null);
     return preflightSize(stream, options, true);
+}
+
+/// Validate and measure a complete chunked stream using caller-owned scratch.
+pub fn decodedStreamChunksSizeWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!Counter {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, &.{}, options, null);
+    return (try preflightSize(joined, options, false)).decoded_bytes;
+}
+
+/// Measure only the first validated stream and return its joined byte offset.
+pub fn decodedStreamPrefixChunksSizeWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!DecodedPrefixSize {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, &.{}, options, null);
+    return preflightSize(joined, options, true);
 }
 
 fn preflightSize(stream: []const u8, options: DecodePreflightOptions, prefix: bool) DecodePreflightError!DecodedPrefixSize {
@@ -17341,6 +17366,13 @@ pub const StreamDecoder = struct {
         return self;
     }
 
+    /// Eagerly decode one complete stream using independent compressed and history scratch.
+    pub fn initFromChunksWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetFromChunksWithPreflight(chunks, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
     pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!StreamDecoder {
         return initFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
     }
@@ -17385,6 +17417,17 @@ pub const StreamDecoder = struct {
     /// decoder position and destination unchanged, but records the error.
     pub fn resetWithPreflight(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
         try validateDecodePreflight(stream, output_scratch, options, self);
+        return self.installAfterPreflight(stream, output_scratch, options);
+    }
+
+    /// Join and validate before replacing the current decoded stream. Neither
+    /// scratch span is retained, and borrow refusal leaves the decoder untouched.
+    pub fn resetFromChunksWithPreflight(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
+        const joined = try joinPreflightChunks(chunks, compressed_scratch, output_scratch, options, self);
+        return self.installAfterPreflight(joined, output_scratch, options);
+    }
+
+    fn installAfterPreflight(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
         const result = decodeIntoAfterPreflight(stream, output_scratch, options, false) catch |err| {
             self.recordError(err);
             return err;
@@ -17566,22 +17609,30 @@ fn validateDecodeProfile(stream: []const u8, options: DecodeOptions, protected: 
     try validateChunkProfile(&.{stream}, &.{}, options, protected);
 }
 
-fn validateDecodePreflight(stream: []const u8, output: []const u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) Error!void {
-    const object = if (eager) |state| std.mem.asBytes(state) else &.{};
-    const prior_output = if (eager) |state| state.decoded else &.{};
-    try validateDecodeProfile(stream, options.decode, &.{ options.history, output, object, prior_output });
-    // Like the profile, both writable borrows must stay disjoint from the
-    // input and dictionary backing. Reuse the complete geometry check,
-    // including RAW descriptors and detached serialized dictionary tables.
-    const borrow = @import("br/decode/chunk_join.zig");
-    try borrow.validateObserver(&.{stream}, &.{}, &.{ output, object, prior_output }, options.decode.shared_dictionary, options.history);
-    try borrow.validateObserver(&.{stream}, &.{}, &.{object}, options.decode.shared_dictionary, output);
-    if (eager != null)
-        try borrow.validateObserver(&.{stream}, &.{}, &.{prior_output}, options.decode.shared_dictionary, object);
+const decode_chunk_join = @import("br/decode/chunk_join.zig");
+
+fn preflightBorrows(output: []u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) decode_chunk_join.PreflightBorrows {
+    return .{
+        .history = options.history,
+        .output = output,
+        .profile = if (options.decode.memory_profile) |profile| std.mem.asBytes(profile) else &.{},
+        .decoder = if (eager) |state| std.mem.asBytes(state) else &.{},
+        .prior_output = if (eager) |state| state.decoded else &.{},
+    };
+}
+
+fn validateDecodePreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) Error!void {
+    return decode_chunk_join.validatePreflight(&.{stream}, &.{}, options.decode.shared_dictionary, preflightBorrows(output, options, eager));
+}
+
+fn joinPreflightChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) Error![]const u8 {
+    const borrows = preflightBorrows(output, options, eager);
+    try decode_chunk_join.validatePreflight(chunks, compressed_scratch, options.decode.shared_dictionary, borrows);
+    return joinDecodeChunks(chunks, compressed_scratch, options.decode, &.{ borrows.history, borrows.output, borrows.decoder, borrows.prior_output });
 }
 
 fn joinDecodeChunks(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions, protected: []const []const u8) Error![]const u8 {
-    return @import("br/decode/chunk_join.zig").join(chunks, compressed_scratch, protected, options.shared_dictionary);
+    return decode_chunk_join.join(chunks, compressed_scratch, protected, options.shared_dictionary);
 }
 
 fn readWindowBits(reader: *bitstream.BitReader) Error!void {

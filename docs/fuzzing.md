@@ -175,11 +175,12 @@ Brotli boundary defect found and the reference versions and corpus hashes.
 quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide
 window is not enough: the Vort summary must find an actual backward copy past
 65,520 bytes in each wire. The mode checks both incremental schedules, strict
-and prefix caller-history preflight, and an exact-size decode with zero
-requested codec heap. The one-byte-short logical limit, final-byte truncation,
-and trailing bytes must fail strict preflight without writing to the caller's
-output. Tail replay still checks the emitted prefix byte-for-byte; unlike the
-flushed mode, it does not assume the last 64 KiB is the only unpublished data.
+and prefix caller-history preflight with contiguous and chunked input, and
+exact-size decode with zero requested codec heap. A one-byte-short logical
+limit, final-byte truncation, and trailing bytes must fail strict preflight
+without writing to caller output. Tail replay still checks the emitted prefix
+byte-for-byte; unlike the flushed mode, it does not assume the last 64 KiB is
+the only unpublished data.
 `upstream_brotli_preflight_json` records the observed window, maximum distance,
 legacy fixed-history outcome, and requested heap.
 

@@ -57,6 +57,7 @@ pub fn contracts(comptime B: type) !void {
     try std.testing.expectEqual(@as(B.Counter, plain.len), oracle.decoded_bytes);
     try std.testing.expectEqual(gap, oracle.max_lz77_distance);
     try preflightContracts(B, wire.items, plain, history);
+    try @import("chunk_preflight.zig").contracts(B, wire.items, plain, history);
     const decoded = try B.decodeStreamAllocExactSize(h.a, wire.items, plain.len);
     defer h.a.free(decoded);
     try std.testing.expectEqualSlices(u8, plain, decoded);

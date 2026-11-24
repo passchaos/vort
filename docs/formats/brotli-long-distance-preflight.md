@@ -8,10 +8,24 @@ The new entry points are:
 - `decodedStreamSizeWithPreflight` and `decodedStreamPrefixSizeWithPreflight`
 - `decodeStreamIntoWithPreflight` and `decodeStreamPrefixIntoWithPreflight`
 - `StreamDecoder.initWithPreflight` and `StreamDecoder.resetWithPreflight`
+- `decodedStreamChunksSizeWithPreflight` and `decodedStreamPrefixChunksSizeWithPreflight`
+- `decodeStreamChunksIntoWithPreflight` and `decodeStreamPrefixChunksIntoWithPreflight`
+- `StreamDecoder.initFromChunksWithPreflight` and `StreamDecoder.resetFromChunksWithPreflight`
 
 Strict entry points require complete input. Prefix entry points return the
 first validated stream's byte boundary, including the end marker and padding.
 They neither decode nor count the following bytes against the output limit.
+
+The chunked variants take `chunks` and `compressed_scratch` before the other
+arguments. As with the existing chunk APIs, they join once into caller storage;
+that scratch must fit the sum of all chunk lengths, including any transport
+suffix. Empty chunks are allowed. Prefix progress is the byte offset across
+those chunks, not a count of whole chunks. The joined scratch and history are
+not retained. The active prefix of compressed scratch must not overlap
+history, output, telemetry, dictionary storage or a live eager decoder and
+its prior decoded bytes. Borrow and short-join refusal make no scratch writes;
+a later wire-validation failure may modify compressed scratch and history but
+leaves decoded output untouched.
 
 For example, if the protocol supplies a known plaintext length:
 
@@ -64,7 +78,10 @@ The [wide upstream differential mode](../fuzzing.md) verifies both that
 1.2.0 the full-file wire is 506,129 bytes, SHA-256
 `803c10dae9fb558b5c4bef96db9870110154a2f8d644ccf917c2056044786091`, and reaches
 4,193,998 bytes back. Both XML wires exhaust the legacy fixed history but
-pass strict/prefix caller-history preflight with zero requested codec heap.
+pass strict/prefix caller-history preflight with zero requested codec heap,
+with both contiguous input and compressed chunks. The chunked tests also
+exercise empty chunks, a suffix across transport boundaries, aliased borrows,
+short scratch, and failed eager reset followed by a disjoint retry.
 Both incremental schedules decode each entire wire and reject its final-byte
 cut, publishing only the correct plaintext prefix. The no-download CI smoke
 reaches 229,376 bytes back with system libbrotli 1.0.9; it exercises the wide
