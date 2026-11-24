@@ -3,6 +3,7 @@ pub fn contracts(comptime Z: type) !void {
     try @import("stateless.zig").contracts(Z);
     try @import("reusable.zig").contracts(Z);
     try @import("incremental_decode.zig").contracts(Z);
+    try @import("dictionary_set.zig").contracts(Z);
     try @import("incremental_encode.zig").contracts(Z);
     try @import("failures.zig").contracts(Z);
     try @import("source.zig").contracts(Z);

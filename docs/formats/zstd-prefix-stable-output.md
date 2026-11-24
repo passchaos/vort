@@ -52,6 +52,16 @@ Dictionary catalogs cannot infer an ID-less RAW prefix. An explicitly chosen
 full dictionary can retain its real ID while the independent
 `include_dictionary_id` option controls header serialization.
 
+An incremental decoder can replace its persistent catalog with
+`setDictionarySet(catalog)` before accepting a header or at a completed frame
+boundary, including before `nextStream()`. The setter checks catalog IDs,
+dictionary metadata, aliases and any bound history capacity before replacing
+the previous dictionary or prefix. It borrows the catalog and its dictionary
+storage, preserves buffered input and cumulative progress, and retains the
+catalog across session resets. An empty catalog clears the binding. Use
+`provideDictionarySet` instead when the current header is waiting for a
+specific dictionary; that override lasts for only one frame.
+
 ## Stable output
 
 An incremental decoder can bind a complete mutable buffer with
@@ -77,6 +87,9 @@ history, and older addressable caller bytes cannot enlarge legal distances.
 Reads that reach before current-frame output use the selected prefix/dictionary
 span. A prefix that would be overwritten by the output binding is rejected;
 an earlier frame used as the next prefix requires nonoverlapping output storage.
+Catalog descriptors must stay separate from stable output regardless of
+binding order. Individual catalog entries, including prepared metadata, are
+checked against the bound output when a frame selects them.
 After `NeedDictionary`, both `provideDictionary` and `provideDictionarySet`
 reject overlap between the bound output and either borrowed history or the
 serialized dictionary (including metadata). Refusal leaves the original

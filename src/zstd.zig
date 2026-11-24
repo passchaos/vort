@@ -7023,6 +7023,42 @@ pub const NativeIncrementalFrameDecoder = struct {
         try prefix_decode_stream.setDictionary(self, dictionary, validatePrefixDictionary);
     }
 
+    /// Replace the persistent dictionary catalog at an idle frame boundary.
+    /// The catalog and dictionary storage stay borrowed until replaced,
+    /// cleared or deinitialized. A refusal leaves the previous binding intact.
+    pub fn setDictionarySet(self: *NativeIncrementalFrameDecoder, dictionary_set: NativeDictionarySet) Error!void {
+        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        if (dictionary_set.dictionaries.len == 0) {
+            prefix_decode_stream.clear(self);
+            return;
+        }
+        const stable: []const u8 = if (self.stable_binding.buffer) |output| output else &.{};
+        try stable_driver.validateDictionarySet(&.{
+            std.mem.asBytes(self),
+            self.frame_scratch.allocatedSlice(),
+            self.decoded_scratch.allocatedSlice(),
+            self.direct_history.allocatedSlice(),
+            self.history_workspace_binding.storage,
+            self.compressed_workspace_binding.bytes,
+            self.skippable_output,
+            std.mem.sliceAsBytes(self.skippable_events),
+        }, stable, dictionary_set);
+        try dictionary_set.validate();
+        var maximum: usize = 0;
+        for (dictionary_set.dictionaries) |dictionary| {
+            try validatePrefixDictionary(dictionary);
+            maximum = @max(maximum, dictionary.content.len);
+        }
+        if (self.history_workspace_binding.active()) {
+            const required = try requiredHistoryWorkspaceLen(self.options.max_window_size, maximum);
+            if (self.history_workspace_binding.storage.len < required) return error.OutputTooSmall;
+        }
+        self.dictionary = null;
+        self.dictionary_set = dictionary_set;
+        self.options.dictionary_usage = .persistent;
+        self.prefix_state = .{ .configured = true };
+    }
+
     pub fn setPrefix(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
         try self.setPrefixWithDictionary(NativeDictionary.initRawContent(bytes));
     }
