@@ -23,11 +23,8 @@ fn decodeChecked(
     workspace: model.Workspace,
     progress: *model.Progress,
 ) model.Error!void {
-    const offset = progress.next_decoded_offset;
-    if (offset > index.decoded_size or output.len > index.decoded_size - offset)
-        return error.RangeOutOfBounds;
+    const end = try model.rangeEnd(index.decoded_size, progress.next_decoded_offset, output.len);
     if (output.len == 0) return;
-    const end = try count.addLocal(offset, output.len);
     try workspace.validate(Codec.RawDecoder.required_history_len);
     try model.validateDisjoint(&.{ output, workspace.history, workspace.input_page, workspace.discard, try model.entryBytes(index.entries), index.checkpoint_history });
 

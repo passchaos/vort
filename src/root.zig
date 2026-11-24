@@ -4073,6 +4073,7 @@ pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
 
 test "root Gzip source index contracts" {
     try @import("tests/gzip_source_index.zig").contracts(@This());
+    try @import("tests/gzip_verified_range_extents.zig").contracts(@This());
 }
 pub const parseGzipHeaderInfo = deflate.parseGzipHeaderInfo;
 pub const parseGzipHeaderInfoFromChunks = deflate.parseGzipHeaderInfoFromChunks;

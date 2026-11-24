@@ -14,13 +14,19 @@ const middle_wire = [_]u8{
     0x33, 0x00, 0x00, 0x00,
 };
 
+const first_plain = "earlier\n";
+const last_plain = "later member\n";
+const plain = first_plain ++ middle_plain ++ last_plain;
+
 const SourceContext = struct {
     bytes: []const u8,
     first_readable: u64 = 0,
     blocked: ?struct { start: u64, end: u64 } = null,
+    read_calls: usize = 0,
 
     fn readAt(context: *anyopaque, offset: u64, output: []u8) error{SourceReadFailed}!usize {
         const self: *SourceContext = @ptrCast(@alignCast(context));
+        self.read_calls += 1;
         if (offset < self.first_readable) return error.SourceReadFailed;
         if (self.blocked) |gap| {
             if (offset >= gap.start and offset < gap.end) return error.SourceReadFailed;
@@ -33,9 +39,6 @@ const SourceContext = struct {
 
 pub fn contracts(comptime V: type) !void {
     const Count = V.StreamCount;
-    const first_plain = "earlier\n";
-    const last_plain = "later member\n";
-    const plain = first_plain ++ middle_plain ++ last_plain;
     const first = try V.encodeGzipFixedAlloc(t.allocator, first_plain);
     defer t.allocator.free(first);
     const empty = try V.encodeGzipFixedAlloc(t.allocator, "");
@@ -124,6 +127,12 @@ pub fn contracts(comptime V: type) !void {
     try t.expectEqual(error.InvalidBlockPlan, aliased.failed.err);
     try t.expectEqual(@as(usize, 0), aliased.failed.progress.output_written);
 
+    try verifiedRanges(V, index, &context, workspace, wire, .{
+        .start = first.len,
+        .end = middle_end,
+        .next_start = last_start,
+    });
+
     var empty_context: SourceContext = .{ .bytes = empty };
     const only_empty = try V.buildGzipSourceIndex(.{
         .context = &empty_context,
@@ -156,4 +165,127 @@ pub fn contracts(comptime V: type) !void {
         defer wire[offset] ^= 1;
         try t.expectError(err, V.buildGzipSourceIndex(source, &entries, &saved, workspace, options));
     }
+}
+
+fn verifiedRanges(
+    comptime V: type,
+    index: V.GzipSourceIndex,
+    context: *SourceContext,
+    workspace: V.GzipSourceIndexWorkspace,
+    wire: []u8,
+    middle: struct { start: usize, end: usize, next_start: usize },
+) !void {
+    const Count = V.StreamCount;
+    const boundary = first_plain.len + middle_plain.len;
+    const middle_len = 4;
+    const last_len = 7;
+    const start = boundary - middle_len;
+    const untouched: [middle_len + last_len]u8 = @splat(0xa5);
+    var output = untouched;
+    var scratch: [last_len]u8 = undefined;
+
+    try verifiedRangePreflight(V, index, context, workspace, start, &output, &scratch);
+    try t.expectEqualSlices(u8, &untouched, &output);
+
+    // Stage only the larger intersection, not the whole range or either
+    // member. Both the preceding member and intervening empty member are unreadable.
+    context.first_readable = middle.start;
+    context.blocked = .{ .start = middle.end, .end = middle.next_start };
+    const crossed = index.decodeVerifiedRangeInto(start, &output, workspace, &scratch);
+    try t.expect(crossed == .complete);
+    try t.expectEqual(output.len, crossed.complete.output_written);
+    try t.expectEqual(@as(Count, start + output.len), crossed.complete.next_decoded_offset);
+    try t.expectEqualSlices(u8, plain[start..][0..output.len], &output);
+
+    // Fault after the later member's selected bytes could have been decoded.
+    // Its staged bytes must not escape, but the verified middle slice stays.
+    context.blocked = .{ .start = wire.len - 8, .end = wire.len };
+    output = untouched;
+    try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(start, &output, workspace, &scratch), error.SourceReadFailed, middle_len, boundary);
+    try t.expectEqualSlices(u8, plain[start..boundary], output[0..middle_len]);
+    try t.expectEqualSlices(u8, untouched[middle_len..], output[middle_len..]);
+
+    context.blocked = null;
+    for ([_]usize{ wire.len - 8, wire.len - 4 }, [_]anyerror{ error.ChecksumMismatch, error.SizeMismatch }) |trailer_byte, err| {
+        wire[trailer_byte] ^= 1;
+        defer wire[trailer_byte] ^= 1;
+        output = untouched;
+        try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(start, &output, workspace, &scratch), err, middle_len, boundary);
+        try t.expectEqualSlices(u8, plain[start..boundary], output[0..middle_len]);
+        try t.expectEqualSlices(u8, untouched[middle_len..], output[middle_len..]);
+    }
+
+    // Even a one-byte selection after a raw checkpoint starts at the gzip
+    // header and checks the late CRC. Neither neighboring member is readable.
+    const tiny_start = first_plain.len + 6;
+    var tiny: [1]u8 = @splat(0xa5);
+    var tiny_scratch: [1]u8 = undefined;
+    context.blocked = .{ .start = middle.end, .end = wire.len };
+    context.first_readable = middle.start + 1;
+    try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(tiny_start, &tiny, workspace, &tiny_scratch), error.SourceReadFailed, 0, tiny_start);
+    try t.expectEqual(@as(u8, 0xa5), tiny[0]);
+
+    context.first_readable = middle.start;
+    try t.expectEqual(tiny_scratch.len, try index.verifiedRangeScratchLen(tiny_start, tiny.len));
+    const one = index.decodeVerifiedRangeInto(tiny_start, &tiny, workspace, &tiny_scratch);
+    try t.expect(one == .complete);
+    try t.expectEqual(tiny.len, one.complete.output_written);
+    try t.expectEqual(@as(Count, tiny_start + 1), one.complete.next_decoded_offset);
+    try t.expectEqual(plain[tiny_start], tiny[0]);
+
+    tiny[0] = 0xa5;
+    wire[middle.end - 8] ^= 1;
+    defer wire[middle.end - 8] ^= 1;
+    try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(tiny_start, &tiny, workspace, &tiny_scratch), error.ChecksumMismatch, 0, tiny_start);
+    try t.expectEqual(@as(u8, 0xa5), tiny[0]);
+}
+
+fn verifiedRangePreflight(
+    comptime V: type,
+    index: V.GzipSourceIndex,
+    context: *SourceContext,
+    workspace: V.GzipSourceIndexWorkspace,
+    start: V.StreamCount,
+    output: []u8,
+    scratch: []u8,
+) !void {
+    context.first_readable = context.bytes.len;
+    context.blocked = null;
+    const calls_before = context.read_calls;
+    try t.expectEqual(scratch.len, try index.verifiedRangeScratchLen(start, output.len));
+    try t.expectEqual(@as(usize, 0), try index.verifiedRangeScratchLen(index.decoded_size, 0));
+    try t.expectError(error.RangeOutOfBounds, index.verifiedRangeScratchLen(index.decoded_size, 1));
+    try t.expectError(error.RangeOutOfBounds, index.verifiedRangeScratchLen(index.decoded_size + 1, 0));
+
+    const no_workspace: V.GzipSourceIndexWorkspace = .{ .history = &.{}, .input_page = &.{}, .discard = &.{} };
+    const eof = index.decodeVerifiedRangeInto(index.decoded_size, &.{}, no_workspace, &.{});
+    try t.expect(eof == .complete);
+    try t.expectEqual(@as(usize, 0), eof.complete.output_written);
+    try t.expectEqual(index.decoded_size, eof.complete.next_decoded_offset);
+    try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(index.decoded_size, output, workspace, scratch), error.RangeOutOfBounds, 0, index.decoded_size);
+    try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(start, output, workspace, scratch[0 .. scratch.len - 1]), error.OutputTooSmall, 0, start);
+    try expectVerifiedFailure(V, index.decodeVerifiedRangeInto(start, output, no_workspace, scratch), error.OutputTooSmall, 0, start);
+
+    var aliased_workspace = workspace;
+    aliased_workspace.discard = workspace.input_page[0..workspace.discard.len];
+    for ([_]V.GzipSourceRangeOutcome{
+        index.decodeVerifiedRangeInto(start, output, workspace, output[0..scratch.len]),
+        index.decodeVerifiedRangeInto(start, output, workspace, workspace.history[0..scratch.len]),
+        index.decodeVerifiedRangeInto(start, workspace.history[0..output.len], workspace, scratch),
+        index.decodeVerifiedRangeInto(start, output, aliased_workspace, scratch),
+    }) |result| try expectVerifiedFailure(V, result, error.InvalidBlockPlan, 0, start);
+    try t.expectEqual(calls_before, context.read_calls);
+}
+
+fn expectVerifiedFailure(
+    comptime V: type,
+    outcome: V.GzipSourceRangeOutcome,
+    err: anyerror,
+    written: usize,
+    next: V.StreamCount,
+) !void {
+    try t.expect(outcome == .failed);
+    try t.expectEqual(err, outcome.failed.err);
+    try t.expectEqual(written, outcome.failed.progress.output_written);
+    try t.expectEqual(next, outcome.failed.progress.next_decoded_offset);
 }

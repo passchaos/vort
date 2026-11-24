@@ -61,6 +61,11 @@ pub const Outcome = union(enum) {
     failed: struct { err: Error, progress: Progress },
 };
 
+pub fn rangeEnd(decoded_size: Count, offset: Count, length: usize) Error!Count {
+    if (offset > decoded_size or length > decoded_size - offset) return error.RangeOutOfBounds;
+    return core.stream_count.addLocal(offset, length);
+}
+
 pub fn entryBytes(entries: []const Entry) Error![]const u8 {
     const len = std.math.mul(usize, entries.len, @sizeOf(Entry)) catch return error.IntegerOverflow;
     return @as([*]const u8, @ptrCast(entries.ptr))[0..len];

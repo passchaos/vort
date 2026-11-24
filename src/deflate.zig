@@ -530,16 +530,20 @@ pub const GzipSourceRangeProgress = gzip_index.Progress;
 pub const buildGzipSourceIndex = GzipSourceIndex.build;
 
 test "Gzip source index contracts" {
-    try @import("tests/gzip_source_index.zig").contracts(struct {
+    const Support = struct {
         pub const ByteSource = @import("io/source.zig").Source;
         pub const StreamCount = core.StreamCount;
         pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
         pub const encodeGzipStoredWithHeaderAlloc = deflate.encodeGzipStoredWithHeaderAlloc;
+        pub const GzipSourceIndex = deflate.GzipSourceIndex;
         pub const GzipSourceIndexEntry = deflate.GzipSourceIndexEntry;
+        pub const GzipSourceRangeOutcome = deflate.GzipSourceRangeOutcome;
         pub const GzipSourceIndexWorkspace = deflate.GzipSourceIndexWorkspace;
         pub const GzipSourceIndexOptions = deflate.GzipSourceIndexOptions;
         pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
-    });
+    };
+    try @import("tests/gzip_source_index.zig").contracts(Support);
+    try @import("tests/gzip_verified_range_extents.zig").contracts(Support);
 }
 
 const ZlibOrGzipIncrementalDecoderCodec = struct {

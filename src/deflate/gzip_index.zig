@@ -2,6 +2,7 @@
 const model = @import("gzip_index/types.zig");
 const builder = @import("gzip_index/builder.zig");
 const range = @import("gzip_index/range.zig");
+const verified_range = @import("gzip_index/verified_range.zig");
 
 pub const Entry = model.Entry;
 pub const Options = model.Options;
@@ -46,6 +47,17 @@ pub fn Index(comptime Codec: type) type {
         /// fresh validation of every intersecting member's footer.
         pub fn decodeRangeInto(self: Self, offset: model.Count, output: []u8, workspace: Workspace) Outcome {
             return range.decode(Codec, self, offset, output, workspace);
+        }
+
+        /// Largest requested member intersection. No source reads are made.
+        pub fn verifiedRangeScratchLen(self: Self, offset: model.Count, length: usize) model.Error!usize {
+            return verified_range.scratchLen(self, offset, length);
+        }
+
+        /// Recheck each intersecting member before publishing its intersection.
+        /// Scratch holds only that intersection, not the entire member.
+        pub fn decodeVerifiedRangeInto(self: Self, offset: model.Count, output: []u8, workspace: Workspace, range_scratch: []u8) Outcome {
+            return verified_range.decode(Codec, self, offset, output, workspace, range_scratch);
         }
     };
 }

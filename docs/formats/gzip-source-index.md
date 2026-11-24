@@ -61,6 +61,34 @@ range reads they must also be disjoint from the index's entries and saved
 history. The opaque source context is the caller's responsibility. The index
 itself has no required heap allocation or per-read history allocation.
 
+## Optional per-member revalidation
+
+`decodeVerifiedRangeInto` starts at the gzip header of each intersecting
+member and verifies its complete header, CRC-32, ISIZE and indexed compressed
+and decoded extents. It does not use a raw block checkpoint or read unselected
+members. The requested intersection is staged during that single decode pass
+and copied only after that member passes all checks. On failure, the failing
+member's destination remains untouched and progress counts only the earlier
+member intersections already verified and published.
+
+```zig
+const required = try index.verifiedRangeScratchLen(offset, output.len);
+// The caller provides at least `required` bytes of disjoint range_scratch.
+const result = index.decodeVerifiedRangeInto(offset, output, workspace, range_scratch);
+```
+
+Sizing consults only the index. Scratch is the largest requested intersection,
+not the largest member or entire range; its used prefix must be disjoint from
+output and other workspace and index buffers. The same storage is reused for
+subsequent members. Invalid bounds, a short scratch span or overlapping buffers
+fail before source reads or output publication. An empty valid range requires
+no workspace or scratch and reads no source bytes.
+
+Use the stable source and index as above. This mode detects read-time
+corruption against the current gzip footer and indexed extents; it does not
+authenticate the bytes or prove equivalence to an earlier source snapshot.
+Neither range path allocates codec heap memory.
+
 ## Validation
 
 `test-deflate-wide-decode` and `test-deflate-wide-decode-wasm` cover a zlib
@@ -69,3 +97,6 @@ restarts, concatenation, empty members and a header with FHCRC. Guarded
 short reads verify the chosen block offset, raw footer exclusion, no earlier
 member reads, and exact failure progress. Corrupt CRC/ISIZE and insufficient
 workspace, history, entries or policy allowances cannot publish an index.
+Verified-range tests also cover a one-byte request with a bad trailing CRC,
+late-member read faults, exact scratch sizing, and valid replacement members
+that fail the original indexed compressed or decoded extent checks.

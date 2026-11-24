@@ -18,7 +18,7 @@ assert.equal(wasi.start(instance), 0, "wide decoder WASI contracts failed");
 console.log(JSON.stringify({
     schema: "vort-deflate-wide-decode-wasm-v1", status: "ok", utc: new Date().toISOString(),
     pointer_bits: 32, logical_counter_bits: 64, progress_counter_bits: 32,
-    contract: "Deflate wide counters, block restart, and verified gzip source range indexing",
+    contract: "Deflate wide counters, block restart, and member-verified gzip range publication",
     wasm_path: fs.realpathSync(artifact), node_version: process.version,
     wasm_sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
     execution: "Zig test runner with checked lawful-prefix and physical-suffix contracts",
