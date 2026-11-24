@@ -95,6 +95,14 @@ recognized gzip-header cases. C inflate independently checks committed member
 errors; C Adler/CRC provide footer references. The report also checks 256
 finish seals and 57,230 steps, including 952 zero-output steps.
 
+The dictionary-resume differential also uses an upstream `A/B/B/A` zlib stream
+with four multi-block members and more than two history-window spans per
+member. It checks exact input/output and DICTID offsets through both the direct
+and automatic wrappers, at bytewise, mixed (including empty buffers) and full
+input schedules. A partial dictionary catalog must request each B independently;
+a complete catalog must not request either. A 9-bit cap refuses the next valid
+15-bit member before DICTID, even when trailing data is allowed.
+
 The wasm32-wasi consumer checks the same public policies on a 32-bit target,
 including split-tail reconstruction, member end versus accepted input, header
 and dictionary errors, raw error output/CRC accounting and reset. Its Node

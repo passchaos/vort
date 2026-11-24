@@ -53,6 +53,63 @@ def encode(data, dictionary, level, strategy):
     return wire
 
 
+def check_long_rotation(check, dictionaries):
+    """Cover wrapped history, repeated misses and validated member boundaries."""
+    rng = random.Random(0xD1C710AA)
+    names = ("short", "random-long")
+    order = (0, 1, 1, 0)
+    wires, payloads, requests = [], [], []
+    input_offset = output_offset = 0
+    for index, which in enumerate(order):
+        dictionary = dictionaries[names[which]]
+        window = (9, 15)[which]
+        seed = dictionary[-(160 if which == 0 else 4096):]
+        parts = (seed * (512 if which == 0 else 24), rng.randbytes(35011 + index), seed * 6)
+        payload = b"".join(parts)
+        encoder = zlib.compressobj(6, zlib.DEFLATED, window, 8, zlib.Z_DEFAULT_STRATEGY, zdict=dictionary)
+        wire = b"".join(encoder.compress(part) + encoder.flush(zlib.Z_SYNC_FLUSH) for part in parts[:-1])
+        wire += encoder.compress(parts[-1]) + encoder.flush(zlib.Z_FINISH)
+        dict_id = zlib.adler32(dictionary)
+        require(wire[0] >> 4 == window - 8 and wire[1] & 0x20
+                and struct.unpack_from(">I", wire, 2)[0] == dict_id, "upstream window and DICTID")
+        require(len(payload) > 2 * (1 << window), "multiple history wraps per member")
+        decoder = zlib.decompressobj(wbits=15, zdict=dictionary)
+        require(decoder.decompress(wire) + decoder.flush() == payload and decoder.eof
+                and not decoder.unused_data and not decoder.unconsumed_tail, "exact reference member")
+        # The body itself must need the dictionary; FDICT alone is insufficient.
+        try:
+            no_dictionary = zlib.decompress(wire[6:-4], -window)
+        except zlib.error:
+            pass
+        else:
+            require(no_dictionary != payload, "load-bearing dictionary match")
+        requests.append((index, dict_id, input_offset + 6, output_offset))
+        wires.append(wire)
+        payloads.append(payload)
+        input_offset += len(wire)
+        output_offset += len(payload)
+
+    stream, plain = b"".join(wires), b"".join(payloads)
+    for wrapper in ("zlib", "auto"):
+        for pattern in ("one", "micro", "full"):
+            for initializer, expected_requests in (("missing", requests), ("set-partial", requests[1:3]), ("set-hit", [])):
+                result = check("upstream-long-dictionary-rotation", stream, plain, names, pattern, initializer,
+                               wrapper=wrapper, allow_concatenated=True, allow_trailing_data=True,
+                               max_output_len=len(plain), expected_output_len=len(plain))
+                observed = [(r["stream_index"], r["id"], r["input_offset"], r["output_offset"]) for r in result["requests"]]
+                require(observed == expected_requests, (wrapper, pattern, initializer, "frame-scoped request boundaries"))
+                require(result["snapshot"]["stream_count"] == len(order)
+                        and result["snapshot"]["member_end_offset"] == len(stream)
+                        and result["backpressure_steps"] > 0, (wrapper, pattern, "completed pressured members"))
+        refused = check("upstream-long-rotation-window-refusal", stream, plain, names, "micro", "set-hit",
+                        wrapper=wrapper, allow_concatenated=True, allow_trailing_data=True,
+                        max_window_bits=9, expected_error="OutputLimitExceeded")
+        require(refused["input_read"] == len(wires[0]) + 2 and refused["output_written"] == len(payloads[0])
+                and refused["snapshot"]["stream_count"] == 1 and not refused["requests"],
+                (wrapper, "window refusal before the next member's DICTID"))
+    return len(order), len(plain)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe", type=Path, required=True)
@@ -164,6 +221,7 @@ def main():
               initializer="set-hit", allow_concatenated=True)
         check("concatenated-cumulative-limit", concatenated, concatenated_data, [dict_one, dict_two], "full",
               allow_concatenated=True, max_output_len=len(concatenated_data) - 1, expected_error="OutputLimitExceeded")
+        rotation_members, rotation_plaintext = check_long_rotation(check, dictionaries)
         dictionary = dictionaries["short"]
         limited_data = dictionary[-300:] * 3
         limited = encode(limited_data, dictionary, 6, zlib.Z_DEFAULT_STRATEGY)
@@ -195,7 +253,9 @@ def main():
                   "source_sha256": {str(path.relative_to(ROOT)): digest(path.read_bytes()) for path in
                                     [ROOT / "src/root.zig", ROOT / "src/deflate.zig", ROOT / "src/core.zig", ROOT / "src/checksum.zig",
                                      *sorted((ROOT / "src/deflate/incremental/decoder").glob("*.zig")),
-                                     ROOT / "src/deflate/zlib/dictionary_set.zig", ROOT / "tools/zlib/dictionary_resume_probe.zig", Path(__file__).resolve()]},
+                                     ROOT / "src/deflate/zlib_header.zig", ROOT / "src/deflate/zlib/dictionary_set.zig",
+                                     ROOT / "tools/zlib/dictionary_resume_probe.zig", Path(__file__).resolve()]},
+                  "long_rotation": {"members": rotation_members, "plaintext_bytes": rotation_plaintext},
                   "dictionaries": {name: {"bytes": len(data), "id": zlib.adler32(data), "sha256": digest(data),
                                           "suffix32k_id": zlib.adler32(data[-32768:])} for name, data in dictionaries.items()},
                   "corpus_streams": len(corpus), "dictionary_requests": len(requests), "rows": rows}
