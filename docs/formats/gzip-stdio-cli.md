@@ -33,11 +33,17 @@ member, as GNU gzip does. The default remains strict. Once the first padding
 byte arrives, any nonzero byte, including another member header, is rejected.
 A file containing only zeros is not a gzip stream.
 
-The flag uses incremental decoding for both named and pipe endpoints. The
-incremental library option is `allow_trailing_zero_padding`; it works for
-single members and concatenated streams and cannot be combined with arbitrary
-`allow_trailing_data` handling. Padding counts as consumed input, not as part
+The flag uses incremental decoding for both named and pipe endpoints. Set
+`GzipIncrementalDecoder.Options.allow_trailing_zero_padding` for the same
+behavior in a streaming caller. Padding counts as consumed input, not as part
 of the last member, and EOF is confirmed with `finish()`.
+
+For whole-input decoding, set `GzipDecodeOptions.allow_trailing_zero_padding`
+(including `ZlibOrGzipDecodeOptions.gzip` for auto-detection). It applies to
+single and concatenated gzip decoding, including chunked inputs. Both options
+default to `false` and cannot be enabled alongside `allow_trailing_data`.
+Auto-detect prefix decoders still stop at the end of the first member without
+validating or counting its suffix.
 
 `zig build test-gzip-stdio-cli` checks these contracts on the native CLI and
 the WASI decode probe, including progressive output and atomic replacement.
