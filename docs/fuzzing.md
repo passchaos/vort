@@ -170,6 +170,8 @@ The README smoke is also part of `ci-smoke`; the full Silesia sweep is opt-in
 and is functionality evidence, not a timing result. The
 [full-file receipt](performance/codec-upstream-real-20261124.md) records the
 Brotli boundary defect found and the reference versions and corpus hashes.
+The [follow-up receipt](performance/codec-upstream-real-20261125.md) records
+four more full files and a separate multi-meta-block wide Brotli sweep.
 
 `--real-brotli-wide` selects only Brotli and uses libbrotli's one-shot
 quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide
