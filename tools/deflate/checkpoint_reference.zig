@@ -120,6 +120,30 @@ pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plai
     }
 }
 
+pub fn verifyDictionaryAppend(wire: []const u8, dictionary: []const u8, prefix_len: usize, expected: []const u8) !void {
+    var stream: C.z_stream = std.mem.zeroes(C.z_stream);
+    if (C.inflateInit2_(&stream, ref.bits(.raw), C.ZLIB_VERSION, @sizeOf(C.z_stream)) != C.Z_OK)
+        return error.LibzInit;
+    defer _ = C.inflateEnd(&stream);
+    var output: [16]u8 = undefined;
+    stream.next_in = @constCast(wire.ptr);
+    stream.avail_in = @intCast(wire.len);
+    stream.next_out = &output;
+    stream.avail_out = output.len;
+    if (C.inflate(&stream, C.Z_BLOCK) != C.Z_OK or stream.data_type & 128 == 0 or stream.total_out != prefix_len)
+        return error.LibzMissingDictionaryBoundary;
+    if (C.inflateSetDictionary(&stream, dictionary.ptr, @intCast(dictionary.len)) != C.Z_OK)
+        return error.LibzDictionary;
+    var history: [32 * 1024]u8 = undefined;
+    var history_len: c_uint = 0;
+    if (C.inflateGetDictionary(&stream, &history, &history_len) != C.Z_OK or
+        history_len != prefix_len + dictionary.len or
+        !std.mem.eql(u8, history[0..prefix_len], expected[0..prefix_len]) or
+        !std.mem.eql(u8, history[prefix_len..history_len], dictionary)) return error.LibzDictionaryHistory;
+    if (C.inflate(&stream, C.Z_FINISH) != C.Z_STREAM_END or stream.avail_in != 0 or
+        stream.total_out != expected.len or !std.mem.eql(u8, output[0..expected.len], expected)) return error.LibzPlaintext;
+}
+
 pub fn verifyRestart(wire: []const u8, byte_offset: usize, bit_offset: u3, history: []const u8, expected: []const u8, output: []u8) !void {
     var stream: C.z_stream = std.mem.zeroes(C.z_stream);
     if (C.inflateInit2_(&stream, ref.bits(.raw), C.ZLIB_VERSION, @sizeOf(C.z_stream)) != C.Z_OK)

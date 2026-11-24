@@ -42,6 +42,38 @@ conflict with this copy. The later `step` contract still requires independent
 receiver/history storage before decoding can continue; seed does not waive
 that persistent storage rule.
 
+## Appending to raw history
+
+`appendDictionary` on the raw Deflate and Deflate64 incremental decoders
+keeps the newest format window of **old history followed by the supplied
+bytes**. It allocates nothing and does not change input/output counters, the
+bit reservoir or the pending token. Use it for an out-of-band dictionary that
+extends the current history, not for replacing history as `seedDictionary`
+does. An empty append is a no-op.
+
+A nonempty append needs caller-owned history and a live, compact decoder.
+Missing history returns `OutputTooSmall`. A completed or finished stream,
+a recorded decode error, or an active semantic generation returns
+`InvalidStreamState`. For a decoder with semantic scratch, use
+`stepToBlockBoundary` and append after it acknowledges a non-final block end.
+An append can also resume a compact mid-block or pending-match state; the
+next match bytes use the amended history.
+
+The two possible history write spans must be independent of the receiver
+and any attached semantic workspace. A partial append also needs its source
+disjoint from those spans; borrowing the untouched part of the ring is fine.
+A dictionary at least as large as the ring replaces it with the retained tail
+using one memmove, so its source may alias history. Rejections do not change
+history or decoder progress.
+
+`test-deflate-wide-decode` and `test-deflate-wide-decode-wasm` cover both
+window sizes, partial matches and ring wrapping. `run-deflate-checkpoint-interop`
+checks the decoded bytes and unchanged checkpoint on a raw stream whose second
+block requires both prior output and an appended byte. The same fixture is
+accepted by libz and zlib-ng using `inflateSetDictionary`.
+
+## Wrapper dictionary provision
+
 Zlib `provideDictionary` first checks a complete unresolved FDICT request
 and the unfinished-input state. It admits the actual seed destination before
 hashing or error recording, hashes the complete dictionary for DICTID, then

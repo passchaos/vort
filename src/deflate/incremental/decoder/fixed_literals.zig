@@ -332,6 +332,22 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             self.history_len = keep;
             self.history_pos = if (keep == self.history.len) 0 else keep;
         }
+
+        /// Append raw dictionary bytes without changing payload progress. The
+        /// newest window of the old history followed by `dictionary` survives.
+        /// Nonempty appends require a live compact decoder with caller history.
+        /// Use a block boundary to append around active semantic generations.
+        pub fn appendDictionary(self: *Self, dictionary: []const u8) Error!void {
+            if (dictionary.len == 0) return;
+            if (self.input_finished or self.phase == .done or self.phase == .fast_dynamic_block or self.last_error_name.len != 0)
+                return error.InvalidStreamState;
+            if (self.history.len == 0) return error.OutputTooSmall;
+            const workspace: []const u8 = if (self.semantic_decoder) |active| std.mem.asBytes(active) else &.{};
+            try dictionary_borrows.validateAppend(std.mem.asBytes(self), workspace, self.history, self.history_pos, dictionary);
+            if (dictionary.len >= self.history.len) return self.seedDictionary(dictionary);
+            self.recordStepOutput(dictionary);
+        }
+
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
             return .{
                 .phase_name = @tagName(self.phase),

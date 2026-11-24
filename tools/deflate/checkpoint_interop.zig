@@ -97,13 +97,39 @@ pub fn main(init: std.process.Init) !void {
     }
     if (counts.zero_progress_checkpoints == 0 or counts.exact_limit_checkpoints == 0 or counts.semantic_blocks == 0 or counts.nonaligned_restarts == 0)
         return error.MissingCheckpointCoverage;
+    try checkDictionaryAppend(history);
     var buffer: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
         "deflate_checkpoint_interop_ok zlib={s} wires={d} runs={d} checkpoints={d} zero_progress={d} at_output_limit={d} semantic_blocks={d} restarts={d} nonaligned_restarts={d}\n",
         .{ std.mem.span(C.zlibVersion()), counts.reference_wires, counts.runs, counts.checkpoints, counts.zero_progress_checkpoints, counts.exact_limit_checkpoints, counts.semantic_blocks, counts.restarts, counts.nonaligned_restarts },
     );
+    try stdout.interface.writeAll("deflate_dictionary_append_interop_ok prefix=3 dictionary=1 decoded=6\n");
     try stdout.interface.flush();
+}
+
+fn checkDictionaryAppend(history: []u8) !void {
+    // A stored ABC block, followed by a final fixed block that refers four
+    // bytes back. The caller supplies the intervening byte X out of band.
+    const wire = [_]u8{ 0x00, 0x03, 0x00, 0xfc, 0xff, 'A', 'B', 'C', 0x03, 0x62, 0x00 };
+    const expected = "ABCABC";
+    try ref.verifyDictionaryAppend(&wire, "X", 3, expected);
+
+    var decoder = try Raw.initWithHistory(.{}, history);
+    var output: [16]u8 = undefined;
+    const first = try decoder.stepToBlockBoundary(&wire, &output);
+    const prefix = first.progress;
+    if (!first.block_boundary or prefix.input_read != 8 or prefix.output_written != 3)
+        return error.VortMissingDictionaryBoundary;
+    const before = decoder.blockBoundaryPosition() orelse return error.VortMissingDictionaryBoundary;
+    try decoder.appendDictionary("X");
+    const after = decoder.blockBoundaryPosition() orelse return error.VortMissingDictionaryBoundary;
+    if (!std.meta.eql(before, after)) return error.VortDictionaryMovedBoundary;
+    const rest = wire[prefix.input_read..];
+    const tail = try decoder.step(rest, output[prefix.output_written..]);
+    if (tail.status != .done or tail.progress.input_read != rest.len or
+        prefix.output_written + tail.progress.output_written != expected.len or
+        !std.mem.eql(u8, output[0..expected.len], expected)) return error.VortDictionaryPlaintext;
 }
 
 fn rawState(decoder: anytype) *Raw {
