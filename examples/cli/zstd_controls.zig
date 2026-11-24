@@ -6,6 +6,8 @@ pub const Controls = struct {
     selection: vort.ZstdNativeFrameSelection = .auto,
     checksum: bool = true,
     content_size: bool = true,
+    content_size_explicit: bool = false,
+    stream_size: ?vort.StreamCount = null,
     level: ?c_int = null,
     strategy: ?vort.zstd.Strategy = null,
     fast_acceleration: ?u32 = null,
@@ -124,6 +126,10 @@ pub const Controls = struct {
 };
 
 pub fn parse(args: anytype, first: ?[]const u8) !Controls {
+    return parseControls(args, first, false);
+}
+
+fn parseControls(args: anytype, first: ?[]const u8, comptime streaming: bool) !Controls {
     var result = Controls{};
     var positional: usize = 0;
     var pending = first;
@@ -175,6 +181,10 @@ pub fn parse(args: anytype, first: ?[]const u8) !Controls {
         } else if (try optionValue("--max-total-memory", arg, args)) |value| {
             if (result.max_total_memory != null) return error.DuplicateZstdOption;
             result.max_total_memory = try std.fmt.parseInt(usize, value, 10);
+        } else if (try optionValue("--stream-size", arg, args)) |value| {
+            if (!streaming) return error.UnsupportedZstdStreamSize;
+            if (result.stream_size != null) return error.DuplicateZstdOption;
+            result.stream_size = try std.fmt.parseInt(vort.StreamCount, value, 10);
         } else if (try optionValue("--max-input-len", arg, args)) |value| {
             if (result.max_input_len != null) return error.DuplicateZstdOption;
             result.max_input_len = try std.fmt.parseInt(vort.StreamCount, value, 10);
@@ -193,7 +203,10 @@ pub fn parse(args: anytype, first: ?[]const u8) !Controls {
             switch (positional) {
                 0 => result.selection = try parseSelection(arg),
                 1 => result.checksum = try parseBool(arg),
-                2 => result.content_size = try parseBool(arg),
+                2 => {
+                    result.content_size = try parseBool(arg);
+                    result.content_size_explicit = true;
+                },
                 else => return error.UnexpectedZstdArgument,
             }
             positional += 1;
@@ -208,7 +221,7 @@ pub fn parseStrategy(value: []const u8) !vort.zstd.Strategy {
 }
 
 pub fn isControlArgument(arg: []const u8) bool {
-    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--fast-long-matches", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--hq-parser-engine", "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len" }) |name| {
+    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--fast-long-matches", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--hq-parser-engine", "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len", "--stream-size" }) |name| {
         if (std.mem.eql(u8, arg, name) or std.mem.startsWith(u8, arg, name ++ "=")) return true;
     }
     return false;
@@ -383,10 +396,27 @@ pub fn encodeStreamFile(init: std.process.Init, args: *std.process.Args.Iterator
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
     if (isControlArgument(output_path)) return error.MissingCorpusPath;
-    const parsed = try parse(args, null);
+    var parsed = try parseControls(args, null, true);
+    const from_stdin = stream_files.isStdio(input_path);
+    if (!from_stdin and parsed.stream_size != null) return error.UnsupportedZstdStreamSize;
+    if (from_stdin and parsed.stream_size == null) {
+        if (parsed.content_size_explicit and parsed.content_size) return error.MissingZstdStreamSize;
+        parsed.content_size = false;
+    }
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
+    if (from_stdin or stream_files.isStdio(output_path)) {
+        try encodeStreamStdio(init, input_path, output_path, options, parsed);
+        if (parsed.profile or parsed.memory_profile) {
+            var buffer: [2048]u8 = undefined;
+            var diagnostic = std.Io.File.stderr().writerStreaming(init.io, &buffer);
+            if (parsed.profile) try printProfile(&diagnostic.interface, profile);
+            if (parsed.memory_profile) try printMemoryProfile(&diagnostic.interface, memory_profile);
+            try diagnostic.interface.flush();
+        }
+        return;
+    }
     const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
     var input_open = true;
     defer if (input_open) input_file.close(init.io);
@@ -404,6 +434,27 @@ pub fn encodeStreamFile(init: std.process.Init, args: *std.process.Args.Iterator
     try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ totals.output_written, totals.input_read, output_path });
     if (parsed.profile) try printProfile(stdout, profile);
     if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
+}
+
+fn encodeStreamStdio(init: std.process.Init, input_path: []const u8, output_path: []const u8, options: vort.ZstdNativeFrameOptions, parsed: Controls) !void {
+    const from_stdin = stream_files.isStdio(input_path);
+    const input = if (from_stdin) std.Io.File.stdin() else try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer if (!from_stdin) input.close(init.io);
+    const size = if (from_stdin) parsed.stream_size else try fileSizeCounter((try input.stat(init.io)).size);
+    if (parsed.max_input_len) |limit| if (size) |length| {
+        if (length > limit) return error.OutputLimitExceeded;
+    };
+    var encoder = if (options.include_content_size)
+        try vort.zstd.NativeIncrementalFrameEncoder.initExactSize(init.gpa, options, size orelse return error.MissingZstdStreamSize)
+    else
+        try vort.zstd.NativeIncrementalFrameEncoder.init(init.gpa, options);
+    defer encoder.deinit();
+    _ = try stream_files.pumpStdio(init.io, input, output_path, &encoder, .{
+        .max_input = parsed.max_input_len,
+        .max_output = parsed.max_output_len,
+        // A stdin pledge also applies when content-size metadata is disabled.
+        .expected_input = parsed.stream_size,
+    });
 }
 
 fn pumpStreamFile(init: std.process.Init, input_file: std.Io.File, writer: *std.Io.Writer, options: vort.ZstdNativeFrameOptions, input_size: vort.StreamCount, max_input: ?vort.StreamCount, max_output: ?vort.StreamCount) !stream_files.Totals {

@@ -2813,7 +2813,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
-        \\  encode-zstd-native-stream-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\  encode-zstd-native-stream-file <in|-> <out|-> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\    '-' selects stdin or binary stdout; stdin omits content size by default
+        \\    --stream-size=BYTES pledges the exact stdin length and enables content size by default
         \\    zstd_options: --level=N | --level N (-131072..22)
         \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)

@@ -1059,6 +1059,7 @@ zig build run-snappy-report-gate
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
 zig build run -- encode-zstd-native-file-hex README.md literal_only true true
 zig build run -- encode-zstd-native-file README.md /tmp/vort-readme.zst literal_only true true
+zig build run -- encode-zstd-native-stream-file - - < README.md > /tmp/vort-readme.zst
 zig build run -- decode-zstd-native-file-to /tmp/vort-readme.zst /tmp/vort-readme.out 1048576
 zig build run -- decode-zstd-native-file-to - - 1048576 < /tmp/vort-readme.zst > /tmp/vort-readme.out
 zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
