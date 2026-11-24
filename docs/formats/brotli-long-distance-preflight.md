@@ -124,6 +124,22 @@ passes. Source bounds, borrow and preflight failures do not publish output.
 A read failure during replay can leave a plaintext prefix in the destination;
 a failed into call does not return usable output or a resume position.
 
+### Publish after a single source pass
+
+`decodeVerifiedSourceInto` and `decodeVerifiedSourcePrefixInto` take an extra
+caller-provided `plaintext_scratch` after the input page. They decode the full
+range or its first stream **once** into that scratch and copy to the output only
+after validating the stream structure, padding, range boundary and requested
+length. Every failure leaves the destination untouched, including a late source
+read error. The scratch may contain partial plaintext on failure.
+
+The scratch and destination must both fit the decoded stream and must be
+mutually disjoint and separate from input, header scratch, history, workspace,
+telemetry and dictionaries. A zero-output stream needs no plaintext scratch.
+This mode trades decoded-size scratch and a copy for avoiding source replay.
+It does not allocate codec heap memory. Brotli has no per-stream checksum;
+this is structural validation, not content authentication.
+
 The focused decode-memory contracts cover a valid 65,537-byte copy followed by
 a context-selected literal, exactly sufficient and one-byte-short history,
 strict/prefix boundaries, output guard bytes, late-block cap refusal, an exact

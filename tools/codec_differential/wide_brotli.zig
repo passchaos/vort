@@ -145,20 +145,33 @@ fn verifyDirectChunks(a: std.mem.Allocator, wire: []const u8, plain: []const u8,
     var short: ShortSource = .{ .bytes = wire };
     var input_page: [257]u8 = undefined;
     @memset(output, sentinel);
-    if (try workspace.decodeSourceInto(.{ .source = .{
+    const range: vort.BrotliDirectChunkPreflightWorkspace.SourceRange = .{ .source = .{
         .context = &short,
         .len = wire.len,
         .max_read_size = 251,
         .read_at = ShortSource.readAt,
-    } }, output, &input_page, options) != plain.len) return error.PreflightSizeMismatch;
+    } };
+    if (try workspace.decodeSourceInto(range, output, &input_page, options) != plain.len)
+        return error.PreflightSizeMismatch;
+    try checkOutput(guarded, plain);
+
+    const plaintext_scratch = try a.alloc(u8, plain.len);
+    defer a.free(plaintext_scratch);
+    short.starts = 0;
+    @memset(output, sentinel);
+    if (try workspace.decodeVerifiedSourceInto(range, output, &input_page, plaintext_scratch, options) != plain.len)
+        return error.PreflightSizeMismatch;
+    if (short.starts != 1) return error.UnexpectedSourceReplay;
     try checkOutput(guarded, plain);
 }
 
 const ShortSource = struct {
     bytes: []const u8,
+    starts: usize = 0,
 
     fn readAt(raw: *anyopaque, offset: u64, output: []u8) error{SourceReadFailed}!usize {
         const self: *ShortSource = @ptrCast(@alignCast(raw));
+        if (offset == 0) self.starts += 1;
         if (offset >= self.bytes.len) return 0;
         const rest = self.bytes[@intCast(offset)..];
         const len = @min(rest.len, output.len, 97);

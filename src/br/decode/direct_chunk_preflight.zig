@@ -69,6 +69,10 @@ pub fn Workspace(comptime Codec: type) type {
             input_read: u64,
             output_written: usize,
         };
+        const Sink = struct {
+            bytes: []u8,
+            full_error: Error,
+        };
 
         pub fn decodedSize(self: *Self, chunks: []const []const u8, options: Options) Error!core.StreamCount {
             return (try self.preflightChunks(chunks, &.{}, options, false)).decoded_bytes;
@@ -103,6 +107,29 @@ pub fn Workspace(comptime Codec: type) type {
             return self.decodeSource(range, output, input_page, options, true);
         }
 
+        /// Decode once into disjoint caller scratch. Output is untouched on error.
+        pub fn decodeVerifiedSourceInto(self: *Self, range: SourceRange, output: []u8, input_page: []u8, plaintext_scratch: []u8, options: Options) SourceError!usize {
+            return (try self.decodeVerifiedSource(range, output, input_page, plaintext_scratch, options, false)).output_written;
+        }
+
+        /// As above, but validate and publish only the first stream in the range.
+        pub fn decodeVerifiedSourcePrefixInto(self: *Self, range: SourceRange, output: []u8, input_page: []u8, plaintext_scratch: []u8, options: Options) SourceError!SourcePrefixResult {
+            return self.decodeVerifiedSource(range, output, input_page, plaintext_scratch, options, true);
+        }
+
+        fn decodeVerifiedSource(self: *Self, range: SourceRange, output: []u8, input_page: []u8, plaintext_scratch: []u8, options: Options, prefix: bool) SourceError!SourcePrefixResult {
+            const end = try range.endOffset();
+            try self.admit(&.{}, output, input_page, plaintext_scratch, options);
+            var reader = try SourceCursor.init(range.source, input_page, range.offset, end);
+            const stage = plaintext_scratch[0..@min(plaintext_scratch.len, output.len)];
+            budget.noHeap(options.preflight.decode);
+            const measured = try self.drive(&reader, .{ .bytes = stage, .full_error = error.OutputTooSmall }, options);
+            try validateMeasured(measured, end - range.offset, options, prefix);
+            const len = try count.toLocal(measured.decoded_bytes);
+            @memcpy(output[0..len], stage[0..len]);
+            return .{ .input_read = measured.input_read, .output_written = len };
+        }
+
         fn decodeChunks(self: *Self, chunks: []const []const u8, output: []u8, options: Options, prefix: bool) Error!Codec.PrefixResult {
             const measured = try self.preflightChunks(chunks, output, options, prefix);
             var reader: ChunkCursor = .{ .chunks = chunks };
@@ -120,14 +147,14 @@ pub fn Workspace(comptime Codec: type) type {
         fn replay(self: *Self, reader: anytype, output: []u8, options: Options, measured: SourcePrefixSize) (Error || @TypeOf(reader.*).Error)!SourcePrefixResult {
             const len = try count.toLocal(measured.decoded_bytes);
             if (output.len < len) return error.OutputTooSmall;
-            const replayed = try self.drive(reader, output[0..len], options);
+            const replayed = try self.drive(reader, .{ .bytes = output[0..len], .full_error = error.SizeMismatch }, options);
             if (replayed.input_read != measured.input_read or replayed.decoded_bytes != measured.decoded_bytes)
                 return error.SizeMismatch;
             return .{ .input_read = measured.input_read, .output_written = len };
         }
 
         fn preflightChunks(self: *Self, chunks: []const []const u8, output: []u8, options: Options, prefix: bool) Error!SourcePrefixSize {
-            try self.admit(chunks, output, &.{}, options);
+            try self.admit(chunks, output, &.{}, &.{}, options);
             var total: usize = 0;
             for (chunks) |chunk| total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
             var reader: ChunkCursor = .{ .chunks = chunks };
@@ -136,7 +163,7 @@ pub fn Workspace(comptime Codec: type) type {
 
         fn preflightSource(self: *Self, range: SourceRange, input_page: []u8, output: []u8, options: Options, prefix: bool) SourceError!SourcePrefixSize {
             const end = try range.endOffset();
-            try self.admit(&.{}, output, input_page, options);
+            try self.admit(&.{}, output, input_page, &.{}, options);
             var reader = try SourceCursor.init(range.source, input_page, range.offset, end);
             return self.measure(&reader, end - range.offset, options, prefix);
         }
@@ -144,14 +171,18 @@ pub fn Workspace(comptime Codec: type) type {
         fn measure(self: *Self, reader: anytype, total: u64, options: Options, prefix: bool) (Error || @TypeOf(reader.*).Error)!SourcePrefixSize {
             budget.noHeap(options.preflight.decode);
             const measured = try self.drive(reader, null, options);
+            try validateMeasured(measured, total, options, prefix);
+            return measured;
+        }
+
+        fn validateMeasured(measured: SourcePrefixSize, total: u64, options: Options, prefix: bool) Error!void {
             if (!prefix and measured.input_read != total) return error.TrailingData;
             if (options.preflight.expected_output_len) |expected| {
                 if (measured.decoded_bytes != expected) return error.SizeMismatch;
             }
-            return measured;
         }
 
-        fn admit(self: *Self, chunks: []const []const u8, output: []u8, input_page: []u8, options: Options) Error!void {
+        fn admit(self: *Self, chunks: []const []const u8, output: []u8, input_page: []u8, plaintext_scratch: []u8, options: Options) Error!void {
             const policy = options.preflight.decode;
             const borrows: borrow.PreflightBorrows = .{
                 .history = options.preflight.history,
@@ -161,11 +192,12 @@ pub fn Workspace(comptime Codec: type) type {
             };
             try borrow.validatePreflight(chunks, &.{}, policy.shared_dictionary, borrows);
             const residents = [_][]const u8{ borrows.history, borrows.output, borrows.profile, borrows.decoder };
-            try borrow.validateObserver(chunks, &.{}, &(residents ++ .{input_page}), policy.shared_dictionary, options.compressed_header_scratch);
-            try borrow.validateObserver(chunks, &.{}, &residents, policy.shared_dictionary, input_page);
+            try borrow.validateObserver(chunks, &.{}, &(residents ++ .{ input_page, plaintext_scratch }), policy.shared_dictionary, options.compressed_header_scratch);
+            try borrow.validateObserver(chunks, &.{}, &(residents ++ .{plaintext_scratch}), policy.shared_dictionary, input_page);
+            try borrow.validateObserver(chunks, &.{}, &residents, policy.shared_dictionary, plaintext_scratch);
         }
 
-        fn drive(self: *Self, reader: anytype, destination: ?[]u8, options: Options) (Error || @TypeOf(reader.*).Error)!SourcePrefixSize {
+        fn drive(self: *Self, reader: anytype, destination: ?Sink, options: Options) (Error || @TypeOf(reader.*).Error)!SourcePrefixSize {
             var policy = options.preflight.decode;
             // The caller supplies every buffer. Observe the whole operation
             // above, rather than passing a one-shot heap policy to step().
@@ -183,7 +215,7 @@ pub fn Workspace(comptime Codec: type) type {
             while (true) {
                 const input = try reader.current();
                 const output: []u8 = if (destination) |into| blk: {
-                    const tail = into[try count.toLocal(written)..];
+                    const tail = into.bytes[try count.toLocal(written)..];
                     break :blk tail[0..@min(tail.len, self.discard.len)];
                 } else &self.discard;
                 const step = self.decoder.step(input, output) catch |err| {
@@ -206,7 +238,9 @@ pub fn Workspace(comptime Codec: type) type {
                 }
                 if (consumed == 0 and produced == 0) {
                     if (step.status == .need_input and input.len == 0) try self.decoder.finish();
-                    if (step.status == .need_output and output.len == 0) return error.SizeMismatch;
+                    if (step.status == .need_output and output.len == 0) {
+                        return if (destination) |sink| sink.full_error else error.InvalidStreamState;
+                    }
                     return error.InvalidStreamState;
                 }
             }

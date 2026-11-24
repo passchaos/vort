@@ -115,6 +115,16 @@ fn sourceReplayFault(comptime B: type, workspace: *B.DirectChunkPreflightWorkspa
     try t.expectEqual(@as(usize, 2), fault.passes);
     try t.expectEqualSlices(u8, plain[0..256], output[0..256]);
     try t.expect(std.mem.allEqual(u8, output[1024..], guard));
+
+    var empty: ReplayFault = .{ .bytes = &.{0x06} };
+    try t.expectEqual(@as(usize, 0), try workspace.decodeVerifiedSourceInto(.{ .source = .{
+        .context = &empty,
+        .len = empty.bytes.len,
+        .read_at = ReplayFault.readAt,
+    } }, &.{}, &page, &.{}, .{
+        .preflight = .{ .history = &.{}, .max_output_len = 0, .expected_output_len = 0 },
+    }));
+    try t.expectEqual(@as(usize, 1), empty.passes);
 }
 
 fn formatContracts(comptime B: type, workspace: *B.DirectChunkPreflightWorkspace) !void {
