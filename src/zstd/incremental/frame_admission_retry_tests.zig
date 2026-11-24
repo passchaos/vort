@@ -119,6 +119,94 @@ test "Zstd frame admission retry split window header preserves prefix and worksp
     }
 }
 
+test "Zstd frame admission retry can migrate retained input to a larger compressed workspace" {
+    const window = 2048;
+    const header = magic ++ "\x01\x08\x07";
+    const frame = header ++ last_block;
+    const prefix_bytes = "borrowed prefix";
+    const prefix = zstd.NativeDictionary.init(7, prefix_bytes);
+    const Storage = enum { owned, separate, in_place, shifted };
+    for (std.enums.values(Storage)) |storage| {
+        var small: [1024]u8 = @splat(canary);
+        var larger: [window + 3]u8 = @splat(canary);
+        var history: [window + prefix_bytes.len]u8 = @splat(canary);
+        var decoder = Decoder.initWithOptions(testing.allocator, .{
+            .max_window_size = small.len,
+            .max_working_memory = if (storage == .owned) std.math.maxInt(usize) else 0,
+            .retry_frame_admission_limits = true,
+        });
+        defer decoder.deinit();
+        try testing.expectError(error.InvalidStreamState, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = window }, &larger));
+        try decoder.setPrefixWithDictionary(prefix);
+        try decoder.bindHistoryWorkspace(&history);
+        switch (storage) {
+            .owned => {},
+            .separate => try decoder.bindCompressedBlockWorkspace(&small),
+            .in_place, .shifted => try decoder.bindCompressedBlockWorkspace(larger[0..small.len]),
+        }
+        var output: [last_payload.len]u8 = @splat(canary);
+        try testing.expectError(error.OutputLimitExceeded, decoder.step(frame, &output));
+        try expectPaused(&decoder, header.len, 0, .{ .input_read = header.len });
+        const paused = decoder.snapshot();
+        const borrowed = decoder.prefixSnapshot();
+        const saved_small = small;
+        const saved_larger = larger;
+        const offset: usize = if (storage == .shifted) 1 else 0;
+        if (storage != .owned)
+            try testing.expectError(error.OutputTooSmall, decoder.retryFrameAdmission(.{ .max_window_size = window }));
+        try testing.expectError(error.OutputTooSmall, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = window }, larger[0 .. window - 1]));
+        try testing.expectError(error.InvalidBlockPlan, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = window }, history[0..window]));
+        try testing.expectError(error.InvalidBlockPlan, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = window }, std.mem.asBytes(&decoder)[0..window]));
+        // The compressed buffer fits this change, but the history ring does not.
+        try testing.expectError(error.OutputTooSmall, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = window + 1 }, larger[offset..]));
+        try testing.expectEqualDeep(paused, decoder.snapshot());
+        try testing.expectEqualDeep(borrowed, decoder.prefixSnapshot());
+        try testing.expectEqual(@as(Count, small.len), decoder.options.max_window_size);
+        try testing.expectEqualSlices(u8, &saved_small, &small);
+        try testing.expectEqualSlices(u8, &saved_larger, &larger);
+        try testing.expect(std.mem.allEqual(u8, &history, canary));
+
+        try decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = window }, larger[offset..]);
+        try testing.expect(!decoder.snapshot().frame_admission_paused);
+        try testing.expectEqualDeep(borrowed, decoder.prefixSnapshot());
+        try testing.expectEqual(paused.last_step_progress, decoder.snapshot().last_step_progress);
+        try testing.expectEqual(paused.input_received, decoder.snapshot().input_received);
+        try testing.expectEqual(@as(Count, window), decoder.options.max_window_size);
+        try testing.expectEqual(window, decoder.compressedBlockWorkspaceCapacity());
+        try testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
+        try testing.expectEqualSlices(u8, &saved_small, &small);
+        try testing.expectEqualSlices(u8, saved_larger[0..offset], larger[0..offset]);
+        try testing.expectEqualSlices(u8, header, larger[offset..][0..header.len]);
+        try testing.expectEqualSlices(u8, saved_larger[offset + header.len ..], larger[offset + header.len ..]);
+        try decodeSuffix(&decoder, frame[header.len..], &output);
+        try testing.expectEqualSlices(u8, last_payload, &output);
+        try testing.expectEqual(@as(Count, frame.len), decoder.snapshot().input_received);
+        try testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
+    }
+}
+
+test "Zstd frame admission retry cannot bind a block workspace to prevalidated input" {
+    const header = magic ++ "\x00\x08"; // Non-single-segment, 2 KiB window.
+    const frame = header ++ last_block;
+    var decoder = Decoder.initWithOptions(testing.allocator, .{
+        .input_policy = .prevalidated_frame,
+        .max_window_size = 1024,
+        .retry_frame_admission_limits = true,
+    });
+    defer decoder.deinit();
+    var workspace: [2048]u8 = @splat(canary);
+    var output: [last_payload.len]u8 = @splat(canary);
+    try testing.expectError(error.OutputLimitExceeded, decoder.step(frame, &output));
+    const paused = decoder.snapshot();
+    try testing.expectError(error.InvalidBlockPlan, decoder.retryFrameAdmissionWithCompressedBlockWorkspace(.{ .max_window_size = 2048 }, &workspace));
+    try testing.expectEqualDeep(paused, decoder.snapshot());
+    try testing.expectEqual(@as(Count, 1024), decoder.options.max_window_size);
+    try testing.expect(std.mem.allEqual(u8, &workspace, canary));
+    try decoder.retryFrameAdmission(.{ .max_window_size = 2048 });
+    try decodeSuffix(&decoder, frame[header.len..], &output);
+    try testing.expectEqualSlices(u8, last_payload, &output);
+}
+
 test "Zstd frame admission retry known sizes and combined frame quota preserve the accepted prefix" {
     const prefix = first_frame ++ metadata_frame;
     const wire = prefix ++ last_frame;

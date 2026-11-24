@@ -59,7 +59,10 @@ workspaces or invalid options leave the pause and previous limits intact.
 The next `step` rechecks the header using only input not already reported as
 accepted, which can be empty if prevalidated lookahead retained the suffix.
 There is no need to replay a header or any other accepted bytes. A dictionary
-request after retry uses the ordinary `provideDictionary` contract.
+request after retry uses the ordinary `provideDictionary` contract. A
+block-stream decoder with insufficient compressed workspace can use
+[`retryFrameAdmissionWithCompressedBlockWorkspace`](zstd-compressed-workspace.md#replacing-the-workspace-on-admission-retry)
+to move accepted bytes and change the limits together.
 
 Skippable admission, unknown-size payload limits, heap failures and malformed
 frames are not made resumable by this option. A frame that still exceeds a

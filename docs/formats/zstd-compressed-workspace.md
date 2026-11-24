@@ -70,6 +70,23 @@ chunked output can instead bind the separate
 [caller-owned rolling history](zstd-history-workspace.md); otherwise its exact
 decoder-owned requested-heap boundary remains enforced independently.
 
+## Replacing the workspace on admission retry
+
+With opt-in [frame admission retry](zstd-frame-window-limit.md#incremental-admission-retry),
+`retryFrameAdmissionWithCompressedBlockWorkspace(limits, workspace)` can raise
+the window limit and bind a larger buffer in one call while a data header is
+paused. It is available only to `.block_stream` decoders. It copies retained
+compressed bytes into the new workspace, whether the old storage was owned
+or borrowed, and rearms decoding without requiring input replay. A new caller
+slice may overlap the old caller workspace, for example when enlarging the
+slice over the same allocation. When the bindings are disjoint, the old
+caller bytes remain unchanged.
+
+Geometry and alias checks (including the existing history binding) finish
+before any copy or ownership change. On refusal the old limits, pause, and
+storage remain intact. On success, the new workspace stays borrowed and the
+next `step` takes only the unaccepted input suffix.
+
 ## Validation
 
 Native, x86 and wasm32-wasi tests cover zero/small/large-window requirement
