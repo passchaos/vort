@@ -6855,12 +6855,15 @@ pub const NativeIncrementalFrameDecoder = struct {
     /// configured `max_window_size` plus the largest configured dictionary
     /// content is the required capacity. Dictionary bytes remain borrowed
     /// separately and phase out as frame output fills the advertised window.
+    /// A pending `NeedDictionary` also permits rebinding before the frame
+    /// starts, so a larger dictionary need not force a header replay.
     pub fn bindHistoryWorkspace(self: *NativeIncrementalFrameDecoder, storage: []u8) Error!void {
-        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        if (!self.historyWorkspaceSetterEligible()) return error.InvalidStreamState;
         if (self.stable_binding.buffer != null) return error.InvalidBlockPlan;
         const required = try requiredHistoryWorkspaceLen(self.options.max_window_size, self.configuredHistoryDictionaryLen());
         if (storage.len < required) return error.OutputTooSmall;
         var binding = try history_workspace.Binding.init(storage);
+        try binding.validateSlice(std.mem.asBytes(self));
         try self.validateHistoryWorkspace(binding, self.options);
         try binding.validateSlice(self.direct_history.allocatedSlice());
         self.direct_history.deinit(self.budget.allocator());
@@ -6870,8 +6873,15 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn clearHistoryWorkspace(self: *NativeIncrementalFrameDecoder) Error!void {
-        if (!prefix_decode_stream.setterEligible(self)) return error.InvalidStreamState;
+        if (!self.historyWorkspaceSetterEligible()) return error.InvalidStreamState;
         self.history_workspace_binding.clear();
+    }
+
+    fn historyWorkspaceSetterEligible(self: *const NativeIncrementalFrameDecoder) bool {
+        if (prefix_decode_stream.setterEligible(self)) return true;
+        // The admitted header is retained separately, and no output history
+        // can have been produced while its dictionary request is unresolved.
+        return self.failure == null and self.phase == .frame and self.required_dictionary_id != null;
     }
 
     pub fn usesHistoryWorkspace(self: *const NativeIncrementalFrameDecoder) bool {

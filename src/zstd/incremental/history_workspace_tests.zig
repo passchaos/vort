@@ -250,6 +250,80 @@ test "Zstd history workspace keeps dictionary borrowed outside the ring" {
     try std.testing.expectEqual(@as(usize, 0), decoder.peakWorkingMemoryBytes());
 }
 
+test "Zstd history workspace can be changed while waiting for a dictionary" {
+    const allocator = std.testing.allocator;
+    const window = 1024;
+    const dictionary_bytes = "dictionary workspace abcdefghijklmnopqrstuvwxyz" ** 16;
+    const dictionary = zstd.NativeDictionary.init(0x7813, dictionary_bytes);
+    const prefix = "previous frame" ** 32;
+    const payload = "abcdefghijklmnopqrstuvwxyz" ** 64;
+    const first = try encode(allocator, prefix, 10, false);
+    defer allocator.free(first);
+    const encoded = try zstd.encodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .selection = .fast_compressed,
+        .block_size_max = window,
+        .window_log = 10,
+        .include_content_size = false,
+        .content_checksum = true,
+    }, dictionary);
+    defer allocator.free(encoded.frame);
+    const header = try zstd.inspectNativeFrameHeader(encoded.frame);
+    const required = window + dictionary_bytes.len;
+
+    for ([_]core.CompressedInputPolicy{ .block_stream, .prevalidated_frame }) |policy| {
+        for ([_]bool{ true, false }) |rebind| {
+            var compressed: [Decoder.compressed_block_workspace_len]u8 = undefined;
+            var small: [window]u8 = @splat(0xa5);
+            var larger: [required]u8 = @splat(0x5a);
+            const zero_heap = rebind and policy == .block_stream;
+            var decoder = Decoder.initWithOptions(allocator, .{
+                .input_policy = policy,
+                .max_window_size = window,
+                .max_working_memory = if (zero_heap) 0 else std.math.maxInt(usize),
+                .stop_after_first_frame = true,
+            });
+            defer decoder.deinit();
+            if (policy == .block_stream) try decoder.bindCompressedBlockWorkspace(&compressed);
+            try decoder.bindHistoryWorkspace(&small);
+            try drive(&decoder, first, prefix, 3, 1);
+            try decoder.nextStream();
+
+            try std.testing.expectError(error.NeedDictionary, decoder.step(encoded.frame, &.{}));
+            const consumed = decoder.snapshot().last_step_progress.input_read;
+            try std.testing.expectEqual(header.payload_offset, consumed);
+            try std.testing.expectEqual(@as(?u32, dictionary.id), decoder.requiredDictionaryId());
+            try std.testing.expectError(error.OutputTooSmall, decoder.provideDictionary(dictionary));
+            const pending = decoder.snapshot();
+            const old_history = small;
+            try std.testing.expectError(error.OutputTooSmall, decoder.bindHistoryWorkspace(larger[0 .. window - 1]));
+            try std.testing.expectError(error.InvalidBlockPlan, decoder.bindHistoryWorkspace(std.mem.asBytes(&decoder)[0..required]));
+            if (policy == .block_stream)
+                try std.testing.expectError(error.InvalidBlockPlan, decoder.bindHistoryWorkspace(compressed[0..required]));
+            try std.testing.expectEqualDeep(pending, decoder.snapshot());
+            try std.testing.expectEqual(window, decoder.historyWorkspaceCapacity());
+
+            if (rebind) {
+                try decoder.bindHistoryWorkspace(&larger);
+                try std.testing.expectEqual(required, decoder.historyWorkspaceCapacity());
+                for (larger) |byte| try std.testing.expectEqual(@as(u8, 0x5a), byte);
+            } else {
+                try decoder.clearHistoryWorkspace();
+                try std.testing.expect(!decoder.usesHistoryWorkspace());
+            }
+            try std.testing.expectEqualSlices(u8, &old_history, &small);
+            try std.testing.expectEqualDeep(pending, decoder.snapshot());
+            try decoder.provideDictionary(dictionary);
+            try std.testing.expectError(error.InvalidStreamState, decoder.clearHistoryWorkspace());
+            try drive(&decoder, encoded.frame[consumed..], payload, 1, 1);
+            const done = decoder.snapshot();
+            try std.testing.expectEqual(@as(core.StreamCount, first.len + encoded.frame.len), done.input_received);
+            try std.testing.expectEqual(@as(core.StreamCount, prefix.len + payload.len), done.output_written);
+            try std.testing.expectEqual(@as(core.StreamCount, 2), done.data_frame_count);
+            if (zero_heap) try std.testing.expectEqual(@as(usize, 0), done.peak_working_bytes);
+        }
+    }
+}
+
 test "Zstd history workspace continues stopped and concatenated frames" {
     const window = 1024;
     const payload = "caller ring next frame " ** 96;
