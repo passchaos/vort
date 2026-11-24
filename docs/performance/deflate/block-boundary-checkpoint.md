@@ -39,6 +39,38 @@ semantic checkpoint with compact decoding, including compressed offsets,
 output offsets, output backpressure, retained history and ordinary-step
 continuation. Empty and nonempty stored blocks have exact checkpoint controls.
 
+`zig build run-deflate-checkpoint-interop` is an independent encoder and
+checkpoint oracle, also run by `ci-smoke`. Libz produces raw, zlib and gzip
+streams using default and fixed strategies, with `Z_BLOCK`, `Z_PARTIAL_FLUSH`,
+`Z_SYNC_FLUSH` or `Z_FULL_FLUSH` between input chunks and an empty final block.
+A mixed-tail case applies PARTIAL, SYNC and FULL in sequence after the last
+`Z_BLOCK`, without new plaintext, to exercise several EOBs at the same output
+position. Libz `inflate(Z_BLOCK)` supplies each non-final EOB position as a bit offset
+and decoded byte count. The comparison excludes libz's wrapper-header and
+final-block returns; it checks the Vort contract of reporting stops between
+DEFLATE blocks, not exact equivalence of the wrapper APIs.
+
+Vort runs compact, semantic and automatic-wrapper routes with a hard output
+cap equal to the plaintext length. Schedules include one-byte transport,
+periodic zero-capacity calls, and contiguous input. Bit positions account for
+retained lookahead; matching only consumed-byte counts would miss defects
+when several boundaries share a byte. This hard-cap policy is distinct from
+raw `stop_at_output_limit`, which intentionally suspends prefix decoding.
+
+```sh
+zig build -Doptimize=ReleaseFast run-deflate-checkpoint-interop
+zig build -Doptimize=ReleaseFast -Dzlib-ng-root="$HOME/Work/zlib-ng" \
+  run-deflate-checkpoint-interop
+```
+
+System libz 1.2.11 and zlib-ng 1.3.2.zlib-ng (`a0467052`, compat build) each
+passed 60 wires, 520 runs, and 1,976 exact checkpoints. Each reported 1,144
+checkpoints at the hard output cap, 90 completed semantic blocks, and 72
+checkpoints where neither the input nor the output byte count advanced. The
+same oracle linked to pre-fix Vort `f9dc91d7` rejected the first raw `Z_BLOCK`
+case with `UnexpectedCompletion` after the checkpoint was skipped; the fix
+and current source pass. These are conformance counts, not performance data.
+
 This establishes the decoder-side checkpoint contract. It does not add an
 encoder checkpoint, a whole-stream save/restore format, or a
 streaming/dictionary performance comparison.

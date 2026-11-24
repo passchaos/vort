@@ -2236,6 +2236,29 @@ pub fn build(b: *std.Build) void {
     }
     b.step("run-deflate-incremental-relaxed-interop", "Validate tiny-buffer relaxed DEFLATE wrappers against libz frames and member errors")
         .dependOn(&b.addRunArtifact(deflate_relaxed_interop_exe).step);
+    const deflate_checkpoint_interop_exe = b.addExecutable(.{
+        .name = "vort-deflate-checkpoint-interop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/checkpoint_interop.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "codec", .module = b.createModule(.{
+                    .root_source_file = b.path("src/deflate.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                }) },
+                .{ .name = "zlib", .module = zlib_compat_mod },
+            },
+        }),
+    });
+    if (zlib_ng_root) |root| {
+        deflate_checkpoint_interop_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+    } else {
+        deflate_checkpoint_interop_exe.root_module.linkSystemLibrary("z", .{});
+    }
+    const deflate_checkpoint_interop_step = b.step("run-deflate-checkpoint-interop", "Compare block checkpoint positions with libz across flushes and output caps");
+    deflate_checkpoint_interop_step.dependOn(&b.addRunArtifact(deflate_checkpoint_interop_exe).step);
     const deflate_split_history_interop_exe = b.addExecutable(.{
         .name = "vort-deflate-split-history-interop",
         .root_module = b.createModule(.{
@@ -8184,6 +8207,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_params_interop_exe.step);
     check_step.dependOn(&deflate_split_history_interop_exe.step);
     check_step.dependOn(&deflate_relaxed_interop_exe.step);
+    check_step.dependOn(&deflate_checkpoint_interop_exe.step);
     check_step.dependOn(&deflate_relaxed_wasm.step);
     check_step.dependOn(&deflate_wide_probe.step);
     check_step.dependOn(&deflate_wide_probe_x86.step);
@@ -8351,6 +8375,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(deflate_params_interop_step);
+    ci_smoke_step.dependOn(deflate_checkpoint_interop_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(bgzf_diff_step);
