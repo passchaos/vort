@@ -93,12 +93,12 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_wasm_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-wasm-tests",
         .root_module = deflate_relaxed_wasm_mod,
-        .filters = &.{"Deflate wide decode"},
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary" },
     });
     deflate_wide_wasm_tests.stack_size = 8 * 1024 * 1024;
     const deflate_wide_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/wide_decode/wasm_gate.js" });
     deflate_wide_wasm_run.addArtifactArg(deflate_wide_wasm_tests);
-    b.step("test-deflate-wide-decode-wasm", "Execute wide decode counters, history and overflow transactions on 32-bit WASI")
+    b.step("test-deflate-wide-decode-wasm", "Execute decode counters, history, overflow and bit-checkpoint contracts on 32-bit WASI")
         .dependOn(&deflate_wide_wasm_run.step);
     const deflate_relaxed_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/incremental_relaxed/wasm_gate.js" });
     deflate_relaxed_wasm_run.addArtifactArg(deflate_relaxed_wasm);
@@ -1205,9 +1205,9 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-tests",
         .root_module = zlib_stream_tests.root_module,
-        .filters = &.{"Deflate wide decode"},
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary" },
     });
-    b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 decode counters and overflow contracts")
+    b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 counters, overflow and bit-checkpoint contracts")
         .dependOn(&b.addRunArtifact(deflate_wide_tests).step);
     const deflate_wide_probe = b.addExecutable(.{
         .name = "vort-deflate-wide-decode-probe",

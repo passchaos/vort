@@ -21,6 +21,38 @@ output progress. Resume with the same unconsumed input; the decoder is already
 at the next block header. Compact and semantic decoding report the same
 checkpoint positions, including under output backpressure.
 
+## Exact position query
+
+`blockBoundaryPosition()` returns `?DeflateBlockBoundaryPosition`. The fields
+`compressed_byte_offset` and `compressed_bit_offset` locate the next header
+relative to decoder reset, counting from the least-significant bit (0) of
+that byte. `decoded_offset` counts published plaintext. Wrapper header and
+footer bytes and previous concatenated members contribute to the absolute
+compressed coordinate. Buffered lookahead does not: the byte position can
+therefore precede the number of compressed bytes already accepted.
+
+```zig
+const step = try decoder.stepToBlockBoundary(input, output);
+if (step.block_boundary) {
+    const checkpoint = decoder.blockBoundaryPosition().?;
+    // Store the byte and bit fields separately, along with decoded_offset.
+    indexCheckpoint(checkpoint);
+}
+```
+
+A raw decoder at completion reports the exact final EOB position, before any
+padding. Completed zlib and gzip decoders report the byte after the last
+validated footer, excluding any accepted trailing-data probe. Stored-only
+positions are byte-aligned even if part of the next header is buffered.
+The query returns null inside a block, during wrapper header/footer parsing
+and auto detection, between members, or while a recorded decode error remains.
+It works after ordinary stepping too and produces no new pause events. Raw
+Deflate64 uses the same position representation.
+
+Keep both compressed fields: a full-width byte offset can overflow if multiplied
+by eight. The coordinate does not contain window history or dictionary state;
+use the existing state-clone or recovery APIs where that state is needed.
+
 ## Validation
 
 Tests generate raw, zlib and gzip streams with 64-byte encoder blocks, producing
@@ -45,10 +77,11 @@ streams using default and fixed strategies, with `Z_BLOCK`, `Z_PARTIAL_FLUSH`,
 `Z_SYNC_FLUSH` or `Z_FULL_FLUSH` between input chunks and an empty final block.
 A mixed-tail case applies PARTIAL, SYNC and FULL in sequence after the last
 `Z_BLOCK`, without new plaintext, to exercise several EOBs at the same output
-position. Libz `inflate(Z_BLOCK)` supplies each non-final EOB position as a bit offset
-and decoded byte count. The comparison excludes libz's wrapper-header and
-final-block returns; it checks the Vort contract of reporting stops between
-DEFLATE blocks, not exact equivalence of the wrapper APIs.
+position. Libz `inflate(Z_BLOCK)` supplies each non-final EOB bit offset and
+decoded byte count, compared with the public `blockBoundaryPosition()` query.
+The checkpoint counts exclude wrapper headers and the final block. Separate
+checks compare the exact raw final EOB against libz and the completed wrapper
+position against its byte-aligned footer end.
 
 Vort runs compact, semantic and automatic-wrapper routes with a hard output
 cap equal to the plaintext length. Schedules include one-byte transport,
@@ -67,9 +100,9 @@ System libz 1.2.11 and zlib-ng 1.3.2.zlib-ng (`a0467052`, compat build) each
 passed 60 wires, 520 runs, and 1,976 exact checkpoints. Each reported 1,144
 checkpoints at the hard output cap, 90 completed semantic blocks, and 72
 checkpoints where neither the input nor the output byte count advanced. The
-same oracle linked to pre-fix Vort `f9dc91d7` rejected the first raw `Z_BLOCK`
-case with `UnexpectedCompletion` after the checkpoint was skipped; the fix
-and current source pass. These are conformance counts, not performance data.
+earlier internal-state oracle linked to pre-fix Vort `f9dc91d7` rejected the
+first raw `Z_BLOCK` case with `UnexpectedCompletion` after the checkpoint was
+skipped; the fix and the current public-position oracle pass. These are conformance counts, not performance data.
 
 This establishes the decoder-side checkpoint contract. It does not add an
 encoder checkpoint, a whole-stream save/restore format, or a

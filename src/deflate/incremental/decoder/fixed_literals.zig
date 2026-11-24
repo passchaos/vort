@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const clone_storage = @import("../clone_storage.zig");
+const block_position = @import("../block_boundary_position.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const huffman = @import("../../../huffman.zig");
@@ -360,6 +361,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         }
         pub fn atBlockBoundary(self: *const Self) bool {
             return self.phase == .block_header or self.phase == .done;
+        }
+
+        /// Position of the next block header, or the final raw EOB before padding.
+        pub fn blockBoundaryPosition(self: *const Self) ?block_position.Position {
+            if (!self.atBlockBoundary() or self.last_error_name.len != 0) return null;
+            return block_position.fromReservoir(self.total_input, self.bit_count, self.total_output);
         }
 
         pub fn finish(self: *Self) Error!void {

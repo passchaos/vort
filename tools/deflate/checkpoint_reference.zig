@@ -64,7 +64,12 @@ fn encodePart(a: std.mem.Allocator, stream: *C.z_stream, result: *std.ArrayList(
     }
 }
 
-pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plain: []const u8) ![]Boundary {
+pub const Trace = struct {
+    checkpoints: []Boundary,
+    final_eob_bits: usize,
+};
+
+pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plain: []const u8) !Trace {
     var stream: C.z_stream = std.mem.zeroes(C.z_stream);
     if (C.inflateInit2_(&stream, ref.bits(wrapper), C.ZLIB_VERSION, @sizeOf(C.z_stream)) != C.Z_OK)
         return error.LibzInit;
@@ -78,6 +83,7 @@ pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plai
     var result: std.ArrayList(Boundary) = .empty;
     errdefer result.deinit(a);
     var wrapper_header_pending = wrapper != .raw;
+    var final_eob_bits: ?usize = null;
     while (true) {
         const previous_in = stream.total_in;
         const previous_out = stream.total_out;
@@ -85,7 +91,8 @@ pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plai
         if (status == C.Z_STREAM_END) {
             if (wrapper_header_pending or stream.total_in != wire.len or stream.total_out != plain.len or !std.mem.eql(u8, output[0..plain.len], plain))
                 return error.LibzPlaintext;
-            return result.toOwnedSlice(a);
+            const end_bits = final_eob_bits orelse return error.LibzMissingFinalBoundary;
+            return .{ .checkpoints = try result.toOwnedSlice(a), .final_eob_bits = end_bits };
         }
         if (status != C.Z_OK and status != C.Z_BUF_ERROR) return error.LibzInflate;
         const at_boundary = stream.data_type & 128 != 0;
@@ -93,15 +100,19 @@ pub fn boundaries(a: std.mem.Allocator, wrapper: Wrapper, wire: []const u8, plai
             if (wrapper_header_pending) {
                 if (stream.total_out != 0) return error.LibzMissingWrapperHeader;
                 wrapper_header_pending = false;
-            } else if (stream.data_type & 64 == 0) {
-                // Z_BLOCK stops after a nonfinal EOB, possibly partway through
-                // the last accepted byte. Compare logical input positions.
+            } else {
+                // Z_BLOCK stops after an EOB, possibly partway through the
+                // last accepted byte. Keep the final raw end before padding.
                 const retained: usize = @intCast(stream.data_type & 63);
                 if (retained >= 8) return error.LibzBoundaryAlignment;
                 const bits = @as(usize, @intCast(stream.total_in)) * 8 - retained;
-                if (result.items.len != 0 and bits <= result.items[result.items.len - 1].bits)
+                if (final_eob_bits != null or (result.items.len != 0 and bits <= result.items[result.items.len - 1].bits))
                     return error.LibzRepeatedBoundary;
-                try result.append(a, .{ .bits = bits, .output = @intCast(stream.total_out) });
+                if (stream.data_type & 64 != 0) {
+                    final_eob_bits = bits;
+                } else {
+                    try result.append(a, .{ .bits = bits, .output = @intCast(stream.total_out) });
+                }
             }
         }
         if (!at_boundary and stream.total_in == previous_in and stream.total_out == previous_out)

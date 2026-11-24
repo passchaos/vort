@@ -5,6 +5,7 @@ const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
+const block_position = @import("../block_boundary_position.zig");
 const step_borrows = @import("step_borrows.zig");
 const header_events = @import("gzip_header_events.zig");
 
@@ -231,6 +232,16 @@ pub fn Decoder(comptime Codec: type) type {
         }
         pub fn atBlockBoundary(self: *const Self) bool {
             return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
+        }
+
+        /// Absolute payload checkpoint or the end of the last validated footer.
+        pub fn blockBoundaryPosition(self: *const Self) ?block_position.Position {
+            if (self.last_error_name.len != 0) return null;
+            return switch (self.phase) {
+                .raw => block_position.inWrapper(self.raw.blockBoundaryPosition() orelse return null, self.raw.total_input, self.total_input, self.total_output),
+                .done => block_position.atByte(self.member_end_offset orelse return null, self.total_output),
+                else => null,
+            };
         }
 
         /// Resume raw-DEFLATE decoding after an external scanner consumed the

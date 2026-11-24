@@ -58,7 +58,8 @@ pub fn main(init: std.process.Init) !void {
                 for ([_]c_int{ C.Z_DEFAULT_STRATEGY, C.Z_FIXED }) |strategy| {
                     const wire = try ref.encode(allocator, format[0], fixture.plain, fixture.chunk_len, flush, strategy);
                     defer allocator.free(wire);
-                    const expected = try ref.boundaries(allocator, format[0], wire, fixture.plain);
+                    const trace = try ref.boundaries(allocator, format[0], wire, fixture.plain);
+                    const expected = trace.checkpoints;
                     defer allocator.free(expected);
                     if (expected.len == 0 or expected[expected.len - 1].output != fixture.plain.len)
                         return error.MissingReferencePlateau;
@@ -71,18 +72,18 @@ pub fn main(init: std.process.Init) !void {
                     }
                     counts.reference_wires += 1;
                     for (schedules) |schedule| {
-                        check(format[1], allocator, history, wire, fixture.plain, expected, schedule, null, &counts) catch |err| {
+                        check(format[1], allocator, history, wire, fixture.plain, trace, schedule, null, &counts) catch |err| {
                             logFailure(format[0], flush, strategy, fixture.plain.len, schedule, "compact");
                             return err;
                         };
                         if (format[0] != .raw) {
-                            check(Auto, allocator, history, wire, fixture.plain, expected, schedule, null, &counts) catch |err| {
+                            check(Auto, allocator, history, wire, fixture.plain, trace, schedule, null, &counts) catch |err| {
                                 logFailure(format[0], flush, strategy, fixture.plain.len, schedule, "auto");
                                 return err;
                             };
                         }
                         if (schedule.input_max == std.math.maxInt(usize)) {
-                            check(format[1], allocator, history, wire, fixture.plain, expected, schedule, semantic, &counts) catch |err| {
+                            check(format[1], allocator, history, wire, fixture.plain, trace, schedule, semantic, &counts) catch |err| {
                                 logFailure(format[0], flush, strategy, fixture.plain.len, schedule, "semantic");
                                 return err;
                             };
@@ -120,11 +121,12 @@ fn check(
     history: []u8,
     wire: []const u8,
     plain: []const u8,
-    expected: []const ref.Boundary,
+    trace: ref.Trace,
     schedule: Schedule,
     semantic: ?*Raw.SemanticWorkspace,
     counts: *Counts,
 ) !void {
+    const expected = trace.checkpoints;
     const options: Decoder.Options = .{ .expected_output_len = plain.len, .max_output_len = plain.len };
     var decoder = if (Decoder == Raw) try Raw.initWithHistory(options, history) else try Decoder.init(options, history);
     if (Decoder != Auto) {
@@ -150,7 +152,9 @@ fn check(
         if (r.block_boundary) {
             if (r.status != .need_input or !decoder.atBlockBoundary() or checkpoint == expected.len)
                 return error.UnexpectedCheckpoint;
-            const bits = read * 8 - rawState(&decoder).bit_count;
+            const position = decoder.blockBoundaryPosition() orelse return error.MissingCheckpointPosition;
+            const bits = @as(usize, @intCast(position.compressed_byte_offset)) * 8 + position.compressed_bit_offset;
+            if (position.decoded_offset != written) return error.CheckpointOutputMismatch;
             const result: ref.Boundary = .{ .bits = bits, .output = written };
             if (!std.meta.eql(result, expected[checkpoint])) {
                 std.log.err("checkpoint {d}: expected bits={d} output={d}, got bits={d} output={d}", .{ checkpoint, expected[checkpoint].bits, expected[checkpoint].output, bits, written });
@@ -164,6 +168,17 @@ fn check(
             try decoder.finish();
             if (checkpoint != expected.len or read != wire.len or written != plain.len)
                 return error.UnexpectedCompletion;
+            const position = decoder.blockBoundaryPosition() orelse return error.MissingCheckpointPosition;
+            if (position.decoded_offset != written) return error.CheckpointOutputMismatch;
+            if (Decoder == Raw) {
+                const bits = @as(usize, @intCast(position.compressed_byte_offset)) * 8 + position.compressed_bit_offset;
+                if (bits != trace.final_eob_bits) {
+                    std.log.err("final EOB: expected bits={d}, got bits={d}", .{ trace.final_eob_bits, bits });
+                    return error.CheckpointFinalEobMismatch;
+                }
+            } else if (position.compressed_byte_offset != read or position.compressed_bit_offset != 0) {
+                return error.CheckpointFooterMismatch;
+            }
             if (guarded[0] != sentinel or guarded[guarded.len - 1] != sentinel) return error.OutputGuardChanged;
             counts.runs += 1;
             counts.semantic_blocks += rawState(&decoder).semanticBlocksCompleted();

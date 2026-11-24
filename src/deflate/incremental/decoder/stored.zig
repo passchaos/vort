@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const clone_storage = @import("../clone_storage.zig");
+const block_position = @import("../block_boundary_position.zig");
 const step_borrows = @import("step_borrows.zig");
 const count = core.stream_count;
 const Count = core.StreamCount;
@@ -164,6 +165,16 @@ pub const Decoder = struct {
     }
     pub fn atBlockBoundary(self: *const Decoder) bool {
         return self.phase == .header or self.phase == .done;
+    }
+
+    /// A partly buffered header still starts at its original byte offset.
+    pub fn blockBoundaryPosition(self: *const Decoder) ?block_position.Position {
+        if (self.last_error_name.len != 0) return null;
+        return switch (self.phase) {
+            .header => block_position.atByte(self.total_input - count.fromLocal(self.header_received), self.total_output),
+            .done => block_position.atByte(self.total_input, self.total_output),
+            .payload => null,
+        };
     }
 
     fn admitStep(self: *const Decoder, input: []const u8, output: []u8) Error!void {

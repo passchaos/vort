@@ -3547,6 +3547,7 @@ pub const ZlibIncrementalBestEncoder = deflate.ZlibIncrementalBestEncoder;
 pub const GzipIncrementalBestEncoder = deflate.GzipIncrementalBestEncoder;
 pub const RawDeflateIncrementalStoredDecoder = deflate.RawDeflateIncrementalStoredDecoder;
 pub const RawDeflateIncrementalFixedLiteralDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+pub const DeflateBlockBoundaryPosition = deflate.BlockBoundaryPosition;
 pub const RawDeflateSyncPoint = deflate.RawDeflateSyncPoint;
 pub const RawDeflateSyncScanner = deflate.RawDeflateSyncScanner;
 pub const RawDeflateSyncScanResult = deflate.RawDeflateSyncScanResult;
