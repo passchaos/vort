@@ -10,7 +10,8 @@ pub fn decode(io: std.Io, input_path: []const u8, output_path: []const u8, decod
     const dir = std.Io.Dir.cwd();
     const from_stdin = isStdio(input_path);
     const input = if (from_stdin) std.Io.File.stdin() else try dir.openFile(io, input_path, .{});
-    defer if (!from_stdin) input.close(io);
+    var input_open = !from_stdin;
+    defer if (input_open) input.close(io);
 
     if (isStdio(output_path)) {
         // A producer may wait for decoded output before writing its next chunk.
@@ -23,6 +24,10 @@ pub fn decode(io: std.Io, input_path: []const u8, output_path: []const u8, decod
     var buffer: [32 * 1024]u8 = undefined;
     var writer = atomic.file.writerStreaming(io, &buffer);
     try pump(io, input, &writer.interface, decoder);
+    if (input_open) {
+        input.close(io);
+        input_open = false;
+    }
     try writer.interface.flush();
     try atomic.replace(io);
 }

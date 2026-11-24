@@ -41,6 +41,7 @@ pub fn Decoder(comptime Codec: type) type {
         member_count: Count = 0,
         member_offset: Count = 0,
         member_end_offset: ?Count = null,
+        padding_started: bool = false,
         prefix: member_prefix.Prefix = .{},
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
@@ -72,6 +73,10 @@ pub fn Decoder(comptime Codec: type) type {
             /// the next member; a split candidate prefix can be recovered with
             /// `trailingPrefix` after this decoder reaches done.
             allow_trailing_data: bool = false,
+            /// Consume an all-zero tail after the last validated footer.
+            /// Once padding starts, no later member is allowed. Call finish
+            /// at EOF. Mutually exclusive with allow_trailing_data.
+            allow_trailing_zero_padding: bool = false,
         };
         pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, between_members, done };
         pub const Snapshot = struct {
@@ -102,6 +107,7 @@ pub fn Decoder(comptime Codec: type) type {
         };
 
         pub fn init(options: Options, history: []u8) Error!Self {
+            if (options.allow_trailing_data and options.allow_trailing_zero_padding) return error.InvalidBlockPlan;
             return .{
                 .options = options,
                 .raw = try Codec.RawDecoder.initWithHistory(.{
@@ -144,6 +150,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.member_count = 0;
             self.member_offset = 0;
             self.member_end_offset = null;
+            self.padding_started = false;
             self.prefix.reset();
             self.configureRawForMember();
             self.last_error_name = "";
@@ -196,7 +203,7 @@ pub fn Decoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) Error!void {
             self.input_finished = true;
-            if (self.options.allow_concatenated and self.phase == .between_members) {
+            if (self.phase == .between_members) {
                 try self.validateExpectedOutput();
                 self.phase = .done;
                 return;
@@ -214,7 +221,7 @@ pub fn Decoder(comptime Codec: type) type {
             return self.prefix.bytes[0..self.prefix.received];
         }
         /// Compressed offset immediately after the last validated footer.
-        /// Unlike total_input this excludes an accepted trailing-data probe.
+        /// Unlike total_input this excludes trailing probes and zero padding.
         pub fn memberEndOffset(self: *const Self) ?Count {
             return self.member_end_offset;
         }
@@ -473,10 +480,21 @@ pub fn Decoder(comptime Codec: type) type {
                     try count.advance(&self.member_count, 1);
                     self.member_end_offset = self.total_input;
                     self.prefix.reset();
-                    self.phase = if (self.options.allow_concatenated) .between_members else .done;
+                    self.phase = if (self.options.allow_concatenated or self.options.allow_trailing_zero_padding) .between_members else .done;
                 },
                 .between_members => {
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
+                    if (self.padding_started or (self.options.allow_trailing_zero_padding and input[input_read] == 0)) {
+                        const suffix = input[input_read..];
+                        var zeros: usize = 0;
+                        while (zeros < suffix.len and suffix[zeros] == 0) : (zeros += 1) {}
+                        self.total_input = try count.addLocal(self.total_input, zeros);
+                        self.padding_started = true;
+                        input_read += zeros;
+                        if (input_read != input.len) return self.fail(.between_members, error.TrailingData);
+                        return result(input_read, output_written, .need_input);
+                    }
+                    if (!self.options.allow_concatenated) return self.fail(.between_members, error.TrailingData);
                     if (!self.options.allow_trailing_data) {
                         self.beginMember(self.total_input);
                         continue;

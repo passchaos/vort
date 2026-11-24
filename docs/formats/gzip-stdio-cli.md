@@ -24,7 +24,20 @@ footer or stdin EOF. A bad footer, incomplete member, or non-member suffix
 fails the command; output already written to stdout cannot be withdrawn.
 When reading stdin into a named destination, the command is quiet on success
 and replaces the file only after validation reaches EOF. Two named paths retain
-the original one-shot decoding and summary.
+the original one-shot decoding and summary by default.
+
+### Optional terminal zero padding
+
+Pass `--allow-zero-padding` to accept an all-zero suffix after a validated
+member, as GNU gzip does. The default remains strict. Once the first padding
+byte arrives, any nonzero byte, including another member header, is rejected.
+A file containing only zeros is not a gzip stream.
+
+The flag uses incremental decoding for both named and pipe endpoints. The
+incremental library option is `allow_trailing_zero_padding`; it works for
+single members and concatenated streams and cannot be combined with arbitrary
+`allow_trailing_data` handling. Padding counts as consumed input, not as part
+of the last member, and EOF is confirmed with `finish()`.
 
 `zig build test-gzip-stdio-cli` checks these contracts on the native CLI and
 the WASI decode probe, including progressive output and atomic replacement.

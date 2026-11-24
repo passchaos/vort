@@ -2965,8 +2965,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Inspect a zlib FDICT file using a preset dictionary file
         \\  decode-gzip-hex [hex] [max_output]
         \\                              Decode gzip-wrapped deflate hex to text
-        \\  decode-gzip-file <in|-> <out|-> [max_output]
-        \\  decode-gzip-concat-file <in|-> <out|-> [max_output]
+        \\  decode-gzip-file <in|-> <out|-> [max_output] [--allow-zero-padding]
+        \\  decode-gzip-concat-file <in|-> <out|-> [max_output] [--allow-zero-padding]
+        \\                              --allow-zero-padding accepts an all-zero suffix after the final member
         \\                              Decode gzip members; '-' selects streaming stdin or binary stdout
         \\  inspect-gzip-header-hex [hex] [text|json]
         \\                              Print parsed gzip header metadata for hex input

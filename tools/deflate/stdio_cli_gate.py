@@ -54,8 +54,10 @@ def corrupt_footer(wire, offset):
 
 
 def check_modes(argv, cwd):
-    def decode(src, dst, cap=None, *, wire=b""):
+    def decode(src, dst, cap=None, *, wire=b"", allow_zero_padding=False):
         options = [] if cap is None else [str(cap)]
+        if allow_zero_padding:
+            options.append("--allow-zero-padding")
         return subprocess.run([*argv, src, dst, *options], cwd=cwd, input=wire,
                               capture_output=True, timeout=TIMEOUT)
 
@@ -86,11 +88,12 @@ def check_modes(argv, cwd):
     success("empty member with zero cap", decode("-", "-", 0, wire=EMPTY_WIRE))
     success("empty member after cumulative cap is exhausted", decode("-", "-", cap, wire=WIRE + EMPTY_WIRE), PLAIN)
 
-    def reject(label, wire, error, allowed_prefix=b"", cap=None):
-        failure(label, decode("-", "-", cap, wire=wire), error, allowed_prefix)
+    def reject(label, wire, error, allowed_prefix=b"", cap=None, *, allow_zero_padding=False):
+        options = {"wire": wire, "allow_zero_padding": allow_zero_padding}
+        failure(label, decode("-", "-", cap, **options), error, allowed_prefix)
         out.write_bytes(SENTINEL)
         old_inode = out.stat().st_ino
-        failure(f"{label} to file", decode("-", out.name, cap, wire=wire), error)
+        failure(f"{label} to file", decode("-", out.name, cap, **options), error)
         require(out.read_bytes() == SENTINEL, f"{label}: existing destination changed")
         if os.name == "posix":
             require(out.stat().st_ino == old_inode, f"{label}: existing destination was replaced")
@@ -114,6 +117,19 @@ def check_modes(argv, cwd):
     reject("nonempty member after cap is exhausted", WIRE, "OutputLimitExceeded", FIRST, len(FIRST))
     failure("file to stdout with insufficient cumulative cap", decode(source.name, "-", cap - 1),
             "OutputLimitExceeded", PLAIN[:-1])
+
+    # Padding exceeds the CLI read buffer and must be consumed without output.
+    padding = b"\x00" * (32 * 1024 + 1)
+    padded = WIRE + padding
+    source.write_bytes(padded)
+    success("padded file to stdout at exact cap", decode(source.name, "-", cap, allow_zero_padding=True), PLAIN)
+    success("padded stdin to file", decode("-", out.name, wire=padded, allow_zero_padding=True))
+    require(out.read_bytes() == PLAIN, "padded stdin to file: wrong payload")
+    success("padded empty member at zero cap", decode("-", "-", 0, wire=EMPTY_WIRE + padding, allow_zero_padding=True))
+    reject("junk after padding", padded + b"!", "TrailingData", PLAIN, cap, allow_zero_padding=True)
+    reject("member after padding", FIRST_WIRE + b"\x00" + SECOND_WIRE, "TrailingData", FIRST,
+           allow_zero_padding=True)
+    reject("padding without a member", padding[:HEADER_SIZE], "BadGzipHeader", allow_zero_padding=True)
 
     out.unlink()
     failure("truncation to missing destination", decode("-", out.name, wire=WIRE[:-1]), "TruncatedFrame")

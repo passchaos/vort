@@ -10,14 +10,33 @@ pub fn isGzipDecodeFileCommand(command: []const u8) bool {
 pub fn decodeGzipFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
-    const limit = args.next();
-    if (decode_stdio.isStdio(input_path) or decode_stdio.isStdio(output_path)) {
+    var limit: ?[]const u8 = null;
+    var allow_padding = false;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--allow-zero-padding")) {
+            if (allow_padding) return error.DuplicateGzipOption;
+            allow_padding = true;
+        } else if (std.mem.startsWith(u8, arg, "--")) {
+            return error.UnknownGzipOption;
+        } else {
+            if (limit != null) return error.UnexpectedArgument;
+            limit = arg;
+        }
+    }
+    const stdio = decode_stdio.isStdio(input_path) or decode_stdio.isStdio(output_path);
+    if (stdio or allow_padding) {
         var history: [vort.lz77.default_window_len]u8 = undefined;
         var decoder = try vort.GzipIncrementalDecoder.init(.{
             .allow_concatenated = true,
+            .allow_trailing_zero_padding = allow_padding,
             .max_output_len = if (limit) |value| try std.fmt.parseInt(vort.StreamCount, value, 10) else std.math.maxInt(vort.StreamCount),
         }, &history);
-        return decode_stdio.decode(init.io, input_path, output_path, &decoder);
+        try decode_stdio.decode(init.io, input_path, output_path, &decoder);
+        if (!stdio) {
+            const state = decoder.snapshot();
+            try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ state.total_input, state.total_output, output_path });
+        }
+        return;
     }
 
     const max_output_len = if (limit) |value| try std.fmt.parseInt(usize, value, 10) else null;
