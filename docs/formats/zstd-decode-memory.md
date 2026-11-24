@@ -75,6 +75,18 @@ a zero limit cannot admit such an allocation.
 
 ## Validation
 
+`run-zstd-full-dictionary-diff` extends the single-dictionary comparison with
+four checksummed, upstream multi-block frames and two skippable markers. Two
+independently trained dictionaries are selected in A/B/B/A order; half the
+frames omit their content size. A same-ID dictionary substitution checks that
+selection depends on dictionary content or entropy, not just its ID. Both
+incremental input policies check catalog selection and recovery after a
+wrong-ID refusal, with a second request for the next B frame. Recovery is
+checked at explicit boundaries and during automatic traversal, including when
+prevalidated input has already buffered the requested frame's body. Source
+inspection, whole-stream decode and cursor retry use the same upstream wire
+and check the exact compressed offsets and complete plaintext.
+
 The public contracts use independently observed allocation peaks and compare
 an exact successful cap `D` with refusal at `D - 1`. They cover raw, RLE and
 compressed frames, checksum verification, standard and magicless formats,
