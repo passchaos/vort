@@ -1,5 +1,16 @@
 # Encoder optimization status
 
+## 2026-11-25 complete 1 MiB allocating-preset cohort
+
+The [same current epoch](modern-encode-refresh-20261125/README.md) now retains
+all 72 conditions at 1 MiB as well as the original 64 KiB cohort. Across twelve
+corpora, Deflate L6/L9 reaches 0.38189/0.15748x reference throughput at
+1.0130/1.0045x size (L9 reference is libdeflate L12). Public Zstd L3/L19 is
+0.08173/0.47871x throughput and 1.0259/1.1840x size; Brotli q8/q11 is
+0.06099/0.30491x throughput and 0.9881/1.0472x size. The actual full-file
+cohort continues in the original process. Those pending rows remain outside
+this checkpoint; no codec speedup is attributed to the measurement repair.
+
 ## 2026-11-25 current allocating-preset checkpoint
 
 The [current 64 KiB checkpoint](modern-encode-refresh-20261125/README.md)
