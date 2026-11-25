@@ -4,6 +4,17 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-25 current-source decode baseline
+
+The [current refresh](modern-decode-refresh-20261125/README.md) binds
+`06d8086d` to the same 360 lifecycle rows and 2,160 measured pairs against
+libdeflate 1.26, libzstd 1.6.0 and libbrotli 1.2.0. The 72-row matched-cold
+throughput ratios are **68.75% / 79.02% / 83.15%**; matched prepared Zstd
+is **81.00%**. Deflate reference-only preparation stays separate. The largest
+aggregate gap is Deflate, while full Mozilla q11 Brotli is the weakest single
+cold row at **48.41%**. The archive includes all raw samples; RSS covers both
+participants in each child, not a per-implementation memory comparison.
+
 ## 2026-11-12 exact-copy full-matrix rejection
 
 The [three exact-copy trials](deflate/exact-copy-interleaved-20261112/README.md)

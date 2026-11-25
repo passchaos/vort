@@ -1,0 +1,107 @@
+{
+  "brotli/cold": {
+    "rows": 72,
+    "time_ratio_geomean": 1.2027146970244265,
+    "throughput_ratio_geomean": 0.8314523822433099,
+    "ci95": [
+      1.1961820855405687,
+      1.2086256141301144
+    ],
+    "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+    "seed": 539365669,
+    "resamples": 2000,
+    "vort_mib_per_second_geomean": 391.57490662214127,
+    "reference_mib_per_second_geomean": 470.9528951804168,
+    "paired_child_rss_kib": {
+      "min": 4856,
+      "median": 10488.0,
+      "max": 242976
+    },
+    "weakest_task": "brotli_mozilla_full_11_cold",
+    "weakest_throughput_ratio": 0.4841047720138368
+  },
+  "deflate/cold": {
+    "rows": 72,
+    "time_ratio_geomean": 1.454542622524638,
+    "throughput_ratio_geomean": 0.6875013385749452,
+    "ci95": [
+      1.4522650394877499,
+      1.456731285234788
+    ],
+    "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+    "seed": 539365670,
+    "resamples": 2000,
+    "vort_mib_per_second_geomean": 884.698168967176,
+    "reference_mib_per_second_geomean": 1286.8311948322616,
+    "paired_child_rss_kib": {
+      "min": 3432,
+      "median": 7992.0,
+      "max": 240504
+    },
+    "weakest_task": "deflate_mr_65536_9_cold",
+    "weakest_throughput_ratio": 0.6000076533073155
+  },
+  "deflate/prepared": {
+    "rows": 72,
+    "time_ratio_geomean": 1.4591979604732648,
+    "throughput_ratio_geomean": 0.6853079754001766,
+    "ci95": [
+      1.454039411948195,
+      1.4642475631938314
+    ],
+    "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+    "seed": 539365671,
+    "resamples": 2000,
+    "vort_mib_per_second_geomean": 886.3264599797176,
+    "reference_mib_per_second_geomean": 1293.3257627158932,
+    "paired_child_rss_kib": {
+      "min": 3448,
+      "median": 7992.0,
+      "max": 240504
+    },
+    "weakest_task": "deflate_reymont_65536_9_prepared",
+    "weakest_throughput_ratio": 0.5945617678430661
+  },
+  "zstd/cold": {
+    "rows": 72,
+    "time_ratio_geomean": 1.2655290504997825,
+    "throughput_ratio_geomean": 0.7901833621322878,
+    "ci95": [
+      1.2634729229938022,
+      1.2675899461505766
+    ],
+    "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+    "seed": 539365672,
+    "resamples": 2000,
+    "vort_mib_per_second_geomean": 1118.4756641300376,
+    "reference_mib_per_second_geomean": 1415.463445233599,
+    "paired_child_rss_kib": {
+      "min": 3960,
+      "median": 8568.0,
+      "max": 239480
+    },
+    "weakest_task": "zstd_mozilla_1048576_3_cold",
+    "weakest_throughput_ratio": 0.6039905649980714
+  },
+  "zstd/prepared": {
+    "rows": 72,
+    "time_ratio_geomean": 1.2345571135899327,
+    "throughput_ratio_geomean": 0.8100070778354912,
+    "ci95": [
+      1.2320313280140411,
+      1.2371482166541197
+    ],
+    "method": "order-stratified paired log-ratio bootstrap; fixed rows",
+    "seed": 539365673,
+    "resamples": 2000,
+    "vort_mib_per_second_geomean": 1136.1872355412343,
+    "reference_mib_per_second_geomean": 1402.6880340075109,
+    "paired_child_rss_kib": {
+      "min": 4088,
+      "median": 8568.0,
+      "max": 239608
+    },
+    "weakest_task": "zstd_mozilla_1048576_3_prepared",
+    "weakest_throughput_ratio": 0.6026834539971885
+  }
+}
