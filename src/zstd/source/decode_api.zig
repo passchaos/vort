@@ -26,10 +26,12 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const byte_source = @import("../../io/source.zig");
 const history_workspace = @import("../decode/history_workspace.zig");
+const frame_count_limit = @import("../frame/count_limit.zig");
 const frame_executor = @import("frame_executor.zig");
 const source_frame = @import("frame.zig");
 const source_input = @import("input.zig");
 const stream_cursor = @import("stream_cursor.zig");
+const stream_progress = @import("stream_progress.zig");
 const output_alias = @import("output_alias.zig");
 
 const Count = core.StreamCount;
@@ -59,6 +61,9 @@ pub fn Facade(comptime Support: type) type {
             dictionary_set: ?Support.DecodeDictionarySet = null,
             frame_decoded_max: Count = std.math.maxInt(Count),
             ignore_checksum: bool = false,
+            /// Reject a larger advertised window before looking up a dictionary
+            /// or reading a block header. Independent of workspace capacity.
+            max_window_size: Count = std.math.maxInt(Count),
         };
 
         pub const StreamOptions = struct {
@@ -69,7 +74,15 @@ pub fn Facade(comptime Support: type) type {
             dictionary_set: ?Support.DecodeDictionarySet = null,
             frame_decoded_max: Count = std.math.maxInt(Count),
             total_decoded_max: Count = std.math.maxInt(Count),
+            /// Limit on the combined number of data and skippable frames,
+            /// including empty frames. The first excess valid header returns
+            /// `OutputLimitExceeded` before its frame body is processed.
+            /// For cursor traversal, set the limit at cursor initialization.
+            max_frames: Count = frame_count_limit.unlimited,
             ignore_checksum: bool = false,
+            /// Maximum advertised window of each inspected or decoded data
+            /// frame. Header-only cursor traversal and `skipData` ignore it.
+            max_window_size: Count = std.math.maxInt(Count),
         };
 
         pub const FrameInfo = struct {
@@ -105,6 +118,23 @@ pub fn Facade(comptime Support: type) type {
             skippable_frames: usize,
         };
 
+        pub const StreamCheckpoint = stream_progress.Checkpoint;
+        pub const StreamProgress = stream_progress.Progress;
+        pub const StreamOutcome = union(enum) {
+            complete: StreamProgress,
+            failed: struct {
+                err: Error,
+                progress: StreamProgress,
+                /// Present when a data frame header was admitted for decode.
+                frame: ?DataFrameInfo,
+            },
+        };
+
+        const StreamObservation = struct {
+            progress: StreamProgress,
+            frame: ?DataFrameInfo = null,
+        };
+
         pub const DataFrameInfo = struct {
             /// Absolute source offset of the frame's first byte.
             offset: u64,
@@ -131,7 +161,22 @@ pub fn Facade(comptime Support: type) type {
             skippable: SkippableFrameInfo,
         };
 
-        const Parsed = struct {
+        fn frameInfo(frame: source_frame.DataFrameLayout) DataFrameInfo {
+            return .{
+                .offset = frame.available.offset,
+                .dictionary_id = frame.header.dictionary_id,
+                .window_size = frame.header.window_size,
+                .content_size = frame.header.content_size,
+                .has_checksum = frame.header.has_checksum,
+                .single_segment = frame.header.single_segment,
+                .block_size_max = frame.header.block_size_max,
+            };
+        }
+
+        // Shared with the seekable source adapter; public facades export only
+        // the caller-facing options and operations, not this prepared state.
+        pub const FrameState = Support.State;
+        pub const Parsed = struct {
             frame: source_frame.DataFrameLayout,
             dictionary: ?Support.DecodeDictionary,
             dictionary_id: u32,
@@ -141,39 +186,34 @@ pub fn Facade(comptime Support: type) type {
         fn resolveDictionary(
             header_id: u32,
             dictionary: ?Support.DecodeDictionary,
+            dictionary_set: ?Support.DecodeDictionarySet,
         ) Error!?Support.DecodeDictionary {
             if (header_id == 0) return dictionary;
-            const resolved = dictionary orelse return error.NeedDictionary;
-            if (resolved.id != header_id) return error.DictionaryMismatch;
-            return resolved;
+            if (dictionary_set) |set|
+                if (set.find(header_id)) |entry| return entry;
+            const fallback = dictionary orelse return error.NeedDictionary;
+            if (fallback.id != header_id) return error.DictionaryMismatch;
+            return fallback;
         }
 
-        fn fromLayout(
+        pub fn admitFrame(
             frame: source_frame.DataFrameLayout,
-            dictionary: ?Support.DecodeDictionary,
+            options: anytype,
         ) Error!Parsed {
-            const resolved = try resolveDictionary(
-                frame.header.dictionary_id,
-                dictionary,
+            if (frame.header.window_size > options.max_window_size)
+                return error.OutputLimitExceeded;
+            const dictionary_id = frame.header.dictionary_id;
+            const dictionary = try resolveDictionary(
+                dictionary_id,
+                options.dictionary,
+                options.dictionary_set,
             );
             return .{
                 .frame = frame,
-                .dictionary = resolved,
-                .dictionary_id = frame.header.dictionary_id,
-                .dictionary_content = if (resolved) |value| value.content else &.{},
+                .dictionary = dictionary,
+                .dictionary_id = dictionary_id,
+                .dictionary_content = if (dictionary) |value| value.content else &.{},
             };
-        }
-
-        fn resolveFrameDictionary(
-            header_id: u32,
-            options: Options,
-        ) Error!?Support.DecodeDictionary {
-            if (header_id == 0) return options.dictionary;
-            if (options.dictionary_set) |set|
-                if (set.find(header_id)) |dictionary| return dictionary;
-            const fallback = options.dictionary orelse return error.NeedDictionary;
-            if (fallback.id != header_id) return error.DictionaryMismatch;
-            return fallback;
         }
 
         fn parse(source: byte_source.Source, options: Options) Error!Parsed {
@@ -186,16 +226,18 @@ pub fn Facade(comptime Support: type) type {
                 available,
                 options.format,
             );
-            return fromLayout(
-                frame,
-                try resolveFrameDictionary(frame.header.dictionary_id, options),
-            );
+            return admitFrame(frame, options);
         }
+
+        const InspectedFrame = struct {
+            info: FrameInfo,
+            decoded_min: Count,
+        };
 
         fn inspectFrameLayout(
             frame: source_frame.DataFrameLayout,
-            options: Options,
-        ) Error!FrameInfo {
+            frame_decoded_max: Count,
+        ) Error!InspectedFrame {
             var total: Count = 0;
             var all_uncompressed = true;
             var offset = frame.first_block_offset;
@@ -212,19 +254,19 @@ pub fn Facade(comptime Support: type) type {
                 offset = block.next_header_offset;
                 if (block.header.last) break;
             }
-            if (all_uncompressed) {
-                if (frame.header.content_size) |expected|
-                    if (total != expected) return error.SizeMismatch;
-                if (total > options.frame_decoded_max)
-                    return error.OutputLimitExceeded;
+            // Raw and RLE lengths are exact even when compressed blocks
+            // prevent inspection from determining the whole decoded size.
+            if (frame.header.content_size) |expected| {
+                if (total > expected or (all_uncompressed and total != expected))
+                    return error.SizeMismatch;
             }
             const decoded_size: ?Count = if (all_uncompressed)
                 total
             else
                 frame.header.content_size;
-            if (decoded_size) |known|
-                if (known > options.frame_decoded_max)
-                    return error.OutputLimitExceeded;
+            const decoded_min = decoded_size orelse total;
+            if (decoded_min > frame_decoded_max)
+                return error.OutputLimitExceeded;
             if (frame.header.has_checksum) {
                 const end = try frame.available.end();
                 if (offset > end or end - offset < 4)
@@ -232,27 +274,30 @@ pub fn Facade(comptime Support: type) type {
                 offset += 4;
             }
             return .{
-                .content_size = frame.header.content_size,
-                .has_checksum = frame.header.has_checksum,
-                .single_segment = frame.header.single_segment,
-                .window_size = frame.header.window_size,
-                .block_size_max = frame.header.block_size_max,
-                .dictionary_id = frame.header.dictionary_id,
-                .decoded_size = decoded_size,
-                .frame_end_offset = offset,
+                .info = .{
+                    .content_size = frame.header.content_size,
+                    .has_checksum = frame.header.has_checksum,
+                    .single_segment = frame.header.single_segment,
+                    .window_size = frame.header.window_size,
+                    .block_size_max = frame.header.block_size_max,
+                    .dictionary_id = frame.header.dictionary_id,
+                    .decoded_size = decoded_size,
+                    .frame_end_offset = offset,
+                },
+                .decoded_min = decoded_min,
             };
         }
 
         /// Walk block headers without reading payloads or decoding entropy.
         /// The checksum footer is range-checked but its value is not compared.
-        /// Compressed blocks do not carry their regenerated size in the block
-        /// header, so their total is only known from a declared content size.
+        /// Without a declared content size, compressed blocks contribute no
+        /// bytes to the lower bound checked against the decoded cap.
         pub fn inspect(
             source: byte_source.Source,
             options: Options,
         ) Error!FrameInfo {
             const parsed = try parse(source, options);
-            return inspectFrameLayout(parsed.frame, options);
+            return (try inspectFrameLayout(parsed.frame, options.frame_decoded_max)).info;
         }
 
         pub fn decodedSize(
@@ -262,7 +307,7 @@ pub fn Facade(comptime Support: type) type {
             return (try inspect(source, options)).decoded_size;
         }
 
-        fn openFrame(
+        pub fn openFrame(
             parsed: Parsed,
             workspace: Workspace,
             options: Options,
@@ -309,6 +354,16 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: Options,
         ) Error!Result {
+            return decodeFrameIntoObserved(parsed, destination, workspace, options, null);
+        }
+
+        fn decodeFrameIntoObserved(
+            parsed: Parsed,
+            destination: []u8,
+            workspace: Workspace,
+            options: Options,
+            failed_output_written: ?*usize,
+        ) Error!Result {
             try output_alias.validateOperation(destination, workspace, options);
             var history: history_workspace.Binding = undefined;
             var state: Support.State = undefined;
@@ -320,6 +375,9 @@ pub fn Facade(comptime Support: type) type {
                 &state,
             );
             var written: usize = 0;
+            errdefer if (failed_output_written) |published| {
+                published.* = written;
+            };
             while (executor.snapshot().phase != .done) {
                 switch (executor.snapshot().phase) {
                     .drain => {
@@ -460,18 +518,6 @@ pub fn Facade(comptime Support: type) type {
             return output.toOwnedSlice(allocator);
         }
 
-        fn resolveStreamDictionary(
-            header_id: u32,
-            options: StreamOptions,
-        ) Error!?Support.DecodeDictionary {
-            if (header_id == 0) return options.dictionary;
-            if (options.dictionary_set) |set|
-                if (set.find(header_id)) |dictionary| return dictionary;
-            const fallback = options.dictionary orelse return error.NeedDictionary;
-            if (fallback.id != header_id) return error.DictionaryMismatch;
-            return fallback;
-        }
-
         fn streamRange(source: byte_source.Source) Error!source_input.Range {
             return source_input.Range.init(source, 0, source.len);
         }
@@ -486,50 +532,44 @@ pub fn Facade(comptime Support: type) type {
                 .dictionary_set = options.dictionary_set,
                 .frame_decoded_max = frame_decoded_max,
                 .ignore_checksum = options.ignore_checksum,
+                .max_window_size = options.max_window_size,
             };
         }
 
         /// Walk every element header and every data-frame block header without
-        /// reading payloads or decoding entropy.
+        /// reading payloads or decoding entropy. Enforce the cumulative cap
+        /// against the known lower bound even when the exact total is unknown.
         pub fn inspectStream(
             source: byte_source.Source,
             options: StreamOptions,
         ) Error!StreamInfo {
             const range = try streamRange(source);
-            var cursor = stream_cursor.Cursor.init(range, options.format);
-            var total: ?Count = 0;
+            var cursor = stream_cursor.Cursor.initWithFrameLimit(
+                range,
+                options.format,
+                options.max_frames,
+            );
+            var total_min: Count = 0;
+            var total_known = true;
             var data_frames: usize = 0;
             var skippable_frames: usize = 0;
             while (try cursor.next()) |element| {
                 switch (element) {
                     .skippable => skippable_frames += 1,
                     .data => |frame| {
-                        const dictionary = try resolveStreamDictionary(
-                            frame.header.dictionary_id,
-                            options,
-                        );
-                        const parsed = try fromLayout(frame, dictionary);
-                        const info = try inspectFrameLayout(
-                            parsed.frame,
-                            frameOptions(options, options.frame_decoded_max),
-                        );
-                        if (total) |value| {
-                            if (info.decoded_size) |size| {
-                                const next = try count.add(value, size);
-                                if (next > options.total_decoded_max)
-                                    return error.OutputLimitExceeded;
-                                total = next;
-                            } else {
-                                total = null;
-                            }
-                        }
+                        const parsed = try admitFrame(frame, options);
+                        const inspected = try inspectFrameLayout(parsed.frame, options.frame_decoded_max);
+                        total_min = try count.add(total_min, inspected.decoded_min);
+                        if (total_min > options.total_decoded_max)
+                            return error.OutputLimitExceeded;
+                        total_known = total_known and inspected.info.decoded_size != null;
                         data_frames += 1;
-                        try cursor.finishData(info.frame_end_offset);
+                        try cursor.finishData(inspected.info.frame_end_offset);
                     },
                 }
             }
             return .{
-                .total_decoded = total,
+                .total_decoded = if (total_known) total_min else null,
                 .stream_end_offset = cursor.offset(),
                 .data_frames = data_frames,
                 .skippable_frames = skippable_frames,
@@ -555,48 +595,130 @@ pub fn Facade(comptime Support: type) type {
             workspace: Workspace,
             options: StreamOptions,
         ) Error!StreamResult {
+            const complete = (try decodeStreamFromCheckpoint(source, destination, workspace, options, .{ .format = options.format }, null, null)).checkpoint;
+            return .{
+                .decoded_len = complete.decoded_len,
+                .stream_end_offset = complete.compressed_offset,
+                .data_frames = try count.toLocal(complete.data_frames),
+                .skippable_frames = try count.toLocal(complete.skippable_frames),
+            };
+        }
+
+        /// Resume at a trusted complete-element checkpoint from the same
+        /// source. Pass null for a fresh stream. On failure, only the complete
+        /// frame prefix is kept when retrying; the remaining bytes are replayed.
+        pub fn decodeStreamIntoWithProgress(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            options: StreamOptions,
+            checkpoint: ?StreamCheckpoint,
+        ) StreamOutcome {
+            return decodeStreamIntoOutcome(source, destination, workspace, options, checkpoint, null);
+        }
+
+        /// Stage each complete frame in separate caller-owned scratch before
+        /// publishing. A failed frame never changes its destination bytes.
+        pub fn decodeVerifiedStreamIntoWithProgress(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            frame_scratch: []u8,
+            options: StreamOptions,
+            checkpoint: ?StreamCheckpoint,
+        ) StreamOutcome {
+            return decodeStreamIntoOutcome(source, destination, workspace, options, checkpoint, frame_scratch);
+        }
+
+        fn decodeStreamIntoOutcome(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            options: StreamOptions,
+            checkpoint: ?StreamCheckpoint,
+            frame_scratch: ?[]u8,
+        ) StreamOutcome {
+            const start = checkpoint orelse StreamCheckpoint{ .format = options.format };
+            var observation: StreamObservation = .{ .progress = .{ .checkpoint = start } };
+            const complete = decodeStreamFromCheckpoint(source, destination, workspace, options, start, &observation, frame_scratch) catch |err|
+                return .{ .failed = .{ .err = err, .progress = observation.progress, .frame = observation.frame } };
+            return .{ .complete = complete };
+        }
+
+        fn decodeStreamFromCheckpoint(
+            source: byte_source.Source,
+            destination: []u8,
+            workspace: Workspace,
+            options: StreamOptions,
+            start: StreamCheckpoint,
+            observation: ?*StreamObservation,
+            frame_scratch: ?[]u8,
+        ) Error!StreamProgress {
+            var progress: StreamProgress = .{ .checkpoint = start };
+            errdefer if (observation) |observed| {
+                observed.progress = progress;
+            };
             try output_alias.validateOperation(destination, workspace, options);
-            const range = try streamRange(source);
-            var cursor = stream_cursor.Cursor.init(range, options.format);
-            var total: Count = 0;
-            var written: usize = 0;
-            var data_frames: usize = 0;
-            var skippable_frames: usize = 0;
-            while (try cursor.next()) |element| {
+            if (frame_scratch) |scratch| {
+                if (options.ignore_checksum) return error.InvalidBlockPlan;
+                try output_alias.validateRegions(scratch, &.{destination});
+                try output_alias.validateOperation(scratch, workspace, options);
+            }
+            if (start.format != options.format) return error.InvalidBlockPlan;
+            if (start.compressed_offset > source.len) return error.RangeOutOfBounds;
+            _ = try remainingCap(start.decoded_len, options.total_decoded_max);
+            const remaining_frames = try stream_progress.remainingFrames(start, options.max_frames);
+            const range = try source_input.Range.init(source, start.compressed_offset, source.len - start.compressed_offset);
+            var cursor = stream_cursor.Cursor.initWithFrameLimit(range, options.format, remaining_frames);
+            while (true) {
+                if (observation) |observed| observed.frame = null;
+                const element = (try cursor.next()) orelse break;
                 switch (element) {
-                    .skippable => skippable_frames += 1,
+                    .skippable => try count.advance(&progress.checkpoint.skippable_frames, 1),
                     .data => |frame| {
-                        const dictionary = try resolveStreamDictionary(
-                            frame.header.dictionary_id,
-                            options,
-                        );
-                        const parsed = try fromLayout(frame, dictionary);
-                        const cap = try remainingCap(
-                            total,
-                            options.total_decoded_max,
-                        );
-                        const result = try decodeFrameInto(
+                        if (observation) |observed| observed.frame = frameInfo(frame);
+                        const parsed = try admitFrame(frame, options);
+                        const cap = try remainingCap(progress.checkpoint.decoded_len, options.total_decoded_max);
+                        const frame_options = frameOptions(options, @min(options.frame_decoded_max, cap));
+                        const offered = destination[progress.output_written..];
+                        const frame_destination = if (frame_scratch) |scratch|
+                            scratch[0..@min(scratch.len, offered.len)]
+                        else
+                            offered;
+                        if (frame_scratch != null) {
+                            if (frame.header.content_size) |expected| {
+                                if (expected > frame_options.frame_decoded_max) return error.OutputLimitExceeded;
+                                if (expected > frame_destination.len) return error.OutputTooSmall;
+                            }
+                        }
+                        var partial: usize = 0;
+                        const result = decodeFrameIntoObserved(
                             parsed,
-                            destination[written..],
+                            frame_destination,
                             workspace,
-                            frameOptions(
-                                options,
-                                @min(options.frame_decoded_max, cap),
-                            ),
-                        );
-                        written += try count.toLocal(result.decoded_len);
-                        total = try count.add(total, result.decoded_len);
-                        data_frames += 1;
+                            frame_options,
+                            if (observation != null and frame_scratch == null) &partial else null,
+                        ) catch |err| {
+                            progress.output_written += partial;
+                            return err;
+                        };
+                        const len = try count.toLocal(result.decoded_len);
+                        if (frame_scratch == null) progress.output_written += len;
+                        const decoded = try count.add(progress.checkpoint.decoded_len, result.decoded_len);
+                        const frames = try count.add(progress.checkpoint.data_frames, 1);
                         try cursor.finishData(result.frame_end_offset);
+                        if (frame_scratch != null) {
+                            @memcpy(offered[0..len], frame_destination[0..len]);
+                            progress.output_written += len;
+                        }
+                        progress.checkpoint.decoded_len = decoded;
+                        progress.checkpoint.data_frames = frames;
+                        progress.complete_output_written = progress.output_written;
                     },
                 }
+                progress.checkpoint.compressed_offset = cursor.offset();
             }
-            return .{
-                .decoded_len = total,
-                .stream_end_offset = cursor.offset(),
-                .data_frames = data_frames,
-                .skippable_frames = skippable_frames,
-            };
+            return progress;
         }
 
         pub fn decodeStreamAppend(
@@ -608,7 +730,11 @@ pub fn Facade(comptime Support: type) type {
         ) Error!StreamResult {
             try validateAppend(out, workspace, options);
             const range = try streamRange(source);
-            var cursor = stream_cursor.Cursor.init(range, options.format);
+            var cursor = stream_cursor.Cursor.initWithFrameLimit(
+                range,
+                options.format,
+                options.max_frames,
+            );
             var total: Count = 0;
             var data_frames: usize = 0;
             var skippable_frames: usize = 0;
@@ -616,11 +742,7 @@ pub fn Facade(comptime Support: type) type {
                 switch (element) {
                     .skippable => skippable_frames += 1,
                     .data => |frame| {
-                        const dictionary = try resolveStreamDictionary(
-                            frame.header.dictionary_id,
-                            options,
-                        );
-                        const parsed = try fromLayout(frame, dictionary);
+                        const parsed = try admitFrame(frame, options);
                         const cap = try remainingCap(
                             total,
                             options.total_decoded_max,
@@ -681,15 +803,29 @@ pub fn Facade(comptime Support: type) type {
                 source: byte_source.Source,
                 format: stream_cursor.FrameFormat,
             ) Error!Cursor {
-                return .{ .inner = stream_cursor.Cursor.init(
+                return initWithFrameLimit(source, format, frame_count_limit.unlimited);
+            }
+
+            /// Limit the combined number of data and skippable frames returned
+            /// by `next`. Options passed to pending-frame actions do not change
+            /// this traversal limit or count a frame again.
+            pub fn initWithFrameLimit(
+                source: byte_source.Source,
+                format: stream_cursor.FrameFormat,
+                max_frames: Count,
+            ) Error!Cursor {
+                return .{ .inner = stream_cursor.Cursor.initWithFrameLimit(
                     try streamRange(source),
                     format,
+                    max_frames,
                 ) };
             }
 
             /// Parse the next element header. Data frames stay pending until a
             /// completion method runs; skippable frames advance immediately
-            /// and expose their checked payload range without reading it.
+            /// and expose their checked payload range without reading it. An
+            /// excess valid header returns `OutputLimitExceeded` without
+            /// changing the current offset or pending state.
             pub fn next(self: *Cursor) Error!?StreamElement {
                 if (self.pending_frame != null) return error.InvalidStreamState;
                 const element = (try self.inner.next()) orelse return null;
@@ -703,15 +839,7 @@ pub fn Facade(comptime Support: type) type {
                     } },
                     .data => |frame| {
                         self.pending_frame = frame;
-                        return .{ .data = .{
-                            .offset = frame.available.offset,
-                            .dictionary_id = frame.header.dictionary_id,
-                            .window_size = frame.header.window_size,
-                            .content_size = frame.header.content_size,
-                            .has_checksum = frame.header.has_checksum,
-                            .single_segment = frame.header.single_segment,
-                            .block_size_max = frame.header.block_size_max,
-                        } };
+                        return .{ .data = frameInfo(frame) };
                     },
                 }
             }
@@ -736,11 +864,7 @@ pub fn Facade(comptime Support: type) type {
                     workspace.sequence_page,
                 });
                 try output_alias.validateOptions(std.mem.asBytes(self), options);
-                const dictionary = try resolveStreamDictionary(
-                    frame.header.dictionary_id,
-                    options,
-                );
-                const parsed = try fromLayout(frame, dictionary);
+                const parsed = try admitFrame(frame, options);
                 const cap = try remainingCap(
                     self.total_decoded,
                     options.total_decoded_max,
@@ -765,46 +889,36 @@ pub fn Facade(comptime Support: type) type {
             }
 
             /// Walk the pending data frame's block headers without decoding
-            /// entropy, enforce the frame cap, publish its exact end and
-            /// return its layout. Dictionary identity is still admitted so a
-            /// later decode of the same frame would be valid.
+            /// entropy, enforce the window and frame decoded caps, publish its
+            /// exact end and return its layout. Dictionary identity is checked;
+            /// no bytes are added to the cursor's cumulative decoded count.
             pub fn inspectPending(
                 self: *Cursor,
                 options: StreamOptions,
             ) Error!FrameInfo {
                 const frame = self.pending_frame orelse
                     return error.InvalidStreamState;
-                const dictionary = try resolveStreamDictionary(
-                    frame.header.dictionary_id,
-                    options,
-                );
-                const parsed = try fromLayout(frame, dictionary);
-                const info = try inspectFrameLayout(
-                    parsed.frame,
-                    frameOptions(options, options.frame_decoded_max),
-                );
-                try self.inner.finishData(info.frame_end_offset);
+                const parsed = try admitFrame(frame, options);
+                const inspected = try inspectFrameLayout(parsed.frame, options.frame_decoded_max);
+                try self.inner.finishData(inspected.info.frame_end_offset);
                 self.pending_frame = null;
-                return info;
+                return inspected.info;
             }
 
             /// Advance past the pending data frame without decoding it or
             /// requiring dictionary content. Block headers are still
-            /// range-checked and the exact end is published; decoded caps do
-            /// not apply because no output is produced.
+            /// range-checked and the exact end is published; the window and
+            /// decoded caps do not apply because no history or output is used.
             pub fn skipData(
                 self: *Cursor,
-                options: StreamOptions,
+                _: StreamOptions,
             ) Error!FrameInfo {
                 const frame = self.pending_frame orelse
                     return error.InvalidStreamState;
-                const info = try inspectFrameLayout(
-                    frame,
-                    frameOptions(options, std.math.maxInt(Count)),
-                );
-                try self.inner.finishData(info.frame_end_offset);
+                const inspected = try inspectFrameLayout(frame, std.math.maxInt(Count));
+                try self.inner.finishData(inspected.info.frame_end_offset);
                 self.pending_frame = null;
-                return info;
+                return inspected.info;
             }
 
             /// Cumulative bytes published by successful `decodeInto` calls.

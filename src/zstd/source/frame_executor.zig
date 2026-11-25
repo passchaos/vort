@@ -233,6 +233,20 @@ pub fn Executor(comptime HuffmanCodec: type, comptime SequenceCodec: type) type 
             return self.staging[0..self.staged_len];
         }
 
+        /// Release the committed block after inspecting its lease in place.
+        /// Bytes not copied to a destination still count as decoded history.
+        pub fn discardCommittedBlock(self: *Self) Error!void {
+            if (self.phase != .drain) return error.InvalidStreamState;
+            self.finishBlock();
+        }
+
+        /// The seek table and the normal frame footer use the same hash, but
+        /// a seek table can carry a checksum even when the frame does not.
+        pub fn frameContentChecksum(self: *Self) Error!u32 {
+            if (self.phase != .done) return error.InvalidStreamState;
+            return @truncate(self.hasher.final());
+        }
+
         /// Byte offset immediately after the checksum footer (or last block).
         /// Only available after the frame has completed successfully.
         pub fn frameEndOffset(self: *const Self) Error!u64 {

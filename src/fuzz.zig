@@ -390,6 +390,9 @@ fn malformedRepeat16DynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
 
 fn malformedRepeat18OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
     var lengths: [19]u4 = @splat(0);
+    // A singleton CODES tree fails admission before repeat decoding. Include
+    // an unused zero symbol so the two 138-zero runs test the actual overrun.
+    lengths[0] = 1;
     lengths[18] = 1;
     const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
 
@@ -399,7 +402,7 @@ fn malformedRepeat18OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u
     try writer.writeBits(allocator, 0, 3);
     try writer.writeBits(allocator, 0, 3);
     try writer.writeBits(allocator, 1, 3);
-    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 1, 3);
     try encoder.writeSymbol(&writer, allocator, 18);
     try writer.writeBits(allocator, 127, 7);
     try encoder.writeSymbol(&writer, allocator, 18);
@@ -409,6 +412,9 @@ fn malformedRepeat18OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u
 
 fn malformedRepeat17OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
     var lengths: [19]u4 = @splat(0);
+    // CODES must be complete; the unused zero symbol keeps this fixture's
+    // failure in the repeat-length bounds check rather than tree admission.
+    lengths[0] = 1;
     lengths[17] = 1;
     const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
 
@@ -418,15 +424,16 @@ fn malformedRepeat17OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u
     try writer.writeBits(allocator, 0, 3);
     try writer.writeBits(allocator, 1, 3);
     try writer.writeBits(allocator, 0, 3);
-    try writer.writeBits(allocator, 0, 3);
-    // Repeat-17 can encode only 3..10 zeros at a time. Fill the expected
-    // HLIT+HDIST length vector exactly with 86 three-zero repeats, then emit
-    // one more repeat so parseDynamicLengthsBody must reject the overrun.
+    try writer.writeBits(allocator, 1, 3);
+    // The old 86 three-zero repeats filled all 258 lengths, so its extra
+    // opcode was never parsed. Stop at 255 and overrun with a four-zero run.
     var repeats: usize = 0;
-    while (repeats < 87) : (repeats += 1) {
+    while (repeats < 85) : (repeats += 1) {
         try encoder.writeSymbol(&writer, allocator, 17);
         try writer.writeBits(allocator, 0, 3);
     }
+    try encoder.writeSymbol(&writer, allocator, 17);
+    try writer.writeBits(allocator, 1, 3);
     return writer.toOwnedSlice(allocator);
 }
 
@@ -467,6 +474,10 @@ fn missingEndOfBlockDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
 fn malformedMissingDistanceDynamicAlloc(allocator: std.mem.Allocator) ![]u8 {
     var lit_lengths: [258]u4 = @splat(0);
     lit_lengths['a'] = 2;
+    // Three two-bit LL leaves were incomplete and failed header admission.
+    // The unused fourth leaf makes LL valid, preserving the empty-DIST token
+    // rejection this fixture is intended to reach.
+    lit_lengths['b'] = 2;
     lit_lengths[256] = 2;
     lit_lengths[257] = 2;
     var code_len_lengths: [19]u4 = @splat(0);
@@ -522,4 +533,30 @@ test "deflate smoke corpus covers valid and malformed raw streams" {
     try std.testing.expectEqual(@as(usize, 16), stats.cases);
     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
     try std.testing.expectEqual(@as(usize, 13), stats.expected_errors);
+}
+
+test "deflate malformed smoke fixtures reach repeat overruns and empty distance use" {
+    const allocator = std.testing.allocator;
+    const repeat18 = try malformedRepeat18OverrunDynamicHeaderAlloc(allocator);
+    defer allocator.free(repeat18);
+    var reader18 = bitstream.BufferedBitReader.init(repeat18);
+    try std.testing.expectError(error.InvalidDynamicBlockHeader, huffman.parseDynamicLengths(&reader18));
+    try std.testing.expectEqual(@as(usize, 45), reader18.bitPosition());
+
+    const repeat17 = try malformedRepeat17OverrunDynamicHeaderAlloc(allocator);
+    defer allocator.free(repeat17);
+    var reader17 = bitstream.BufferedBitReader.init(repeat17);
+    try std.testing.expectError(error.InvalidDynamicBlockHeader, huffman.parseDynamicLengths(&reader17));
+    try std.testing.expectEqual(@as(usize, 373), reader17.bitPosition());
+
+    const missing_distance = try malformedMissingDistanceDynamicAlloc(allocator);
+    defer allocator.free(missing_distance);
+    var reader = bitstream.BufferedBitReader.init(missing_distance);
+    const parsed = try huffman.parseDynamicLengths(&reader);
+    try std.testing.expectEqual(@as(usize, 324), reader.bitPosition());
+    try std.testing.expectEqual(@as(u4, 0), parsed.distance_max_bits);
+    const literal = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+    try std.testing.expectEqual(@as(u16, 'a'), try literal.decodeValue(&reader));
+    try std.testing.expectEqual(@as(u16, 257), try literal.decodeValue(&reader));
+    try std.testing.expectError(error.InvalidHuffmanCode, deflate.decodeRawAutoAlloc(allocator, missing_distance));
 }

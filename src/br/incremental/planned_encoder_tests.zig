@@ -1682,10 +1682,11 @@ test "static dictionary stream wire ignores randomized input output fragmentatio
         var expected_metadata: usize = 0;
         for (0..segments.len - 1) |segment_index|
             expected_metadata += @intFromBool(segment_index % 3 == 0);
-        try std.testing.expectEqual(
-            expected_metadata,
-            summary.metadata_meta_block_count,
-        );
+        try std.testing.expectEqual(expected_metadata * "schedule metadata".len, summary.metadata_bytes);
+        // Every explicit metadata block is present, plus at most one empty
+        // alignment block for each plain flush.
+        try std.testing.expect(summary.metadata_meta_block_count >= expected_metadata);
+        try std.testing.expect(summary.metadata_meta_block_count <= segments.len - 1);
     }
 }
 

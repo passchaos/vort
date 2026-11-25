@@ -1,0 +1,7 @@
+{
+  "src/br/encoder/hq_command_parser.zig": "9b619d5475a34e14fddf80ef92e42032cba24d467dbd17cc31fec75dc532e5b0",
+  "src/br/encoder/recent_match_evidence.zig": "d384bbdddb573d18b07094e71cb04208092f33e8b32bdfe6317cf4bea61b145b",
+  "src/br/encoder/recent_match_evidence_tests.zig": "8509b9d04beadef5f5513d30f47a094cbf9eab5d242d4cb2452b34032cafb014",
+  "src/br/encoder/recent_match_evidence_parser_tests.zig": "548e0ff48ce4fa1b9ac72a3dba19824a6b3ee883c5af398e0be9927eabb17a6f",
+  "proof-artifacts/prototype.patch": "bcfb35d0db3eaa1b4ca76eeaabefc500473b5d23f5c6915209e477da7276e2b3"
+}

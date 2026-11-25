@@ -1,0 +1,54 @@
+{
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 106,
+      "sha256": "d443fccf47b94220bb89b7763938544094ba45830a9829f3ec86307c519f5f0a"
+    },
+    {
+      "path": "after.log",
+      "bytes": 375,
+      "sha256": "698d0c758a7ec5578d7f29f390a1278bc790c70315cd1f600fe919d9eb2956e2"
+    },
+    {
+      "path": "before.log",
+      "bytes": 6434,
+      "sha256": "3c3a82fe94decfebe981e0041bada722b99b8a2535c3658818afa9c42ada25f3"
+    },
+    {
+      "path": "cross-architecture.log",
+      "bytes": 10591,
+      "sha256": "2973664fe8572907e9145f1c354b62989b52cf7d75df812e8c2bb0a9d520e1db"
+    },
+    {
+      "path": "interop.log",
+      "bytes": 8167,
+      "sha256": "5ee07318cbab68e66bcb39c1a2373d8d30688aa24a0d5300c4959f2b5931e70f"
+    },
+    {
+      "path": "library-compile.log",
+      "bytes": 1147,
+      "sha256": "5c6a671122897b186d1daa78e7e6c3ff91beeb3f4cdbdd7bbcacf920b647a97e"
+    },
+    {
+      "path": "prefix-neighbor.log",
+      "bytes": 374,
+      "sha256": "7a1b2d3dce6df768fbf57cc575708beacc918d26652685dd1c492a8dd9b59785"
+    },
+    {
+      "path": "source-provenance.json",
+      "bytes": 1626,
+      "sha256": "e1a6ff10b58246f508d697473197077a0a2c934b2ba0c97edff74287454b8696"
+    },
+    {
+      "path": "step-neighbor.log",
+      "bytes": 375,
+      "sha256": "c24a9a02f3488e17404ea82c2be3ad0de0feafe3c87af2ae9be69135276a02de"
+    },
+    {
+      "path": "wasi-receipt.json",
+      "bytes": 13189,
+      "sha256": "1ebe9a121170a3f076ee2245bccf72f01b1370bd522987db87df76f203306049"
+    }
+  ]
+}

@@ -70,6 +70,25 @@ const rebuilt = try vort.brSerializeSharedDictionaryAlloc(allocator, .{
 defer allocator.free(rebuilt);
 ```
 
+## Attaching before stream input
+
+Both progressive decoders accept `attachSerializedDictionary(&dictionary)`
+with a parsed view before the current frame consumes input, including after an
+empty poll or `nextFrame`. The view and all backing slices are borrowed for the
+frame. Attaching does not reparse, allocate or discard retained workspace.
+One serialized view may be bound per frame; a constructor-supplied view
+already occupies that binding. A second or late attachment returns
+`InvalidStreamState` without changing the first binding.
+
+The compound history is configured RAW prefixes, prefixes staged with
+`attachRawDictionary`, then the optional serialized RAW tail, independent of
+staging call order. A nonempty tail counts toward the same 15-slot and byte
+limits; custom static words and transforms also become available. A failed
+attachment does not use up either the serialized binding or a RAW slot.
+`nextFrame` and resets discard staged attachments but keep their existing
+rules for configured dictionaries. Parsing and attaching remain separate;
+this API does not accept unparsed serialized bytes.
+
 ## Validation
 
 Unit coverage includes a two-dictionary context split, local/contextual/

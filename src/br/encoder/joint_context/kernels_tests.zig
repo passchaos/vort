@@ -65,6 +65,44 @@ test "joint kernels disjoint partition merge matches checked sums and u32 bounda
     }
 }
 
+test "joint kernels incremental moves match full re-aggregation" {
+    var contexts: [16]Histogram = @splat(.{});
+    var random: u32 = 0x12345678;
+    var total: usize = 0;
+    for (&contexts) |*context| {
+        for (0..256) |symbol| {
+            random = random *% 1664525 +% 1013904223;
+            const count: u32 = (random >> 16) % 5;
+            context.counts[symbol] = count;
+            context.total += count;
+        }
+        total += @intCast(context.total);
+    }
+    var assignment: [16]u8 = undefined;
+    for (&assignment) |*tree| {
+        random = random *% 1664525 +% 1013904223;
+        tree.* = @intCast((random >> 16) % 4);
+    }
+    var incremental: [4]Histogram = undefined;
+    kernels.aggregateTrees(&contexts, &assignment, 4, &incremental, total);
+
+    var moves: [16]kernels.TreeMove = undefined;
+    var move_count: usize = 0;
+    for (&assignment, 0..) |*tree, index| {
+        random = random *% 1664525 +% 1013904223;
+        const next: u8 = @intCast((random >> 16) % 4);
+        if (next == tree.*) continue;
+        moves[move_count] = .{ .context = @intCast(index), .from = tree.*, .to = next };
+        tree.* = next;
+        move_count += 1;
+    }
+    kernels.moveContexts(&contexts, &incremental, moves[0..move_count]);
+
+    var full: [4]Histogram = undefined;
+    kernels.aggregateTrees(&contexts, &assignment, 4, &full, total);
+    try std.testing.expectEqualDeep(full, incremental);
+}
+
 test {
     _ = @import("assignment_tests.zig");
     _ = @import("initialization_tests.zig");

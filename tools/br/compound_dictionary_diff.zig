@@ -281,6 +281,7 @@ fn validateSerializedDictionaryMatrix(
     defer allocator.free(vort_output);
     if (!std.mem.eql(u8, input, vort_output))
         return error.ReferenceDecodeFailed;
+    try verifyStagedSerializedDecode(allocator, &parsed, reference_wire, input);
 
     var contextual_dictionary: std.ArrayList(u8) = .empty;
     defer contextual_dictionary.deinit(allocator);
@@ -350,6 +351,7 @@ fn validateSerializedDictionaryMatrix(
         contextual_input.items,
         contextual_vort_output,
     )) return error.ReferenceDecodeFailed;
+    try verifyStagedSerializedDecode(allocator, &contextual_parsed, contextual_reference_wire, contextual_input.items);
     try validateTrainedSerializedDictionary(
         allocator,
         runtime,
@@ -386,6 +388,38 @@ fn validateSerializedDictionaryMatrix(
         reference_options,
     );
     return 22;
+}
+
+noinline fn verifyStagedSerializedDecode(
+    allocator: std.mem.Allocator,
+    dictionary: *const vort.BrotliSerializedSharedDictionary,
+    wire: []const u8,
+    expected: []const u8,
+) !void {
+    var decoder = vort.BrotliIncrementalStreamDecoder.initWithOptions(allocator, .{
+        .expected_output_len = expected.len,
+    });
+    defer decoder.deinit();
+    const poll = try decoder.step(&.{}, &.{});
+    if (poll.status != .need_input or poll.progress.input_read != 0 or poll.progress.output_written != 0)
+        return error.ReferenceDecodeFailed;
+    try decoder.attachSerializedDictionary(dictionary);
+
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var read: usize = 0;
+    var written: usize = 0;
+    while (true) {
+        const step = try decoder.step(wire[read..], output[written..@min(written + 7, output.len)]);
+        read += step.progress.input_read;
+        written += step.progress.output_written;
+        if (step.status == .done) break;
+        if (step.progress.input_read == 0 and step.progress.output_written == 0)
+            return error.ReferenceDecodeFailed;
+    }
+    if (read != wire.len or written != output.len or !std.mem.eql(u8, output, expected))
+        return error.ReferenceDecodeFailed;
+    try decoder.finish();
 }
 
 fn validateTrainedSerializedDictionary(

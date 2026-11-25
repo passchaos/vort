@@ -81,6 +81,37 @@ that raw Deflate already had. Verified gates:
 
 ## 2026-11-12: structure-aware codec differential fuzzing
 
+The [2026-11-20 current-source campaign](performance/codec-functional-differential-current-20261120.md)
+records the latest deep-run results after encoder lifecycle admission. Its
+14,684 valid-stream checks and 498,324 mutations retain explicit external
+reference versus Vort-only scope; the historical reporting counters now have
+classified observations and representative adjudication.
+
+The [classified reporting tool](performance/codec-differential-reporting-20261120.md)
+now separates actual external references, Vort-only contracts and mutation
+acceptance directions, with bounded complete-output captures and replay.
+Representative triage exposed malformed Deflate distance-tree acceptance;
+the [dynamic admission fix](performance/deflate-dynamic-admission-20261120.md)
+removes eight raw and two gzip observations at unchanged generated-wire and
+mutation-sequence digests in the current seed.
+
+A later [bounded three-format screen](performance/codec-functional-differential-20261124.md)
+records reference parity for generated valid wires and the regression for
+incremental zlib completion with an allowed tail and a short output pledge.
+Its Brotli follow-up uses `--brotli-reference-floor=BYTES` to distinguish
+reference destination limits from acceptance differences without changing
+the generated cases. This summary-only option accepts 4,096 through 1 MiB
+(before the one-byte slack), applies only to Brotli, and cannot be combined
+with artifact capture or replay. Omit it to use the historical capacity.
+`--brotli-reference-exact-input` selects the streaming reference for ordinary
+Brotli too and rejects otherwise successful decodes if input remains. Its
+summary counts those unconsumed tails; it can be combined with the capacity
+floor but not capture or replay. Without it, ordinary Brotli retains the
+historical one-shot reference policy. `--zlib-reference-exact-input` requires
+complete input for single-stream raw Deflate, zlib and gzip reference calls.
+It reports successful prefixes refused for leaving a tail, leaves the
+already-strict multi-member gzip reference unchanged, and is also summary-only.
+
 `tools/codec_differential_fuzz.zig` (`run-codec-differential-fuzz`)
 complements the raw-byte target with generated valid wires. A deterministic
 SplitMix64 generator feeds eight content patterns (RLE, periodic, random,
@@ -91,6 +122,137 @@ through 8 KiB (`--deep` extends the schedule to 64 KiB) into:
   0 exercises the stored-block encoder explicitly);
 - standard Zstd frames at levels 1/3/9;
 - RFC Brotli qualities 0/5/11 (q11 only for inputs up to 1 KiB in smoke).
+
+For a valid-wire-only incremental campaign, pass `--incremental-valid-only`:
+
+```sh
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --deep --incremental-valid-only --brotli-reference-exact-input --zlib-reference-exact-input
+```
+
+The flag preserves the ordinary one-shot, exact-size and applicable reference
+checks, then drives the same wire through two incremental schedules. The
+unpledged schedule uses one-byte input on small wires and bounded fragments on
+long wires. The second applies an exact output pledge with a different chunk
+schedule. Zstd also exercises its block-stream and prevalidated-frame input
+policies respectively. In both schedules, every step checks progress bounds,
+exact plaintext as it is published, and output canaries. EOF requires complete
+wire consumption, a successful `finish`, and the exact plaintext length. Deep
+runs include dictionary, concatenation, and format variants; the existing
+classification report still distinguishes external checks from Vort-only
+contracts. `incremental_valid_json` reports passes, failures, and successful
+step calls by codec. This mode skips truncation and mutation and cannot be used
+with divergence capture or replay; default runs are unchanged.
+
+For independent real-file streams, repeat `--real-file=PATH`. This replaces
+synthetic generation, reads whole files (never silent prefixes), and applies an
+8 MiB per-file default cap. `--real-limit=BYTES` changes the cap up to 64 MiB.
+Libz, libzstd and libbrotli encode with explicit flushes at 64 KiB intervals.
+Each complete wire must round-trip and finish through both incremental schedules,
+including periodic empty output buffers. The same schedules then replay the
+final-byte cut: the reference must reject it, and Vort must report truncation
+while every published byte still matches the original plaintext. For this
+single-frame case, prevalidated Zstd must withhold all bytes until validation;
+the other routes must publish at least the prefix before the last 64 KiB.
+The report separates
+full and cut cases and binds file/wire hashes, reference versions and settings.
+
+```sh
+zig build -Doptimize=ReleaseFast run-codec-real-stream-smoke
+corpus="$HOME/Work/corpora/silesia-20261025/files"
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-flush-cuts --real-file="$corpus/xml" --real-file="$corpus/ooffice"
+```
+
+Add `--real-flush-cuts` to cut at the first, middle and last distinct
+nonfinal flushes reported by each reference encoder. The reference must
+reject these unfinished streams. Both Vort schedules must consume the whole
+compressed prefix and return truncation. Progressive routes must publish
+exactly the corresponding plaintext prefix, except that prevalidated Zstd
+must publish nothing from its incomplete single frame. This mode requires
+`--real-file` and cannot be combined with `--real-brotli-wide`. Files with
+no nonfinal flush have no checkpoint cuts. `upstream_real_flush_step_json`
+records compressed and decoded offsets for each replay;
+`upstream_real_flush_json` reports their counts separately from tail cuts.
+
+The README smoke enables these checkpoints and is part of `ci-smoke`; the
+full Silesia sweep is opt-in and is functionality evidence, not a timing result. The
+[full-file receipt](performance/codec-upstream-real-20261124.md) records the
+Brotli boundary defect found and the reference versions and corpus hashes.
+The [follow-up receipt](performance/codec-upstream-real-20261125.md) records
+four more full files and a separate multi-meta-block wide Brotli sweep.
+The [flush checkpoint receipt](performance/codec-upstream-flush-cuts-20261125.md)
+records the additional mid-stream truncation runs.
+
+### Upstream dictionary streams
+
+`--real-dictionary=PATH` adds a shared raw dictionary of 1 byte to 32 KiB to each
+`--real-file` and enables the flush cuts. Each file must exceed one 64 KiB
+flush interval. The reference encoders attach it as a Deflate/zlib preset,
+Zstd RAW prefix, or Brotli RAW shared dictionary; gzip is excluded because
+its wrapper has no preset dictionary. The full wire must decode to the same
+plaintext on both sides. With a missing or wrong dictionary, zlib and the
+checksummed Zstd frame must reject; raw Deflate and Brotli may instead decode
+bytes that differ from the original because they cannot authenticate a RAW
+prefix. The test checks both complete-input schedules, the final-byte cut,
+and the selected flush cuts. Fault outcomes are reported separately in
+`upstream_real_dictionary_fault_json`. The zlib stream also pauses after its
+six-byte FDICT header, rejects the wrong dictionary without losing the request,
+and resumes with only the unconsumed suffix.
+`upstream_real_dictionary_json` records dictionary size and SHA-256 alongside
+the wire digest. `--real-dictionary-smoke` is a standalone mode using a
+built-in multi-block fixture with an external history match. The smoke also
+exercises two checksummed Zstd frames produced with different full dictionaries:
+missing or same-ID-wrong contents for the second frame leave only the verified
+first frame in the destination. After a missing-dictionary refusal, the decoder
+resumes at the second frame without rereading the first.
+
+```sh
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build run-codec-real-dictionary-smoke
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-file="$corpus/xml" --real-dictionary=/tmp/xml-prefix.raw
+```
+
+Use a dictionary that matches the input's beginning (for example,
+`head -c 32768 "$corpus/xml" > /tmp/xml-prefix.raw`). Brotli requires a
+reference library exporting the RAW shared dictionary APIs; selection of
+Brotli fails explicitly if those APIs are unavailable. The dictionary smoke
+is opt-in, not part of `ci-smoke`, so installations with older libbrotli
+continue to run the ordinary smoke. `--only=raw-deflate`, `--only=zlib` or
+`--only=zstd` does not load the Brotli dictionary reference. The
+[dictionary conformance receipt](performance/codec-upstream-raw-dictionary-20261125.md)
+records the built-in and full-file runs.
+
+### Wide standard Brotli streams
+
+`--real-brotli-wide` selects only Brotli and uses libbrotli's one-shot
+quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide
+window is not enough: the Vort summary must find an actual backward copy past
+65,520 bytes in each wire. The mode checks both incremental schedules, strict
+and prefix caller-history preflight with contiguous and joined chunk input,
+plus direct validation and replay over 257-byte pieces and over a short-read
+random-access source, without a compressed join buffer. The staged source
+path must publish identical plaintext after just one source pass. All
+preflight routes use zero requested codec heap. A one-byte-short
+logical limit, final-byte truncation, and trailing bytes must fail strict preflight
+without writing to caller output. Tail replay still checks the emitted prefix
+byte-for-byte; unlike the flushed mode, it does not assume the last 64 KiB is
+the only unpublished data.
+`upstream_brotli_preflight_json` records the observed window, maximum distance,
+legacy fixed-history outcome, and requested heap.
+
+```sh
+# Deterministic long-copy input, no corpus download (included in ci-smoke).
+zig build run-codec-brotli-wide-smoke
+# Optional real file, with the same size limit as --real-file.
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-brotli-wide --real-file="$corpus/xml"
+```
 
 Every valid wire is checked three ways: Vort one-shot and exact-size decode
 must reproduce the source; the installed system references (zlib, libzstd,
@@ -136,9 +298,8 @@ truncation and mutation pipeline:
   and OS fields through both the stored and best encoders;
 - Zstd content checksums, unknown content size, explicit Window_Log 10
   frames, two-frame concatenation and skippable frames in leading, trailing
-  and interspersed positions. The libzstd one-shot API rejects skippable and
-  concatenated suffixes while Vort's frame loop accepts them, so those
-  variants use a `ZSTD_decompressStream` reference whose completion rule is
+  and interspersed positions. These variants use a `ZSTD_decompressStream`
+  reference to inspect frame completion explicitly. Its completion rule is
   full input consumption plus a zero final hint (the API buffers partial
   magic bytes and returns a positive hint for truncated streams, and returns
   0 at every frame boundary);
@@ -219,3 +380,263 @@ alphabet (the empty Huffman table fails only if a distance symbol is ever
 actually decoded), matching zlib semantics; oversubscribed and incomplete
 multi-symbol alphabets remain rejected. Focused raw and gzip streaming
 regression tests pin the previously failing sizes.
+
+## 2026-11-15: bounded incremental Zstd decoder fuzz driver
+
+`src/zstd/incremental/fuzz_driver.zig` adds a deterministic driver that
+mutates both the wire and the caller-driven step schedule, which the
+one-shot raw-byte target cannot reach. `zstd.incremental_fuzz.drive(allocator,
+seed)` derives, per seed: a generated frame (both frame formats, raw/RLE and
+literal-only selections, optional checksum and content size, six payload
+shapes including multi-block), a mutation regime (valid, one-sided truncation,
+single-byte flip, or appended suffix), both compressed-input policies, an
+optional exact/short output pledge, a finite working-memory and compressed
+buffer cap, and independent input/output slice schedules.
+
+Every step is checked for the same invariants the hand-written decoder tests
+rely on: local progress never exceeds the offered slices, the cumulative
+snapshot advances by exactly the reported progress, output beyond
+`output_written` keeps its canary fill, and live/peak working memory plus
+retained compressed capacity stay within budget. Rejections must be
+documented decode errors (never real `OutOfMemory`), are sticky across further
+calls, carry diagnostics, and reproduce after `reset`; accepted runs are
+replayed under a different schedule to prove schedule independence and, when
+the one-shot decoder also accepts the bytes, must match its output. Truncated
+wires and uncompleted suffix members terminate as an explicit `incomplete`
+result rather than a stall.
+
+The same entry backs the in-graph tests (`zig build test-zstd`, including the
+48-seed fixed matrix, determinism and suffix-retention cases, with testing
+allocator leak detection) and a standalone ReleaseFast runner:
+
+```sh
+zig build run-zstd-incremental-fuzz-smoke
+```
+
+The runner is also compiled by the `check` graph. Its seed mix currently
+reports roughly balanced accepted/rejected/incomplete outcomes; a violated
+invariant exits non-zero. The structure is codec-agnostic and is reused for
+the Brotli and Deflate incremental decoders below.
+
+## 2026-11-15: bounded incremental Brotli decoder fuzz driver
+
+`src/br/incremental/fuzz_driver.zig` ports the Zstd `drive` contract to the
+owned incremental Brotli decoder (`br.IncrementalStreamDecoder`) behind the
+same seed-driven, codec-agnostic shape. Each seed selects a generated wire
+(either `encodePlannedStreamAlloc` for inputs of at least five bytes, or an
+RFC stored stream that also covers empty and tiny payloads), a mutation regime
+(valid, truncation, single-byte flip, appended suffix), an optional
+exact/short output pledge, finite working-memory and compressed-input caps,
+and independent input/output slice schedules.
+
+Brotli-specific contract differences are modeled explicitly: there is no
+frame-format or compressed-input-policy dimension, and a completed stream
+rejects further bytes with `TrailingData` unless `allow_trailing_data` is
+set. The suffix regime therefore always enables trailing tolerance so frame
+completion timing cannot make the result depend on the chunk schedule; a
+dedicated test pins both the sticky `TrailingData` rejection and the tolerant
+path. As with Zstd, every step checks progress accounting, canary
+preservation, resource caps, sticky documented errors that clear on `reset`,
+schedule independence, and one-shot (`decodeStreamAlloc`) differential
+agreement, while truncated wires end as an explicit incomplete result.
+
+The same entry backs in-graph tests (`zig build test-br`, including the
+48-seed matrix, determinism and trailing-data cases, with leak detection) and
+a standalone ReleaseFast runner:
+
+```sh
+zig build run-br-incremental-fuzz-smoke
+```
+
+The runner is compiled by the `check` graph and exits non-zero on any violated
+invariant.
+
+## 2026-11-15: bounded incremental Deflate decoder fuzz driver
+
+`src/deflate/incremental/fuzz_driver.zig` completes the three-codec family by
+porting the `drive` contract to the zlib and gzip incremental decoders
+(`deflate.ZlibIncrementalDecoder` / `deflate.GzipIncrementalDecoder`). Deflate
+differs from the other two codecs in that its incremental decoders are built
+over a caller-owned 32 KiB history slice (the RFC 1951 maximum window) instead
+of an allocator, and their error set is the closed `deflate.Error` (core
+errors), so the hot path never allocates and every non-success result is a
+documented rejection.
+
+Each seed selects a wrapper (zlib/gzip), a wire kind (stored/fixed/best), a
+mutation regime (valid, truncation, single-byte flip, appended suffix), an
+optional exact/short output pledge, and independent input/output slice
+schedules. A type-erased `Handle` drives either generic through the shared
+schedule. Every step checks progress accounting against the snapshot, canary
+preservation, schedule independence (a second run under different chunks), and
+one-shot differential agreement against `decodeZlibAlloc`/`decodeGzipAlloc`;
+truncated wires end as an explicit incomplete result. The wrapper-specific
+trailing-data rule is modeled as in Brotli: the suffix regime always enables
+`allow_trailing_data` so completion timing cannot make `TrailingData`
+schedule-dependent, while dedicated tests pin both the sticky rejection path
+(including reset clearing `last_error_name`) and the tolerant path, plus the
+short-pledge `SizeMismatch` contract.
+
+The same entry backs in-graph tests (a 48-seed matrix, determinism,
+trailing-data and short-pledge cases; allocator-backed temporary storage
+still gets testing-allocator leak detection) and a standalone ReleaseFast
+runner:
+
+```sh
+zig build run-deflate-incremental-fuzz-smoke
+```
+
+The runner is compiled by the `check` graph and exits non-zero on any violated
+invariant. All three primary codecs (Zstd, Brotli, Deflate) now share the same
+bounded incremental schedule/canary fuzz shape.
+
+## 2026-11-15: coverage-guided entry for the incremental drivers
+
+`tools/incremental_fuzz_libfuzzer.zig` exports
+`LLVMFuzzerTestOneInput` over the three incremental `drive` functions. Because
+each driver derives its wire mutation and step schedule from an opaque seed,
+feeding arbitrary fuzzer bytes to this entry explores the full
+schedule/canary/resource/sticky-error state space beyond the fixed 48-seed
+matrices; the raw-byte `fuzz_target` harness still covers only one-shot
+decoding. Any violated driver invariant or real allocation failure returns
+non-zero so the engine preserves the crashing input. A debug `main` provides a
+no-runtime smoke:
+
+```sh
+zig build run-incremental-libfuzzer-smoke
+```
+
+The executable is also compiled by the `check` graph. For an actual
+coverage-guided campaign, rebuild the same entry with the toolchain's
+libFuzzer instrumentation and point it at a seed corpus of arbitrary bytes.
+
+## 2026-11-16: broad deterministic sweeps harden the drivers
+
+Each codec driver now also runs a 256-seed deterministic sweep (a wider
+derivation than the 48-entry fixed matrix) inside its in-graph tests, catching
+schedule-dependent edge cases the matrix missed. The sweeps surfaced and fixed
+three real driver-assumption gaps rather than decoder defects:
+
+- Zstd: on a non-stopping decoder, an appended suffix is a real concatenated
+  member attempt, so a different chunking may legitimately parse deeper into
+  the random suffix and reject it. Schedule-independent output is now asserted
+  only for frame-bounded regimes (or a suffix with `stop_after_first_frame`).
+- Brotli: streams have no magic and end at an internal meta-block stop marker,
+  so a flipped byte or suffix can end the stream before the whole view is
+  consumed; the identical-output replay is now required only for the clean
+  `valid` regime.
+- Deflate: damaged wrapper streams can expand past the plaintext length. The
+  decoder now always gets a finite `max_output_len`, the caller capture buffer
+  carries extra headroom so wrapper header/footer finalization never runs out
+  of output room, and over-expansion becomes a documented
+  `OutputLimitExceeded` rejection instead of a driver buffer overrun.
+
+## 2026-11-16: valid multi-member concatenation coverage
+
+Each driver gains a dedicated deterministic test that round-trips two valid
+members under one-byte input scheduling, complementing the random suffix
+regime (which feeds random trailing bytes) with an all-valid concatenated
+stream. The three codecs model member transitions differently and the tests
+pin each contract:
+
+- Zstd: a non-stopping decoder walks from the first frame straight into the
+  next (`data_frame_count == 2`), with mixed literal-only and raw/RLE members.
+- Deflate: both zlib and gzip wrappers use `allow_concatenated = true`; the
+  test checks the cumulative output and the wrapper-specific member count
+  (`stream_count` for zlib, `member_count` for gzip).
+- Brotli: members are armed explicitly through `nextFrame`, which is only
+  valid once the prior member reaches `done`; the test verifies the
+  per-member output slices and `frame_count == 2`.
+
+## 2026-11-16: dictionary round-trip coverage
+
+Each driver also gains a deterministic preset-dictionary round-trip under
+one-byte scheduling, pinning the codec-specific dictionary attachment path:
+
+- Zstd: a raw-content `NativeDictionary` passed to
+  `encodeNativeFrameWithDictionaryAlloc` and `initWithDictionary`.
+- Deflate: a zlib stream built with
+  `encodeZlibFixedWithDictionaryAlloc` and decoded through
+  `ZlibIncrementalDecoder.initWithDictionary` over caller-owned history.
+- Brotli: a multi-prefix `SharedDictionary` supplied via
+  `DecodeOptions.shared_dictionary` (encoding through
+  `encodePlannedStreamWithOptionsAlloc`).
+
+The negative "missing dictionary rejects dictionary references" contract is
+already covered by dedicated hard-coded-frame tests outside the fuzz drivers;
+the drivers focus on the positive attached-dictionary round-trip because a
+general encoder is free to emit literals instead of references.
+
+## Public API / error coverage audit (2026-11-16)
+
+A systematic gap scan accompanied the incremental fuzz work and closed several
+zero-test public surfaces: the Zstd `decodeFrameChunks*` family (alloc/into,
+exact/limited, scratch, size preflight, dictionary) and the Deflate gzip/zlib
+size-preflight entry points including concatenated streams. Brotli's
+chunks/prefix APIs were already covered under `src/br/decode/tests/`.
+
+Reusable audit method:
+
+- Low-reference scan: list `pub fn decode*`/`decoded*` symbols whose total
+  in-file reference count is ~1 (definition only), then cross-check the whole
+  `src/<codec>/` tree because tests often live in separate modules or behind
+  root re-exports (thin wrappers and method-style APIs produce false positives).
+- Error coverage: diff the errors actually `return`ed in the codec source
+  against the `error.X` names asserted in tests. Exclude cross-codec errors in
+  the shared `core.Error` set that the codec never produces, internal sentinels
+  remapped before they reach callers (e.g. Zstd `EndOfStream` ->
+  `TruncatedFrame`), and errors already asserted in the codec root test block.
+
+Result after the added tests: no remaining produced-but-untested error and no
+zero-test non-wrapper decode API was found across Zstd, Brotli, or Deflate.
+
+## Encoder-side coverage follow-up (2026-11-16)
+
+Applying the same low-reference scan to encode entry points found and closed
+two zero-test independent contracts:
+
+- `encodedNativeFrameBound` must upper-bound the real encoded length across
+  empty/tiny/random/repeated inputs and checksum options;
+- `encodeNativeFrameIntoSlice` must produce a byte-identical frame in a caller
+  buffer and reject an undersized buffer with `OutputTooSmall`.
+
+The other ref=1 encode names are not gaps on inspection: `encodeFrameAppend`
+is the same core as the tested IntoSlice/Alloc paths; literal-only encoding has
+deep block-mode/decode-interaction coverage in `limits_tests.zig` plus error
+paths in `controls_resource_tests.zig`; seek-table encoding is covered by the
+HQ/controls test modules; and the `With*` names are thin option wrappers over
+tested cores. No remaining untested non-wrapper encode or decode entry point was
+found across the three codecs.
+
+## Other container formats coverage check (2026-11-16)
+
+Beyond the three primary codecs, the coverage-guided entry point
+(`tools/fuzz_target.zig`) already routes 46 encode/decode entry points spanning
+the container and secondary formats (lz4, lz4-legacy, cab, chd, cso, dax,
+decmpfs, the Windows LZ* family, android OTA, and more).
+
+lz4 was checked specifically as a high-exposure format: it has no separate
+incremental fuzz driver, but its one-shot path is in the coverage fuzzer and its
+incremental state machine already has 75 dedicated tests across
+`decoder_tests`, `dictionary_resume_tests`, `limits_tests`, and `tests`,
+covering step scheduling, resume, and resource limits. A parallel driver would
+therefore duplicate existing coverage rather than close a gap. The same pattern
+holds for the other wired formats: no zero-test non-wrapper entry point was
+found that would justify a new driver. New drivers should only be added where a
+format has an uncovered incremental scheduling state machine, not merely because
+it is absent from this driver's file list.
+
+## Incremental encoder memory borrows (2026-11-20)
+
+The scheduling fuzz above uses independent input and output storage. Its API
+and error inventory does not establish safety for overlapping memory. A later
+source audit found that Deflate, Brotli and Zstd incremental encoders could
+publish a header or pending bytes before reading new input in the same call.
+Overlapping buffers could therefore replace unread plaintext.
+
+Dedicated public regressions now exercise those memory layouts, including
+receiver and retained-capacity overlap, dictionaries and metadata, pending
+drains, refusal without state or output changes, and successful disjoint retry.
+They run through `check-incremental-encode-borrows` on native, Linux x86 and
+actual WASI; the parallel Zstd path uses synchronous fallback on WASI.
+See the [buffer contract](formats/incremental-encode-borrows.md) and
+[before/after evidence](performance/incremental-encode-borrows-20261120.md).

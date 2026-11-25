@@ -1,0 +1,28 @@
+Captured before production changes:
+zig build -j2 test-zstd -Dzstd-test-filter='Zstd incremental encoder step borrows' --summary all
+
+test-zstd
++- run test vort-zstd-tests 25 pass, 1 fail (26 total)
+error: 'zstd.test.Zstd incremental encoder step borrows' failed:
+       expected error.InvalidBlockPlan, found .{ .progress = .{ .input_read = 32, .output_written = 6 }, .status = .need_input, .block_boundary = false }
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x127ea70 in expectError__anon_43584 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/step_borrow_tests.zig:17:5: 0x1282a4a in contracts__anon_43356 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, encoder.step(storage[0..32], storage[0..32]));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:4:5: 0x1282f77 in test.Zstd incremental encoder step borrows (zstd.zig)
+           try @import("zstd/incremental/encoder/step_borrow_tests.zig").contracts(@This());
+           ^
+failed command: ./.zig-cache/o/99fcb0a601b0733fccfa1f9d31a343f8/vort-zstd-tests --cache-dir=./.zig-cache --seed=0x59910f23 --listen=-
+
+Build Summary: 3/5 steps succeeded (1 failed); 25/26 tests passed (1 failed)
+test-zstd transitive failure
++- run test vort-zstd-tests 25 pass, 1 fail (26 total)
+   +- compile test vort-zstd-tests Debug native success 3s MaxRSS:304M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:40M
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/867619ce5bdb09ed945e4900e693ffb6/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort .zig-cache /home/passchaos/.cache/zig --seed 0x59910f23 -Z2f017e72633cb0b0 -j2 test-zstd -Dzstd-test-filter=Zstd incremental encoder step borrows --summary all

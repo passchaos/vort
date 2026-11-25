@@ -1,0 +1,68 @@
+{
+  "source_changed": [
+    "br.zig"
+  ],
+  "main_current_source_sha256": "14cdb397db4368bc886712c3722d913441cf9136aac1c1b635d28c86825ff372",
+  "before_source_sha256": "05a5ac308c62b51e6b491c445b8bd708c2ca2a681e0904d32f61d43935ce4a8a",
+  "after_source_sha256": "a8ce663823b3786e57434dc499a094925b7c6f8c8ae7c89535eafd0a69903fc9",
+  "current_huffman_sha256": "ba22fd54106f4aa2086521b9cf31a761a4e9e008b216d4c9da0076a9eaf31e92",
+  "before_huffman_sha256": "ba22fd54106f4aa2086521b9cf31a761a4e9e008b216d4c9da0076a9eaf31e92",
+  "after_huffman_sha256": "ba22fd54106f4aa2086521b9cf31a761a4e9e008b216d4c9da0076a9eaf31e92",
+  "record_source_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+  "record_releasefast_native_object_sha256": "f092e66a94ab2b85ab695be1b9871a88c644e8fd9976958a4bdb61ac1d15ce0a",
+  "record_build": [
+    "zig",
+    "build-obj",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "-fsingle-threaded"
+  ],
+  "codec_build": [
+    "zig",
+    "build-exe",
+    "record-releasefast-native.o",
+    "-lc",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "-fsingle-threaded"
+  ],
+  "before_executable_sha256": "bea93045f1718cf63289d0af5fc375971293322bec4b7a7b35c34e5d94d9e6e6",
+  "after_executable_sha256": "dcfe62dc8b9bd24cd04ad87d216744235c06309f2305008a4de05bbecad6afdd",
+  "cases_sha256": "0d80c73cce9785a27a7e38043e8e45bdf4a74f3392adee57d98c67b5bf574234",
+  "initial_52_cases_sha256": "b6139fe5f700b6fb101cfd4a88a51ddc30be8a8ae078fbb963a8bc0f3520fb14",
+  "policy_driver_sha256": "54d4f8a04cc9e5530b555dc9cb2aff7ec4b50959bfea392dde5bc0fe7a72db48",
+  "benchmark_driver_sha256": "eb65c826c8b8766d4651347b9f18374a2489cd7404d40f9d18ec69a966e4f542",
+  "statistics_sha256": "5139b0cd7e5733e04a753e06fd911ef9475047c30b11212f85b0574610f02aee",
+  "bootstrap_helper_sha256": "e160aa8e662a0e62b431071f07928d167c5a6a8d24332b6937196254f0e9d46d",
+  "bootstrap_origin": "tools/decode/evidence.py:bootstrap_log_mean; candidate maps to vort slot, baseline to reference slot; throughput CI reversed reciprocal",
+  "host": {
+    "system": "Linux",
+    "node": "passchaos-Precision-3640-Tower",
+    "release": "6.8.0-79-generic",
+    "version": "#79~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug 15 16:54:53 UTC 2",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "process_provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "bea93045f1718cf63289d0af5fc375971293322bec4b7a7b35c34e5d94d9e6e6",
+    "command": "/tmp/vort-br-record-skip-accept-YIIQKf/before-bench --cases=/tmp/vort-br-record-skip-accept-YIIQKf/cases.json --command-state-max-input-kib=8 --mode=generic"
+  },
+  "glibc_version": "2.35",
+  "cpu": 2,
+  "ht_sibling": 10,
+  "governor": "powersave",
+  "energy_performance_preference": "performance",
+  "intel_pstate_status": "active"
+}

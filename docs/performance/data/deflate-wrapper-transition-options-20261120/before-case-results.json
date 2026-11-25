@@ -1,0 +1,50 @@
+[
+  {
+    "case": "headers",
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate.zig",
+      "--test-filter",
+      "Deflate isolated before header option admission"
+    ],
+    "cwd": "/tmp/vort-deflate-wrapper-options-before.gZvHHg",
+    "environment_overrides": {
+      "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/.zig-cache",
+      "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/.zig-global-cache"
+    },
+    "started_utc": "2026-11-20T12:50:16.226150+00:00",
+    "finished_utc": "2026-11-20T12:50:22.959197+00:00",
+    "exit_code": 1,
+    "stdout": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/logs/headers.stdout",
+    "stderr": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/logs/headers.stderr",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "b41b65b85c34b6985c33b622dbdf854be0b1c19f574b09d546c05adb44de76e0",
+    "isolated_deflate_runner_sha256": "60014aa7da7f5eeac0212a6bd07151471480fc0f1142fc4a4c868b3346ff0651",
+    "python_runner_sha256": "5d80e2d15ee42701b50d94ee314f662e30d3c53ae6f6ccfaae98e7d568d6f3d0"
+  },
+  {
+    "case": "pledges",
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate.zig",
+      "--test-filter",
+      "Deflate isolated before impossible exact pledge"
+    ],
+    "cwd": "/tmp/vort-deflate-wrapper-options-before.gZvHHg",
+    "environment_overrides": {
+      "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/.zig-cache",
+      "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/.zig-global-cache"
+    },
+    "started_utc": "2026-11-20T12:50:22.962056+00:00",
+    "finished_utc": "2026-11-20T12:50:27.018095+00:00",
+    "exit_code": 1,
+    "stdout": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/logs/pledges.stdout",
+    "stderr": "/tmp/vort-deflate-wrapper-options-before.gZvHHg/logs/pledges.stderr",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "84a7d2ba3a3060e5f3d9a9d61e32dc470412191109bb5c86e79ac8b61ffb63d3",
+    "isolated_deflate_runner_sha256": "60014aa7da7f5eeac0212a6bd07151471480fc0f1142fc4a4c868b3346ff0651",
+    "python_runner_sha256": "5d80e2d15ee42701b50d94ee314f662e30d3c53ae6f6ccfaae98e7d568d6f3d0"
+  }
+]

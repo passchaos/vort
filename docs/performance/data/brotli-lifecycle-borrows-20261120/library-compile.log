@@ -1,0 +1,19 @@
+Build Summary: 13/13 steps succeeded
+check-library-tests success
++- compile test vort-tests Debug native success 26s MaxRSS:1G
+   +- WriteFile cached
+   +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:39M
+   +- WriteFile cached
+   +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:39M
+   +- compile obj vort-br-record-optimal Debug native (reused)
+   +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+check-encoder-lifecycle-wasm success
++- compile test vort-br-encoder-lifecycle-wasm-tests Debug wasm32-wasi success 24s MaxRSS:1G
+|  +- WriteFile cached
+|  +- compile obj vort-encode-borrows-br-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:39M
+|  +- compile obj vort-encode-borrows-br-wasm32 Debug wasm32-wasi (reused)
++- compile test vort-zstd-encoder-lifecycle-wasm-tests Debug wasm32-wasi success 12s MaxRSS:1G
+   +- WriteFile cached
+   +- compile obj vort-encode-borrows-zstd-wasm32 Debug wasm32-wasi cached 5ms MaxRSS:39M
+   +- compile obj vort-encode-borrows-zstd-wasm32 Debug wasm32-wasi (reused)
+

@@ -5,6 +5,7 @@ const allocator = std.testing.allocator;
 pub fn contracts(comptime D: type) !void {
     try oneShotFamilies(D);
     try incrementalDetection(D);
+    try detectionFinish(D);
     try dictionaryRecovery(D);
     try concatenationAndTail(D);
     try commitmentAndLimits(D);
@@ -81,6 +82,49 @@ fn incrementalDetection(comptime D: type) !void {
     }
 }
 
+fn detectionFinish(comptime D: type) !void {
+    const plain = "resume only after reset";
+    const zlib = try D.encodeZlibFixedAlloc(allocator, plain);
+    defer allocator.free(zlib);
+    const gzip = try D.encodeGzipFixedAlloc(allocator, plain);
+    defer allocator.free(gzip);
+    for ([_][]const u8{ zlib, gzip }) |wire| {
+        for (0..2) |prefix_len| {
+            const Auto = D.ZlibOrGzipIncrementalDecoder;
+            var history: [65_536]u8 = undefined;
+            var clone_history: [65_536]u8 = undefined;
+            var decoder = try Auto.init(.{ .expected_output_len = plain.len }, &history);
+            var output: [plain.len]u8 = @splat(0xa5);
+            const prefix = try decoder.step(wire[0..prefix_len], &output);
+            try std.testing.expectEqual(.need_input, prefix.status);
+            try std.testing.expectEqual(prefix_len, prefix.progress.input_read);
+            try std.testing.expectError(error.TruncatedFrame, decoder.finish());
+
+            var copy: Auto = undefined;
+            try decoder.cloneInto(&copy, .{ .history = &clone_history });
+            for ([_]*Auto{ &decoder, &copy }) |sealed| {
+                try std.testing.expectError(error.TruncatedFrame, sealed.step("", &output));
+                try std.testing.expectError(error.TrailingData, sealed.step(wire[prefix_len..], &output));
+                const after = sealed.snapshot();
+                try std.testing.expectEqual(.detecting, after.phase);
+                try std.testing.expectEqual(@as(?D.ZlibOrGzipFormat, null), after.format);
+                try std.testing.expectEqual(prefix_len, after.total_input);
+                try std.testing.expectEqual(@as(usize, 0), after.total_output);
+                try std.testing.expectEqual(@as(?@TypeOf(after.total_input), prefix_len), after.last_error_input_offset);
+                try std.testing.expectEqualDeep(@as(@TypeOf(after.last_step_progress), .{}), after.last_step_progress);
+                try std.testing.expect(std.mem.allEqual(u8, &output, 0xa5));
+            }
+
+            decoder.reset();
+            const resumed = try decoder.step(wire, &output);
+            try std.testing.expectEqual(.done, resumed.status);
+            try std.testing.expectEqual(wire.len, resumed.progress.input_read);
+            try std.testing.expectEqualStrings(plain, &output);
+            try decoder.finish();
+        }
+    }
+}
+
 fn dictionaryRecovery(comptime D: type) !void {
     const dictionary = "auto wrapper preset dictionary " ** 4;
     const plain = dictionary ++ "payload payload";
@@ -93,7 +137,9 @@ fn dictionaryRecovery(comptime D: type) !void {
     if (first) |_| return error.ExpectedNeedDictionary else |err| try std.testing.expectEqual(error.NeedDictionary, err);
     const failed = decoder.snapshot().last_step_progress;
     try std.testing.expectEqual(D.ZlibOrGzipFormat.zlib, decoder.selectedFormat().?);
-    try std.testing.expect(decoder.requiredDictionaryId() != null);
+    const requested = decoder.requiredDictionaryId() orelse return error.ExpectedNeedDictionary;
+    try std.testing.expectError(error.NeedDictionary, decoder.finish());
+    try std.testing.expectEqual(@as(?u32, requested), decoder.requiredDictionaryId());
     try std.testing.expectError(error.DictionaryMismatch, decoder.provideDictionary("wrong"));
     try decoder.provideDictionary(dictionary);
     const resumed = try decoder.step(wire[failed.input_read..], &output);

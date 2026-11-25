@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
+const rotation = @import("dictionary_rotation.zig");
 
 fn skewedText(comptime seed: u32, comptime len: usize) [len]u8 {
     @setEvalBranchQuota(10_000);
@@ -270,6 +271,7 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const path = args.next() orelse return error.MissingCorpusPath;
     const generated_path = args.next();
+    const rotation_dictionary_path = args.next();
     if (args.next() != null) return error.InvalidBlockPlan;
     const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(1 << 20));
     defer init.gpa.free(bytes);
@@ -385,5 +387,13 @@ pub fn main(init: std.process.Init) !void {
         "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} custom_repcodes={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} cover={d}/{d} cover_fixed={d} cover_candidates={d} sequence_entropy={d}\n",
         .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, cover_sizes.content_size, cover_sizes.reference_size, cover_sizes.fixed_reference_size, cover_sizes.candidates, trained_sequence_entropy_len },
     );
+    if (rotation_dictionary_path) |second_path| {
+        const second = try std.Io.Dir.cwd().readFileAlloc(init.io, second_path, init.gpa, .limited(1 << 20));
+        defer init.gpa.free(second);
+        const receipt = try rotation.verify(init.gpa, runtime, .{ bytes, second });
+        try stdout.interface.print("rotation_frames={d} rotation_blocks={d} rotation_requests={d} rotation_plaintext={d}\n", .{
+            receipt.frames, receipt.blocks, receipt.requests, receipt.plaintext,
+        });
+    }
     try stdout.interface.flush();
 }

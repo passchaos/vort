@@ -1,0 +1,63 @@
+1/32 br.test_0...OK
+2/32 br.incremental.stored.encoder.test_0...OK
+3/32 br.incremental.copy_decoder.test_0...OK
+4/32 br.incremental.owned_copy_decoder.test_0...OK
+5/32 br.encoder.distance.test_0...OK
+6/32 br.encoder.code_length_rle.test_0...OK
+7/32 br.encoder.hq_options.test_0...OK
+8/32 br.encoder.hq_types.test_0...OK
+9/32 br.encoder.hq_parser.test_0...OK
+10/32 br.encoder.total_budget.test_0...OK
+11/32 tests.br_total_memory_contracts.test_0...OK
+12/32 br.encoder.stored_memory_owner.test_0...OK
+13/32 br.encoder.stored_memory_reuse.test_0...OK
+14/32 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/32 br.encoder.hq_dictionary.test_0...OK
+16/32 br.encoder.hq_codec.alias.test_0...OK
+17/32 br.encoder.static_dictionary_matcher.test_0...OK
+18/32 br.encoder.stored_bit_bound.test_0...OK
+19/32 br.encoder.total_budget.tests.test_0...OK
+20/32 br.encoder.hq_parser.tests.test_0...OK
+21/32 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows stored rejects fresh prefix overlap...expected error.InvalidBlockPlan, found .{ .progress = .{ .input_read = 6, .output_written = 3 }, .status = .need_input, .block_boundary = false }
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1295af0 in expectError__anon_44999 (std.zig)
+        return error.TestExpectedError;
+        ^
+/home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:13:9: 0x12999a4 in freshOverlap__anon_44886 (br.zig)
+        try std.testing.expectError(error.InvalidBlockPlan, encoder.step(bytes[0..6], &bytes));
+        ^
+/home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:22:5: 0x129a8c7 in test.Brotli encoder step borrows stored rejects fresh prefix overlap (br.zig)
+    try freshOverlap(br.IncrementalStoredStreamEncoder);
+    ^
+22/32 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows planned rejects fresh prefix overlap...expected error.InvalidBlockPlan, found .{ .progress = .{ .input_read = 6, .output_written = 3 }, .status = .need_input, .block_boundary = false }
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1295af0 in expectError__anon_44999 (std.zig)
+        return error.TestExpectedError;
+        ^
+/home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:13:9: 0x1504b2a in freshOverlap__anon_57770 (br.zig)
+        try std.testing.expectError(error.InvalidBlockPlan, encoder.step(bytes[0..6], &bytes));
+        ^
+/home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:26:5: 0x1505a27 in test.Brotli encoder step borrows planned rejects fresh prefix overlap (br.zig)
+    try freshOverlap(br.IncrementalPlannedStreamEncoder);
+    ^
+23/32 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows static dictionary rejects fresh prefix overlap...expected error.InvalidBlockPlan, found .{ .progress = .{ .input_read = 6, .output_written = 3 }, .status = .need_input, .block_boundary = false }
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1295af0 in expectError__anon_44999 (std.zig)
+        return error.TestExpectedError;
+        ^
+/home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:13:9: 0x12b48d8 in freshOverlap__anon_47329 (br.zig)
+        try std.testing.expectError(error.InvalidBlockPlan, encoder.step(bytes[0..6], &bytes));
+        ^
+/home/passchaos/project-z/vort/src/br/incremental/stored/step_borrows_tests.zig:30:5: 0x12b5827 in test.Brotli encoder step borrows static dictionary rejects fresh prefix overlap (br.zig)
+    try freshOverlap(br.IncrementalStaticDictionaryStreamEncoder);
+    ^
+24/32 br.encoder.scoped_static_dictionary.test_0...OK
+25/32 br.encoder.literal_context_policy.test_0...OK
+26/32 lz77.test_0...OK
+27/32 lz77.test_1...OK
+28/32 br.encoder.hq_tree.test_0...OK
+29/32 br.encoder.histogram_model.log_q8.test_0...OK
+30/32 br.encoder.joint_context.kernels.test_0...OK
+31/32 br.encoder.hq_parser.command_storage.test_0...OK
+32/32 br.encoder.joint_context.kernels_tests.test_0...OK
+29 passed; 0 skipped; 3 failed.

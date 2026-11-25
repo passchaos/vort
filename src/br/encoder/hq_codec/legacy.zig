@@ -25,7 +25,14 @@ pub fn inspect(comptime Codec: type, allocator: std.mem.Allocator, encoded: []co
                 if (decoded_len != expected_len) return error.SizeMismatch;
                 return emitted;
             },
-            .metadata => try Codec.skipMetadata(&reader),
+            .metadata => |final| {
+                try Codec.skipMetadata(&reader);
+                if (final) {
+                    try Codec.checkEnd(reader);
+                    if (decoded_len != expected_len) return error.SizeMismatch;
+                    return emitted;
+                }
+            },
             .uncompressed => |length| {
                 if (length > resolved.block_len) return null;
                 try Codec.consumePadding(&reader);

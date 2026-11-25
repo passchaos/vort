@@ -1,0 +1,135 @@
+check-incremental-encode-borrows
++- test-incremental-encode-borrows-wasm
+   +- install generated to incremental-encode-borrows-wasm.json
+      +- run node w
+1/12 deflate.test.Deflate incremental encode borrow contracts...OK
+2/12 deflate.test_0...OK
+3/12 deflate.bt_optimal.test_0...OK
+4/12 deflate.incremental.tests.test_0...OK
+5/12 deflate.incremental.tests.step_borrows.test_0...OK
+6/12 deflate.incremental.tests.dictionary_borrows.test_0...OK
+7/12 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+8/12 io.requested_heap_budget.test_0...OK
+9/12 lz77.test_0...OK
+10/12 lz77.test_1...OK
+11/12 bitstream.test_0...OK
+12/12 deflate.incremental.encoder.match_finder.rolling_hash.test_0...OK
+All 12 tests passed.
+1/45 br.test_0...OK
+2/45 br.incremental.stored.encoder.test_0...OK
+3/45 br.incremental.copy_decoder.test_0...OK
+4/45 br.incremental.owned_copy_decoder.test_0...OK
+5/45 br.encoder.distance.test_0...OK
+6/45 br.encoder.code_length_rle.test_0...OK
+7/45 br.encoder.hq_options.test_0...OK
+8/45 br.encoder.hq_types.test_0...OK
+9/45 br.encoder.hq_parser.test_0...OK
+10/45 br.encoder.total_budget.test_0...OK
+11/45 tests.br_total_memory_contracts.test_0...OK
+12/45 br.encoder.stored_memory_owner.test_0...OK
+13/45 br.encoder.stored_memory_reuse.test_0...OK
+14/45 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/45 br.encoder.hq_dictionary.test_0...OK
+16/45 br.encoder.hq_codec.alias.test_0...OK
+17/45 br.encoder.static_dictionary_matcher.test_0...OK
+18/45 br.encoder.stored_bit_bound.test_0...OK
+19/45 br.encoder.total_budget.tests.test_0...OK
+20/45 br.encoder.hq_parser.tests.test_0...OK
+21/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows stored rejects fresh prefix overlap...OK
+22/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows planned rejects fresh prefix overlap...OK
+23/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows static dictionary rejects fresh prefix overlap...OK
+24/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows all facades protect receiver and full owned capacities...OK
+25/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows pending drain rejects before progress and retries...OK
+26/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows metadata readers remain disjoint from every writer...OK
+27/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows accept adjacent ranges and empty borrowed slices...OK
+28/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect planned and static retained scratch after reset...OK
+29/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect raw dictionary descriptors and cached bytes...OK
+30/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect memory profiles before activation and retained lease control...OK
+31/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect serialized dictionary view and backing...OK
+32/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect nested matcher and HQ allocations...OK
+33/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows protect HQ profile and owned alias snapshots...OK
+34/45 br.incremental.stored.step_borrows_tests.test.Brotli encoder step borrows preserve multiblock quality dictionary metadata continuation...OK
+35/45 lz77.test_0...OK
+36/45 lz77.test_1...OK
+37/45 br.encoder.hq_tree.test_0...OK
+38/45 io.requested_heap_budget.test_0...OK
+39/45 bitstream.test_0...OK
+40/45 br.encoder.literal_context_policy.test_0...OK
+41/45 br.encoder.scoped_static_dictionary.test_0...OK
+42/45 br.encoder.histogram_model.log_q8.test_0...OK
+43/45 br.encoder.joint_context.kernels.test_0...OK
+44/45 br.encoder.hq_parser.command_storage.test_0...OK
+45/45 br.encoder.joint_context.kernels_tests.test_0...OK
+All 45 tests passed.
+1/26 zstd.test.Zstd incremental encoder step borrows...OK
+2/26 zstd.test_0...OK
+3/26 zstd.decode.budget.test_0...OK
+4/26 io.requested_heap_budget.test_0...OK
+5/26 tests.zstd_stream_counter_contracts.test_0...OK
+6/26 tests.zstd_large_history_contracts.test_0...OK
+7/26 zstd.incremental.encoder.frame.test_0...OK
+8/26 tests.zstd_hq_search_contracts.test_0...OK
+9/26 zstd.match.hq_tree.test_0...OK
+10/26 zstd.match.hq_parser.test_0...OK
+11/26 zstd.match.lazy2.test_0...OK
+12/26 zstd.match.hq_parser.tests.test_0...OK
+13/26 zstd.match.hq_parser.frontier_parser.test_0...OK
+14/26 zstd.encode.total_budget.test_0...OK
+15/26 zstd.encode.controls.test_0...OK
+16/26 checksum.xxh64_stream.test_0...OK
+17/26 zstd.match.controlled_source.test_0...OK
+18/26 lz77.test_0...OK
+19/26 lz77.test_1...OK
+20/26 zstd.encode.repeated_pattern.test_0...OK
+21/26 zstd.literals.cut_histogram.test_0...OK
+22/26 zstd.match.controlled_fast.test_0...OK
+23/26 zstd.match.adaptive_tree.test_0...OK
+24/26 zstd.match.hq_parser.row_tags.test_0...OK
+25/26 zstd.match.hq_parser.search_edges.test_0...OK
+26/26 zstd.match.hq_parser.prepared_price.test_0...OK
+All 26 tests passed.
+(node:2964037) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed command: node tools/wasi_test_gate.js deflate "Deflate incremental encode borrow contracts" ./.zig-cache/o/30589c2a8ced97d99a9c02e72fe17084/vort-deflate-encode-borrows-wasm-tests.wasm br "Brotli encoder step borrows" ./.zig-cache/o/d1f7f90c336a4fe3627b7fab1db5e721/vort-br-encode-borrows-wasm-tests.wasm zstd "Zstd incremental encoder step borrows" ./.zig-cache/o/7401d547b53a52c0d0a5671b128f5a03/vort-zstd-encode-borrows-wasm-tests.wasm
+
+Build Summary: 33/33 steps succeeded; 166/166 tests passed
+check-incremental-encode-borrows success
++- test-incremental-encode-borrows success
+|  +- run test vort-deflate-encode-borrows-tests 12 pass (12 total) 3s MaxRSS:11M
+|  |  +- compile test vort-deflate-encode-borrows-tests Debug native success 4s MaxRSS:237M
+|  +- run test vort-br-encode-borrows-tests 45 pass (45 total) 14s MaxRSS:32M
+|  |  +- compile test vort-br-encode-borrows-tests Debug native success 4s MaxRSS:273M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-encode-borrows-br-x86_64 Debug native success 261ms MaxRSS:136M
+|  |     +- compile obj vort-encode-borrows-br-x86_64 Debug native (reused)
+|  +- run test vort-zstd-encode-borrows-tests 26 pass (26 total) 34ms MaxRSS:11M
+|     +- compile test vort-zstd-encode-borrows-tests Debug native success 3s MaxRSS:308M
+|        +- WriteFile cached
+|        +- compile obj vort-encode-borrows-zstd-x86_64 Debug native success 243ms MaxRSS:137M
+|        +- compile obj vort-encode-borrows-zstd-x86_64 Debug native (reused)
++- test-incremental-encode-borrows-x86 success
+|  +- run test vort-deflate-encode-borrows-x86-tests 12 pass (12 total) 4s MaxRSS:10M
+|  |  +- compile test vort-deflate-encode-borrows-x86-tests Debug x86-linux-musl success 8s MaxRSS:560M
+|  +- run test vort-br-encode-borrows-x86-tests 45 pass (45 total) 14s MaxRSS:29M
+|  |  +- compile test vort-br-encode-borrows-x86-tests Debug x86-linux-musl success 12s MaxRSS:926M
+|  |     +- WriteFile cached
+|  |     +- compile obj vort-encode-borrows-br-x86 Debug x86-linux-musl success 1s MaxRSS:293M
+|  |     +- compile obj vort-encode-borrows-br-x86 Debug x86-linux-musl (reused)
+|  +- run test vort-zstd-encode-borrows-x86-tests 26 pass (26 total) 43ms MaxRSS:10M
+|     +- compile test vort-zstd-encode-borrows-x86-tests Debug x86-linux-musl success 9s MaxRSS:826M
+|        +- WriteFile cached
+|        +- compile obj vort-encode-borrows-zstd-x86 Debug x86-linux-musl success 2s MaxRSS:295M
+|        +- compile obj vort-encode-borrows-zstd-x86 Debug x86-linux-musl (reused)
++- test-incremental-encode-borrows-wasm success
+   +- install generated to incremental-encode-borrows-wasm.json success
+      +- run node success 14s
+         +- compile test vort-deflate-encode-borrows-wasm-tests Debug wasm32-wasi success 7s MaxRSS:799M
+         +- compile test vort-br-encode-borrows-wasm-tests Debug wasm32-wasi success 20s MaxRSS:1G
+         |  +- WriteFile cached
+         |  +- compile obj vort-encode-borrows-br-wasm32 Debug wasm32-wasi success 449ms MaxRSS:177M
+         |  +- compile obj vort-encode-borrows-br-wasm32 Debug wasm32-wasi (reused)
+         +- compile test vort-zstd-encode-borrows-wasm-tests Debug wasm32-wasi success 10s MaxRSS:1G
+            +- WriteFile cached
+            +- compile obj vort-encode-borrows-zstd-wasm32 Debug wasm32-wasi success 574ms MaxRSS:212M
+            +- compile obj vort-encode-borrows-zstd-wasm32 Debug wasm32-wasi (reused)
+

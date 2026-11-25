@@ -39,8 +39,12 @@ Dictionary bytes remain borrowed and are never copied into the ring. The extra
 capacity preserves the Zstandard history coordinate while dictionary bytes are
 phased out and frame output replaces them; real libzstd decodecorpus frames use
 this extended interval. A dictionary set therefore sizes against its largest
-entry. Late `provideDictionary` checks the already-bound capacity and can be
-retried with a sufficiently sized workspace.
+entry. Late `provideDictionary` checks the already-bound capacity. If it
+returns `OutputTooSmall`, rebind a larger history workspace while the
+`NeedDictionary` request is pending and retry dictionary provision. You can
+also clear the workspace to use decoder-owned history, subject to the heap
+limit. Neither operation consumes input, discards the admitted frame header
+or resets cumulative progress.
 
 Within one `step`, committed ring history remains read-only and newly produced
 bytes remain in the current caller output slice. A match can read borrowed
@@ -59,8 +63,9 @@ block completes.
 - `reset`, `resetAll`, `nextStream` and a compatible `resetWithOptions` retain
   the physical binding and clear logical history. Increasing the configured
   maximum beyond capacity fails transactionally.
-- Clear/rebind require an idle frame-header state. Deinitialization never frees
-  or clears caller memory.
+- Clear/rebind require an idle frame-header state or a pending dictionary
+  request. Rebinding still rejects overlap with the decoder and retained
+  compressed input. Deinitialization never frees or clears caller memory.
 - Caller history is excluded from `workingMemoryBytes`. Pairing it with the
   128 KiB caller compressed-block workspace lets ordinary tiny-output decoding
   run with `max_working_memory = 0`; borrowed dictionary, caller output and the

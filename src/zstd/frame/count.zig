@@ -4,6 +4,8 @@ const core = @import("../../core.zig");
 const Count = core.StreamCount;
 const count = core.stream_count;
 const format = @import("format.zig");
+const count_limit = @import("count_limit.zig");
+const window_limit = @import("window_limit.zig");
 
 pub fn addWithinLimit(current: Count, additional: Count, limit: Count) error{ IntegerOverflow, OutputLimitExceeded }!Count {
     const next = try count.add(current, additional);
@@ -28,10 +30,13 @@ pub fn visibleHistory(produced: Count, dictionary_len: usize, window: u64) usize
 pub fn decodedSize(comptime Codec: type, frame: []const u8, options: Codec.Options) Codec.Error!Count {
     var offset: usize = 0;
     var total: Count = 0;
+    var remaining_frames = options.max_frames;
     while (offset < frame.len) {
         const prefix = try format.consumePrefix(frame, &offset, options.format);
         if (prefix == .data) {
             const header = try Codec.parseHeader(frame, &offset, true);
+            try count_limit.requireSlot(remaining_frames);
+            try window_limit.validate(header.window_size, options.max_window_size);
             const dictionary = try Codec.resolveDictionary(header, options);
             const history = try Codec.validateDictionary(header, dictionary);
             const frame_start = total;
@@ -78,9 +83,11 @@ pub fn decodedSize(comptime Codec: type, frame: []const u8, options: Codec.Optio
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
             offset += 4;
+            try count_limit.requireSlot(remaining_frames);
             if (frame.len - offset < skip_len) return error.TruncatedFrame;
             offset += skip_len;
         }
+        count_limit.consume(&remaining_frames);
     }
     return total;
 }

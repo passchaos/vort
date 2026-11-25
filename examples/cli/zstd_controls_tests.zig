@@ -181,6 +181,7 @@ test "Zstd CLI HQ search profile formats optional controls without narrowing" {
     });
     try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_profile strategy=") != null);
     try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_search_profile parse_mode=whole_block match_lengths=complete parser_engine=beam max_prices=18446744073709551615 ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "candidate_checks=0 short_hash_probes=0 rep_probes=0 skipped_positions=0 parser_matches=0 parser_matched_bytes=0\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "max_plan_price_evaluations=4294967313 ") != null);
     writer = std.Io.Writer.fixed(&bytes);
     try cli.printProfile(&writer, .{});

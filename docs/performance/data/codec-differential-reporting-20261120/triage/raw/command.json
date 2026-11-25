@@ -1,0 +1,18 @@
+{
+  "command": [
+    "zig",
+    "test",
+    "--dep",
+    "deflate",
+    "-Mroot=/tmp/vort-raw-acceptance-replay-d8fnjvzw/replay.zig",
+    "-Mdeflate=/home/passchaos/project-z/vort/src/deflate.zig",
+    "--test-filter",
+    "Raw captured strict suffix policy",
+    "--cache-dir",
+    "/tmp/vort-raw-acceptance-replay-d8fnjvzw/cache",
+    "--global-cache-dir",
+    "/tmp/vort-raw-acceptance-replay-d8fnjvzw/global-cache"
+  ],
+  "captured_utc": "2026-11-20T13:18:50.578668+00:00",
+  "source_deflate_sha256": "ceefdf6e03318687a0a8592c02ee47b5b72369574126162d06e96983e6b4ada1"
+}

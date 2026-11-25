@@ -27,6 +27,9 @@ const Codec = struct {
             compressed_header_scratch: []u8,
             metadata_output: []u8,
             metadata_block_lengths: []usize,
+            max_metadata_bytes: core.StreamCount,
+            max_metadata_blocks: core.StreamCount,
+            metadata_observer: ?@import("metadata_events.zig").Observer,
             allow_trailing_data: bool,
         };
         pub const Phase = enum { prefix, payload, compressed_header, done };
@@ -44,6 +47,7 @@ const Codec = struct {
         prefix_remaining: u2 = 2,
         input_read: core.StreamCount = 0,
         output_written: core.StreamCount = 0,
+        history_capacity_exceeded: bool = false,
 
         pub fn initWithOptions(_: []u8, _: Options) @This() {
             return .{};

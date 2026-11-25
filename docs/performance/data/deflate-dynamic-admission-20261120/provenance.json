@@ -1,0 +1,267 @@
+{
+  "source_repository": "/home/passchaos/project-z/vort",
+  "captured_source_head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "snapshot_kind": "complete frozen working source, including uncommitted earlier approved work; not a HEAD/index overlay",
+  "generated_utc": "2026-11-20T13:58:11.230661+00:00",
+  "before_source_manifest_sha256": "6a326aa69bea086cf709248ddcf7810a57b4058e520fc7c34830c876649a48b6",
+  "after_source_manifest_sha256": "87fe407bc96ef32eda6b3f7aecb7d8ef91fb74e27a81b62da3b231a9c06e686f",
+  "before_source_files": 2085,
+  "verified_main_source_files_unchanged": 2085,
+  "current_deflate_root_sha256": "a0acb4d832e3d75ab23ce851d720c8fc0e00002f5e770e5c010da9212e18c811",
+  "current_huffman_source_sha256": "ba22fd54106f4aa2086521b9cf31a761a4e9e008b216d4c9da0076a9eaf31e92",
+  "generic_huffman_builder_region_sha256": "076811ad6f7278239acf402726684e41fd4e0d6c52105152c3693c6cf371b34f",
+  "generic_builder_region_matches_frozen_source": true,
+  "patch_sha256": "2a56343203a6f086945c2fc53da386ced2443356edaa4b32caf8db4de3762eb8",
+  "changed_files": [
+    {
+      "path": "src/deflate/dynamic/admission.zig",
+      "before_sha256": null,
+      "after_sha256": "d1be337993d5d74db8a37f7753f10f9fda8b7d50a5bd9c1a188d3b690ceac596"
+    },
+    {
+      "path": "src/deflate/dynamic/admission_tests.zig",
+      "before_sha256": null,
+      "after_sha256": "e1e7c1b12960c760af22257df382eeb177996261fda5083881cec46359547dca"
+    },
+    {
+      "path": "src/deflate/dynamic/tests/deflate64.zig",
+      "before_sha256": null,
+      "after_sha256": "2e9b4c3b93e88659c6d378efd31d1d56568b1b431d30750877d94b86a02238c6"
+    },
+    {
+      "path": "src/deflate/dynamic/tests/incremental.zig",
+      "before_sha256": null,
+      "after_sha256": "83e0a8ecea16c9e05e5a4d052f515085fb68cc45b5be560dd77fb39e6eb887c6"
+    },
+    {
+      "path": "src/deflate/dynamic/tests/one_shot.zig",
+      "before_sha256": null,
+      "after_sha256": "e6e1b7539d58d54dcaf3cbd13e26189ce60944b5d5e88f76edd823f8aa6a5a44"
+    },
+    {
+      "path": "src/deflate/dynamic/tests/real_samples.zig",
+      "before_sha256": null,
+      "after_sha256": "2ee135a8038a6fbf984953ec875b49045be627a1e18b1cd55421c5b88124e02f"
+    },
+    {
+      "path": "src/deflate/dynamic/tests/shapes.zig",
+      "before_sha256": null,
+      "after_sha256": "bad23fd6f280e75f0a903faa89d11366d659c758e77b38332cac51f18101efaa"
+    },
+    {
+      "path": "src/deflate/dynamic/tests/wire.zig",
+      "before_sha256": null,
+      "after_sha256": "9311c315d67f74ddb6b1aef6bf731f347352a0fe01356a6c8c032c0808da28ff"
+    },
+    {
+      "path": "src/deflate/incremental/decoder/compact_tables.zig",
+      "before_sha256": "4d76551902bf8331f87e9375f0feb812fba557e5c2753317fbafcbaa681a7f34",
+      "after_sha256": "d7738bec2d458c1c83d4dacb582b79cac6c43db0e26e634ced539ee15e42f854"
+    },
+    {
+      "path": "src/deflate/semantic/distance_holes_modes.zig",
+      "before_sha256": "335715541e33d4e3a3ce5c92b1bbe0284d72902ab369046bf769c8bc1b763365",
+      "after_sha256": "d9655ae0e5803221ec50a8f5248993e11b216fbf53a7a604cb3d6e2443b342b1"
+    },
+    {
+      "path": "src/deflate/semantic/distance_holes_tests.zig",
+      "before_sha256": "f08692f8e653f11732860acc30e1b2afd0679469b0afcaf4c4b1fa906c8e0eaa",
+      "after_sha256": "6beb7ea50e93faaf8ef793a94fa6e1ba42292d73d6a46ccc5ee5d2788d26f385"
+    },
+    {
+      "path": "src/deflate/semantic/public_linear_contracts.zig",
+      "before_sha256": "46d3acd1deed098b0229d36298b17e7cc126bdfd2fef21293a502226ed219531",
+      "after_sha256": "0fd62045b6c1b17cbf54dee2a4c8006ac1486678de8b7fb2c515ae915f8931c4"
+    },
+    {
+      "path": "src/deflate.zig",
+      "before_sha256": "ceefdf6e03318687a0a8592c02ee47b5b72369574126162d06e96983e6b4ada1",
+      "after_sha256": "a0acb4d832e3d75ab23ce851d720c8fc0e00002f5e770e5c010da9212e18c811"
+    },
+    {
+      "path": "src/deflate64/decoder.zig",
+      "before_sha256": "d3a42069c6d27f86925d26fe209a6f25b0ce2e164eb38c2b34c82b7c512a7f20",
+      "after_sha256": "4cf384feb04f0db3501f34acf9f32870f89314d9bd9113c89a6844c1ef108424"
+    },
+    {
+      "path": "src/fuzz.zig",
+      "before_sha256": "3c24e36747ddd6cf86a98dcaeb2cf1185d52ef6d2ad95379cf625f1740d599e2",
+      "after_sha256": "9ba23248fb1cbf39f137b6d22ca00c36b44c80c66fa0915be21590e4b606cd5f"
+    },
+    {
+      "path": "src/huffman.zig",
+      "before_sha256": "6d79eeb354d47ad67c2592236902fc7f55a2f1486d071866cfde3d9ed4e762a3",
+      "after_sha256": "ba22fd54106f4aa2086521b9cf31a761a4e9e008b216d4c9da0076a9eaf31e92"
+    }
+  ],
+  "cache_isolation": {
+    "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-deflate-dynamic-admission.IGIQSs/.zig-cache",
+    "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-deflate-dynamic-admission.IGIQSs/.zig-global-cache"
+  },
+  "zig_version": "0.16.0",
+  "build_mode": "Debug",
+  "native_target": "x86_64-linux",
+  "reference_zlib_version": "1.2.11",
+  "wasi_artifact": {
+    "label": "deflate-dynamic-admission-final",
+    "test_filter": "Deflate dynamic tree admission contracts",
+    "wasm_path": "/tmp/vort-deflate-dynamic-admission.IGIQSs/dynamic-tree-final.wasm",
+    "wasm_sha256": "918e20efab950150981d40e9c99f4e9ae2ec9d3196b3b002c363828aa3923a65",
+    "wasm_bytes": 4227525,
+    "exit_code": 0,
+    "imports": [
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_time_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_res_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "poll_oneoff",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pwrite",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pread",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_times",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_size",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_sync",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_seek",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_link",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_symlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_readlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_rename",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_remove_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_readdir",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_create_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get",
+        "kind": "function"
+      }
+    ]
+  },
+  "scope_limit": "Android OTA Puffin has its own format parser and was not modified; shared Deflate/Deflate64 decode paths are covered",
+  "workspace_mutations": "none; all edits/tests/artifacts in temporary isolated copy"
+}

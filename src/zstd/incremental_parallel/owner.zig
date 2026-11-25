@@ -11,6 +11,9 @@ const queue_mod = @import("queue.zig");
 const one_shot = @import("../parallel/types.zig");
 const prefix = @import("../prefix/binding.zig");
 const prefix_errors = @import("../incremental/encoder/prefix_errors.zig");
+const step_borrows = @import("../incremental/encoder/step_borrows.zig");
+const skippable_wire = @import("../frame/skippable.zig");
+const skippable_stream = @import("../incremental/skippable_stream.zig");
 
 pub fn Owner(comptime Codec: type) type {
     return struct {
@@ -33,6 +36,8 @@ pub fn Owner(comptime Codec: type) type {
             finishing: bool,
             done: bool,
             parallel: types.Snapshot,
+            skippable_streaming: bool = false,
+            skippable_remaining: u32 = 0,
         };
 
         control: *memory.Control,
@@ -41,6 +46,7 @@ pub fn Owner(comptime Codec: type) type {
         config: types.Config(Codec),
         prefix_state: prefix.State = .{},
         state: stream.State = .{},
+        streamed_skippable: ?skippable_stream.State = null,
         hash: Codec.Hash = Codec.Hash.init(0),
         actual_state: Codec.State,
         rsync: ?one_shot.Rsync = null,
@@ -85,10 +91,13 @@ pub fn Owner(comptime Codec: type) type {
             return if (@hasField(Codec.Options, "dictionary_usage")) options.frame.dictionary_usage == .prefix else false;
         }
 
-        fn setterEligible(self: *const Self) bool {
+        fn setterStageEligible(self: *const Self) bool {
             return self.failure == null and !self.prefix_state.busy and self.state.unit == .none and
-                self.queue.snapshot().inflight_jobs == 0 and
                 (self.state.done or (!self.state.header_written and !self.state.finishing and !self.state.flushing and self.state.frame_input == 0));
+        }
+
+        fn setterEligible(self: *const Self) bool {
+            return self.setterStageEligible() and self.queue.snapshot().inflight_jobs == 0;
         }
 
         pub fn prefixSnapshot(self: *const Self) prefix.Snapshot {
@@ -97,13 +106,15 @@ pub fn Owner(comptime Codec: type) type {
             return observed;
         }
 
-        pub fn setPrefix(self: *Self, bytes: []const u8) Error!void {
-            try self.setPrefixWithDictionary(Codec.rawPrefix(bytes));
+        pub fn setPrefix(self: *Self, bytes: []const u8, receiver: []const u8) Error!void {
+            try self.setPrefixWithDictionary(Codec.rawPrefix(bytes), receiver);
         }
 
-        pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
-            if (!self.setterEligible()) return error.InvalidStreamState;
+        pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary, receiver: []const u8) Error!void {
+            if (!self.setterStageEligible()) return error.InvalidStreamState;
             const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateNextFrameBorrows(self.options, selected, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidStreamState;
             const id: ?u32 = if (selected) |dict| dict.id else null;
             Codec.resetStateRetainingCapacity(&self.actual_state, null) catch unreachable;
             self.config.dictionary = selected;
@@ -116,9 +127,11 @@ pub fn Owner(comptime Codec: type) type {
             self.prefix_state.install(dictionary);
         }
 
-        pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
-            if (!self.setterEligible()) return error.InvalidStreamState;
+        pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary, receiver: []const u8) Error!void {
+            if (!self.setterStageEligible()) return error.InvalidStreamState;
             const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateNextFrameBorrows(self.options, selected, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidStreamState;
             try Codec.validateDictionaryMetadata(selected);
             Codec.resetStateRetainingCapacity(&self.actual_state, selected) catch unreachable;
             self.prefix_state = .{};
@@ -131,8 +144,10 @@ pub fn Owner(comptime Codec: type) type {
             self.queue.replaceDictionaryBinding(self.config.frame_options, selected, self.config.dictionary_id);
         }
 
-        pub fn clearDictionary(self: *Self) Error!void {
-            if (!self.setterEligible()) return error.InvalidStreamState;
+        pub fn clearDictionary(self: *Self, receiver: []const u8) Error!void {
+            if (!self.setterStageEligible()) return error.InvalidStreamState;
+            try self.validateNextFrameBorrows(self.options, null, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidStreamState;
             self.clearBinding();
         }
 
@@ -159,18 +174,21 @@ pub fn Owner(comptime Codec: type) type {
         pub fn snapshot(self: *const Self) Snapshot {
             const observed = profiles.snapshot(self);
             profiles.publishObserved(Codec, self, observed);
+            const inline_header = if (self.streamed_skippable) |*active| active.pendingHeaderLen() else 0;
             return .{
                 .input_read = self.state.total_input,
                 .output_written = self.state.total_output,
                 .frame_input = self.state.frame_input,
                 .frame_output = self.state.frame_output,
                 .buffered_input = observed.owned_input_bytes,
-                .pending_output = self.state.pendingLen() + observed.completed_output_bytes,
+                .pending_output = self.state.pendingLen() + observed.completed_output_bytes + inline_header,
                 .frame_count = self.state.frame_count,
                 .frame_index = if (self.state.done and self.state.frame_count != 0) self.state.frame_count - 1 else self.state.frame_count,
                 .finishing = self.state.finishing,
                 .done = self.state.done,
                 .parallel = observed,
+                .skippable_streaming = self.streamed_skippable != null,
+                .skippable_remaining = if (self.streamed_skippable) |active| active.remaining else 0,
             };
         }
 
@@ -188,11 +206,13 @@ pub fn Owner(comptime Codec: type) type {
         }
 
         pub fn flush(self: *Self) void {
+            if (self.streamed_skippable != null) return;
             if (self.failure == null and !self.state.finishing and !self.state.done and !self.state.skippable_only) self.state.flushing = true;
             profiles.publish(Codec, self);
         }
 
         pub fn finish(self: *Self) void {
+            if (self.streamed_skippable != null) return;
             if (self.failure == null and !self.state.done and !self.state.skippable_only) {
                 self.state.finishing = true;
                 self.state.flushing = false;
@@ -200,33 +220,48 @@ pub fn Owner(comptime Codec: type) type {
             profiles.publish(Codec, self);
         }
 
-        pub fn step(self: *Self, input: []const u8, output: []u8, current: Limits) Error!core.StepResult {
-            return self.stepCommon(input, output, current, null);
+        pub fn step(self: *Self, input: []const u8, output: []u8, current: Limits, receiver: []const u8) Error!core.StepResult {
+            return self.stepCommon(input, output, current, null, receiver);
         }
 
         /// Completed frames use an explicit nextFrame boundary. Validate the
         /// directive and current stage before modifying prefix bookkeeping.
-        pub fn stepWithDirective(self: *Self, input: []const u8, output: []u8, current: Limits, directive: prefix.Directive) Error!core.StepResult {
+        pub fn stepWithDirective(self: *Self, input: []const u8, output: []u8, current: Limits, directive: prefix.Directive, receiver: []const u8) Error!core.StepResult {
             switch (directive) {
                 .@"continue", .flush, .end => {},
                 _ => return error.InvalidStreamState,
             }
             if ((self.state.done and input.len != 0) or ((self.state.finishing or self.state.flushing or self.state.skippable_only) and input.len != 0) or (self.state.finishing and directive == .flush)) return error.InvalidStreamState;
-            return self.stepCommon(input, output, current, directive);
+            return self.stepCommon(input, output, current, directive, receiver);
         }
 
-        fn stepCommon(self: *Self, input: []const u8, output: []u8, current: Limits, directive: ?prefix.Directive) Error!core.StepResult {
+        fn stepCommon(self: *Self, input: []const u8, output: []u8, current: Limits, directive: ?prefix.Directive, receiver: []const u8) Error!core.StepResult {
+            if (self.streamed_skippable != null) return error.InvalidStreamState;
+            self.validateStepBorrows(input, output, receiver) catch |err| {
+                // A completed empty poll has no wire writes. If its output
+                // aliases state or profiles, preserve those bytes by keeping
+                // the previous observations; ordinary polls still refresh them.
+                if (self.state.done and input.len == 0 and self.failure == null) return .{ .status = .done };
+                return err;
+            };
             var progress: core.Progress = .{};
             self.last_call_error = null;
             defer {
                 self.last_step_progress = progress;
                 profiles.publish(Codec, self);
             }
-            if (current.max_job_count == 0) {
-                self.last_call_error = error.InvalidBlockPlan;
-                return error.InvalidBlockPlan;
+            try self.applyStepLimits(current);
+            // Reject an invalid pledge before activating a prefix or doing
+            // any queue/output work. A corrected offer can use this receiver.
+            if (self.failure == null and !self.state.done and !self.state.finishing and
+                !self.state.skippable_only and (!self.state.flushing or input.len == 0))
+            {
+                self.validateOffer(input.len, current, directive) catch |err| {
+                    self.last_call_error = err;
+                    if (err != error.SizeMismatch and !prefix_errors.retryable(err) and self.prefix_state.phase == .active) return self.poison(err);
+                    return err;
+                };
             }
-            settings.applyLimits(Codec, &self.options, current);
             return self.stepInner(input, output, current, &progress, directive) catch |err| {
                 self.last_call_error = err;
                 if (!prefix_errors.retryable(err) and self.prefix_state.phase == .active) return self.poison(err);
@@ -234,9 +269,31 @@ pub fn Owner(comptime Codec: type) type {
             };
         }
 
-        fn validateOffer(self: *Self, input_len: usize, current: Limits) Error!void {
+        fn applyStepLimits(self: *Self, current: Limits) Error!void {
+            if (current.max_job_count == 0) {
+                self.last_call_error = error.InvalidBlockPlan;
+                return error.InvalidBlockPlan;
+            }
+            settings.applyLimits(Codec, &self.options, current);
+        }
+
+        fn validateStepBorrows(self: *Self, input: []const u8, output: []u8, receiver: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init(input, output, self.options);
+            if (self.config.dictionary) |dictionary| try admission.dictionary(dictionary);
+            try admission.owned(receiver);
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.asBytes(self.control));
+            try admission.list(self.state.front);
+            try admission.parallelState(&self.actual_state);
+            try self.queue.validateStepBorrows(&admission);
+        }
+
+        fn validateOffer(self: *Self, input_len: usize, current: Limits, directive: ?prefix.Directive) Error!void {
+            const offered_end = if (input_len == 0) self.state.frame_input else (try self.state.checkInput(input_len, current.max_input_len)).frame;
+            if (directive == .end) if (self.state.expected_input_len) |expected| {
+                if (offered_end != expected) return error.SizeMismatch;
+            };
             if (input_len == 0) return;
-            _ = try self.state.checkInput(input_len, current.max_input_len);
             const admitted = self.queue.copyProfile().accepted_jobs;
             if (self.config.parallel.rsyncable) {
                 // Content-defined Jobs can be as short as the minimum block,
@@ -266,7 +323,6 @@ pub fn Owner(comptime Codec: type) type {
             const activated = self.prefix_state.activate(if (self.state.skippable_only) .skippable else .frame);
             self.prefix_state.busy = true;
             if (activated and !self.state.skippable_only) Codec.resetStateRetainingCapacity(&self.actual_state, self.config.dictionary) catch |err| return self.poison(err);
-            try self.validateOffer(input.len, current);
             if (self.state.finishing) if (self.state.expected_input_len) |expected| {
                 if (self.state.frame_input != expected) return self.poison(error.SizeMismatch);
             };
@@ -463,6 +519,7 @@ pub fn Owner(comptime Codec: type) type {
             self.queue.resetRetainingCapacity(self.config) catch unreachable;
             Codec.resetStateRetainingCapacity(&self.actual_state, if (self.prefix_state.phase == .pending) null else self.config.dictionary) catch unreachable;
             self.state.resetFrame(self.config.expected_input_len, true);
+            self.streamed_skippable = null;
             self.hash = Codec.Hash.init(0);
             self.front_job = null;
             self.front_emitted = .{};
@@ -486,9 +543,7 @@ pub fn Owner(comptime Codec: type) type {
             self.clearBinding();
         }
 
-        pub fn nextFrame(self: *Self, options: Options, expected: ?types.Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32, replace_binding: bool) Error!void {
-            defer profiles.publish(Codec, self);
-            if (self.failure != null or !self.state.done or self.state.unit != .none or self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
+        pub fn nextFrame(self: *Self, options: Options, expected: ?types.Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32, replace_binding: bool, receiver: []const u8) Error!void {
             const retained = !replace_binding and self.prefix_state.phase == .pending;
             const selected = if (retained) self.config.dictionary else dictionary;
             var configured = options;
@@ -496,6 +551,8 @@ pub fn Owner(comptime Codec: type) type {
                 configured.frame.dictionary_usage = .prefix;
                 configured.frame.dictionary_id = self.config.dictionary_id orelse 0;
             }
+            try self.validateNextFrameBorrows(configured, selected, receiver);
+            if (self.failure != null or !self.state.done or self.state.unit != .none or self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
             try validate(configured, expected, selected, metadata_id);
             const prepared = try settings.prepare(Codec, configured, expected, selected, metadata_id);
             const previous_limit = self.control.snapshot().limit;
@@ -503,7 +560,6 @@ pub fn Owner(comptime Codec: type) type {
             try self.control.checkNewLimit(next_limit);
             try self.control.changeLimit(next_limit);
             errdefer self.control.changeLimit(previous_limit) catch unreachable;
-            profiles.publish(Codec, self);
             try self.queue.resetRetainingCapacity(prepared.config);
             Codec.resetStateRetainingCapacity(&self.actual_state, if (prefixUsage(prepared.options)) null else prepared.config.dictionary) catch unreachable;
             self.options = prepared.options;
@@ -522,13 +578,37 @@ pub fn Owner(comptime Codec: type) type {
             self.last_step_progress = .{};
             profiles.capture(Codec, self);
             self.control.resetPeak();
+            // The ended frame already published its final observations on done.
+            // Publish only the committed next bindings: old observer bytes may
+            // now be the next frame's immutable prefix or dictionary.
+            profiles.publish(Codec, self);
         }
 
-        pub fn writeSkippable(self: *Self, id: u4, payload: []const u8, current: Limits) Error!void {
-            defer profiles.publish(Codec, self);
+        fn validateNextFrameBorrows(self: *Self, options: Options, dictionary: ?Codec.Dictionary, receiver: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init("", &.{}, options);
+            if (dictionary) |selected| try admission.dictionary(selected);
+            try admission.owned(receiver);
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.asBytes(self.control));
+            try admission.list(self.state.front);
+            try admission.parallelState(&self.actual_state);
+            try self.queue.validateOwnedBorrows(&admission);
+        }
+
+        fn validateSkippableStage(self: *const Self) Error!void {
             if (self.failure) |err| return err;
-            if (self.config.frame_options.format != .standard or (!self.state.done and !prefixUsage(self.options)) or !self.setterEligible()) return error.InvalidBlockPlan;
+            if (self.config.frame_options.format != .standard or (!self.state.done and !prefixUsage(self.options)) or !self.setterStageEligible()) return error.InvalidBlockPlan;
+        }
+
+        pub fn writeSkippable(self: *Self, id: u4, payload: []const u8, current: Limits, receiver: []const u8, mutation_started: *bool) Error!void {
+            try self.validateSkippableStage();
             if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
+            const wire_len = std.math.add(usize, skippable_wire.encoded_len, payload.len) catch return error.IntegerOverflow;
+            try self.validateSkippableBorrows(payload, receiver);
+            if (self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
+            if (wire_len > current.max_pending_output_len) return error.OutputLimitExceeded;
+            mutation_started.* = true;
+            defer profiles.publish(Codec, self);
             _ = self.prefix_state.activate(.skippable);
             self.prefix_state.busy = true;
             self.control.coordinator.clearFailure();
@@ -541,6 +621,60 @@ pub fn Owner(comptime Codec: type) type {
             self.state.skippable_only = true;
             self.state.done = false;
             try self.state.checkPending(current.max_pending_output_len);
+        }
+
+        pub fn beginSkippable(self: *Self, id: u4, payload_len: u32, current: Limits, receiver: []const u8) Error!void {
+            try self.validateSkippableStage();
+            try self.validateSkippableBorrows("", receiver);
+            if (current.max_job_count == 0 or self.queue.snapshot().inflight_jobs != 0) return error.InvalidBlockPlan;
+            const wire_len = skippable_stream.wireLen(payload_len);
+            _ = try count.add(self.state.frame_output, wire_len);
+            _ = try count.add(self.state.total_output, wire_len);
+            if (skippable_wire.encoded_len > current.max_pending_output_len) return error.OutputLimitExceeded;
+
+            _ = self.prefix_state.activate(.skippable);
+            self.prefix_state.busy = true;
+            self.streamed_skippable = skippable_stream.State.init(id, payload_len);
+            self.state.skippable_only = true;
+            self.state.done = false;
+            profiles.publish(Codec, self);
+        }
+
+        pub fn stepSkippable(self: *Self, input: []const u8, output: []u8, current: Limits, receiver: []const u8) Error!core.StepResult {
+            const active = if (self.streamed_skippable) |*value| value else return error.InvalidStreamState;
+            try self.validateStepBorrows(input, output, receiver);
+            var progress: core.Progress = .{};
+            self.last_call_error = null;
+            defer {
+                self.last_step_progress = progress;
+                profiles.publish(Codec, self);
+            }
+            try self.applyStepLimits(current);
+            // The header was admitted at begin; metadata body bytes bypass
+            // the data-input counters and are never queued or retained.
+            const status = active.step(input, output, &progress, &self.state.frame_output, &self.state.total_output, current.max_output_len) catch |err| {
+                self.last_call_error = err;
+                return err;
+            };
+            if (status == .done) {
+                self.streamed_skippable = null;
+                self.state.skippable_only = false;
+                self.state.done = true;
+                self.completePrefix();
+            }
+            return result(progress, status);
+        }
+
+        fn validateSkippableBorrows(self: *Self, payload: []const u8, receiver: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init(payload, &.{}, self.options);
+            // Only the offered payload is read; no previous dictionary borrow
+            // is needed while emitting a skippable frame.
+            try admission.owned(receiver);
+            try admission.owned(std.mem.asBytes(self));
+            try admission.owned(std.mem.asBytes(self.control));
+            try admission.list(self.state.front);
+            try admission.parallelState(&self.actual_state);
+            try self.queue.validateOwnedBorrows(&admission);
         }
 
         pub fn deinit(self: *Self) void {

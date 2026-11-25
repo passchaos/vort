@@ -38,7 +38,7 @@ assert.equal(value(6), 0n);
 assert.equal(value(7), 2n);
 assert.ok(value(8) > value(9));
 assert.ok(value(12) >= value(1));
-assert.ok(value(13) >= value(12) + value(1));
+assert.ok(value(13) >= value(12) && value(13) - value(12) < value(1));
 assert.equal(value(14), 1n);
 assert.equal(value(15), 1n);
 assert.ok(value(16) > value(17));

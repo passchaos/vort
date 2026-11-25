@@ -1,0 +1,516 @@
+{
+  "schema": "vort.puffin.stored-padding.audit.v1",
+  "utc": "2026-11-20T16:35:10.399625+00:00",
+  "audit_dir": "/tmp/vort-puffin-padding-audit-iph4ew0a",
+  "cli": "/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort",
+  "cli_sha256": "6aaf480d9bcf63b350bf0e3ead926b4837b43d81aba660490e8e62fc835389f1",
+  "cli_bytes": 229938650,
+  "compiler_note": "Existing CLI; no compilation or source change was performed. Current codec stored-padding logic and pinned AOSP source were read separately.",
+  "python": "3.10.12 (main, Aug 15 2025, 14:32:43) [GCC 11.4.0]",
+  "zlib_version": "1.2.11",
+  "zlib_runtime_version": "1.2.11",
+  "source_before": {
+    "/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig": "caaacbe43fcd23a8b6a6e906ac0a2c1f163d12224f527f3f2a95cfb363d1afe2",
+    "/home/passchaos/project-z/vort/examples/cli/android_ota.zig": "655b84a5f16e27f029eb0b3b3e59744f5b4ee38ba5b547f59ab421e43ff0333e",
+    "/home/passchaos/project-z/vort/docs/performance/data/puffin-dynamic-bounds-20261121/producer/reference/aosp/src/puffer.cc": "55588c4418262f441b970ae087b33963c547620952bd2cd846d606c41bbc85d1",
+    "/home/passchaos/project-z/vort/docs/performance/data/puffin-dynamic-bounds-20261121/producer/reference/aosp/src/huffer.cc": "f1b868362e12f0c4910ad1f954f6819bb6cd18eb47d73b0afe619772f073046d"
+  },
+  "source_after": {
+    "/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig": "caaacbe43fcd23a8b6a6e906ac0a2c1f163d12224f527f3f2a95cfb363d1afe2",
+    "/home/passchaos/project-z/vort/examples/cli/android_ota.zig": "655b84a5f16e27f029eb0b3b3e59744f5b4ee38ba5b547f59ab421e43ff0333e",
+    "/home/passchaos/project-z/vort/docs/performance/data/puffin-dynamic-bounds-20261121/producer/reference/aosp/src/puffer.cc": "55588c4418262f441b970ae087b33963c547620952bd2cd846d606c41bbc85d1",
+    "/home/passchaos/project-z/vort/docs/performance/data/puffin-dynamic-bounds-20261121/producer/reference/aosp/src/huffer.cc": "f1b868362e12f0c4910ad1f954f6819bb6cd18eb47d73b0afe619772f073046d"
+  },
+  "sources_unchanged": true,
+  "aosp_commit": "56246e65146cbf7b736343c95a3e8ed970b9d106",
+  "cases": [
+    {
+      "padding": 0,
+      "raw_hex": "9a3061c20440000000ffff",
+      "raw_bytes": 11,
+      "deflate_bits": 88,
+      "stored_start_bit": 46,
+      "stored_header_end_bit": 49,
+      "padding_bits": 7,
+      "zlib_output_hex": "90909090",
+      "fields": [
+        [
+          1,
+          0,
+          "nonfinal"
+        ],
+        [
+          2,
+          1,
+          "fixed"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          7,
+          0,
+          "EOB256"
+        ],
+        [
+          1,
+          1,
+          "final"
+        ],
+        [
+          2,
+          0,
+          "stored"
+        ],
+        [
+          7,
+          0,
+          "padding"
+        ],
+        [
+          16,
+          0,
+          "LEN"
+        ],
+        [
+          16,
+          65535,
+          "NLEN"
+        ]
+      ],
+      "puff_returncode": 0,
+      "puff_hex": "0000200390909090ff81000080ff81",
+      "puff_bytes": 15,
+      "stored_puff_header": 128,
+      "huff_returncode": 0,
+      "huff_error": null,
+      "huff_output_emitted": true,
+      "bit_exact": true
+    },
+    {
+      "padding": 31,
+      "raw_hex": "9a3061c204403e0000ffff",
+      "raw_bytes": 11,
+      "deflate_bits": 88,
+      "stored_start_bit": 46,
+      "stored_header_end_bit": 49,
+      "padding_bits": 7,
+      "zlib_output_hex": "90909090",
+      "fields": [
+        [
+          1,
+          0,
+          "nonfinal"
+        ],
+        [
+          2,
+          1,
+          "fixed"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          7,
+          0,
+          "EOB256"
+        ],
+        [
+          1,
+          1,
+          "final"
+        ],
+        [
+          2,
+          0,
+          "stored"
+        ],
+        [
+          7,
+          31,
+          "padding"
+        ],
+        [
+          16,
+          0,
+          "LEN"
+        ],
+        [
+          16,
+          65535,
+          "NLEN"
+        ]
+      ],
+      "puff_returncode": 0,
+      "puff_hex": "0000200390909090ff8100009fff81",
+      "puff_bytes": 15,
+      "stored_puff_header": 159,
+      "huff_returncode": 0,
+      "huff_error": null,
+      "huff_output_emitted": true,
+      "bit_exact": true
+    },
+    {
+      "padding": 32,
+      "raw_hex": "9a3061c20440400000ffff",
+      "raw_bytes": 11,
+      "deflate_bits": 88,
+      "stored_start_bit": 46,
+      "stored_header_end_bit": 49,
+      "padding_bits": 7,
+      "zlib_output_hex": "90909090",
+      "fields": [
+        [
+          1,
+          0,
+          "nonfinal"
+        ],
+        [
+          2,
+          1,
+          "fixed"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          7,
+          0,
+          "EOB256"
+        ],
+        [
+          1,
+          1,
+          "final"
+        ],
+        [
+          2,
+          0,
+          "stored"
+        ],
+        [
+          7,
+          32,
+          "padding"
+        ],
+        [
+          16,
+          0,
+          "LEN"
+        ],
+        [
+          16,
+          65535,
+          "NLEN"
+        ]
+      ],
+      "puff_returncode": 0,
+      "puff_hex": "0000200390909090ff810000a0ff81",
+      "puff_bytes": 15,
+      "stored_puff_header": 160,
+      "huff_returncode": 1,
+      "huff_error": "error: SizeMismatch",
+      "huff_output_emitted": false,
+      "misinterpreted_56bit_huff_returncode": 0,
+      "misinterpreted_huff_hex": "9a3061c204c000",
+      "misinterpreted_output_hex": "90909090"
+    },
+    {
+      "padding": 64,
+      "raw_hex": "9a3061c20440800000ffff",
+      "raw_bytes": 11,
+      "deflate_bits": 88,
+      "stored_start_bit": 46,
+      "stored_header_end_bit": 49,
+      "padding_bits": 7,
+      "zlib_output_hex": "90909090",
+      "fields": [
+        [
+          1,
+          0,
+          "nonfinal"
+        ],
+        [
+          2,
+          1,
+          "fixed"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          7,
+          0,
+          "EOB256"
+        ],
+        [
+          1,
+          1,
+          "final"
+        ],
+        [
+          2,
+          0,
+          "stored"
+        ],
+        [
+          7,
+          64,
+          "padding"
+        ],
+        [
+          16,
+          0,
+          "LEN"
+        ],
+        [
+          16,
+          65535,
+          "NLEN"
+        ]
+      ],
+      "puff_returncode": 0,
+      "puff_hex": "0000200390909090ff810000c0ff81",
+      "puff_bytes": 15,
+      "stored_puff_header": 192,
+      "huff_returncode": 1,
+      "huff_error": "error: InvalidPuffinStream",
+      "huff_output_emitted": false
+    },
+    {
+      "padding": 31,
+      "raw_hex": "9a3061c28409807c0000ffff",
+      "raw_bytes": 12,
+      "deflate_bits": 96,
+      "stored_start_bit": 55,
+      "stored_header_end_bit": 58,
+      "padding_bits": 6,
+      "zlib_output_hex": "9090909090",
+      "fields": [
+        [
+          1,
+          0,
+          "nonfinal"
+        ],
+        [
+          2,
+          1,
+          "fixed"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          7,
+          0,
+          "EOB256"
+        ],
+        [
+          1,
+          1,
+          "final"
+        ],
+        [
+          2,
+          0,
+          "stored"
+        ],
+        [
+          6,
+          31,
+          "padding"
+        ],
+        [
+          16,
+          0,
+          "LEN"
+        ],
+        [
+          16,
+          65535,
+          "NLEN"
+        ]
+      ],
+      "puff_returncode": 0,
+      "puff_hex": "000020049090909090ff8100009fff81",
+      "stored_puff_header": 159,
+      "huff_returncode": 0,
+      "huff_error": null,
+      "huff_output_emitted": true,
+      "bit_exact": true
+    },
+    {
+      "padding": 32,
+      "raw_hex": "9a3061c2840980800000ffff",
+      "raw_bytes": 12,
+      "deflate_bits": 96,
+      "stored_start_bit": 55,
+      "stored_header_end_bit": 58,
+      "padding_bits": 6,
+      "zlib_output_hex": "9090909090",
+      "fields": [
+        [
+          1,
+          0,
+          "nonfinal"
+        ],
+        [
+          2,
+          1,
+          "fixed"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          9,
+          19,
+          "literal144"
+        ],
+        [
+          7,
+          0,
+          "EOB256"
+        ],
+        [
+          1,
+          1,
+          "final"
+        ],
+        [
+          2,
+          0,
+          "stored"
+        ],
+        [
+          6,
+          32,
+          "padding"
+        ],
+        [
+          16,
+          0,
+          "LEN"
+        ],
+        [
+          16,
+          65535,
+          "NLEN"
+        ]
+      ],
+      "puff_returncode": 0,
+      "puff_hex": "000020049090909090ff810000a0ff81",
+      "stored_puff_header": 160,
+      "huff_returncode": 1,
+      "huff_error": "error: SizeMismatch",
+      "huff_output_emitted": false
+    }
+  ]
+}

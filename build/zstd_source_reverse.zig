@@ -36,11 +36,11 @@ pub fn register(
     const wasi = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const check = b.step(
         "check-zstd-source-reverse",
-        "Execute source-backed Zstd layout, literal-stream, compressed-block, frame-execution, stream-cursor, public frame/stream decode, resumable stream cursor and entropy primitive contracts on native, x86 and WASI",
+        "Execute Zstd source-backed decode, seekable read/write, and frame admission contracts on native, x86 and WASI",
     );
     const compile_wasm = b.step(
         "check-zstd-source-reverse-wasm",
-        "Compile source-backed Zstd layout, literal-stream, compressed-block, frame-execution, stream-cursor, public frame/stream decode, resumable stream cursor and entropy primitive WASI contracts",
+        "Compile source-backed Zstd layout, entropy, frame/stream and seekable range WASI contracts",
     );
 
     for ([_]std.Build.ResolvedTarget{ target, x86, wasi }, 0..) |variant, index| {
@@ -52,12 +52,13 @@ pub fn register(
         const implementation_tests = b.addTest(.{
             .name = b.fmt("vort-zstd-source-reverse{s}-tests", .{suffix}),
             .root_module = codecModule(b, variant, optimize),
-            .filters = &.{"Zstd source"},
+            .filters = &.{ "Zstd source", "Zstd frame window limit", "Zstd frame count limit", "Zstd frame admission retry", "Zstd chunk window", "Zstd seekable window limit" },
         });
         if (index == 2) {
             implementation_tests.stack_size = 8 * 1024 * 1024;
             compile_wasm.dependOn(&implementation_tests.step);
-            const run = b.addSystemCommand(&.{ "node", "tools/zstd/source_reverse_wasm_gate.js" });
+            const run = b.addSystemCommand(&.{"node"});
+            run.addFileArg(b.path("tools/zstd/source_reverse_wasm_gate.js"));
             run.addArtifactArg(implementation_tests);
             gate.dependOn(&b.addInstallFile(
                 run.captureStdOut(.{}),

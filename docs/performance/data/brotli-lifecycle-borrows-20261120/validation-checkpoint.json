@@ -1,0 +1,27 @@
+{
+  "schema": "vort.brotli-lifecycle-validation-checkpoint.v1",
+  "confirmed_utc": "2026-11-20T11:18:10.163842+00:00",
+  "goal_status": "active",
+  "repo_applied": true,
+  "completed_validation": {
+    "lifecycle": "43/43",
+    "step": "46/46",
+    "finish": "35/35",
+    "cross_architecture": "28/28 steps;148/148 native/x86 tests;actual WASI br/zstd success",
+    "full_test_compilation": "13/13 steps",
+    "current_brotli_reference": "98 main cases,7056 generated/progressive fixtures,libbrotli1.0.9"
+  },
+  "prior_snapshot_checks": "401/401 latest prior native/WASM checks;5710 passed/2 skipped earlier Debug snapshot",
+  "remaining_job": {
+    "command": "zig build -j2 test -Doptimize=ReleaseSafe --summary all",
+    "session_id": 15705,
+    "build_pid": 3002054,
+    "compiler_pid": 3002423,
+    "source": "../incremental-encoder-lifecycle-20261120/source-before-brotli-setters.json",
+    "confirmed_live": true,
+    "log": "../incremental-encoder-lifecycle-20261120/library-tests-releasesafe.log"
+  },
+  "git_state": "Controlled code/docs staged; original src/lz77.zig experiment unstaged and unchanged; uncommitted per AGENTS.md.",
+  "original_lz77_diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a",
+  "next_action": "Resume original compile handle before treating it as terminal; keep current and prior snapshot verification scopes separate."
+}

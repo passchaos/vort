@@ -33,6 +33,13 @@
 
 const std = @import("std");
 const vort = @import("vort");
+const reporting = @import("codec_differential/reporting.zig");
+const incremental_valid = @import("codec_differential/incremental_valid.zig");
+const upstream_real = @import("codec_differential/upstream_real.zig");
+const wide_brotli = @import("codec_differential/wide_brotli.zig");
+const zlib_admission = @import("codec_differential/zlib_dictionary_admission.zig");
+const zstd_rotation = @import("codec_differential/zstd_dictionary_rotation.zig");
+const BrotliRuntime = @import("br/libbrotli_runtime.zig").Runtime;
 
 const c = @cImport({
     @cInclude("zlib.h");
@@ -67,6 +74,7 @@ const Pattern = enum {
     text,
     mixed,
     sparse_binary,
+    real_file,
 
     fn label(self: Pattern) []const u8 {
         return switch (self) {
@@ -78,6 +86,7 @@ const Pattern = enum {
             .text => "text",
             .mixed => "mixed",
             .sparse_binary => "sparse-binary",
+            .real_file => "real-file",
         };
     }
 };
@@ -122,12 +131,14 @@ const WireCase = struct {
     /// Zstd frames, whose source is the joined member payloads.
     source: []const u8,
     dictionary: ?[]const u8 = null,
+    upstream_real: bool = false,
+    upstream_flush_interval: ?usize = null,
+    upstream_checkpoint: ?upstream_real.Checkpoint = null,
     /// Brotli Large Window extension: Vort must opt in and libbrotli only
     /// accepts the wire through a streaming decoder with the same parameter.
     brotli_large_window: bool = false,
-    /// Zstd skippable/concatenated wires are rejected by the libzstd one-shot
-    /// API but accepted by its streaming API, which is the matching reference
-    /// contract for Vort's frame-loop decoder.
+    /// Use the streaming reference for Zstd skippable and concatenated wires
+    /// to check input consumption and the final frame-completion hint.
     zstd_stream_reference: bool = false,
     /// Concatenated gzip members need a per-member inflate state: a single
     /// inflate call stops at the first member's Z_STREAM_END without
@@ -156,25 +167,7 @@ const WireCase = struct {
     serialized_dictionary_bytes: ?[]u8 = null,
 };
 
-const Stats = struct {
-    wires: u64 = 0,
-    variant_wires: u64 = 0,
-    vort_roundtrip_ok: u64 = 0,
-    exact_size_ok: u64 = 0,
-    reference_ok: u64 = 0,
-    reference_rejected_valid: u64 = 0,
-    truncation_cuts: u64 = 0,
-    truncation_both_rejected: u64 = 0,
-    truncation_agreed: u64 = 0,
-    mutations_xor: u64 = 0,
-    mutations_bitflip: u64 = 0,
-    mutations_overwrite: u64 = 0,
-    mutations_double_overwrite: u64 = 0,
-    mutations_insert: u64 = 0,
-    mutations_delete: u64 = 0,
-    mutation_rejected: u64 = 0,
-    one_sided_divergence: u64 = 0,
-};
+const Stats = reporting.Stats;
 
 const Failure = struct {
     codec: Codec,
@@ -190,11 +183,92 @@ const Harness = struct {
     allocator: std.mem.Allocator,
     rng: Rng,
     stats: Stats = .{},
+    reporting: reporting.Reporter,
+    active_level: u4 = 0,
+    last_reference: reporting.ReferenceObservation = .{},
     failures: std.ArrayList(Failure),
     only: ?Codec,
     deep: bool,
     max_mutation_wire: usize = 2048,
     hq_br_limit: usize = 1024,
+    brotli_audit: reporting.BrotliReferenceAudit = .{},
+    zlib_exact_input: bool = false,
+    zlib_trailing_rejections: usize = 0,
+    incremental_valid_only: bool = false,
+    real_output: ?*std.Io.Writer = null,
+    real_brotli_dictionary_reference: ?BrotliRuntime = null,
+    incremental_runs: [codecs.len]RunCount = @splat(.{}),
+    incremental_tail_runs: [codecs.len]RunCount = @splat(.{}),
+    incremental_flush_runs: [codecs.len]RunCount = @splat(.{}),
+
+    const RunCount = struct { passed: usize = 0, failed: usize = 0, calls: usize = 0 };
+
+    fn checkIncremental(self: *Harness, codec: Codec, pattern: Pattern, wire_case: WireCase, outcome: incremental_valid.Outcome) !void {
+        const counts = if (outcome == .complete)
+            &self.incremental_runs[@intFromEnum(codec)]
+        else if (wire_case.upstream_checkpoint != null)
+            &self.incremental_flush_runs[@intFromEnum(codec)]
+        else
+            &self.incremental_tail_runs[@intFromEnum(codec)];
+        for (incremental_valid.schedules) |schedule| {
+            var progress: incremental_valid.Progress = .{};
+            incremental_valid.check(self.allocator, codec, wire_case, schedule, outcome, &progress) catch |err| {
+                if (err == error.OutOfMemory) return err;
+                counts.failed += 1;
+                try self.fail(codec, pattern, wire_case.label, wire_case.source.len, wire_case.wire.len, "vort-incremental", "schedule={s}/{s} level={d} read={d} written={d} calls={d} phase={s}: {s}", .{
+                    @tagName(schedule), @tagName(outcome), self.active_level, progress.read, progress.written, progress.calls, progress.error_phase, @errorName(err),
+                });
+                continue;
+            };
+            if (wire_case.upstream_checkpoint) |checkpoint| {
+                const expected = if (codec == .zstd and schedule == .pledged) 0 else checkpoint.decoded_bytes;
+                if (progress.read != checkpoint.wire_bytes or progress.written != expected) {
+                    counts.failed += 1;
+                    try self.fail(codec, pattern, wire_case.label, wire_case.source.len, wire_case.wire.len, "vort-flush-cut", "schedule={s} flush={d} read={d}/{d} published={d}/{d}", .{
+                        @tagName(schedule), checkpoint.flush_index, progress.read, checkpoint.wire_bytes, progress.written, expected,
+                    });
+                    continue;
+                }
+            } else if (wire_case.upstream_real and outcome == .truncated) {
+                const prevalidated = codec == .zstd and schedule == .pledged;
+                const minimum = if (prevalidated) 0 else if (wire_case.upstream_flush_interval) |interval|
+                    wire_case.source.len -| interval
+                else
+                    0;
+                const maximum = if (prevalidated) 0 else wire_case.source.len;
+                if (progress.written < minimum or progress.written > maximum) {
+                    counts.failed += 1;
+                    try self.fail(codec, pattern, wire_case.label, wire_case.source.len, wire_case.wire.len, "vort-incremental", "schedule={s}: published {d} bytes before truncation, expected {d}..{d}", .{ @tagName(schedule), progress.written, minimum, maximum });
+                    continue;
+                }
+            }
+            counts.passed += 1;
+            counts.calls += progress.calls;
+            if (self.real_output) |stdout| {
+                if (wire_case.upstream_checkpoint) |checkpoint| {
+                    try stdout.writeAll("upstream_real_flush_step_json: ");
+                    try std.json.Stringify.value(.{
+                        .schema = "vort.codec-differential.upstream-flush-cut.v1",
+                        .path = wire_case.label,
+                        .codec = codec.label(),
+                        .schedule = schedule,
+                        .checkpoint = checkpoint,
+                        .progress = progress,
+                    }, .{}, stdout);
+                } else {
+                    try stdout.writeAll("upstream_real_step_json: ");
+                    try std.json.Stringify.value(.{
+                        .path = wire_case.label,
+                        .codec = codec.label(),
+                        .schedule = schedule,
+                        .outcome = outcome,
+                        .progress = progress,
+                    }, .{}, stdout);
+                }
+                try stdout.writeByte('\n');
+            }
+        }
+    }
 
     fn fail(
         self: *Harness,
@@ -262,6 +336,7 @@ const Harness = struct {
                     offset += chunk;
                 }
             },
+            .real_file => unreachable, // File input is not generated.
             .sparse_binary => {
                 @memset(buffer, 0);
                 var offset: usize = 0;
@@ -332,7 +407,7 @@ const Harness = struct {
         return decoded;
     }
 
-    fn vortDecode(self: *Harness, codec: Codec, wire_case: WireCase) ?[]u8 {
+    pub fn vortDecode(self: *Harness, codec: Codec, wire_case: WireCase) ?[]u8 {
         const a = self.allocator;
         const wire = wire_case.wire;
         const dict = wire_case.dictionary;
@@ -436,24 +511,30 @@ const Harness = struct {
         };
     }
 
-    fn referenceDecode(self: *Harness, codec: Codec, wire_case: WireCase, capacity: usize) ?[]u8 {
+    pub fn referenceDecode(self: *Harness, codec: Codec, wire_case: WireCase, capacity: usize) ?[]u8 {
         const a = self.allocator;
         // One byte of slack keeps zero-length outputs addressable and lets
         // overrun-prone implementations fail loudly instead of aliasing. The
         // 4x headroom tolerates RLE-style expansion in mutated wires while a
         // fixed ceiling bounds every reference allocation.
-        const target_cap = @min(@max(capacity *% 4, 4096), 1 << 20);
-        const dst = a.alloc(u8, target_cap + 1) catch return null;
+        const default_capacity = if (wire_case.upstream_real) wire_case.source.len + 1 else reporting.referenceCapacity(capacity);
+        const output_capacity = if (codec == .br)
+            @max(default_capacity, self.brotli_audit.output_floor + 1)
+        else
+            default_capacity;
+        self.last_reference = .{ .output_capacity = output_capacity };
+        const dst = a.alloc(u8, output_capacity) catch return null;
+        const zlib_tails = if (self.zlib_exact_input) &self.zlib_trailing_rejections else null;
         switch (codec) {
-            .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary),
-            .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary),
+            .raw => return zlibInflate(a, dst, wire_case.wire, -15, wire_case.dictionary, &self.last_reference, zlib_tails),
+            .zlib => return zlibInflate(a, dst, wire_case.wire, 15, wire_case.dictionary, &self.last_reference, zlib_tails),
             .gzip => if (wire_case.gzip_multi_member)
                 return gzipInflateMembers(a, dst, wire_case.wire)
             else
-                return zlibInflate(a, dst, wire_case.wire, 31, null),
+                return zlibInflate(a, dst, wire_case.wire, 31, null, &self.last_reference, zlib_tails),
             .zstd => {
                 if (wire_case.zstd_stream_reference) {
-                    return zstdDecompressStream(a, dst, wire_case.wire);
+                    return zstdDecompressStream(a, dst, wire_case.wire, if (wire_case.upstream_real) wire_case.dictionary else null);
                 }
                 // A standard dictionary passes its full serialized bytes; a
                 // raw-content dictionary passes just the history bytes.
@@ -481,8 +562,20 @@ const Harness = struct {
                 return a.realloc(dst, result) catch dst[0..result];
             },
             .br => {
-                if (wire_case.brotli_large_window) {
-                    return brotliDecompressStream(a, dst, wire_case.wire, true);
+                if (wire_case.brotli_shared_dictionary and wire_case.upstream_real) {
+                    const runtime = self.real_brotli_dictionary_reference orelse {
+                        a.free(dst);
+                        return null;
+                    };
+                    const decoded = runtime.decodeWithRawDictionariesInto(wire_case.wire, dst, &.{wire_case.dictionary.?}) catch {
+                        a.free(dst);
+                        return null;
+                    };
+                    return a.realloc(dst, decoded) catch dst[0..decoded];
+                }
+                if (wire_case.brotli_large_window or self.brotli_audit.exact_input) {
+                    const tails = if (wire_case.brotli_large_window) null else &self.brotli_audit.trailing_rejections;
+                    return brotliDecompressStream(a, dst, wire_case.wire, wire_case.brotli_large_window, tails);
                 }
                 var decoded_size: usize = dst.len;
                 const result = c.BrotliDecoderDecompress(
@@ -506,6 +599,8 @@ const Harness = struct {
         wire: []const u8,
         window_bits: c_int,
         dictionary: ?[]const u8,
+        observation: *reporting.ReferenceObservation,
+        trailing_rejections: ?*usize,
     ) ?[]u8 {
         var stream: c.z_stream = std.mem.zeroes(c.z_stream);
         if (c.inflateInit2(&stream, window_bits) != c.Z_OK) {
@@ -543,10 +638,18 @@ const Harness = struct {
             }
             code = c.inflate(&stream, c.Z_FINISH);
         }
+        observation.* = .{ .output_capacity = dst.len, .input_consumed = wire.len - @as(usize, stream.avail_in), .input_remaining = stream.avail_in, .result_code = code };
         _ = c.inflateEnd(&stream);
         if (code != c.Z_STREAM_END) {
             a.free(dst);
             return null;
+        }
+        if (trailing_rejections) |count| {
+            if (observation.input_remaining.? != 0) {
+                count.* += 1;
+                a.free(dst);
+                return null;
+            }
         }
         const written = dst.len - stream.avail_out;
         return a.realloc(dst, written) catch dst[0..written];
@@ -592,12 +695,10 @@ const Harness = struct {
         return a.realloc(dst, total) catch dst[0..total];
     }
 
-    /// Streaming libzstd reference. The one-shot API rejects skippable frames
-    /// and trailing concatenated members, while Vort's frame loop accepts them,
-    /// so the streaming API is the matching interoperability contract. A
-    /// truncated stream that makes zero progress on the final call is treated
-    /// as a rejection.
-    fn zstdDecompressStream(a: std.mem.Allocator, dst: []u8, wire: []const u8) ?[]u8 {
+    /// Streaming libzstd reference with explicit consumption and completion
+    /// checks. A truncated stream that makes zero progress on the final call
+    /// is treated as a rejection.
+    fn zstdDecompressStream(a: std.mem.Allocator, dst: []u8, wire: []const u8, raw_prefix: ?[]const u8) ?[]u8 {
         // Match ZSTD_decompress, which accepts an empty input as a zero-byte
         // result; Vort's frame loop takes the same empty-output shortcut.
         const dctx = c.ZSTD_createDCtx() orelse {
@@ -605,6 +706,12 @@ const Harness = struct {
             return null;
         };
         defer _ = c.ZSTD_freeDCtx(dctx);
+        if (raw_prefix) |prefix| {
+            if (c.ZSTD_isError(c.ZSTD_DCtx_refPrefix(dctx, prefix.ptr, prefix.len)) != 0) {
+                a.free(dst);
+                return null;
+            }
+        }
         var input = c.ZSTD_inBuffer{ .src = wire.ptr, .size = wire.len, .pos = 0 };
         var total: usize = 0;
         // Match ZSTD_decompress, which accepts an empty input as a zero-byte
@@ -655,6 +762,7 @@ const Harness = struct {
         dst: []u8,
         wire: []const u8,
         large_window: bool,
+        trailing_rejections: ?*usize,
     ) ?[]u8 {
         const state = c.BrotliDecoderCreateInstance(null, null, null) orelse {
             a.free(dst);
@@ -690,6 +798,7 @@ const Harness = struct {
                 },
                 c.BROTLI_DECODER_RESULT_SUCCESS => {
                     if (avail_in != 0) {
+                        if (trailing_rejections) |count| count.* += 1;
                         a.free(dst);
                         return null;
                     }
@@ -1303,13 +1412,15 @@ const Harness = struct {
         const a = self.allocator;
         const input = wire_case.source;
         const wire = wire_case.wire;
+        self.active_level = level;
+        self.reporting.observeWire(self.info(codec, pattern, wire_case), wire_case);
         self.stats.wires += 1;
         if (!std.mem.eql(u8, wire_case.label, "baseline")) self.stats.variant_wires += 1;
 
         // 1. Vort one-shot round trip.
         {
             const decoded = self.vortDecode(codec, wire_case) orelse {
-                try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "vort-roundtrip", "level={d} rejected its own valid wire", .{level});
+                try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "vort-roundtrip", "level={d} rejected a valid wire", .{level});
                 return;
             };
             defer a.free(decoded);
@@ -1340,7 +1451,8 @@ const Harness = struct {
         //    magicless Zstd frames are rejected outright by libzstd as unknown
         //    frame descriptors; both rely on the two Vort decode contracts
         //    plus the no-reference rejection check below.
-        if (!wire_case.brotli_shared_dictionary and !wire_case.zstd_magicless and !wire_case.brotli_serialized_dictionary) {
+        if (reporting.hasReference(wire_case)) {
+            self.stats.by_codec[@intFromEnum(codec)].external_valid_checks += 1;
             const reference = self.referenceDecode(codec, wire_case, input.len) orelse {
                 self.stats.reference_rejected_valid += 1;
                 try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-interop", "level={d} system reference rejected Vort wire", .{level});
@@ -1352,6 +1464,7 @@ const Harness = struct {
                 return;
             }
             self.stats.reference_ok += 1;
+            self.stats.by_codec[@intFromEnum(codec)].external_valid_ok += 1;
         } else if (wire_case.brotli_shared_dictionary) {
             // Without the attached prefix the wire must not decode: otherwise
             // the encoder emitted a stream that does not actually need the
@@ -1386,6 +1499,22 @@ const Harness = struct {
             self.stats.reference_ok += 1;
         }
 
+        if (!reporting.hasReference(wire_case)) self.stats.by_codec[@intFromEnum(codec)].vort_only_valid_contracts += 1;
+        if (self.incremental_valid_only) {
+            try self.checkIncremental(codec, pattern, wire_case, .complete);
+            if (wire_case.upstream_real) {
+                var truncated = wire_case;
+                truncated.wire = wire[0 .. wire.len - 1];
+                if (self.referenceDecode(codec, truncated, input.len)) |accepted| {
+                    a.free(accepted);
+                    try self.fail(codec, pattern, wire_case.label, input.len, wire.len, "reference-truncated-tail", "reference accepted the final-byte cut", .{});
+                    return;
+                }
+                try self.checkIncremental(codec, pattern, truncated, .truncated);
+            }
+            return;
+        }
+
         // 4. Truncation with cross-decoder agreement. Every prefix is fed to
         //    both Vort and the system reference. Both rejecting is the normal
         //    incomplete-stream outcome; both accepting must yield identical
@@ -1406,6 +1535,8 @@ const Harness = struct {
             // prefix can never decode further than the full wire and any
             // accepted prefix must reproduce the source prefix exactly.
             if (wire_case.brotli_shared_dictionary or wire_case.zstd_magicless or wire_case.brotli_serialized_dictionary) {
+                self.stats.by_codec[@intFromEnum(codec)].truncation_no_reference_checks += 1;
+                if (vort_result != null) self.stats.by_codec[@intFromEnum(codec)].truncation_no_reference_accept += 1 else self.stats.by_codec[@intFromEnum(codec)].truncation_no_reference_reject += 1;
                 if (vort_result) |decoded| {
                     if (decoded.len > input.len or !std.mem.eql(u8, decoded, input[0..decoded.len])) {
                         try self.fail(codec, pattern, wire_case.label, input.len, cut, "truncation", "prefix of {d} bytes: Vort-only decode output mismatch", .{cut});
@@ -1419,6 +1550,9 @@ const Harness = struct {
             }
             const reference_result = self.referenceDecode(codec, prefix_case, input.len);
             defer if (reference_result) |decoded| a.free(decoded);
+            const truncation = &self.stats.by_codec[@intFromEnum(codec)];
+            truncation.truncation_external_checks += 1;
+            if (vort_result != null and reference_result != null) truncation.truncation_external_both_accept += 1 else if (vort_result == null and reference_result == null) truncation.truncation_external_both_reject += 1 else truncation.truncation_external_one_sided += 1;
             if (vort_result == null and reference_result == null) {
                 self.stats.truncation_both_rejected += 1;
                 continue;
@@ -1579,6 +1713,7 @@ const Harness = struct {
         // Brotli dictionaries can change copy boundaries under corruption, so
         // both length and content changes are recorded rather than failing.
         if (wire_case.brotli_shared_dictionary or wire_case.brotli_serialized_dictionary) {
+            try self.reporting.mutation(&self.stats, self.info(codec, pattern, wire_case), wire_case, mutated, operator, vort_result, null, .{});
             if (vort_result) |decoded| {
                 if (decoded.len != expected_len or !std.mem.eql(u8, decoded, wire_case.source)) {
                     self.stats.one_sided_divergence += 1;
@@ -1589,6 +1724,7 @@ const Harness = struct {
             return;
         }
         if (wire_case.zstd_magicless) {
+            try self.reporting.mutation(&self.stats, self.info(codec, pattern, wire_case), wire_case, mutated, operator, vort_result, null, .{});
             if (vort_result) |decoded| {
                 if (decoded.len != expected_len) {
                     try self.fail(codec, pattern, wire_case.label, expected_len, mutated.len, "mutation", "{s}: Vort-only decode changed output length", .{operator});
@@ -1604,6 +1740,7 @@ const Harness = struct {
         }
         const reference_result = self.referenceDecode(codec, mutated_case, expected_len);
         defer if (reference_result) |decoded| a.free(decoded);
+        try self.reporting.mutation(&self.stats, self.info(codec, pattern, wire_case), wire_case, mutated, operator, vort_result, reference_result, self.last_reference);
         if (vort_result == null) self.stats.mutation_rejected += 1;
         if (vort_result != null and reference_result != null) {
             if (!std.mem.eql(u8, vort_result.?, reference_result.?)) {
@@ -1613,6 +1750,10 @@ const Harness = struct {
         } else if (vort_result != null or reference_result != null) {
             self.stats.one_sided_divergence += 1;
         }
+    }
+
+    fn info(self: *const Harness, codec: Codec, pattern: Pattern, wire_case: WireCase) reporting.Info {
+        return .{ .codec_index = @intFromEnum(codec), .codec = @tagName(codec), .pattern = @tagName(pattern), .variant = wire_case.label, .level = self.active_level };
     }
 
     fn levelsFor(self: *Harness, codec: Codec, input_len: usize) []const u4 {
@@ -1694,6 +1835,18 @@ pub fn main(init: std.process.Init) !void {
     var only: ?Codec = null;
     var deep = false;
     var max_size: usize = 8192;
+    var brotli_audit: reporting.BrotliReferenceAudit = .{};
+    var zlib_exact_input = false;
+    var incremental_valid_only = false;
+    var real_files: std.ArrayList([]const u8) = .empty;
+    defer real_files.deinit(init.gpa);
+    var real_limit: usize = upstream_real.default_file_limit;
+    var real_brotli_wide = false;
+    var real_flush_cuts = false;
+    var real_dictionary_path: ?[]const u8 = null;
+    var real_dictionary_smoke = false;
+    var divergence_directory: ?[]const u8 = null;
+    var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "--seed=")) {
             seed = try std.fmt.parseInt(u64, arg["--seed=".len..], 0);
@@ -1702,12 +1855,41 @@ pub fn main(init: std.process.Init) !void {
             max_size = 65536;
         } else if (std.mem.startsWith(u8, arg, "--max-size=")) {
             max_size = try std.fmt.parseInt(usize, arg["--max-size=".len..], 0);
+        } else if (std.mem.startsWith(u8, arg, "--brotli-reference-floor=")) {
+            brotli_audit.output_floor = try std.fmt.parseInt(usize, arg["--brotli-reference-floor=".len..], 0);
+            if (brotli_audit.output_floor < 4096 or brotli_audit.output_floor > 1 << 20)
+                return error.InvalidBrotliReferenceFloor;
+        } else if (std.mem.eql(u8, arg, "--brotli-reference-exact-input")) {
+            brotli_audit.exact_input = true;
+        } else if (std.mem.eql(u8, arg, "--zlib-reference-exact-input")) {
+            zlib_exact_input = true;
+        } else if (std.mem.startsWith(u8, arg, "--real-file=")) {
+            try real_files.append(init.gpa, arg["--real-file=".len..]);
+        } else if (std.mem.startsWith(u8, arg, "--real-limit=")) {
+            real_limit = try std.fmt.parseInt(usize, arg["--real-limit=".len..], 0);
+            if (real_limit == 0 or real_limit > upstream_real.maximum_file_limit) return error.InvalidRealLimit;
+        } else if (std.mem.eql(u8, arg, "--real-brotli-wide")) {
+            real_brotli_wide = true;
+        } else if (std.mem.eql(u8, arg, "--real-flush-cuts")) {
+            real_flush_cuts = true;
+        } else if (std.mem.startsWith(u8, arg, "--real-dictionary=")) {
+            if (real_dictionary_path != null) return error.InvalidRealDictionaryMode;
+            real_dictionary_path = arg["--real-dictionary=".len..];
+            if (real_dictionary_path.?.len == 0) return error.InvalidRealDictionaryMode;
+        } else if (std.mem.eql(u8, arg, "--real-dictionary-smoke")) {
+            real_dictionary_smoke = true;
+        } else if (std.mem.eql(u8, arg, "--incremental-valid-only")) {
+            incremental_valid_only = true;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
             const name = arg["--only=".len..];
             inline for (codecs) |codec| {
                 if (std.mem.eql(u8, name, codec.label())) only = codec;
             }
             if (only == null) return error.UnknownCodecFilter;
+        } else if (std.mem.startsWith(u8, arg, "--divergence-dir=")) {
+            divergence_directory = arg["--divergence-dir=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--replay-dir=")) {
+            replay_directory = arg["--replay-dir=".len..];
         } else if (std.mem.eql(u8, arg, "--help")) {
             try printUsage(init);
             return;
@@ -1716,75 +1898,168 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    const dictionary_mode = real_dictionary_smoke or real_dictionary_path != null;
+    if (dictionary_mode) {
+        if (real_brotli_wide or only == .gzip or
+            (real_dictionary_smoke and (real_dictionary_path != null or real_files.items.len != 0)) or
+            (!real_dictionary_smoke and real_files.items.len == 0)) return error.InvalidRealDictionaryMode;
+        real_flush_cuts = true;
+    }
+    if (real_flush_cuts and (real_brotli_wide or (real_files.items.len == 0 and !real_dictionary_smoke))) return error.InvalidRealFlushCutMode;
+    if (real_brotli_wide) {
+        if (only != null and only != .br) return error.ConflictingRealBrotliFilter;
+        only = .br;
+    }
+    const real_mode = real_brotli_wide or real_dictionary_smoke or real_files.items.len != 0;
+    if (real_mode) {
+        if (deep) return error.ConflictingRealAndGeneratedModes;
+        incremental_valid_only = true;
+        brotli_audit.exact_input = true;
+        zlib_exact_input = true;
+    }
+    if (replay_directory != null and divergence_directory != null) return error.ConflictingArtifactModes;
+    if (replay_directory != null or divergence_directory != null) {
+        if (incremental_valid_only) return error.ConflictingIncrementalValidArtifactModes;
+        if (brotli_audit.output_floor != 0) return error.ConflictingBrotliReferenceFloorArtifactModes;
+        if (brotli_audit.exact_input) return error.ConflictingBrotliReferenceInputArtifactModes;
+        if (zlib_exact_input) return error.ConflictingZlibReferenceInputArtifactModes;
+    }
+
     // The C reference libraries allocate through libc; use the same allocator
     // so cross-allocator ownership never enters the comparison.
     const allocator = std.heap.c_allocator;
+    const real_dictionary: ?[]u8 = if (real_dictionary_path) |path|
+        try std.Io.Dir.cwd().readFileAlloc(init.io, path, allocator, .limited(upstream_real.maximum_dictionary_len + 1))
+    else
+        null;
+    defer if (real_dictionary) |bytes| allocator.free(bytes);
+    if (real_dictionary) |bytes| if (bytes.len == 0 or bytes.len > upstream_real.maximum_dictionary_len)
+        return error.InvalidRealDictionarySize;
+    var brotli_dictionary_reference: ?BrotliRuntime = if (dictionary_mode and (only == null or only == .br)) try BrotliRuntime.open() else null;
+    defer if (brotli_dictionary_reference) |*runtime| runtime.deinit();
+    if (brotli_dictionary_reference) |runtime| {
+        if (!runtime.supportsSharedDictionary()) return error.ReferenceRawDictionaryUnavailable;
+        if (runtime.encoder_version() != c.BrotliDecoderVersion()) return error.ReferenceVersionMismatch;
+    }
     var harness = Harness{
         .allocator = allocator,
+        .reporting = try reporting.Reporter.init(allocator, init.io, divergence_directory),
         .rng = .{ .state = seed },
         .failures = .empty,
         .only = only,
         .deep = deep,
+        .brotli_audit = brotli_audit,
+        .zlib_exact_input = zlib_exact_input,
+        .incremental_valid_only = incremental_valid_only,
+        .real_brotli_dictionary_reference = brotli_dictionary_reference,
     };
     defer {
         for (harness.failures.items) |failure| allocator.free(failure.detail);
         harness.failures.deinit(allocator);
+        harness.reporting.deinit();
     }
 
-    const input = try allocator.alloc(u8, max_size);
-    defer allocator.free(input);
-
-    for (patterns) |pattern| {
-        for (smoke_sizes) |size| {
-            if (size > max_size) continue;
-            try runPatternCase(&harness, pattern, size, seed, input);
-        }
-        if (deep) {
-            for (deep_extra_sizes) |size| {
-                if (size > max_size) continue;
-                try runPatternCase(&harness, pattern, size, seed, input);
-            }
-            // Independent RNG stream per pattern keeps random-size draws
-            // stable regardless of which fixed sizes were filtered out.
-            var size_rng = Rng{ .state = seed ^ (@as(u64, @intFromEnum(pattern)) *% 0x9e3779b97f4a7c15 +% 0xdeadbeef) };
-            var draw: usize = 0;
-            while (draw < random_size_count) : (draw += 1) {
-                const size = size_rng.bounded(max_size + 1);
-                try runPatternCase(&harness, pattern, size, seed, input);
-            }
-        }
+    if (replay_directory) |directory| {
+        try reporting.replayAll(allocator, init.io, directory, &harness, Codec, WireCase);
+        return;
     }
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print(
-        \\codec differential fuzz: seed={d} deep={} only={s}
-        \\  valid wires={d} (variants={d}) vort_roundtrip={d} exact_size={d} reference_interop={d}
-        \\  truncation cuts={d} (both_rejected={d} agreed_accept={d})
-        \\  mutations xor={d} bitflip={d} overwrite={d} double-overwrite={d} insert={d} delete={d} (rejected={d} one_sided_divergence={d})
-        \\
-    , .{
-        seed,
-        deep,
-        if (only) |codec| codec.label() else "all",
-        harness.stats.wires,
-        harness.stats.variant_wires,
-        harness.stats.vort_roundtrip_ok,
-        harness.stats.exact_size_ok,
-        harness.stats.reference_ok,
-        harness.stats.truncation_cuts,
-        harness.stats.truncation_both_rejected,
-        harness.stats.truncation_agreed,
-        harness.stats.mutations_xor,
-        harness.stats.mutations_bitflip,
-        harness.stats.mutations_overwrite,
-        harness.stats.mutations_double_overwrite,
-        harness.stats.mutations_insert,
-        harness.stats.mutations_delete,
-        harness.stats.mutation_rejected,
-        harness.stats.one_sided_divergence,
-    });
+    if (real_mode) {
+        harness.real_output = stdout;
+        for (real_files.items) |path| {
+            const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, allocator, .limited(real_limit));
+            defer allocator.free(input);
+            try runRealInput(&harness, stdout, path, input, .{
+                .brotli_wide = real_brotli_wide,
+                .record_flushes = real_flush_cuts,
+                .raw_dictionary = real_dictionary,
+            });
+        }
+        if (real_dictionary_smoke) {
+            const fixture = try upstream_real.dictionarySmokeInput(allocator);
+            defer allocator.free(fixture.storage);
+            if (fixture.input.len > real_limit) return error.StreamTooLong;
+            try runRealInput(&harness, stdout, "builtin-raw-dictionary-v1", fixture.input, .{
+                .record_flushes = true,
+                .raw_dictionary = fixture.dictionary,
+            });
+            if (only == null or only == .zstd) {
+                if (zstd_rotation.verify(allocator)) |receipt| {
+                    try stdout.writeAll("upstream_zstd_dictionary_rotation_json: ");
+                    try std.json.Stringify.value(receipt, .{}, stdout);
+                    try stdout.writeByte('\n');
+                } else |err| {
+                    if (err == error.OutOfMemory) return err;
+                    try harness.fail(.zstd, .real_file, "builtin-zstd-dictionary-rotation-v1", 0, 0, "dictionary-rotation", "{s}", .{@errorName(err)});
+                }
+            }
+        } else if (real_files.items.len == 0) {
+            const input = try wide_brotli.smokeInput(allocator);
+            defer allocator.free(input);
+            if (input.len > real_limit) return error.StreamTooLong;
+            try runRealInput(&harness, stdout, "builtin-wide-brotli-v1", input, .{ .brotli_wide = true });
+        }
+    } else {
+        const input = try allocator.alloc(u8, max_size);
+        defer allocator.free(input);
+
+        for (patterns) |pattern| {
+            for (smoke_sizes) |size| {
+                if (size > max_size) continue;
+                try runPatternCase(&harness, pattern, size, seed, input);
+            }
+            if (deep) {
+                for (deep_extra_sizes) |size| {
+                    if (size > max_size) continue;
+                    try runPatternCase(&harness, pattern, size, seed, input);
+                }
+                // Independent RNG stream per pattern keeps random-size draws
+                // stable regardless of which fixed sizes were filtered out.
+                var size_rng = Rng{ .state = seed ^ (@as(u64, @intFromEnum(pattern)) *% 0x9e3779b97f4a7c15 +% 0xdeadbeef) };
+                var draw: usize = 0;
+                while (draw < random_size_count) : (draw += 1) {
+                    const size = size_rng.bounded(max_size + 1);
+                    try runPatternCase(&harness, pattern, size, seed, input);
+                }
+            }
+        }
+    }
+    try harness.reporting.finish(stdout, harness.stats, seed, deep, if (only) |codec| codec.label() else "all", .{
+        .zlib = std.mem.span(c.zlibVersion()),
+        .zstd = std.mem.span(c.ZSTD_versionString()),
+        .brotli_decoder_version_encoded = c.BrotliDecoderVersion(),
+    }, harness.brotli_audit, if (harness.zlib_exact_input) harness.zlib_trailing_rejections else null);
+    if (harness.incremental_valid_only) {
+        try stdout.writeAll("incremental_valid_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.incremental-valid.v1",
+            .schedules = incremental_valid.schedules,
+            .codec_order = codecs,
+            .by_codec = harness.incremental_runs,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
+    if (harness.real_output != null) {
+        try stdout.writeAll("upstream_real_tail_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.upstream-real-tail.v1",
+            .codec_order = codecs,
+            .by_codec = harness.incremental_tail_runs,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
+    if (real_flush_cuts) {
+        try stdout.writeAll("upstream_real_flush_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.upstream-flush-cuts.v1",
+            .codec_order = codecs,
+            .by_codec = harness.incremental_flush_runs,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
             failure.codec.label(),
@@ -1798,6 +2073,149 @@ pub fn main(init: std.process.Init) !void {
     }
     try stdout.flush();
     if (harness.failures.items.len != 0) return error.FuzzMismatch;
+}
+
+fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, input: []const u8, mode: upstream_real.Options) !void {
+    const a = harness.allocator;
+    if (input.len == 0) return error.EmptyRealFile;
+    if (mode.raw_dictionary != null and input.len <= upstream_real.chunk_len) return error.RealDictionaryInputTooSmall;
+    const input_hash = upstream_real.digest(input);
+    for (codecs) |codec| {
+        if (harness.only) |only_codec| if (codec != only_codec) continue;
+        if (codec == .gzip and mode.raw_dictionary != null) continue;
+        const wire = try upstream_real.encode(c, a, input, codec, mode);
+        defer a.free(wire.bytes);
+        const wire_hash = upstream_real.digest(wire.bytes);
+        try stdout.writeAll("upstream_real_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.upstream-real.v1",
+            .path = path,
+            .codec = codec.label(),
+            .source_bytes = input.len,
+            .source_sha256 = &input_hash,
+            .wire_bytes = wire.bytes.len,
+            .wire_sha256 = &wire_hash,
+            .encoder = wire.encoder,
+            .flush_interval = wire.flush_interval,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+        const full: WireCase = .{
+            .label = path,
+            .wire = wire.bytes,
+            .source = input,
+            .dictionary = mode.raw_dictionary,
+            .upstream_real = true,
+            .upstream_flush_interval = wire.flush_interval,
+            .zstd_stream_reference = codec == .zstd,
+            .brotli_shared_dictionary = codec == .br and mode.raw_dictionary != null,
+        };
+        try harness.checkWire(codec, .real_file, full, wire.level);
+        if (mode.raw_dictionary) |dictionary| {
+            if (!try checkRealDictionaryFaults(harness, stdout, codec, full, dictionary)) continue;
+            const dictionary_hash = upstream_real.digest(dictionary);
+            try stdout.writeAll("upstream_real_dictionary_json: ");
+            try std.json.Stringify.value(.{
+                .schema = "vort.codec-differential.upstream-raw-dictionary.v1",
+                .path = path,
+                .codec = codec.label(),
+                .dictionary_bytes = dictionary.len,
+                .dictionary_sha256 = &dictionary_hash,
+                .wire_sha256 = &wire_hash,
+            }, .{}, stdout);
+            try stdout.writeByte('\n');
+        }
+        for (wire.checkpoints.slice()) |checkpoint| {
+            var cut = full;
+            cut.wire = wire.bytes[0..checkpoint.wire_bytes];
+            cut.upstream_checkpoint = checkpoint;
+            // The reference needs room only for what the producer has fed.
+            // Keep the full plaintext pledge for the Vort schedules.
+            var reference = cut;
+            reference.source = input[0..checkpoint.decoded_bytes];
+            if (harness.referenceDecode(codec, reference, reference.source.len)) |accepted| {
+                a.free(accepted);
+                try harness.fail(codec, .real_file, path, input.len, cut.wire.len, "reference-flush-cut", "reference accepted unfinished stream after flush {d}", .{checkpoint.flush_index});
+                continue;
+            }
+            try harness.checkIncremental(codec, .real_file, cut, .truncated);
+        }
+        if (mode.brotli_wide and codec == .br) {
+            const receipt = wide_brotli.verify(a, wire.bytes, input) catch |err| {
+                if (err == error.OutOfMemory) return err;
+                try harness.fail(codec, .real_file, path, input.len, wire.bytes.len, "brotli-wide-preflight", "{s}", .{@errorName(err)});
+                continue;
+            };
+            try stdout.writeAll("upstream_brotli_preflight_json: ");
+            try std.json.Stringify.value(.{
+                .schema = "vort.codec-differential.brotli-wide-preflight.v1",
+                .path = path,
+                .wire_sha256 = &wire_hash,
+                .verification = receipt,
+            }, .{}, stdout);
+            try stdout.writeByte('\n');
+        }
+    }
+}
+
+const DictionaryFault = enum { missing, wrong };
+const FaultOutput = enum { rejected, different, original };
+
+fn checkRealDictionaryFaults(harness: *Harness, stdout: *std.Io.Writer, codec: Codec, full: WireCase, dictionary: []const u8) !bool {
+    const a = harness.allocator;
+    const wrong = try a.dupe(u8, dictionary);
+    defer a.free(wrong);
+    if (codec == .zlib) {
+        // A one-bit change in one byte necessarily changes the Adler-32 ID.
+        wrong[wrong.len - 1] ^= 1;
+    } else {
+        for (wrong) |*byte| byte.* ^= 0xff;
+    }
+    var ok = true;
+    for ([_]DictionaryFault{ .missing, .wrong }) |fault| {
+        var input = full;
+        input.dictionary = if (fault == .wrong) wrong else null;
+        input.brotli_shared_dictionary = full.brotli_shared_dictionary and fault == .wrong;
+        const reference = classifyFaultOutput(a, harness.referenceDecode(codec, input, full.source.len), full.source);
+        const vort_output = classifyFaultOutput(a, harness.vortDecode(codec, input), full.source);
+        const exact = classifyFaultOutput(a, harness.vortDecodeExact(codec, input, full.source.len), full.source);
+        const must_reject = codec == .zlib or codec == .zstd;
+        if (reference == .original or vort_output == .original or exact == .original or
+            (must_reject and (reference != .rejected or vort_output != .rejected or exact != .rejected)))
+        {
+            try harness.fail(codec, .real_file, full.label, full.source.len, full.wire.len, "dictionary-fault", "{s} dictionary: reference={s} vort={s} exact={s}", .{
+                @tagName(fault), @tagName(reference), @tagName(vort_output), @tagName(exact),
+            });
+            ok = false;
+            continue;
+        }
+        try stdout.writeAll("upstream_real_dictionary_fault_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.upstream-dictionary-fault.v1",
+            .path = full.label,
+            .codec = codec.label(),
+            .fault = fault,
+            .reference = reference,
+            .vort = vort_output,
+            .exact = exact,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
+    if (ok and codec == .zlib) {
+        const receipt = zlib_admission.verify(full.wire, full.source, dictionary, wrong) catch |err| {
+            try harness.fail(codec, .real_file, full.label, full.source.len, full.wire.len, "dictionary-admission", "{s}", .{@errorName(err)});
+            return false;
+        };
+        try stdout.writeAll("upstream_zlib_dictionary_admission_json: ");
+        try std.json.Stringify.value(.{ .path = full.label, .verification = receipt }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
+    return ok;
+}
+
+fn classifyFaultOutput(a: std.mem.Allocator, result: ?[]u8, expected: []const u8) FaultOutput {
+    const decoded = result orelse return .rejected;
+    defer a.free(decoded);
+    return if (std.mem.eql(u8, decoded, expected)) .original else .different;
 }
 
 fn runPatternCase(harness: *Harness, pattern: Pattern, size: usize, seed: u64, input: []u8) !void {
@@ -1814,6 +2232,15 @@ fn printUsage(init: std.process.Init) !void {
     try stdout.print(
         \\Usage: vort-codec-differential-fuzz [--seed=N] [--deep] [--max-size=N]
         \\                                   [--only=raw-deflate|zlib|gzip|zstd|brotli]
+        \\                                   [--brotli-reference-floor=BYTES]
+        \\                                   [--brotli-reference-exact-input]
+        \\                                   [--zlib-reference-exact-input]
+        \\                                   [--incremental-valid-only]
+        \\                                   [--real-file=PATH ...] [--real-limit=BYTES]
+        \\                                   [--real-flush-cuts | --real-brotli-wide]
+        \\                                   [--real-dictionary=PATH | --real-dictionary-smoke]
+        \\                                   [--divergence-dir=NEW_DIRECTORY]
+        \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\
     , .{});
     try stdout.flush();

@@ -217,7 +217,7 @@ test "Brotli incremental decoder streams compressed output before finish" {
     for (output, 0..) |byte, index| try std.testing.expectEqual(prefix[index % prefix.len], byte);
 }
 
-test "Brotli incremental decoder sizes history from the window prefix" {
+test "Brotli owned history growth sizes history from the first data meta-block" {
     const payload = "window-sized progressive history";
     const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
@@ -231,9 +231,11 @@ test "Brotli incremental decoder sizes history from the window prefix" {
         const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..]);
         input_offset += step.progress.input_read;
         output_offset += step.progress.output_written;
-        if (decoder.snapshot().history_capacity != 0)
-            try std.testing.expectEqual((@as(usize, 1) << br.default_window_bits) - 16, decoder.snapshot().history_capacity);
+        const capacity = decoder.snapshot().history_capacity;
+        if (input_offset == 1) try std.testing.expectEqual(@as(usize, 0), capacity);
+        if (capacity != 0) try std.testing.expectEqual(payload.len, capacity);
     }
+    try std.testing.expectEqual(payload.len, decoder.snapshot().history_capacity);
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 

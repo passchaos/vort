@@ -1,0 +1,36 @@
+test-zstd
++- run test vort-zstd-tests w
+optional_huffman_state compressed_blocks=3 treeless_blocks=1 one_stream=1 four_stream=3
+optional_huffman_state init_corrupt=12 init_truncated=4 decode_corrupt=2
+raw_mixed sequence_pairs=32078 reader_errors=1336 init_errors=9 grouped=28665 mutations=592 truncations=715 executor_pairs=1322 executor_errors=1302 public_decodes=3
+four-byte optimal frame audit: changed=0 larger=0 total=590165/590165 worst_extra=0
+fastest optimal budget audit: changed=3 larger=0 smaller=3 total=230779/230784 worst_extra=0
+single beam audit: changed=1 larger=0 smaller=1 total=658597/658600 worst_extra=0
+single beam JSON audit: changed=20 total=12581/12534 worst_extra=3
+level three single beam audit: changed=0 larger=0 smaller=0 total=1574138/1574138 worst_extra=0 absolute_selected=0 absolute_larger=0 absolute_worst_extra=0 proxy_selected=0 proxy_larger=0 proxy_worst_extra=0
+level three single beam JSON audit: changed=0 larger=0 total=10104/10104 worst_extra=0
+level three large single beam audit: selected=20 changed=20 larger=20 total=19576/19524 worst_extra=4 absolute_selected=24 absolute_larger=20 absolute_total=19576 absolute_worst_extra=4 proxy_selected=24 proxy_larger=20 proxy_total=19576 proxy_worst_extra=4
+level three structured-family audit: screened=16 eligible=0 changed=0 larger=0 smaller=0 total=100138/100138 worst_extra=0 proxy_eligible=0 proxy_larger=0 proxy_smaller=0 proxy_total=100138 proxy_worst_extra=0
+optimal_prefix cases=110 bound_rejections=132007 prefix_rejections=31420 matches=10886 alloc_failures=6 warm_reuses=220 safety_neighbors=22 checked_slacks=18 targeted_bounds=53357
+ordinal_plan cases=110 bound_rejections=132007 prefix_rejections=31420 matches=10886 alloc_failures=12 warm_reuses=220 safety_neighbors=22 checked_slacks=18 targeted_bounds=53357
+sequence costs independent oracle: models=3, boundaries_per_model=657, comparisons=1983
+four-byte optimal plan audit: improved=2 total=30492051/30492055
+frontier_choices synthetic_plan_cases=36 failure_prefixes=3
+frontier_choices intervals=1463 edge_prices=167316 quota_prefixes=1294 faults=1306
+frontier price independent oracle: first_calls=15662, replay_calls=15218, errors=7804
+adaptive_prepare_allocation_count=4 true_failure_prefixes=4 final_success+checkpoint+cleanup=pass
+cut-histogram state-bytes=4208 initial-scan=49152 adjacent128-scan=256
+repeated_pattern_tiny_range_cases=492760 all_segment_fields+immutable=equal
+repeated_pattern_period_prefix_tail_cases=19845 period2..64+scan48boundary+firstmismatch=equal
+repeated_pattern_long_cache_cases=162 overlap_and_first_start_period_ties=pass
+repeated_pattern_random_subrange_cases=41688 no_cache_false_extension=pass
+validated RLE prefix model=4294967296 actual-final-input=7 wire-tail=4 bytes
+failed command: ./.zig-cache/o/b500b368b1a5db59c6a48d1794aeb5d7/vort-zstd-tests --cache-dir=./.zig-cache --seed=0xf8c6752e --listen=-
+
+Build Summary: 5/5 steps succeeded; 1415/1415 tests passed
+test-zstd success
++- run test vort-zstd-tests 1415 pass (1415 total) 1m MaxRSS:218M
+   +- compile test vort-zstd-tests ReleaseFast native success 4m MaxRSS:4G
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)

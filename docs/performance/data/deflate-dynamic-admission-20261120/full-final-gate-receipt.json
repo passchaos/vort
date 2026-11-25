@@ -1,0 +1,23 @@
+{
+  "recorded_utc": "2026-11-20T16:35:48.211013+00:00",
+  "status": "passed",
+  "session_id": 34953,
+  "terminal_exit_code": 0,
+  "command": "zig build -j2 test check check-wasm --summary all",
+  "build_steps_passed": 408,
+  "build_steps_total": 408,
+  "tests_passed": 5827,
+  "tests_total_including_skips": 5829,
+  "tests_skipped": 2,
+  "root_library_passed": 5734,
+  "root_library_skipped": 2,
+  "root_library_total_including_skips": 5736,
+  "source_manifest": "source-provenance.json",
+  "source_manifest_sha256": "5cfd7f70971ac0f9ef771a351ec194dc780b1f37155828e647ae7b09d1587413",
+  "log": "full-final-gate.log",
+  "log_sha256": "12fe7bf923489b8053aeaef2cff332e9de9afa83e8ac83f909c36201189e383c",
+  "puffin_patch_integrated": false,
+  "record_optimization_integrated": false,
+  "source_scope": "Frozen uncommitted worktree; includes preserved unrelated LZ77 experiment; all60 recorded source hashes matched at terminal",
+  "puffin_codec_baseline_sha256": "caaacbe43fcd23a8b6a6e906ac0a2c1f163d12224f527f3f2a95cfb363d1afe2"
+}

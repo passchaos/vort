@@ -679,6 +679,29 @@ fn crc32Slice32Update(previous: u32, input: []const u8) u32 {
             Crc32Slice32.tables[1][(word7 >> 16) & 0xff] ^
             Crc32Slice32.tables[0][(word7 >> 24) & 0xff];
     }
+    // Short updates (notably 7x31-byte streaming chunks) used to fall
+    // straight from the 32-byte slice to the serial byte loop. The 8- and
+    // 4-byte slices keep the same table layout while shortening the
+    // dependency chain and loop overhead.
+    while (index + 8 <= input.len) : (index += 8) {
+        const word0 = std.mem.readInt(u32, input[index..][0..4], .little) ^ crc;
+        const word1 = std.mem.readInt(u32, input[index + 4 ..][0..4], .little);
+        crc = Crc32Slice32.tables[7][word0 & 0xff] ^
+            Crc32Slice32.tables[6][(word0 >> 8) & 0xff] ^
+            Crc32Slice32.tables[5][(word0 >> 16) & 0xff] ^
+            Crc32Slice32.tables[4][(word0 >> 24) & 0xff] ^
+            Crc32Slice32.tables[3][word1 & 0xff] ^
+            Crc32Slice32.tables[2][(word1 >> 8) & 0xff] ^
+            Crc32Slice32.tables[1][(word1 >> 16) & 0xff] ^
+            Crc32Slice32.tables[0][(word1 >> 24) & 0xff];
+    }
+    while (index + 4 <= input.len) : (index += 4) {
+        const word = std.mem.readInt(u32, input[index..][0..4], .little) ^ crc;
+        crc = Crc32Slice32.tables[3][word & 0xff] ^
+            Crc32Slice32.tables[2][(word >> 8) & 0xff] ^
+            Crc32Slice32.tables[1][(word >> 16) & 0xff] ^
+            Crc32Slice32.tables[0][(word >> 24) & 0xff];
+    }
     while (index < input.len) : (index += 1) {
         const table_index: u8 = @truncate(crc ^ input[index]);
         crc = Crc32.table[table_index] ^ (crc >> 8);

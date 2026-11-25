@@ -1,0 +1,36 @@
+{
+  "intervals": 136,
+  "forbidden_process_intervals": 1,
+  "max_sibling_scheduled_fraction": 0.0332211959943523,
+  "conflicts": [
+    {
+      "start_ns": 978343604475136,
+      "end_ns": 978343730623424,
+      "cpu_run_ns": 614135651,
+      "sibling_run_ns": 4190797,
+      "sibling_scheduled_fraction": 0.0332211959943523,
+      "forbidden_processes": [],
+      "process_activity": [
+        {
+          "pid": 3084726,
+          "name": "python3",
+          "last_cpu": 8,
+          "cpu_ticks_delta": 3
+        },
+        {
+          "pid": 3084727,
+          "name": "before-bench",
+          "last_cpu": 6,
+          "cpu_ticks_delta": 12
+        },
+        {
+          "pid": 3084738,
+          "name": "after-bench",
+          "last_cpu": 6,
+          "cpu_ticks_delta": 1
+        }
+      ],
+      "conflict": "HT sibling scheduled at least 2 percent"
+    }
+  ]
+}

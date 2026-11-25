@@ -21,6 +21,12 @@ pub const Before = struct {
     }
 };
 
+pub fn admitMember(completed: Count, maximum: Count) error{OutputLimitExceeded}!void {
+    // The unlimited setting preserves legacy footer-time counter overflow.
+    if (maximum != std.math.maxInt(Count) and completed >= maximum)
+        return error.OutputLimitExceeded;
+}
+
 pub fn inputWindow(total: Count, input: []const u8) []const u8 {
     return input[0..count.bounded(std.math.maxInt(Count) - total, input.len)];
 }

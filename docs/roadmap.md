@@ -47,6 +47,93 @@ while preserving footer consumption, structure, sizes, dictionaries and memory
 limits. Native, x86 and WASI contracts and independent reference tooling cover
 these options before the next performance increment.
 
+The [member-boundary regressions](performance/codec-member-boundaries-20261115/README.md)
+close Zstd empty-member fragmentation and empty-input polling defects, and
+preserve Brotli's final-metadata termination across decoder and inspection
+routes. `test-codec-member-boundaries`, its `-x86` variant, and its `-wasm`
+variant exercise these zero-output boundaries alongside exact-length,
+checksum, truncation, and trailing-input controls. The
+[incremental Zstd skippable observer](formats/zstd-skippable-observer.md)
+delivers admitted headers and body fragments even after fixed capture fills.
+The paired [streamed Zstd encoder](formats/zstd-skippable-stream.md) emits
+known-length skippable payloads in fragments without staging a whole body,
+using the same wire in the serial and persistent parallel encoders.
+The [incremental Brotli metadata observer](formats/brotli-metadata.md#incremental-decode-observation)
+now delivers complete metadata by fragment even when fixed capture is disabled
+or full, without consuming plaintext quota or retaining metadata-sized storage.
+Per-stream metadata byte and block limits reject excess at the validated header,
+before body reads or observer events, including when metadata is discarded.
+The [owned incremental history contract](formats/brotli-decode-memory.md#incremental-option-reuse)
+now grows history at data meta-block admission when no output length is
+pledged. Empty and metadata-only streams need no heap history, and cross-block
+references survive budgeted growth.
+[Streamed metadata encoding](formats/brotli-metadata.md#streamed-body-encoding)
+now writes a declared-length body directly from caller input to output without
+body-sized pending storage, through the same wire header as legacy metadata.
+
+The [incremental encoder borrow contracts](formats/incremental-encode-borrows.md)
+close header-before-input and pending-drain corruption across Deflate, Brotli
+and serial/parallel Zstd. Active calls reject conflicting caller buffers,
+objects, retained capacities, dictionaries and metadata before state changes,
+and permit disjoint retries. Native, x86 and actual WASI regressions plus
+reference interoperability are recorded in the
+[functional increment](performance/incremental-encode-borrows-20261120.md).
+The Zstd large-sequence fixture now exercises 1,330 sequences while retaining
+its 1,248-sequence gate; the previous fixture's 1,116 count was reproduced with
+identical wires on the pre-change source. Continue auditing mutable lifecycle
+entry points and measuring whole streaming operations before further tuning.
+
+The [encoder lifecycle contracts](formats/encoder-lifecycle.md) preserve
+accepted Brotli metadata when finish is requested before its drain, and protect
+prospective Zstd prefix/dictionary reads from next-frame observer publication.
+Ended prefix and observer storage can change roles without corrupting the new
+borrow. Native/x86/WASI contracts, reference interoperability and the distinct
+before/after library validation scopes are recorded in the
+[lifecycle evidence](performance/incremental-encoder-lifecycle-20261120.md).
+Explicit Brotli flush now seals a partial output byte with an empty metadata
+block so a decoder can recover all accepted plaintext without a later chunk
+or finalization. One-shot chunk boundaries still use the existing wire path.
+
+Deflate wrapper transitions now reject invalid gzip header fields and exact
+input pledges above the applicable raw input cap before resetting the completed
+stream. Atomic refusal and corrected-member retry are covered for Fixed/Best
+encoders, all four gzip transition variants and zlib exact-size transitions.
+The [wrapper transition evidence](performance/deflate-wrapper-transition-options-20261120.md)
+records the current-source portability and library verification scope.
+The [incremental gzip header observer](formats/gzip-header-events.md)
+exposes fixed fields and chunks of extra data, filename and comment without
+buffering the member. A completion event confirms validation (including FHCRC
+when present) before any plaintext from that member is published. The
+[automatic zlib/gzip wrapper](formats/zlib-gzip-auto-detect.md) now forwards
+these events when it selects gzip, leaving zlib dictionary handling and member
+boundaries unchanged. The same per-field header metadata cap is available to
+whole-input and chunk gzip decode, including concatenated and auto routes;
+existing whole-input defaults remain unlimited. Direct and auto-detected
+incremental and one-shot zlib/gzip can independently cap the number of
+members, including empty members that do not use the plaintext budget.
+The [zlib declaration limit](formats/codec-format-controls.md#zlib-decoder-window-admission)
+also rejects a valid member that advertises a window above the caller's cap,
+without changing gzip or raw Deflate behavior.
+The [Zstd frame-count limit](formats/zstd-frame-count-limit.md) likewise
+bounds the combined count of data and skippable frames across one-shot,
+chunked, reusable, incremental and random-access source decoding.
+
+The [dynamic Huffman admission](formats/deflate-dynamic-huffman.md) rejects
+malformed trees before ordinary, compact incremental and Deflate64 decoding.
+It preserves legal one-bit singleton/empty-distance controls and the generic
+Huffman builder. Current native/x86/WASI contracts and full deep differential
+evidence remove eight raw and two gzip invalid-tree acceptances at unchanged
+valid wires and traversal digests; [source-specific evidence](performance/deflate-dynamic-admission-20261120.md)
+records the repaired synthetic fixtures and complete 408-step terminal gate.
+
+The [Puffin structural follow-up](performance/puffin-dynamic-bounds-20261121.md)
+preserves unused empty distance tables, checks dynamic metadata counts and
+token arithmetic, and refuses stored padding values that cannot fit its
+five-bit SKIP field. Serialized output quotas now include pending literal
+headers before buffering or emission. Exact bits, maximum distance 32768,
+error precedence, allocation cleanup and current Debug/ReleaseFast
+native/x86/WASI behavior are covered separately from ordinary inflate rules.
+
 The [codec state and dictionary controls](formats/codec-state-controls.md)
 add independent Deflate stream copies with caller-owned decoder storage,
 Brotli's explicit literal context policy and Zstd's optional frame dictionary
@@ -118,6 +205,19 @@ and growth, retained scratch and entropy workspace; quota and backing OOM
 remain distinct and failed publication preserves caller state. Defaults retain
 their existing allocation paths. Actual wasm32-wasi consumers verify exact
 budget boundaries, ownership handoff, refusal/retry and zero-heap size queries.
+[Source decode admission](zstd-gap.md#source-window-and-decoded-size-admission)
+now enforces a caller-selected window cap at data-frame headers and keeps
+checking the known decoded-size lower bound across frames of unknown size.
+Cursor header traversal and skip still allow callers to bypass decoding an
+unsupported frame without allocating for its advertised window.
+The [one-shot frame window control](formats/zstd-frame-window-limit.md) extends
+that policy to slice and reusable decode, including prefix calls and chunk
+facades that check finite limits before coalescing into caller scratch.
+[Seekable range window controls](formats/zstd-seekable-window-limit.md)
+preflight selected frame headers before allocation or output, without reading
+unselected frame bytes. The [Zstd CLI decode and size commands](formats/zstd-frame-window-limit.md#cli)
+now expose `--max-window-size` without changing the existing output argument
+or success format, and preserve `file-to` destinations on decode refusal.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 
@@ -19782,8 +19882,9 @@ reuse, so production keeps the simpler independently owned plans.
   prefix state parses standard or Large Window WBITS under one-byte input
   fragmentation, replays those exact bits into the existing progressive core,
   and allocates `min(reachable output, advertised window, max_history_len)`.
-  Unknown-size default WBITS=16 streams now own exactly 65,520 history bytes;
-  pledged tiny streams retain only their reachable output. Caller caps smaller
+  At this checkpoint unknown-size default WBITS=16 streams reserved 65,520
+  history bytes; the later on-demand policy supersedes that reservation.
+  Pledged tiny streams retain only their reachable output. Caller caps smaller
   than the advertised window remain useful when actual distances fit. If a
   valid match crosses the cap, the facade maps the core's bounded-ring
   `InvalidMatch` to `OutputLimitExceeded`, preserving the distinction from a

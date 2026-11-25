@@ -89,8 +89,7 @@ def block_prefix(bits):
         return {"kind": "final_empty", "start_bit": start, "end_bit": bits.offset}
     nibbles = bits.take(2) + 4
     if nibbles == 7:
-        require(not final, "metadata block must be non-final")
-        return {"kind": "metadata", **metadata_header(bits, start)}
+        return {"kind": "metadata", "final": final, **metadata_header(bits, start)}
     value = bits.take(nibbles * 4)
     require(nibbles == 4 or value >> ((nibbles - 1) * 4) != 0, "overlong content length")
     uncompressed = bool(bits.take(1)) if not final else False
@@ -119,6 +118,11 @@ def inspect_stored(wire, payload, metadata, expected_count):
         if row["kind"] == "metadata":
             metadata_rows.append(metadata_body(wire, row, metadata))
             bits.offset = row["end_bit"]
+            if row["final"]:
+                end_bit = bits.offset
+                padding = bits.align()
+                require(bits.offset == len(wire) * 8, "trailing Brotli bytes")
+                break
         elif row["kind"] == "stored":
             row["padding_bits"] = bits.align()
             offset, count = bits.offset // 8, row["decoded_bytes"]
@@ -357,6 +361,63 @@ def reference_stream(reference, payload, metadata, large):
         "reason": "libbrotlienc 1.0.9 emits MSKIPBYTES=0 for a one-byte body"}
 
 
+def final_metadata_fixtures():
+    # RFC 7932 fields, independently packed without invoking the Vort encoder.
+    # The two fixed bytestrings are upstream tests/testdata/empty.compressed.15/.16.
+    fixtures = [("upstream-empty-15", bytes.fromhex("1a"), b"", "Brotli upstream empty.compressed.15"),
+                ("upstream-empty-16", bytes.fromhex("81160058"), b"X", "Brotli upstream empty.compressed.16")]
+    for length in (0, 1, 255, 256, 257, 65535, 65536, 65537):
+        metadata = bytes((index * 13 + 5) & 255 for index in range(length))
+        width = 0 if length == 0 else 1 if length <= 256 else 2 if length <= 65536 else 3
+        for final in (False, True):
+            fields = ((0, 1), (int(final), 1)) + (((0, 1),) if final else ())
+            fields += ((3, 2), (0, 1), (width, 2), (max(0, length - 1), width * 8))
+            wire = pack(fields, metadata, final=not final)
+            fixtures.append((f"metadata-{length}-{'final' if final else 'nonfinal'}", wire, metadata,
+                             "independent RFC 7932 metadata fields and body"))
+    return fixtures
+
+
+def check_final_metadata(reference):
+    rows = []
+    for name, wire, metadata, origin in final_metadata_fixtures():
+        decoded = reference.decode(wire, b"")
+        require(decoded["complete_contents_verified"], (name, "reference final metadata", decoded))
+        parsed = inspect_stored(wire, b"", metadata, 1)
+        rows.append({"name": name, "origin": origin, "wire_bytes": len(wire), "wire_sha256": digest(wire),
+                     "metadata_bytes": len(metadata), "metadata_sha256": digest(metadata),
+                     "reference_decode": decoded, "independent_wire": parsed})
+    return rows
+
+
+def reverse_final_metadata(probe, directory, reference, reference_identity):
+    sources = source_identity()
+    checked = {row["name"]: row for row in check_final_metadata(reference)}
+    commands, results = [], []
+    for name, wire, metadata, _ in final_metadata_fixtures():
+        wire_path, output_path = directory / (name + ".br"), directory / (name + ".decoded")
+        wire_path.write_bytes(wire)
+        (directory / (name + ".metadata")).write_bytes(metadata)
+        command = [str(probe), "decode", "standard", str(wire_path), str(output_path)]
+        result = subprocess.run(command, capture_output=True, check=False, timeout=120)
+        commands.append({"command": command, "exit_code": result.returncode,
+                         "stdout_sha256": digest(result.stdout), "stderr": result.stderr.decode(errors="replace")})
+        require(result.returncode == 0, (name, "target final metadata probe", commands[-1]))
+        row = json.loads(result.stdout)
+        require(row["error"] is None and output_path.read_bytes() == b"" and row["input_sha256"] == digest(wire),
+                (name, "target decodes complete final metadata", row))
+        results.append({**checked[name], "wire_file": wire_path.name,
+                        "metadata_file": name + ".metadata", "target_decode": row})
+    require(source_identity() == sources, "source changed during final metadata gate")
+    return {"schema": "vort.br.final-metadata-differential.v1", "created_utc": datetime.now(timezone.utc).isoformat(),
+            "python": platform.python_version(), "host": {"platform": platform.platform(), "machine": platform.machine()},
+            "probe": {"path": str(probe), "sha256": digest(probe.read_bytes())}, "source": sources,
+            "reference": reference_identity, "scope": "upstream empty 15/16 plus final and nonfinal RFC metadata length boundaries",
+            "measurement_scope": "exact metadata wire geometry and complete reference/target empty plaintext; no timing claims",
+            "counts": {"reference_decoder_fixtures": len(results), "target_decodes": len(results)},
+            "reference_streams": results, "commands": commands}
+
+
 def self_check(reference):
     for length in BOUNDARIES:
         width = 0 if length == 0 else 1 if length <= 256 else 2 if length <= 65536 else 3
@@ -376,6 +437,7 @@ def self_check(reference):
                 "reference native metadata field width")
     mid = reference.encode(PAYLOAD, b"", mid=True)
     find_mid_metadata(mid, PAYLOAD, b"", reference, False)
+    return check_final_metadata(reference)
 
 
 def source_identity():
@@ -409,17 +471,24 @@ def main():
     parser.add_argument("--reference-encoder", type=Path)
     parser.add_argument("--reference-decoder", type=Path)
     parser.add_argument("--reference-common", type=Path, help="load globally before explicit encoder/decoder libraries")
+    parser.add_argument("--final-metadata-only", action="store_true", help="only reverse-decode 18 independent final/nonfinal metadata fixtures")
     parser.add_argument("--self-check", action="store_true", help="only independent parser and installed-reference self checks")
     args = parser.parse_args()
     reference = Reference(args.reference_encoder, args.reference_decoder, args.reference_common)
     reference_identity = reference.identity()
-    self_check(reference)
+    final_metadata = self_check(reference)
     if args.self_check:
-        print(json.dumps({"self_check": "passed", "reference": reference_identity}))
+        print(json.dumps({"self_check": "passed", "reference": reference_identity, "final_metadata": final_metadata}))
         return
     require(args.probe is not None and args.directory is not None, "--probe and --directory are required")
     probe, directory = args.probe.resolve(), args.directory.resolve()
     directory.mkdir(parents=True, exist_ok=True)
+    if args.final_metadata_only:
+        report = reverse_final_metadata(probe, directory, reference, reference_identity)
+        report_path = args.report or directory / "final-metadata-differential.json"
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+        print(json.dumps({"report": str(report_path), **report["counts"]}))
+        return
     sources = source_identity()
     (directory / "payload.input").write_bytes(PAYLOAD)
     metadata_files = {}
@@ -556,7 +625,9 @@ def main():
                          "native_reference_encodes": sum(row["origin"].startswith("native ") for row in references),
                          "known_reference_encoder_defects": len(reference_defects),
                          "preallocation_rejects": len(rejects), "malformed_rejects": len(negatives)},
-              "results": results, "reference_streams": references, "preallocation_rejects": rejects,
+              "results": results, "reference_streams": references,
+              "final_metadata": reverse_final_metadata(probe, directory, reference, reference_identity),
+              "preallocation_rejects": rejects,
               "malformed_streams": negatives, "known_reference_encoder_defects": reference_defects, "commands": commands}
     report_path = args.report or directory / "differential.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")

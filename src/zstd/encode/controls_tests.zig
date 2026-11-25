@@ -5,18 +5,22 @@ const fixtures = @import("controls_test_helpers.zig");
 const allocator = fixtures.allocator;
 const strategies = [_]controls.Strategy{ .fast, .double_fast, .greedy, .lazy, .optimal };
 
-test "Zstd encode controls positive auto null and profile only preserve every legacy level wire" {
+test "Zstd encode controls positive auto null and profile only preserve every level wire" {
     const input = fixtures.legacyInput();
     for (0..23) |raw_level| {
         const level: c_int = @intCast(raw_level);
         const plain = try zstd.encodeFrameWithLevelAlloc(allocator, &input, level);
         defer allocator.free(plain);
-        try fixtures.expectLegacy(level, plain);
+        try fixtures.expectLevelWire(level, plain);
         var profile: controls.Profile = .{};
         const profiled = try zstd.encodeFrameWithLevelAndOptionsAlloc(allocator, &input, level, .{ .strategy = .auto, .fast_acceleration = null, .control_profile = &profile });
         defer allocator.free(profiled);
         try std.testing.expectEqualSlices(u8, plain, profiled);
-        try std.testing.expect(!profile.available and !profile.controls_used);
+        // Level 3 follows the zstd-aligned controlled greedy policy; level 2
+        // uses the compact double-fast parser.
+        const controlled = level == 3;
+        try std.testing.expectEqual(controlled, profile.available);
+        try std.testing.expectEqual(controlled, profile.controls_used);
     }
 }
 

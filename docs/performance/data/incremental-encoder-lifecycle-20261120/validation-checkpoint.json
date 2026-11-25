@@ -1,0 +1,44 @@
+{
+  "schema": "vort.encoder-lifecycle-validation-checkpoint.v1",
+  "confirmed_utc": "2026-11-20T11:59:13.222749+00:00",
+  "goal_status": "active",
+  "source_state": "Current lifecycle fixes applied and staged; src/lz77.zig original experiment unstaged and unchanged.",
+  "jobs": [
+    {
+      "command": "zig build -j2 test -Doptimize=ReleaseSafe --summary all",
+      "session_id": 15705,
+      "build_pid": 3002054,
+      "compiler_pid": 3002423,
+      "log": "docs/performance/data/incremental-encoder-lifecycle-20261120/library-tests-releasesafe.log",
+      "confirmed_live": false,
+      "stage": "complete",
+      "exit_code": 0,
+      "result": "11/11 steps;5716 passed,2 skipped;ReleaseSafe compilation116m,execution11m"
+    },
+    {
+      "command": "zig build -j2 check check-wasm --summary all",
+      "session_id": 1597,
+      "build_pid": 3002110,
+      "log": "docs/performance/data/incremental-encoder-lifecycle-20261120/build-checks.log",
+      "confirmed_live": false,
+      "exit_code": 0,
+      "result": "401/401 steps passed"
+    }
+  ],
+  "completed_validation": {
+    "integrated_brotli": "35/35, 60 metadata exact-wire pairs and 60 frozen no-metadata controls",
+    "integrated_zstd": "27/27 prospective next-frame contracts",
+    "cross_architecture": "28/28 steps, 124/124 native/x86 runner tests; actual WASI br+zstd receipts ok",
+    "complete_test_compilation": "13/13 check-library-tests and lifecycle WASI compilation steps",
+    "current_zstd_reference": "171/171 complete matrix, libzstd 1.6.0",
+    "current_brotli_reference": "98 main cases, 7056 generated/progressive fixtures, libbrotli 1.0.9",
+    "current_build_checks": "401/401 steps passed, current Debug check/check-wasm"
+  },
+  "prior_snapshot_validation": {
+    "source": "../incremental-encode-borrows-20261120/source-before-lifecycle.json",
+    "Debug_test": "5710 passed, 2 skipped",
+    "build_checks": "394/394 steps passed"
+  },
+  "next_action": "Resume exact live handles; inspect terminal results; do not restart on observation timeout.",
+  "next_prepared_increment": "../brotli-lifecycle-borrows-20261120/delivery.json"
+}

@@ -43,6 +43,7 @@ const Options = struct {
     distance_parameter_search: ?bool = null,
     command_state_max_input_kib: ?u8 = null,
     window_bits: ?u5 = null,
+    disable_literal_context_modeling: bool = false,
     hq: ?br.HqOptions = null,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
@@ -150,6 +151,7 @@ pub fn main(init: std.process.Init) !void {
             .mode = options.planned_mode,
             .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
             .window_bits = options.window_bits,
+            .disable_literal_context_modeling = options.disable_literal_context_modeling,
         });
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeWithOptionsAlloc(init.gpa, case.payload, reference_settings);
@@ -342,6 +344,7 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, op
         .mode = options.planned_mode,
         .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
         .window_bits = options.window_bits,
+        .disable_literal_context_modeling = options.disable_literal_context_modeling,
         .hq = options.hq,
     };
     const warmup = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
@@ -520,6 +523,10 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
         }
         if (std.mem.eql(u8, arg, "--hq-nice-len")) {
             hqOptions(&options).nice_len = try std.fmt.parseInt(u32, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--no-literal-context-modeling")) {
+            options.disable_literal_context_modeling = true;
             continue;
         }
         if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--case")) options.case_filter = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--extended-dictionary-probes")) options.extended_dictionary_probes = try std.fmt.parseInt(u16, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--adaptive-command-split")) options.adaptive_command_split = true else if (std.mem.eql(u8, arg, "--adaptive-literal-split")) options.adaptive_literal_split = true else if (std.mem.eql(u8, arg, "--adaptive-distance-split")) options.adaptive_distance_split = true else if (std.mem.eql(u8, arg, "--no-adaptive-distance-split")) options.adaptive_distance_split = false else if (std.mem.eql(u8, arg, "--distance-parameter-search")) options.distance_parameter_search = true else if (std.mem.eql(u8, arg, "--no-distance-parameter-search")) options.distance_parameter_search = false else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;

@@ -93,12 +93,12 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_wasm_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-wasm-tests",
         .root_module = deflate_relaxed_wasm_mod,
-        .filters = &.{"Deflate wide decode"},
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart", "Gzip source index", "Deflate rsyncable", "Deflate dictionary append", "Deflate semantic handoff", "Gzip zero padding" },
     });
     deflate_wide_wasm_tests.stack_size = 8 * 1024 * 1024;
     const deflate_wide_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/wide_decode/wasm_gate.js" });
     deflate_wide_wasm_run.addArtifactArg(deflate_wide_wasm_tests);
-    b.step("test-deflate-wide-decode-wasm", "Execute wide decode counters, history and overflow transactions on 32-bit WASI")
+    b.step("test-deflate-wide-decode-wasm", "Execute decode counters, history, overflow and bit-checkpoint contracts on 32-bit WASI")
         .dependOn(&deflate_wide_wasm_run.step);
     const deflate_relaxed_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/incremental_relaxed/wasm_gate.js" });
     deflate_relaxed_wasm_run.addArtifactArg(deflate_relaxed_wasm);
@@ -492,6 +492,7 @@ pub fn build(b: *std.Build) void {
         .filters = if (root_test_filter) |filter| &.{filter} else &.{},
     });
     const run_tests = b.addRunArtifact(tests);
+    b.step("check-library-tests", "Compile the complete library test suite").dependOn(&tests.step);
     const seven_zip_aes_tests = b.addTest(.{
         .name = "vort-seven-zip-aes-tests",
         .root_module = tests_mod,
@@ -630,6 +631,23 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.step("build-br-metadata-probe", "Compile the public Brotli metadata compatibility probe").dependOn(&br_metadata_probe.step);
+    const br_window_probe = b.addExecutable(.{
+        .name = "vort-br-window-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/window_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "lz77", .module = b.createModule(.{
+                .root_source_file = b.path("src/lz77.zig"),
+                .target = target,
+                .optimize = .ReleaseFast,
+            }) }},
+        }),
+    });
+    b.step("build-br-window-probe", "Compile the Brotli match-window coverage probe").dependOn(&br_window_probe.step);
+    const run_br_window_probe = b.addRunArtifact(br_window_probe);
+    if (b.args) |args| run_br_window_probe.addArgs(args);
+    b.step("run-br-window-probe", "Compare Brotli match coverage at two search windows").dependOn(&run_br_window_probe.step);
     const br_metadata_diff = b.addSystemCommand(&.{ "python3", "tools/br/metadata_diff.py", "--probe" });
     br_metadata_diff.addArtifactArg(br_metadata_probe);
     br_metadata_diff.addArgs(&.{ "--directory", "zig-out/br-metadata" });
@@ -786,6 +804,7 @@ pub fn build(b: *std.Build) void {
     wasm_check_step.dependOn(zlib_or_gzip_auto_gates.compile_wasm);
     const gzip_direct_chunk_gates = @import("build/gzip_direct_chunks.zig").register(b, target, optimize, vort_mod_releasefast);
     wasm_check_step.dependOn(gzip_direct_chunk_gates.compile_wasm);
+    wasm_check_step.dependOn(@import("build/gzip_header_events.zig").register(b, target, optimize));
     const zstd_prefix_stable_gates = @import("build/zstd_prefix_stable.zig").register(b, target, optimize, vort_mod_releasefast);
     wasm_check_step.dependOn(zstd_prefix_stable_gates.compile_wasm);
     const zstd_compressed_workspace_gates = @import("build/zstd_compressed_workspace.zig").register(b, target, optimize, vort_mod_releasefast);
@@ -794,6 +813,23 @@ pub fn build(b: *std.Build) void {
     wasm_check_step.dependOn(zstd_history_workspace_gates.compile_wasm);
     const zstd_source_reverse_gates = @import("build/zstd_source_reverse.zig").register(b, target, optimize);
     wasm_check_step.dependOn(zstd_source_reverse_gates.compile_wasm);
+    const zstd_source_seekable_encode_probe = b.addExecutable(.{
+        .name = "vort-zstd-source-seekable-encode-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/source_seekable_encode_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const run_zstd_source_seekable_encode_probe = b.addRunArtifact(zstd_source_seekable_encode_probe);
+    if (b.args) |args| run_zstd_source_seekable_encode_probe.addArgs(args);
+    b.step("run-zstd-source-seekable-encode-probe", "Write a file-backed seekable archive for upstream verification")
+        .dependOn(&run_zstd_source_seekable_encode_probe.step);
+    wasm_check_step.dependOn(@import("build/incremental_encode_borrows.zig").register(b, target, optimize));
+    wasm_check_step.dependOn(@import("build/encoder_lifecycle.zig").register(b, target, optimize));
+    wasm_check_step.dependOn(@import("build/deflate_dynamic_admission.zig").register(b, target, optimize));
+    wasm_check_step.dependOn(@import("build/puffin_dynamic_bounds.zig").register(b, target, optimize));
     const zstd_test_filter = b.option(
         []const u8,
         "zstd-test-filter",
@@ -805,6 +841,7 @@ pub fn build(b: *std.Build) void {
         .filters = if (zstd_test_filter) |filter| &.{filter} else &.{},
     });
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
+    @import("build/codec_member_boundaries.zig").register(b, target, optimize, br_tests_mod, zstd_tests_mod);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
     const zstd_decode_memory_tests = b.addTest(.{
@@ -1181,9 +1218,9 @@ pub fn build(b: *std.Build) void {
     const deflate_wide_tests = b.addTest(.{
         .name = "vort-deflate-wide-decode-tests",
         .root_module = zlib_stream_tests.root_module,
-        .filters = &.{"Deflate wide decode"},
+        .filters = &.{ "Deflate wide decode", "Deflate block boundary position", "stepToBlockBoundary", "block restart", "Gzip source index", "Deflate rsyncable", "Deflate dictionary append", "Deflate semantic handoff", "Gzip zero padding" },
     });
-    b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 decode counters and overflow contracts")
+    b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 counters, overflow and bit-checkpoint contracts")
         .dependOn(&b.addRunArtifact(deflate_wide_tests).step);
     const deflate_wide_probe = b.addExecutable(.{
         .name = "vort-deflate-wide-decode-probe",
@@ -1594,6 +1631,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    wasm_check_step.dependOn(@import("build/decode_cli_gates.zig").register(b, cli_exe, wasm_target, wasm_mod, optimize));
+
     const run_cli = b.addRunArtifact(cli_exe);
     if (b.args) |args| run_cli.addArgs(args);
     const run_step = b.step("run", "Run the vort CLI smoke example");
@@ -1659,6 +1698,19 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_deflate_bench.addArgs(args);
     const deflate_bench_step = b.step("bench-deflate-decode", "Run deflate/zlib/gzip decode throughput smoke benchmark");
     deflate_bench_step.dependOn(&run_deflate_bench.step);
+
+    const deflate_decode_probe = b.addExecutable(.{
+        .name = "vort-deflate-decode-corpus-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/decode_corpus_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const run_deflate_decode_probe = b.addRunArtifact(deflate_decode_probe);
+    if (b.args) |args| run_deflate_decode_probe.addArgs(args);
+    b.step("run-deflate-decode-corpus-probe", "Repeatedly decode one raw-deflate corpus prefix for profiling").dependOn(&run_deflate_decode_probe.step);
 
     const corpus_decode_bench_exe = b.addExecutable(.{
         .name = "vort-bench-corpus-decode",
@@ -1756,14 +1808,14 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/deflate_huffman_build_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
     const run_deflate_huffman_build_bench_csv = b.addRunArtifact(deflate_huffman_build_bench_exe);
-    run_deflate_huffman_build_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-deflate-huffman-build-bench.csv" });
+    run_deflate_huffman_build_bench_csv.addArgs(&.{ "--iterations", "16384", "--csv", "zig-out/vort-deflate-huffman-build-bench.csv" });
     const deflate_huffman_build_bench_csv_step = b.step("run-deflate-huffman-build-bench-csv", "Write focused DEFLATE Huffman table build benchmark CSV");
     deflate_huffman_build_bench_csv_step.dependOn(&run_deflate_huffman_build_bench_csv.step);
 
@@ -1782,9 +1834,9 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/huffman_length_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
@@ -2197,6 +2249,48 @@ pub fn build(b: *std.Build) void {
     }
     b.step("run-deflate-incremental-relaxed-interop", "Validate tiny-buffer relaxed DEFLATE wrappers against libz frames and member errors")
         .dependOn(&b.addRunArtifact(deflate_relaxed_interop_exe).step);
+    const deflate_checkpoint_interop_exe = b.addExecutable(.{
+        .name = "vort-deflate-checkpoint-interop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/checkpoint_interop.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "codec", .module = b.createModule(.{
+                    .root_source_file = b.path("src/deflate.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                }) },
+                .{ .name = "zlib", .module = zlib_compat_mod },
+            },
+        }),
+    });
+    if (zlib_ng_root) |root| {
+        deflate_checkpoint_interop_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+    } else {
+        deflate_checkpoint_interop_exe.root_module.linkSystemLibrary("z", .{});
+    }
+    const deflate_checkpoint_interop_step = b.step("run-deflate-checkpoint-interop", "Compare block checkpoint positions with libz across flushes and output caps");
+    deflate_checkpoint_interop_step.dependOn(&b.addRunArtifact(deflate_checkpoint_interop_exe).step);
+    const gzip_rsyncable_probe = b.addExecutable(.{
+        .name = "vort-gzip-rsyncable-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/gzip_rsyncable_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "codec", .module = b.createModule(.{
+                .root_source_file = b.path("src/deflate.zig"),
+                .target = target,
+                .optimize = optimize,
+            }) }},
+        }),
+    });
+    const gzip_rsyncable_diff = b.addSystemCommand(&.{ "python3", "tools/deflate/gzip_rsyncable_diff.py" });
+    gzip_rsyncable_diff.addArtifactArg(gzip_rsyncable_probe);
+    gzip_rsyncable_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| gzip_rsyncable_diff.addArgs(args);
+    b.step("run-gzip-rsyncable-diff", "Check incremental gzip CLI round trips and local rsync reuse after edits")
+        .dependOn(&gzip_rsyncable_diff.step);
     const deflate_split_history_interop_exe = b.addExecutable(.{
         .name = "vort-deflate-split-history-interop",
         .root_module = b.createModule(.{
@@ -2259,6 +2353,43 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_deflate_reference_bench.addArgs(args);
     const deflate_reference_bench_step = b.step("run-deflate-reference-bench", "Compare one-shot raw Deflate decode against libdeflate");
     deflate_reference_bench_step.dependOn(&run_deflate_reference_bench.step);
+
+    const deflate_reference_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-deflate-encode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "zlib", .module = zlib_compat_mod },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const deflate_reference_library_dir = b.option(
+        []const u8,
+        "deflate-reference-dir",
+        "Directory containing a libdeflate shared library to link and load first",
+    );
+    if (deflate_reference_library_dir) |dir| {
+        deflate_reference_encode_bench_exe.root_module.addLibraryPath(.{ .cwd_relative = dir });
+        deflate_reference_encode_bench_exe.root_module.addRPath(.{ .cwd_relative = dir });
+    }
+    const deflate_reference_include_dir = b.option(
+        []const u8,
+        "deflate-reference-include",
+        "Directory containing the matching libdeflate.h for version reporting",
+    );
+    if (deflate_reference_include_dir) |dir|
+        deflate_reference_encode_bench_exe.root_module.addIncludePath(.{ .cwd_relative = dir });
+    deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("deflate", .{});
+    deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
+    const run_deflate_reference_encode_bench = b.addRunArtifact(deflate_reference_encode_bench_exe);
+    if (b.args) |args| run_deflate_reference_encode_bench.addArgs(args);
+    const deflate_reference_encode_bench_step = b.step("run-deflate-encode-bench", "Compare one-shot raw Deflate encode against zlib and libdeflate");
+    deflate_reference_encode_bench_step.dependOn(&run_deflate_reference_encode_bench.step);
 
     const deflate_incremental_decode_gate = b.addSystemCommand(&.{
         "python3",
@@ -2363,6 +2494,98 @@ pub fn build(b: *std.Build) void {
     const fuzz_smoke_step = b.step("run-fuzz-smoke", "Run deterministic malformed-frame smoke corpus");
     fuzz_smoke_step.dependOn(&run_fuzz_smoke.step);
 
+    const zstd_incremental_fuzz_smoke_exe = b.addExecutable(.{
+        .name = "vort-zstd-incremental-fuzz-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/incremental_fuzz_smoke.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "zstd", .module = zstd_encode_bench_mod }},
+        }),
+    });
+    const run_zstd_incremental_fuzz_smoke = b.addRunArtifact(zstd_incremental_fuzz_smoke_exe);
+    const zstd_incremental_fuzz_smoke_step = b.step(
+        "run-zstd-incremental-fuzz-smoke",
+        "Run the deterministic incremental Zstd decoder schedule/canary fuzz driver",
+    );
+    zstd_incremental_fuzz_smoke_step.dependOn(&run_zstd_incremental_fuzz_smoke.step);
+
+    const br_incremental_fuzz_smoke_exe = b.addExecutable(.{
+        .name = "vort-br-incremental-fuzz-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/incremental_fuzz_smoke.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "br", .module = br_encode_bench_mod }},
+        }),
+    });
+    const run_br_incremental_fuzz_smoke = b.addRunArtifact(br_incremental_fuzz_smoke_exe);
+    const br_incremental_fuzz_smoke_step = b.step(
+        "run-br-incremental-fuzz-smoke",
+        "Run the deterministic incremental Brotli decoder schedule/canary fuzz driver",
+    );
+    br_incremental_fuzz_smoke_step.dependOn(&run_br_incremental_fuzz_smoke.step);
+
+    const deflate_incremental_fuzz_smoke_mod = b.createModule(.{
+        .root_source_file = b.path("src/deflate.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const deflate_incremental_fuzz_smoke_exe = b.addExecutable(.{
+        .name = "vort-deflate-incremental-fuzz-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/incremental_fuzz_smoke.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "deflate", .module = deflate_incremental_fuzz_smoke_mod }},
+        }),
+    });
+    const run_deflate_incremental_fuzz_smoke = b.addRunArtifact(deflate_incremental_fuzz_smoke_exe);
+    const deflate_incremental_fuzz_smoke_step = b.step(
+        "run-deflate-incremental-fuzz-smoke",
+        "Run the deterministic incremental Deflate zlib/gzip decoder schedule/canary fuzz driver",
+    );
+    deflate_incremental_fuzz_smoke_step.dependOn(&run_deflate_incremental_fuzz_smoke.step);
+
+    const rans_study_mod = b.createModule(.{
+        .root_source_file = b.path("src/rans.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const rans_parameter_study_exe = b.addExecutable(.{
+        .name = "vort-rans-parameter-study",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/rans/parameter_study.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "rans", .module = rans_study_mod }},
+        }),
+    });
+    const run_rans_parameter_study = b.addRunArtifact(rans_parameter_study_exe);
+    if (b.args) |args| run_rans_parameter_study.addArgs(args);
+    const rans_parameter_study_step = b.step(
+        "run-rans-parameter-study",
+        "Run the deterministic rANS N/L ratio and overhead parameter study",
+    );
+    rans_parameter_study_step.dependOn(&run_rans_parameter_study.step);
+
+    const rans_schedule_probe_exe = b.addExecutable(.{
+        .name = "vort-rans-decode-schedule-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/rans/decode_schedule_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "rans", .module = rans_study_mod }},
+        }),
+    });
+    const run_rans_schedule_probe = b.addRunArtifact(rans_schedule_probe_exe);
+    if (b.args) |args| run_rans_schedule_probe.addArgs(args);
+    const rans_schedule_probe_step = b.step(
+        "run-rans-decode-schedule-probe",
+        "Run the single-host rANS nested-vs-lockstep ILP diagnostic",
+    );
+    rans_schedule_probe_step.dependOn(&run_rans_schedule_probe.step);
+
     const fuzz_corpus_exe = b.addExecutable(.{
         .name = "vort-fuzz-corpus",
         .root_module = b.createModule(.{
@@ -2463,6 +2686,21 @@ pub fn build(b: *std.Build) void {
     const libfuzzer_smoke_step = b.step("run-libfuzzer-smoke", "Run exported LLVMFuzzerTestOneInput smoke");
     libfuzzer_smoke_step.dependOn(&run_libfuzzer_smoke.step);
 
+    const incremental_libfuzzer_smoke_exe = b.addExecutable(.{
+        .name = "vort-incremental-libfuzzer-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/incremental_fuzz_libfuzzer.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_incremental_libfuzzer_smoke = b.addRunArtifact(incremental_libfuzzer_smoke_exe);
+    const incremental_libfuzzer_smoke_step = b.step("run-incremental-libfuzzer-smoke", "Run incremental Zstd/Brotli/Deflate LLVMFuzzerTestOneInput smoke");
+    incremental_libfuzzer_smoke_step.dependOn(&run_incremental_libfuzzer_smoke.step);
+
     const afl_smoke_exe = b.addExecutable(.{
         .name = "vort-afl-smoke",
         .root_module = b.createModule(.{
@@ -2499,6 +2737,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_codec_differential_fuzz.addArgs(args);
     const codec_differential_fuzz_step = b.step("run-codec-differential-fuzz", "Run structure-aware Deflate/Zstd/Brotli differential fuzzing against system references");
     codec_differential_fuzz_step.dependOn(&run_codec_differential_fuzz.step);
+    const run_codec_real_stream_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
+    run_codec_real_stream_smoke.addArgs(&.{ "--real-file=README.md", "--real-flush-cuts" });
+    const codec_real_stream_smoke_step = b.step("run-codec-real-stream-smoke", "Verify upstream multi-block README streams, flush cuts and late truncation across the codecs");
+    codec_real_stream_smoke_step.dependOn(&run_codec_real_stream_smoke.step);
+    const run_codec_real_dictionary_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
+    run_codec_real_dictionary_smoke.addArg("--real-dictionary-smoke");
+    b.step("run-codec-real-dictionary-smoke", "Verify upstream dictionary streams, faults and Zstd rotation (requires RAW-capable libbrotli)")
+        .dependOn(&run_codec_real_dictionary_smoke.step);
+    const run_codec_brotli_wide_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
+    run_codec_brotli_wide_smoke.addArg("--real-brotli-wide");
+    const codec_brotli_wide_smoke_step = b.step("run-codec-brotli-wide-smoke", "Verify libbrotli long-distance streams and caller-history preflight");
+    codec_brotli_wide_smoke_step.dependOn(&run_codec_brotli_wide_smoke.step);
 
     const checksum_diff_exe = b.addExecutable(.{
         .name = "vort-checksum-diff",
@@ -3889,6 +4139,11 @@ pub fn build(b: *std.Build) void {
     const br_literal_cli_diff_step = b.step("run-br-literal-cli-diff", "Run black-box smoke for minimal dependency-free Brotli literal blocks against Node Brotli");
     br_literal_cli_diff_step.dependOn(&br_literal_cli_diff.step);
 
+    const br_large_decode_cli = b.addSystemCommand(&.{ "python3", "tools/br/large_window_decode_cli.py" });
+    br_large_decode_cli.addArtifactArg(cli_exe);
+    const br_large_decode_cli_step = b.step("test-br-large-window-decode-cli", "Verify explicit Brotli Large Window CLI decoding against an upstream fixture");
+    br_large_decode_cli_step.dependOn(&br_large_decode_cli.step);
+
     const br_rle_probe_exe = b.addExecutable(.{
         .name = "vort-br-rle-probe",
         .root_module = b.createModule(.{
@@ -3977,6 +4232,18 @@ pub fn build(b: *std.Build) void {
     const run_br_quality_stage_profile = b.addRunArtifact(br_quality_stage_profile_exe);
     if (b.args) |args| run_br_quality_stage_profile.addArgs(args);
     b.step("run-br-quality-stage-profile", "Record actual native q8 candidate stages and wires").dependOn(&run_br_quality_stage_profile.step);
+    const br_quality_stage_probe_exe = b.addExecutable(.{
+        .name = "vort-br-quality-stage-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/quality_stage_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort_br", .module = br_encode_bench_mod }},
+        }),
+    });
+    const run_br_quality_stage_probe = b.addRunArtifact(br_quality_stage_probe_exe);
+    if (b.args) |args| run_br_quality_stage_probe.addArgs(args);
+    b.step("run-br-quality-stage-probe", "Report traced quality-scheduled stages for one prefix").dependOn(&run_br_quality_stage_probe.step);
     const br_dense_huffman_bench = b.addExecutable(.{
         .name = "vort-br-dense-huffman-bench",
         .root_module = b.createModule(.{
@@ -4285,6 +4552,20 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_br_ratio_stage_profile.addArgs(args);
     const br_ratio_stage_profile_step = b.step("run-br-ratio-stage-profile", "Profile Brotli ratio candidate stages and optimal search");
     br_ratio_stage_profile_step.dependOn(&run_br_ratio_stage_profile.step);
+    const br_optimal_search_probe_exe = b.addExecutable(.{
+        .name = "vort-br-optimal-search-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/optimal_search_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_optimal_search_probe = b.addRunArtifact(br_optimal_search_probe_exe);
+    if (b.args) |args| run_br_optimal_search_probe.addArgs(args);
+    const br_optimal_search_probe_step = b.step("run-br-optimal-search-probe", "Profile the Brotli optimal search on one input prefix");
+    br_optimal_search_probe_step.dependOn(&run_br_optimal_search_probe.step);
     const run_br_ratio_stage_profile_csv = b.addRunArtifact(br_ratio_stage_profile_exe);
     run_br_ratio_stage_profile_csv.addArgs(&.{ "--iterations", "3", "--csv", "zig-out/vort-br-ratio-stage-profile.csv" });
     const br_ratio_stage_profile_gate = b.addSystemCommand(&.{ "python3", "tools/br/ratio_stage_profile_gate.py", "--csv", "zig-out/vort-br-ratio-stage-profile.csv", "--executable" });
@@ -6439,9 +6720,9 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/br/progressive_copy_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
@@ -6469,10 +6750,10 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/br/progressive_huffman_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
@@ -7931,6 +8212,9 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_magicless_tests.step);
     check_step.dependOn(&zstd_magicless_root_tests.step);
     check_step.dependOn(&zstd_magicless_probe.step);
+    check_step.dependOn(&zstd_incremental_fuzz_smoke_exe.step);
+    check_step.dependOn(&br_incremental_fuzz_smoke_exe.step);
+    check_step.dependOn(&deflate_incremental_fuzz_smoke_exe.step);
     check_step.dependOn(&br_large_history_tests.step);
     check_step.dependOn(&br_large_history_probe.step);
     check_step.dependOn(&br_metadata_tests.step);
@@ -7964,6 +8248,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_params_interop_exe.step);
     check_step.dependOn(&deflate_split_history_interop_exe.step);
     check_step.dependOn(&deflate_relaxed_interop_exe.step);
+    check_step.dependOn(&deflate_checkpoint_interop_exe.step);
     check_step.dependOn(&deflate_relaxed_wasm.step);
     check_step.dependOn(&deflate_wide_probe.step);
     check_step.dependOn(&deflate_wide_probe_x86.step);
@@ -7976,6 +8261,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(br_public_wasm_check);
     check_step.dependOn(br_large_wasm_check);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
+    check_step.dependOn(&incremental_libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&codec_differential_fuzz_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
@@ -8121,6 +8407,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(libfuzzer_smoke_step);
     ci_smoke_step.dependOn(afl_smoke_step);
     ci_smoke_step.dependOn(codec_differential_fuzz_step);
+    ci_smoke_step.dependOn(codec_real_stream_smoke_step);
+    ci_smoke_step.dependOn(codec_brotli_wide_smoke_step);
     ci_smoke_step.dependOn(checksum_bench_gate_step);
     ci_smoke_step.dependOn(checksum_diff_step);
     ci_smoke_step.dependOn(checksum_zlib_diff_step);
@@ -8128,6 +8416,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(deflate_params_interop_step);
+    ci_smoke_step.dependOn(deflate_checkpoint_interop_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(bgzf_diff_step);
@@ -8166,6 +8455,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(cab_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
+    ci_smoke_step.dependOn(br_large_decode_cli_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);

@@ -1,0 +1,169 @@
+{
+  "schema": "vort.codec_encode_samples",
+  "version": 1,
+  "codec": "brotli",
+  "round_count": 5,
+  "timing": {
+    "clock": "awake",
+    "unit": "nanoseconds",
+    "round_order": "vort_first_on_even_zero_based_rounds",
+    "csv_statistic": "minimum",
+    "median_statistic": "integer_floor",
+    "mix": "sum_of_encoded_lengths_wrapping_target_usize",
+    "vort_warmup": "one_untimed_encode_before_each_primary_vort_round",
+    "reference_warmup": "none",
+    "timed_work": "encoding_allocation_and_free",
+    "metadata_outside_timing": true
+  },
+  "reference_version": 16785408,
+  "reference_decoder_version": 16785408,
+  "references": [
+    {
+      "role": "brotli_encoder",
+      "requested_path": "/home/passchaos/Work/brotli/build-vort/libbrotlienc.so.1.2.0",
+      "successful_open_argument": "/home/passchaos/Work/brotli/build-vort/libbrotlienc.so.1.2.0",
+      "canonical_file_path": "/home/passchaos/Work/brotli/build-vort/libbrotlienc.so.1.2.0",
+      "file_sha256": "aaa556baae0b4010ce7e79d427b689233104168c90adda4be1df8b945a2f95bb",
+      "file_bytes": 851728,
+      "version": 16785408,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    },
+    {
+      "role": "brotli_decoder",
+      "requested_path": "/home/passchaos/Work/brotli/build-vort/libbrotlidec.so.1.2.0",
+      "successful_open_argument": "/home/passchaos/Work/brotli/build-vort/libbrotlidec.so.1.2.0",
+      "canonical_file_path": "/home/passchaos/Work/brotli/build-vort/libbrotlidec.so.1.2.0",
+      "file_sha256": "3acf45976e96498b954bb104b06ef5b8e1cd08b5e0d8d6826c233ed1f07c0469",
+      "file_bytes": 60304,
+      "version": 16785408,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    },
+    {
+      "role": "brotli_common",
+      "requested_path": "/home/passchaos/Work/brotli/build-vort/libbrotlicommon.so.1.2.0",
+      "successful_open_argument": "/home/passchaos/Work/brotli/build-vort/libbrotlicommon.so.1.2.0",
+      "canonical_file_path": "/home/passchaos/Work/brotli/build-vort/libbrotlicommon.so.1.2.0",
+      "file_sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "file_bytes": 143728,
+      "version": null,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    }
+  ],
+  "provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "f15d100c21958bb91b7babb077df46cfee1772f596a7630267b10777841b7585",
+    "command": "/tmp/vort-br-full-evidence-20261123/baseline --planned-quality 10 --quality 10 --command-state-max-input-kib=8 --window-bits 16 --reference-lgwin 16 --reference-mode generic --iterations 20 --path /home/passchaos/Work/corpora/silesia-20261025/files/dickens --limit 8192 --csv /tmp/vort-br-full-evidence-20261123/q10-profile.csv --samples-json /tmp/vort-br-full-evidence-20261123/q10-profile.json --libbrotli-encoder /home/passchaos/Work/brotli/build-vort/libbrotlienc.so.1.2.0 --libbrotli-decoder /home/passchaos/Work/brotli/build-vort/libbrotlidec.so.1.2.0 --libbrotli-common /home/passchaos/Work/brotli/build-vort/libbrotlicommon.so.1.2.0"
+  },
+  "rows": [
+    {
+      "case": "file0_dickens",
+      "input_bytes": 8192,
+      "input_sha256": "602ff7349c8ca821c5d560915480aff05096986b89396b059b09ebce046dc48c",
+      "iterations": 20,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 503430369,
+          "reference_ns": 63789015,
+          "vort_mix": 59720,
+          "reference_mix": 60260
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 501502114,
+          "reference_ns": 63720633,
+          "vort_mix": 59720,
+          "reference_mix": 60260
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 501675566,
+          "reference_ns": 66534166,
+          "vort_mix": 59720,
+          "reference_mix": 60260
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 506778478,
+          "reference_ns": 70222308,
+          "vort_mix": 59720,
+          "reference_mix": 60260
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 510340017,
+          "reference_ns": 65612247,
+          "vort_mix": 59720,
+          "reference_mix": 60260
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 501502114,
+        "reference_min_ns": 63720633,
+        "vort_median_ns": 503430369,
+        "reference_median_ns": 65612247
+      },
+      "wires": {
+        "vort_bytes": 2986,
+        "reference_bytes": 3013,
+        "vort_sha256": "99d3052191080b2c992eb7548ca68d951c79e30a9a30e06bd75d328edecd9d2f",
+        "reference_sha256": "3bfe6471b3139aa54c7929e457011a35d01e0ffd3d351fb56317d3cc509ab3ea"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 10,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 8,
+        "vort_command_state_override_requested": 8,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 10,
+        "reference_quality_override_requested": 10,
+        "reference_case_quality": null,
+        "reference_lgwin": 16,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": 16,
+        "reference_mode_override_requested": 0,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 16,
+        "parameters_match": true,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "vort.functional-validation-checkpoint.v1",
+  "confirmed_utc": "2026-11-20T09:20:27.186508+00:00",
+  "goal_status": "active",
+  "full_validation_status": "complete for snapshot before lifecycle changes",
+  "jobs": [
+    {
+      "command": "zig build -j2 test --summary all",
+      "session_id": 39829,
+      "build_pid": 2980834,
+      "test_pid": 2980886,
+      "log": "docs/performance/data/incremental-encode-borrows-20261120/library-tests-final.log",
+      "confirmed_live": false,
+      "exit_code": 0,
+      "result": "11/11 steps; 5710 passed, 2 skipped"
+    },
+    {
+      "command": "zig build -j2 check check-wasm --summary all",
+      "session_id": 38309,
+      "build_pid": 2981757,
+      "log": "docs/performance/data/incremental-encode-borrows-20261120/build-checks-final.log",
+      "confirmed_live": false,
+      "exit_code": 0,
+      "result": "394/394 build steps; 86/86 native/x86 auxiliary tests passed"
+    }
+  ],
+  "completed_validation": {
+    "cross_architecture": "38/38 build steps, 180/180 native and x86 runner tests, four successful WASI suites",
+    "zstd_reference": "171/171 complete matrix, current reported sources all match",
+    "brotli_reference": "98 main cases and 7056 generated fixtures plus progressive replays, libbrotli 1.0.9",
+    "build_checks": "zig build -j2 check check-wasm --summary all: 394/394 steps passed"
+  },
+  "git_state": "Uncommitted functional changes; original src/lz77.zig experiment preserved unchanged.",
+  "next_action": "Resume these exact live handles; inspect terminal results before rerunning or claiming final validation."
+}

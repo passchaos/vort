@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const br = vort.br;
+const raw_dictionary = @import("brotli_dictionary.zig");
 const ParseMode = @FieldType(vort.BrotliHqOptions, "parse_mode");
 const CopyLengths = @FieldType(vort.BrotliHqOptions, "copy_lengths");
 
@@ -28,6 +29,7 @@ pub const Controls = struct {
     max_input_len: ?vort.StreamCount = null,
     max_output_len: ?vort.StreamCount = null,
     metadata: ?[]const u8 = null,
+    dictionary: raw_dictionary.Arguments = .{},
 
     pub fn hasStreamLimits(self: Controls) bool {
         return self.max_input_len != null or self.max_output_len != null;
@@ -43,7 +45,7 @@ pub const Controls = struct {
     }
 
     pub fn storedOptionsWithMemoryProfile(self: Controls, memory_profile: ?*vort.BrotliEncodeMemoryProfile) !vort.br.StoredStreamOptions {
-        if (self.quality != null or self.mode != null or self.hqSelected() or self.profile or self.hasStreamLimits())
+        if (self.quality != null or self.mode != null or self.hqSelected() or self.profile or self.hasStreamLimits() or self.dictionary.specified())
             return error.UnsupportedBrotliStoredOption;
         const options: vort.br.StoredStreamOptions = .{
             .large_window = self.large_window,
@@ -113,6 +115,7 @@ pub fn parseWithFirst(args: anytype, first: ?[]const u8) !Controls {
     while (true) {
         const arg = pending orelse args.next() orelse break;
         pending = null;
+        if (try result.dictionary.consume(arg, args)) continue;
         if (try optionValue("--quality", arg, args)) |value| try set(&result, "quality", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--mode", arg, args)) |value| try set(&result, "mode", try parseMode(value)) else if (try optionValue("--window-bits", arg, args)) |value| try set(&result, "window_bits", try std.fmt.parseInt(u5, value, 10)) else if (try optionValue("--hq-depth", arg, args)) |value| try set(&result, "search_depth", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-nice-len", arg, args)) |value| try set(&result, "nice_len", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-beam-width", arg, args)) |value| try set(&result, "beam_width", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-iterations", arg, args)) |value| try set(&result, "iterations", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-parse-mode", arg, args)) |value| try set(&result, "parse_mode", std.meta.stringToEnum(ParseMode, value) orelse return error.InvalidBrotliParseMode) else if (try optionValue("--hq-copy-lengths", arg, args)) |value| try set(&result, "copy_lengths", std.meta.stringToEnum(CopyLengths, value) orelse return error.InvalidBrotliCopyLengths) else if (try optionValue("--hq-max-price-evaluations", arg, args)) |value| try set(&result, "max_price_evaluations", try std.fmt.parseInt(u64, value, 10)) else if (try optionValue("--block-len", arg, args)) |value| try set(&result, "planned_block_len", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-block-len", arg, args)) |value| try set(&result, "block_len", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-memory", arg, args)) |value| try set(&result, "memory", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-npostfix", arg, args)) |value| try set(&result, "npostfix", try std.fmt.parseInt(u2, value, 10)) else if (try optionValue("--hq-ndirect-high", arg, args)) |value| try set(&result, "ndirect_high", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--max-total-memory", arg, args)) |value| try set(&result, "max_total_memory", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--metadata", arg, args)) |value| try set(&result, "metadata", value) else if (try optionValue("--max-input-len", arg, args)) |value| try set(&result, "max_input_len", try std.fmt.parseInt(vort.StreamCount, value, 10)) else if (try optionValue("--max-output-len", arg, args)) |value| try set(&result, "max_output_len", try std.fmt.parseInt(vort.StreamCount, value, 10)) else if (std.mem.eql(u8, arg, "--memory-profile")) {
             if (result.memory_profile) return error.DuplicateBrotliOption;
             result.memory_profile = true;
@@ -165,7 +168,7 @@ pub fn parseStoredWithFirst(args: anytype, first: ?[]const u8) !Controls {
         positional += 1;
     }
     var parsed = try parseWithFirst(args, first_option);
-    if (parsed.quality != null or parsed.mode != null or parsed.hqSelected() or parsed.profile or parsed.hasStreamLimits())
+    if (parsed.quality != null or parsed.mode != null or parsed.hqSelected() or parsed.profile or parsed.hasStreamLimits() or parsed.dictionary.specified())
         return error.UnsupportedBrotliStoredOption;
     if (window_bits != null) {
         if (parsed.window_bits != null) return error.DuplicateBrotliOption;
@@ -179,7 +182,7 @@ pub fn parseStoredWithFirst(args: anytype, first: ?[]const u8) !Controls {
 }
 
 pub fn isStoredControlArgument(value: []const u8) bool {
-    inline for (.{ "--large-window", "--window-bits", "--metadata", "--max-total-memory", "--memory-profile" }) |name| {
+    inline for (.{ "--large-window", "--window-bits", "--metadata", "--max-total-memory", "--memory-profile", "--dictionary", "--max-dictionary-bytes" }) |name| {
         if (std.mem.eql(u8, value, name) or std.mem.startsWith(u8, value, name ++ "=")) return true;
     }
     return false;

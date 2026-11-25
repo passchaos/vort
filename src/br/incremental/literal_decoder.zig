@@ -1,6 +1,8 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 const progressive_bits = @import("bit_reader.zig");
+const metadata_events = @import("metadata_events.zig");
+const metadata_limits = @import("metadata_limits.zig");
 
 /// Byte-progressive decoder for final Brotli compressed meta-blocks containing
 /// one insert-only command. The bounded prefix buffer is discarded logically
@@ -41,11 +43,21 @@ pub fn Decoder(comptime Codec: type) type {
         const Self = @This();
         pub const Counter = core.StreamCount;
         pub const Error = Codec.Error;
+        pub const MetadataEvent = metadata_events.Event;
+        pub const MetadataObserver = metadata_events.Observer;
         pub const Options = struct {
             max_output_len: Counter = std.math.maxInt(Counter),
             expected_output_len: ?Counter = null,
+            /// Maximum total declared metadata body bytes per Brotli stream.
+            max_metadata_bytes: Counter = std.math.maxInt(Counter),
+            /// Maximum metadata blocks per Brotli stream, including empty blocks.
+            max_metadata_blocks: Counter = std.math.maxInt(Counter),
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Called synchronously during step. Chunk bytes are borrowed for
+            /// the callback only. Do not reenter the decoder or mutate its
+            /// input, output, or other buffers during the callback.
+            metadata_observer: ?MetadataObserver = null,
         };
         pub const Phase = enum { header, literals, trailer, stored, metadata, padding, done };
         const NextHeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, alignment };
@@ -76,6 +88,12 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn initWithOptions(options: Options) Self {
             return .{ .options = options, .metadata_output = options.metadata_output, .metadata_block_lengths = options.metadata_block_lengths };
         }
+        /// Change the observer between calls to step. Only future events are
+        /// delivered; null detaches without changing decode state or captures.
+        pub fn setMetadataObserver(self: *Self, observer: ?MetadataObserver) void {
+            self.options.metadata_observer = observer;
+        }
+
         pub fn reset(self: *Self) void {
             self.* = .{
                 .options = self.options,
@@ -222,17 +240,20 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            self.next_header_state = if (value != 0) .last_empty else .nibbles;
+                            self.final_meta_block = value != 0;
+                            self.next_header_state = if (self.final_meta_block) .last_empty else .nibbles;
                         },
                         .last_empty => {
                             const value = reader.readBits(u1, 1) catch |err| switch (err) {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            if (value != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
-                            try self.validateFinalOutputSize();
-                            self.phase = .padding;
-                            break;
+                            if (value != 0) {
+                                try self.validateFinalOutputSize();
+                                self.phase = .padding;
+                                break;
+                            }
+                            self.next_header_state = .nibbles;
                         },
                         .nibbles => {
                             const code = reader.readBits(u2, 2) catch |err| switch (err) {
@@ -244,6 +265,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 self.next_header_state = .metadata_reserved;
                                 continue;
                             }
+                            if (self.final_meta_block) return self.fail(.trailer, error.UnsupportedBrotliFeature);
                             self.next_length_width = @intCast((4 + @as(usize, code)) * 4);
                             self.next_header_state = .block_len;
                         },
@@ -305,10 +327,21 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.trailer, err),
                             };
                             if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
-                            if (self.metadata and self.metadata_remaining == 0) {
-                                try self.recordMetadataBlock();
-                                self.phase = .trailer;
-                            } else self.phase = if (self.metadata) .metadata else .stored;
+                            if (self.metadata) {
+                                metadata_limits.validate(
+                                    self.metadata_total,
+                                    self.metadata_block_count,
+                                    self.metadata_remaining,
+                                    self.options.max_metadata_bytes,
+                                    self.options.max_metadata_blocks,
+                                ) catch |err| return self.fail(.trailer, err);
+                                const next_count = if (self.metadata_remaining == 0) try self.nextMetadataBlockCount() else null;
+                                if (self.options.metadata_observer) |observer|
+                                    observer.emitStart(self.metadata_block_count, self.metadata_remaining, self.final_meta_block);
+                                if (next_count) |count| {
+                                    try self.finishMetadataBlock(count);
+                                } else self.phase = .metadata;
+                            } else self.phase = .stored;
                             self.next_header_state = .is_last;
                             break;
                         },
@@ -330,17 +363,20 @@ pub fn Decoder(comptime Codec: type) type {
                     const n = @min(self.metadata_remaining, input.len - input_read);
                     const next_metadata = core.stream_count.addLocal(self.metadata_total, n) catch return self.fail(.metadata, error.IntegerOverflow);
                     const next_len = std.math.add(usize, self.current_metadata_len, n) catch return self.fail(.metadata, error.IntegerOverflow);
-                    if (n == self.metadata_remaining) _ = try self.nextMetadataBlockCount();
+                    const next_count = if (n == self.metadata_remaining) try self.nextMetadataBlockCount() else null;
+                    const bytes = input[input_read..][0..n];
+                    if (self.options.metadata_observer) |observer|
+                        observer.emitChunk(self.metadata_block_count, self.current_metadata_len, bytes);
                     const capture = @min(n, self.metadata_output.len -| self.metadata_written);
-                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], input[input_read..][0..capture]);
+                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], bytes[0..capture]);
                     self.metadata_written += capture;
                     self.metadata_total = next_metadata;
                     self.current_metadata_len = next_len;
                     input_read += n;
                     self.metadata_remaining -= n;
-                    if (self.metadata_remaining != 0) return result(input_read, output_written, .need_input);
-                    try self.recordMetadataBlock();
-                    self.phase = .trailer;
+                    if (next_count) |count| {
+                        try self.finishMetadataBlock(count);
+                    } else return result(input_read, output_written, .need_input);
                 },
                 .padding => {
                     const padding_bits: u8 = @intCast((8 - self.stream_bits % 8) % 8);
@@ -394,13 +430,14 @@ pub fn Decoder(comptime Codec: type) type {
         fn nextMetadataBlockCount(self: *Self) Error!Counter {
             return core.stream_count.add(self.metadata_block_count, 1) catch return self.fail(self.phase, error.IntegerOverflow);
         }
-        fn recordMetadataBlock(self: *Self) Error!void {
-            const next_count = try self.nextMetadataBlockCount();
+        fn finishMetadataBlock(self: *Self, next_count: Counter) Error!void {
             if (self.metadata_block_count < core.stream_count.fromLocal(self.metadata_block_lengths.len))
                 self.metadata_block_lengths[core.stream_count.toLocal(self.metadata_block_count) catch unreachable] = self.current_metadata_len;
             self.metadata_block_count = next_count;
             self.current_metadata_len = 0;
             self.metadata = false;
+            if (self.final_meta_block) try self.validateFinalOutputSize();
+            self.phase = if (self.final_meta_block) .padding else .trailer;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };

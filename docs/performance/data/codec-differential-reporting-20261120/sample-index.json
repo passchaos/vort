@@ -1,0 +1,227 @@
+[
+  {
+    "codec": "raw",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 0,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 0,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 5,
+      "input_remaining": 1,
+      "result_code": 1
+    }
+  },
+  {
+    "codec": "zlib",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 0,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 0,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 11,
+      "input_remaining": 1,
+      "result_code": 1
+    }
+  },
+  {
+    "codec": "gzip",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 0,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 0,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 23,
+      "input_remaining": 1,
+      "result_code": 1
+    }
+  },
+  {
+    "codec": "br",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 0,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 0,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "br",
+    "direction": "no_reference_content_changed",
+    "variant": "raw-shared-dictionary",
+    "source_bytes": 768,
+    "vort_decoded_bytes": 768,
+    "reference_decoded_bytes": null,
+    "reference_capacity": null,
+    "inflate": {
+      "output_capacity": null,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "raw",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 1,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 1,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 6,
+      "input_remaining": 1,
+      "result_code": 1
+    }
+  },
+  {
+    "codec": "zlib",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 1,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 1,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 12,
+      "input_remaining": 1,
+      "result_code": 1
+    }
+  },
+  {
+    "codec": "gzip",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 1,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 1,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 24,
+      "input_remaining": 1,
+      "result_code": 1
+    }
+  },
+  {
+    "codec": "zstd",
+    "direction": "vort_only",
+    "variant": "unknown-content-size",
+    "source_bytes": 1,
+    "vort_decoded_bytes": 1,
+    "reference_decoded_bytes": null,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "br",
+    "direction": "reference_only",
+    "variant": "baseline",
+    "source_bytes": 1,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 1,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "zstd",
+    "direction": "reference_only",
+    "variant": "explicit-window-log-10",
+    "source_bytes": 2,
+    "vort_decoded_bytes": null,
+    "reference_decoded_bytes": 2050,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "br",
+    "direction": "vort_only",
+    "variant": "explicit-window",
+    "source_bytes": 7,
+    "vort_decoded_bytes": 4103,
+    "reference_decoded_bytes": null,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "br",
+    "direction": "no_reference_length_changed",
+    "variant": "serialized-shared-dictionary",
+    "source_bytes": 140,
+    "vort_decoded_bytes": 144,
+    "reference_decoded_bytes": null,
+    "reference_capacity": null,
+    "inflate": {
+      "output_capacity": null,
+      "input_consumed": null,
+      "input_remaining": null,
+      "result_code": null
+    }
+  },
+  {
+    "codec": "gzip",
+    "direction": "vort_only",
+    "variant": "rich-gzip-header",
+    "source_bytes": 20505,
+    "vort_decoded_bytes": 20505,
+    "reference_decoded_bytes": null,
+    "reference_capacity": 82021,
+    "inflate": {
+      "output_capacity": 82021,
+      "input_consumed": 30,
+      "input_remaining": 29,
+      "result_code": -3
+    }
+  },
+  {
+    "codec": "raw",
+    "direction": "vort_only",
+    "variant": "baseline",
+    "source_bytes": 128,
+    "vort_decoded_bytes": 127,
+    "reference_decoded_bytes": null,
+    "reference_capacity": 4097,
+    "inflate": {
+      "output_capacity": 4097,
+      "input_consumed": 34,
+      "input_remaining": 90,
+      "result_code": -3
+    }
+  }
+]

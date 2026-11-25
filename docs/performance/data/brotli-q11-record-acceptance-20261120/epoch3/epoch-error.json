@@ -1,0 +1,6 @@
+{
+  "type": "RuntimeError",
+  "message": "Foreign CPU work during calibration",
+  "all_observed_samples_retained": true,
+  "adoption_allowed": false
+}

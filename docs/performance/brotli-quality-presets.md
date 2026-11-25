@@ -1,6 +1,7 @@
 # Brotli quality and mode preset status
 
-Date: 2026-11-07.
+Capability review: 2026-11-20. Dated benchmark results below retain their
+original source and measurement epochs.
 
 ## Scope
 
@@ -26,8 +27,12 @@ content detection. Generic and text currently have the same policy; font adds
 one optional distance-shape candidate from q4, so modes may legitimately choose
 the same winning wire.
 
-These presets emit RFC 7932-compatible streams through Vort's existing planned
-encoder. They do **not** implement libbrotli's quality presets internally and
+By default these presets emit RFC 7932-compatible streams through Vort's
+existing planned encoder. Setting `large_window = true` explicitly selects the
+Large Window extension at widths 10...30, including a distinct extension
+identity at widths no larger than 24. Decoders must enable
+`allow_large_window = true` for those streams. The presets do **not** implement
+libbrotli's quality presets internally and
 do not claim algorithm, byte-for-byte output, compressed-size, memory, or
 throughput parity with libbrotli. A larger quality number generally deepens the
 configured search and never retracts an enabled feature; q11 deliberately
@@ -47,11 +52,17 @@ commands and bounded dynamic trees above it; q3 uses a trivial single-block
 dynamic three-tree writer. q4...q11 retain the general command writer. All
 qualities keep exact
 compressed-versus-stored comparison. The default advertised window is 16 bits,
-and every quality accepts RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
+and every quality accepts RFC windows 10...24, or 10...30 with explicit
+`large_window = true`. The quality path's ordinary LZ matcher is capped at
 `lz77.max_window_len`, currently 65,535 bytes. q2...q11 with an explicit
 17...24-bit window now layer the Brotli sparse long-distance matcher over its
 literal runs, so the emitted command plan can use the complete advertised
-distance range instead of merely writing a wider header. The stream core's
+distance range instead of merely writing a wider header. The same bounded far
+augmenter serves explicit Large Window q2+ and legacy non-fragment streams,
+whose retained history grows with accepted data up to the advertised distance.
+It does not preallocate the complete window30 buffer; actual capacities,
+simultaneous branch snapshots and candidates remain charged to the existing
+memory caps. The stream core's
 ordinary dictionary matcher also consumes the complete 16-bit retained
 history, rather than truncating cross-meta-block search to the generic 32 KiB
 default. q0/q1 also accept every RFC width from 10 through 24, but their
@@ -93,8 +104,10 @@ or the recent-distance ring.
 `adaptive_blocks = false` disables this policy; `true` forces it for a 64 KiB
 configured block. A non-zero explicit `block_len` is fixed by default.
 Automatic lookahead is
-disabled above the standard 16-bit window to keep branch snapshots bounded;
-forcing it there is rejected. Conservative encoded bounds assume every
+disabled above the standard 16-bit window to keep branch snapshots bounded.
+Forcing it above 16 bits is rejected in standard format. Non-HQ Large Window
+streams with a 64 KiB configured block may explicitly enable adaptive blocks;
+HQ still rejects that override. Conservative encoded bounds assume every
 adaptive 64 KiB block may be partitioned at every 4 KiB grid point, which is
 strictly more conservative than the search's four-segment limit.
 
@@ -428,9 +441,10 @@ are split into bounded 16/32/64 KiB planning blocks selected as above. Every blo
 legacy level or q0...q11 quality/mode policy, including its parser budget,
 recent-distance choice, context/split candidates, bounded optimal candidate,
 distance-parameter/font candidate, static-dictionary policy, and exact
-compressed-versus-stored bit comparison. LZ77 history and the actual committed
-recent-distance ring continue across block boundaries and are bounded by the
-advertised window. A stored fallback rolls back candidate distance state while
+compressed-versus-stored bit comparison. Non-fragment LZ77 history and the
+actual committed recent-distance ring continue across block boundaries and are
+bounded by the advertised window. q0/q1 keep fragment-local matching under
+either format. A stored fallback rolls back candidate distance state while
 advancing the logical output position.
 
 The same policy core backs allocating, caller-buffer, reusable, explicit
@@ -438,6 +452,11 @@ chunk-list, and incremental planned encoders, including RAW shared-prefix
 matching. Incremental `flush` and metadata boundaries preserve the selected
 stream policy and bounded history. Explicit chunked/incremental block-size
 overrides use the same core and conservative stored-stream bounds.
+
+Explicit Large Window encoding is available across these APIs independently of
+HQ parsing. The [general Large Window contract](../formats/brotli-general-large-window.md)
+and [HQ contract](../formats/brotli-large-window-hq.md) distinguish the stream
+identity, actual search/history limits, format transitions and resource caps.
 
 ## Verification and performance claims
 

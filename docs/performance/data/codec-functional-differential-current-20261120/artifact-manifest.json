@@ -1,0 +1,59 @@
+{
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 68,
+      "sha256": "eee62520ef834c76ed488464197b822a7c86f60fd037c27647d25cdcba5ddc76"
+    },
+    {
+      "path": "deep-debug-seed-20261120-receipt.json",
+      "bytes": 1450,
+      "sha256": "4015c2a4dccfc1193f2659cc64b7799d1bd71012cd456733f1ab3f32730be8b5"
+    },
+    {
+      "path": "deep-debug-seed-20261120.log",
+      "bytes": 916,
+      "sha256": "0dc0fa57d488b3a693ef647c7a5a4c030f2aa5d98ff6e5d5d881c4061dcff9db"
+    },
+    {
+      "path": "deep-seed-20261120-receipt.json",
+      "bytes": 1197,
+      "sha256": "90a301a727e8c6d5cfd3ebd38d98dfe8b8bfcf084224b394e863a35d79d9d794"
+    },
+    {
+      "path": "deep-seed-20261120.log",
+      "bytes": 945,
+      "sha256": "6bed985a0aad396cc1440385821172dbc0570d024cb41168d3ff463ac0a6c619"
+    },
+    {
+      "path": "modern-reference-probes.json",
+      "bytes": 842,
+      "sha256": "61a722252c0f609355d5a35ec252a192b5d9a722e435e423c2251122ffe06874"
+    },
+    {
+      "path": "raw-deflate-subset-seed-20261120.log",
+      "bytes": 363,
+      "sha256": "4ffe0271c749fe0f65ac6e5e27c04ec7b35b2f12f0cf48fcf9c4167430c8e0bc"
+    },
+    {
+      "path": "reference-linkage.log",
+      "bytes": 524,
+      "sha256": "4b7583993c6240f13c94498fdbfa089f580e5c716253d58081006d861413000f"
+    },
+    {
+      "path": "source-provenance.json",
+      "bytes": 1978,
+      "sha256": "88fcb1f73e6a74cb50b565f1c6f827616fedd627ed8355f1b438593b716f7379"
+    },
+    {
+      "path": "source-snapshot.json",
+      "bytes": 292651,
+      "sha256": "4ee989270879fc6d8c976b1cdb3bcf203b1aba9b92d4ba6f7ebb3315e53de813"
+    },
+    {
+      "path": "validation-checkpoint.json",
+      "bytes": 1400,
+      "sha256": "73c13e016f8f3107835f9bc5a692f6e974f7ab81c9b788812d011bb61e144ee3"
+    }
+  ]
+}

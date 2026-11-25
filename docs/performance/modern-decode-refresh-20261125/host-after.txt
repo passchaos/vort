@@ -1,0 +1,16 @@
+2026-11-25T10:37:10+08:00
+ 10:37:10 up 15 days, 19:16,  1 user,  load average: 1.57, 1.00, 0.61
+    PID PSR %CPU COMMAND
+4131654  13  2.3 traex
+   1452   2  1.5 corplink-uc
+2037943  11  0.7 avahi-daemon
+   1441  12  0.3 corplink-uc
+ 242224   1  0.2 tmux: server
+2012452   3  0.2 systemd-journal
+2495232   7  0.1 kworker/7:1-events
+2505990   7  0.1 kworker/7:3-events
+      1   8  0.0 systemd
+      2   4  0.0 kthreadd
+      3   1  0.0 pool_workqueue_release
+      4   0  0.0 kworker/R-rcu_g
+      5   0  0.0 kworker/R-rcu_p

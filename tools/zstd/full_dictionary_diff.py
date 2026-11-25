@@ -27,8 +27,21 @@ def main() -> int:
             [zstd, "--train", "--dictID=1180675969", *map(str, samples), "-o", str(dictionary)],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+        rotation_samples = []
+        for index in range(48):
+            path = root / f"rotation-{index:03d}.log"
+            path.write_text(
+                f"route=/assets/{index % 11}/segment/{index} scheduler=round-robin "
+                f"operation=dispatch priority={index % 5} shard={index % 4}\n" * 3
+            )
+            rotation_samples.append(path)
+        rotation = root / "rotation.zdict"
+        subprocess.run(
+            [zstd, "--train", "--dictID=1180676001", *map(str, rotation_samples), "-o", str(rotation)],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
         generated = root / "vort-generated.zdict"
-        output = subprocess.check_output([sys.argv[1], str(dictionary), str(generated)], text=True)
+        output = subprocess.check_output([sys.argv[1], str(dictionary), str(generated), str(rotation)], text=True)
         if not output.startswith("zstd_full_dictionary_diff=ok version="):
             raise SystemExit(f"unexpected probe output: {output!r}")
         if "id=1180675969" not in output:
@@ -38,6 +51,12 @@ def main() -> int:
         if "custom_repcodes=yes" not in output:
             raise SystemExit(f"custom repcode interoperability was not exercised: {output!r}")
         fields = dict(field.split("=", 1) for field in output.split() if "=" in field)
+        if (int(fields.get("rotation_frames", 0)) != 4
+                or int(fields.get("rotation_blocks", 0)) < 8
+                or int(fields.get("rotation_requests", 0)) != 8
+                or int(fields.get("rotation_plaintext", 0)) <= 4 * 128 * 1024):
+            raise SystemExit(f"upstream dictionary rotation coverage was not exercised: {output!r}")
+
         def sizes(name: str) -> tuple[int, int]:
             trained, baseline = fields.get(name, "0/0").split("/", 1)
             return int(trained), int(baseline)

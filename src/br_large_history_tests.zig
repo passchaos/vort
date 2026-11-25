@@ -287,7 +287,7 @@ fn Suite(comptime Br: type) type {
                 try h.drain(a, &encoder, &wire, .done, 4096);
                 const summary = try h.checkWire(Br, a, wire.items, input, 25, true);
                 try std.testing.expectEqual(prefix.len, summary.max_lz77_distance);
-                try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+                try std.testing.expect(summary.metadata_meta_block_count == 1 or summary.metadata_meta_block_count == 2);
                 try std.testing.expectEqual(metadata.len, summary.metadata_bytes);
 
                 try encoder.nextStream(opts);

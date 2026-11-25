@@ -11,7 +11,7 @@ const text_section = switch (builtin.object_format) {
 };
 
 const short_hash_bits = 8;
-const long_hash_bits = 11;
+const long_hash_bits = 13;
 const short_hash_size = 1 << short_hash_bits;
 const long_hash_size = 1 << long_hash_bits;
 const invalid_position = std.math.maxInt(u32);
@@ -36,6 +36,22 @@ pub fn planReuse(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: lz77.GreedyOptions,
+    single_table: bool,
+) !lz77.PlanStats {
+    if (single_table) return planReuseImpl(true, records, allocator, input, options);
+    return planReuseImpl(false, records, allocator, input, options);
+}
+
+/// `single_table` keeps the 8-byte hash table, lazy lookahead and rep probes
+/// but drops the 4-byte short table. It is the speed-first level-1 parser:
+/// fewer short matches and sequences trade a small size increase for a large
+/// encode-speed gain. The default two-table parser remains for ratio tiers.
+fn planReuseImpl(
+    comptime single_table: bool,
+    records: *std.ArrayList(sequence_plan.Record),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
 ) !lz77.PlanStats {
     if (input.len < input_len_min or input.len > input_len_max or options.min_match < 4 or options.max_match < 4)
         return error.InvalidBlockPlan;
@@ -48,6 +64,7 @@ pub fn planReuse(
     // caller-owned capacity is retained for subsequent blocks.
     try records.ensureTotalCapacityPrecise(allocator, input.len / record_capacity_divisor);
     var short_table: [short_hash_size]u32 = @splat(invalid_position);
+    _ = &short_table;
     var long_table: [long_hash_size]u32 = @splat(invalid_position);
     var reps = [3]usize{ 1, 4, 8 };
     var stats: lz77.PlanStats = .{};
@@ -66,14 +83,17 @@ pub fn planReuse(
                 try storeMatch(records, allocator, &stats, &reps, anchor, rep_match);
                 anchor = rep_match.position + rep_match.length;
                 position = anchor;
-                try consumeImmediateReps(records, allocator, input, options, &short_table, &long_table, &stats, &reps, &anchor, &position);
+                try consumeImmediateReps(single_table, records, allocator, input, options, &short_table, &long_table, &stats, &reps, &anchor, &position);
                 continue;
             }
         }
 
-        const short_hash = shortHash(input, position);
-        const short_candidate = short_table[short_hash];
-        short_table[short_hash] = @intCast(position);
+        const short_candidate = if (comptime single_table) invalid_position else blk: {
+            const short_hash = shortHash(input, position);
+            const candidate = short_table[short_hash];
+            short_table[short_hash] = @intCast(position);
+            break :blk candidate;
+        };
         const long_candidate = if (position + 8 <= input.len) candidate: {
             const long_hash = longHash(input, position);
             const previous = long_table[long_hash];
@@ -82,8 +102,10 @@ pub fn planReuse(
         } else invalid_position;
 
         var best = candidateMatch(input, position, long_candidate, options, 8);
-        const short_match = candidateMatch(input, position, short_candidate, options, 4);
-        if (preferMatch(short_match, best, reps, position - anchor)) best = short_match;
+        if (comptime !single_table) {
+            const short_match = candidateMatch(input, position, short_candidate, options, 4);
+            if (preferMatch(short_match, best, reps, position - anchor)) best = short_match;
+        }
 
         if (best.length != 0 and best.length < 8 and position + 9 <= input.len) {
             const next_long_candidate = long_table[longHash(input, position + 1)];
@@ -131,13 +153,13 @@ pub fn planReuse(
         try storeMatch(records, allocator, &stats, &reps, anchor, best);
         anchor = best.position + best.length;
 
-        if (best.position + 1 < anchor) insertPosition(input, best.position + 1, &short_table, &long_table);
+        if (best.position + 1 < anchor) insertPosition(single_table, input, best.position + 1, &short_table, &long_table);
         if (best.position + 2 < anchor and best.position + 10 <= input.len)
             long_table[longHash(input, best.position + 2)] = @intCast(best.position + 2);
-        if (anchor >= 2) insertPosition(input, anchor - 2, &short_table, &long_table);
-        if (anchor >= 1) insertPosition(input, anchor - 1, &short_table, &long_table);
+        if (anchor >= 2) insertPosition(single_table, input, anchor - 2, &short_table, &long_table);
+        if (anchor >= 1) insertPosition(single_table, input, anchor - 1, &short_table, &long_table);
         position = anchor;
-        try consumeImmediateReps(records, allocator, input, options, &short_table, &long_table, &stats, &reps, &anchor, &position);
+        try consumeImmediateReps(single_table, records, allocator, input, options, &short_table, &long_table, &stats, &reps, &anchor, &position);
     }
 
     stats.literals += input.len - anchor;
@@ -145,6 +167,7 @@ pub fn planReuse(
 }
 
 noinline fn consumeImmediateReps(
+    comptime single_table: bool,
     records: *std.ArrayList(sequence_plan.Record),
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -159,7 +182,7 @@ noinline fn consumeImmediateReps(
     while (position.* + 4 <= input.len) {
         const immediate = matchAtDistance(input, position.*, reps[1], options);
         if (immediate.length == 0) return;
-        insertPosition(input, position.*, short_table, long_table);
+        insertPosition(single_table, input, position.*, short_table, long_table);
         try storeMatch(records, allocator, stats, reps, anchor.*, immediate);
         anchor.* = immediate.position + immediate.length;
         position.* = anchor.*;
@@ -266,8 +289,10 @@ fn candidateMatch(input: []const u8, position: usize, raw_candidate: u32, option
     return .{ .position = position, .length = matchLength(input, candidate, position, maximum), .distance = distance };
 }
 
-fn insertPosition(input: []const u8, position: usize, short_table: *[short_hash_size]u32, long_table: *[long_hash_size]u32) void {
-    if (position + 4 <= input.len) short_table[shortHash(input, position)] = @intCast(position);
+fn insertPosition(comptime single_table: bool, input: []const u8, position: usize, short_table: *[short_hash_size]u32, long_table: *[long_hash_size]u32) void {
+    if (comptime !single_table) {
+        if (position + 4 <= input.len) short_table[shortHash(input, position)] = @intCast(position);
+    }
     if (position + 8 <= input.len) long_table[longHash(input, position)] = @intCast(position);
 }
 

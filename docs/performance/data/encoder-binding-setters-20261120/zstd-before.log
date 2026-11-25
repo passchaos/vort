@@ -1,0 +1,60 @@
+test-zstd
++- run test vort-zstd-tests 15 pass, 4 fail (19 total)
+error: 'zstd.test.Zstd incremental encoder setter borrows serial' failed:
+       serial setter input changed=true
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12b8b3b in expectError__anon_46755 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/setter_borrow_tests.zig:16:5: 0x12c755c in serial__anon_48221 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, result);
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:4:5: 0x12c78a7 in test.Zstd incremental encoder setter borrows serial (zstd.zig)
+           try @import("zstd/incremental/encoder/setter_borrow_tests.zig").serial(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder setter borrows parallel' failed:
+       parallel setter input changed=true
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1254a0b in expectError__anon_43491 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/setter_borrow_tests.zig:30:5: 0x12c2c54 in parallel__anon_47263 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, result);
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:7:5: 0x12c3027 in test.Zstd incremental encoder setter borrows parallel (zstd.zig)
+           try @import("zstd/incremental/encoder/setter_borrow_tests.zig").parallel(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder setter borrows serial profile' failed:
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12b8b3b in expectError__anon_46755 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/setter_borrow_tests.zig:40:5: 0x12b8f67 in serialProfile__anon_46687 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, encoder.setDictionary(Z.NativeDictionary.initRawContent(std.mem.asBytes(&profile))));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:10:5: 0x12b90f7 in test.Zstd incremental encoder setter borrows serial profile (zstd.zig)
+           try @import("zstd/incremental/encoder/setter_borrow_tests.zig").serialProfile(@This());
+           ^
+error: 'zstd.test.Zstd incremental encoder setter borrows parallel profile' failed:
+       expected error.InvalidBlockPlan, found void
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x1254a0b in expectError__anon_43491 (std.zig)
+               return error.TestExpectedError;
+               ^
+       /home/passchaos/project-z/vort/src/zstd/incremental/encoder/setter_borrow_tests.zig:49:5: 0x1254f1f in parallelProfile__anon_43354 (zstd.zig)
+           try std.testing.expectError(error.InvalidBlockPlan, encoder.setDictionary(Z.NativeDictionary.initRawContent(std.mem.asBytes(&profile))));
+           ^
+       /home/passchaos/project-z/vort/src/zstd.zig:13:5: 0x1255107 in test.Zstd incremental encoder setter borrows parallel profile (zstd.zig)
+           try @import("zstd/incremental/encoder/setter_borrow_tests.zig").parallelProfile(@This());
+           ^
+failed command: ./.zig-cache/o/737f18b032fc94ca1e27ec3a08183bd7/vort-zstd-tests --cache-dir=./.zig-cache --seed=0x67f59ce9 --listen=-
+
+Build Summary: 3/5 steps succeeded (1 failed); 15/19 tests passed (4 failed)
+test-zstd transitive failure
++- run test vort-zstd-tests 15 pass, 4 fail (19 total)
+   +- compile test vort-zstd-tests Debug native success 588ms MaxRSS:243M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:40M
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/5313f62c9349fa9881bca45d012f7f29/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort .zig-cache /home/passchaos/.cache/zig --seed 0x67f59ce9 -Zb0afcf5cfb84a157 -j2 test-zstd -Dzstd-test-filter=Zstd incremental encoder setter borrows --summary all

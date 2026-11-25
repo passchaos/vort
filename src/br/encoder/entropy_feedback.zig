@@ -12,6 +12,8 @@ const CopyCodeHistogram = histogram_model.Histogram(24);
 const DistanceHistogram = histogram_model.Histogram(64);
 const CommandHistogram = histogram_model.Histogram(704);
 const q8 = histogram_model.cost_scale;
+/// Fixed-point scale used by every learned cost in this module.
+pub const cost_scale = histogram_model.cost_scale;
 
 /// Allocator-owned entropy costs learned from one complete Brotli command
 /// proposal. This deliberately models separable literal, copy-length, and
@@ -86,7 +88,7 @@ fn buildInternal(
     starting_last_distances: [4]usize,
     repcode_bonus: bool,
 ) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
-    if (input.len == 0 or window_len == 0 or window_len > lz77.default_window_len)
+    if (input.len == 0 or window_len == 0 or window_len > lz77.max_window_len)
         return error.InvalidBlockPlan;
     for (starting_last_distances) |value|
         if (value == 0) return error.InvalidBlockPlan;

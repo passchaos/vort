@@ -1,0 +1,84 @@
+{
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 106,
+      "sha256": "d443fccf47b94220bb89b7763938544094ba45830a9829f3ec86307c519f5f0a"
+    },
+    {
+      "path": "after.log",
+      "bytes": 552,
+      "sha256": "318d41d479212efec01bfaa6ee845b00f71cfa0622283ebf23bb3afcc6f43964"
+    },
+    {
+      "path": "before-case-results.json",
+      "bytes": 2501,
+      "sha256": "2f4bd2c428a6fa0da4355bbe91ec0fce235925c3f3ec89c76d1c03c781d8f888"
+    },
+    {
+      "path": "before-headers.log",
+      "bytes": 1973,
+      "sha256": "b41b65b85c34b6985c33b622dbdf854be0b1c19f574b09d546c05adb44de76e0"
+    },
+    {
+      "path": "before-pledges.log",
+      "bytes": 1966,
+      "sha256": "84a7d2ba3a3060e5f3d9a9d61e32dc470412191109bb5c86e79ac8b61ffb63d3"
+    },
+    {
+      "path": "before-source-provenance.json",
+      "bytes": 3594,
+      "sha256": "7b6ef69c3062875ee66c874a2225c5675bcabd487f07e27ca68acd1fdf83434f"
+    },
+    {
+      "path": "before.log",
+      "bytes": 1566,
+      "sha256": "96ffb4e8f856444bac2a36a7f2f1c262c52ba4a6e91672086065b9ab4510aff5"
+    },
+    {
+      "path": "cross-architecture.log",
+      "bytes": 10657,
+      "sha256": "8b1c4a57f23f2d71d018bc13f48d000604f554af91d6c6a15e0b085683931f50"
+    },
+    {
+      "path": "full-validation-receipt.json",
+      "bytes": 613,
+      "sha256": "2e9d9d442a6d8cf9c9959661d43cee803d5dbb911e1a491b6f798c0bfe23ebc5"
+    },
+    {
+      "path": "full-validation.log",
+      "bytes": 107863,
+      "sha256": "221c336376c957e3ecef14d350340199d03d1487fec4d05a5b234e35d623de29"
+    },
+    {
+      "path": "interop.log",
+      "bytes": 1065,
+      "sha256": "c4abfc2f4657d717ad1a5c5c27d6ba614a1b41510d0d9354c15f8f0c875af13d"
+    },
+    {
+      "path": "isolated-before.tar.xz",
+      "bytes": 220116,
+      "sha256": "3cbc2a55a5d4e1c2c2ec9412185dcf6f3f27355e6571b8498ae98b4dda05e1f4"
+    },
+    {
+      "path": "library-compile.log",
+      "bytes": 1145,
+      "sha256": "ba66e525f92461cddcac411ab355540abcfb706d2b854ae7d7e03b214d53cb18"
+    },
+    {
+      "path": "source-provenance.json",
+      "bytes": 294654,
+      "sha256": "3f069f1e29b1389ae1916b3ff9c58353efc366848f8cbf088dd5fb084ab31aa3"
+    },
+    {
+      "path": "validation-checkpoint.json",
+      "bytes": 1075,
+      "sha256": "a2250e041cc5c5d511140bd7a7f0d8d8fe792afa635ffa92863a13057afe2895"
+    },
+    {
+      "path": "wasi-receipt.json",
+      "bytes": 13192,
+      "sha256": "1dd6015aad90b982f14c810ec4efcb40619799700db228943e2b5808f936d663"
+    }
+  ]
+}

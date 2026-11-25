@@ -14,6 +14,8 @@ pub const Transform = extern struct {
     delta_nb_bits: i32 = 0,
 };
 
+pub const FillResult = struct { initial_state: u8, bit_count: usize };
+
 pub noinline fn fill(
     codes: []const u8,
     state_table: []const u16,
@@ -23,7 +25,7 @@ pub noinline fn fill(
     state_bits: []u8,
     transition_values: []u8,
     transition_bits: []u8,
-) linksection(text_section) ?u8 {
+) linksection(text_section) ?FillResult {
     if (codes.len == 0 or state_table.len == 0 or
         next_states.len != codes.len or state_bits.len != codes.len or
         transition_values.len != codes.len or transition_bits.len != codes.len) return null;
@@ -32,6 +34,7 @@ pub noinline fn fill(
     if (encoder_state < table_size or encoder_state - table_size >= table_size) return null;
     next_states[codes.len - 1] = 0;
     state_bits[codes.len - 1] = 0;
+    var transition_bit_count: usize = 0;
 
     var i = codes.len - 1;
     while (i > 0) {
@@ -52,10 +55,11 @@ pub noinline fn fill(
         state_bits[i] = bits;
         transition_values[i] = @intCast(transition);
         transition_bits[i] = bits;
+        transition_bit_count = std.math.add(usize, transition_bit_count, bits) catch return null;
         encoder_state = state_table[state_index];
         if (encoder_state < table_size or encoder_state - table_size >= table_size) return null;
     }
-    return @intCast(encoder_state - table_size);
+    return .{ .initial_state = @intCast(encoder_state - table_size), .bit_count = transition_bit_count };
 }
 
 fn initialState(state_table: []const u16, transforms: []const Transform, max_symbol: u8, symbol: u8) ?usize {
@@ -75,6 +79,6 @@ test "large transition kernel rejects inconsistent slices" {
     var transforms: [1]Transform = .{.{}};
     var states: [1]u16 = .{1};
     var output: [1]u8 = undefined;
-    try std.testing.expectEqual(@as(?u8, null), fill(&.{}, &states, &transforms, 0, &output, &output, &output, &output));
-    try std.testing.expectEqual(@as(?u8, null), fill(&.{0}, &states, &transforms, 0, output[0..0], &output, &output, &output));
+    try std.testing.expect(fill(&.{}, &states, &transforms, 0, &output, &output, &output, &output) == null);
+    try std.testing.expect(fill(&.{0}, &states, &transforms, 0, output[0..0], &output, &output, &output) == null);
 }

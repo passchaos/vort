@@ -1,0 +1,109 @@
+{
+  "schema": "vort.zstd.functional_audit.v1",
+  "observed_at_utc": "2026-11-15 05:16:04 UTC",
+  "repository": "/home/passchaos/project-z/vort",
+  "revision": "775ed212ebd46489051bd86fce72aa81a2246930",
+  "working_tree_note": "Only pre-existing modified src/zstd/incremental/encoder/counter_tests.zig. The audit did not edit any repository file.",
+  "zig_version": "0.16.0",
+  "build_mode": "ReleaseSafe",
+  "root_cause": {
+    "function": "NativeIncrementalFrameDecoder.fulfilledPledgeStartsDataMember",
+    "path": "src/zstd.zig",
+    "line": 8042,
+    "call_line": 7328,
+    "unsafe_index_line": 8047
+  },
+  "cases": [
+    {
+      "name": "empty poll panic",
+      "input_hex": "",
+      "options": {
+        "input_policy": "prevalidated_frame",
+        "expected_output_len": 0
+      },
+      "output_capacity": 0,
+      "observed": "SIGABRT: index out of bounds: index 0, len 0",
+      "process_exit_code": -6,
+      "expected": "need_input without an out-of-bounds read"
+    },
+    {
+      "name": "split valid empty member",
+      "input_hex": "28b52ffd2000010000",
+      "split": 1,
+      "options": {
+        "input_policy": "prevalidated_frame",
+        "expected_output_len": 0
+      },
+      "output_capacity": 0,
+      "observed": "SizeMismatch after accepting one byte",
+      "unsplit": "done, input_read=9",
+      "control_block_stream": "need_input/input_read=1 then done/input_read=8",
+      "expected": "same successful zero-byte decode under any fragmentation"
+    },
+    {
+      "name": "known FCS surplus with zero output capacity",
+      "input_hex": "28b52ffd200109000061",
+      "options": {
+        "input_policy": "prevalidated_frame",
+        "expected_output_len": 0
+      },
+      "output_capacity": 0,
+      "observed": "need_output after input_read=10; finish=OutputTooSmall",
+      "control_block_stream": "SizeMismatch after input_read=6",
+      "expected": "SizeMismatch from the complete FCS=1 header, without requesting impossible output"
+    },
+    {
+      "name": "truncated empty checksum frame",
+      "input_hex": "28b52ffd240001000099e9d8",
+      "options": {
+        "input_policy": "prevalidated_frame",
+        "expected_output_len": 0
+      },
+      "output_capacity": 0,
+      "observed": "SizeMismatch after input_read=12",
+      "control_block_stream": "need_input/input_read=12 then finish=TruncatedFrame",
+      "expected": "need_input then TruncatedFrame, preserving the real framing failure"
+    },
+    {
+      "name": "invalid checksum of full empty frame",
+      "input_hex": "28b52ffd240001000000000000",
+      "options": {
+        "expected_output_len": 0
+      },
+      "output_capacity": 0,
+      "observed": "ChecksumMismatch under both input policies",
+      "expected": "ChecksumMismatch"
+    }
+  ],
+  "oracle": {
+    "library": "libzstd.so.1",
+    "version": "1.4.8",
+    "artifact": "zstd-libzstd-oracle.txt",
+    "rerun": "python3 docs/performance/codec-member-boundaries-20261115/zstd-oracle.py",
+    "validated_empty_compressed_wires": [
+      "28b52ffd00001d0000040000",
+      "28b52ffd04001d000004000099e9d851",
+      "28b52ffd8000000000001d0000040000",
+      "28b52ffd8400000000001d000004000099e9d851"
+    ]
+  },
+  "fixture_notes": [
+    "All validated compressed empty fixtures use a three-byte payload: two-byte Raw literals header 04 00 and zero sequence count 00.",
+    "Known FCS compressed fixtures use a non-single frame (80/84 descriptor), window descriptor 00 and four-byte FCS=0. Single-segment FCS=0 implies Block_Maximum_Size=0 and cannot hold a nonempty compressed wire payload.",
+    "Empty XXH64 low 32 bits are 0x51d8e999, encoded 99 e9 d8 51.",
+    "edge_probe additionally contains a two-byte compressed empty payload that Vort accepts but system libzstd1.4.8 rejects. That extra observation is not used as a compatibility oracle."
+  ],
+  "artifacts": [
+    "zstd-pledge_probe.zig",
+    "zstd-pledge_probe.txt",
+    "zstd-edge_probe.zig",
+    "zstd-edge_probe.txt",
+    "zstd-oracle.py",
+    "zstd-libzstd-oracle.txt"
+  ],
+  "build_commands": [
+    "zig build-obj -O ReleaseFast --cache-dir /tmp/vort-zstd-functional-audit/cache src/zstd_huffman_x2_object.zig -femit-bin=/tmp/vort-zstd-functional-audit/huffman.o",
+    "zig build-exe -O ReleaseSafe --cache-dir /tmp/vort-zstd-functional-audit/cache /tmp/vort-zstd-functional-audit/huffman.o --dep zstd -Mroot=/tmp/vort-zstd-functional-audit/pledge_probe.zig -Mzstd=/home/passchaos/project-z/vort/src/zstd.zig -femit-bin=/tmp/vort-zstd-functional-audit/pledge_probe",
+    "zig build-exe -O ReleaseSafe --cache-dir /tmp/vort-zstd-functional-audit/cache /tmp/vort-zstd-functional-audit/huffman.o --dep zstd -Mroot=/tmp/vort-zstd-functional-audit/edge_probe.zig -Mzstd=/home/passchaos/project-z/vort/src/zstd.zig -femit-bin=/tmp/vort-zstd-functional-audit/edge_probe"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "schema": "vort.nonrecent-context-proof.v1",
+  "status": "bounded_proof_passed_not_adopted",
+  "snapshot": "/tmp/vort-br-nonrecent-context-20261123",
+  "snapshot_base_revision": "b929184e4f815773f9fde0d2c40224a0a5dcf938",
+  "compiler": "0.16.0",
+  "source_sha256": {
+    "src/br.zig": "972057aefed5052f4b859ace1aa47c9a49a5e7f29019ba58be5ce8efb0ec0e53",
+    "src/br/encoder/prepared_command_distance.zig": "dc6f61fb847bea9fd67b6d56337179f51e671e06b5e50948e48125039d3c22f8",
+    "src/br/encoder/context_candidate_group.zig": "9fd325f49f8a007feb1c68502c46789a86917358cad82b546ed564930ffe33c0",
+    "src/br/encoder/prepared_literal_emission.zig": "e27d744129586b65c22dab300f6174083bb2b16416d456148485bc21662d6ea4",
+    "src/br/encoder/nonrecent_context_tests.zig": "ddb7977a9d587e6ac1fb6b5c28b403edb5eaaa83c9cd6db540c2a3702110fc6b",
+    "src/br/encoder/nonrecent_context_resources_tests.zig": "70ba0e39f73af66a990f6224a94855a1f294c0aec9bf6cfec62173b396476c09",
+    "src/br/encoder/nonrecent_context_fixtures/dickens-8k.txt": "602ff7349c8ca821c5d560915480aff05096986b89396b059b09ebce046dc48c",
+    "proof-artifacts/nonrecent-context.patch": "000519b3f4d285385d4603790e6cf486ee72f1506b02adbda6389573a7a66e67"
+  },
+  "proofs": {
+    "Debug": {
+      "status": "passed",
+      "tests_passed": 33,
+      "direct_cold_warm_count_emit_rows": 104,
+      "public_q10_q11_rows": 2,
+      "actual_public_nonrecent_groups": 14,
+      "allocation_failures": 2,
+      "valid_common_emit_failures": 2,
+      "log": "final-debug-proof.log",
+      "log_sha256": "2aedd60e98591adde1027b59bdf2ce5b9ae945f94818134c15cc3417a20afbac",
+      "commands": [
+        "zig build-obj src/br/encoder/record_optimal_object.zig -O Debug -femit-bin=proof-artifacts/record-optimal-debug.o",
+        "zig test src/br.zig proof-artifacts/record-optimal-debug.o -O Debug --test-filter 'Brotli nonrecent context' --name nonrecent-context-debug"
+      ]
+    },
+    "ReleaseSafe": {
+      "status": "passed",
+      "tests_passed": 33,
+      "direct_cold_warm_count_emit_rows": 104,
+      "public_q10_q11_rows": 2,
+      "actual_public_nonrecent_groups": 14,
+      "allocation_failures": 2,
+      "valid_common_emit_failures": 2,
+      "log": "final-releasesafe-proof.log",
+      "log_sha256": "2aedd60e98591adde1027b59bdf2ce5b9ae945f94818134c15cc3417a20afbac",
+      "commands": [
+        "zig build-obj src/br/encoder/record_optimal_object.zig -O ReleaseSafe -femit-bin=proof-artifacts/record-optimal-safe.o",
+        "zig test src/br.zig proof-artifacts/record-optimal-safe.o -O ReleaseSafe --test-filter 'Brotli nonrecent context' --name nonrecent-context-safe"
+      ]
+    }
+  },
+  "existing_controls": {
+    "tests_passed": 28,
+    "log": "final-existing-controls.log",
+    "sha256": "2cab3e1d0b64e922cb3d534526934ef267d93ece437645492c58eb0b052b9b24"
+  },
+  "prior_stage_controls": {
+    "log": "prior-stage-existing-controls.log",
+    "binding": "prior stage only; not final-source receipt"
+  },
+  "fixture": {
+    "path": "src/br/encoder/nonrecent_context_fixtures/dickens-8k.txt",
+    "length": 8192,
+    "sha256": "602ff7349c8ca821c5d560915480aff05096986b89396b059b09ebce046dc48c",
+    "public_settings": {
+      "quality": [
+        10,
+        11
+      ],
+      "mode": "generic",
+      "window_bits": 16,
+      "command_state_max_input_kib": 8
+    }
+  },
+  "same_last_plan_shared_transactionally": true,
+  "same_last_command_cache": "baseline symbols bypassed when accepted plan is enabled; final command mapping recomputed from saved plan",
+  "distance_context_writer": "excluded from Prepared; ordinary cold fallback retained, special recoding semantics not expanded",
+  "all_proof_sessions_closed": true,
+  "source_edits_pending": false,
+  "performance_runs": false,
+  "adopted": false,
+  "main_edited": false,
+  "completed_at_utc": "2026-11-23T06:15:16.621091+00:00"
+}

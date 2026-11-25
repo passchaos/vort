@@ -1,12 +1,16 @@
 const std = @import("std");
 const vort = @import("vort");
 const Decoder = vort.ZlibIncrementalDecoder;
+const Auto = vort.ZlibOrGzipIncrementalDecoder;
 
 const Config = struct {
     pattern: []const u8 = "micro",
     initializer: []const u8 = "missing",
+    wrapper: enum { zlib, auto } = .zlib,
     dictionary_paths: []const []const u8,
     allow_concatenated: bool = false,
+    allow_trailing_data: bool = false,
+    max_window_bits: u4 = 15,
     max_output_len: usize = std.math.maxInt(usize),
     expected_output_len: ?usize = null,
     finish_on_need: bool = false,
@@ -31,6 +35,7 @@ const Report = struct {
     steps: usize = 0,
     zero_output_steps: usize = 0,
     zero_input_steps: usize = 0,
+    backpressure_steps: usize = 0,
     requests: std.ArrayList(Request) = .empty,
     @"error": ?[]const u8 = null,
     error_input_progress: usize = 0,
@@ -58,6 +63,7 @@ pub fn main(init: std.process.Init) !void {
     const parsed = try std.json.parseFromSlice(Config, init.gpa, configuration, .{});
     defer parsed.deinit();
     const config = parsed.value;
+    if (config.dictionary_paths.len == 0) return error.MissingDictionary;
     const dictionaries = try init.gpa.alloc([]u8, config.dictionary_paths.len);
     defer init.gpa.free(dictionaries);
     var loaded: usize = 0;
@@ -69,19 +75,33 @@ pub fn main(init: std.process.Init) !void {
     const entries = try init.gpa.alloc(vort.ZlibDictionaryEntry, dictionaries.len);
     defer init.gpa.free(entries);
     for (entries, dictionaries) |*entry, dictionary| entry.* = vort.ZlibDictionarySet.entry(dictionary);
-    const options: Decoder.Options = .{ .allow_concatenated = config.allow_concatenated, .max_output_len = config.max_output_len, .expected_output_len = config.expected_output_len };
+    switch (config.wrapper) {
+        .zlib => try runDecoder(Decoder, init, config, encoded, expected, output_path, entries, dictionaries),
+        .auto => try runDecoder(Auto, init, config, encoded, expected, output_path, entries, dictionaries),
+    }
+}
+
+fn runDecoder(comptime D: type, init: std.process.Init, config: Config, encoded: []const u8, expected: []const u8, output_path: []const u8, entries: []const vort.ZlibDictionaryEntry, dictionaries: []const []u8) !void {
+    var options: D.Options = .{};
+    options.allow_concatenated = config.allow_concatenated;
+    options.allow_trailing_data = config.allow_trailing_data;
+    options.max_output_len = config.max_output_len;
+    options.expected_output_len = config.expected_output_len;
+    if (D == Decoder) options.max_window_bits = config.max_window_bits else options.max_zlib_window_bits = config.max_window_bits;
     var history: [32768]u8 = undefined;
     const miss_entries = [_]vort.ZlibDictionaryEntry{vort.ZlibDictionarySet.entry("unrelated dictionary set entry")};
     var decoder = if (std.mem.eql(u8, config.initializer, "set-miss"))
-        try Decoder.initWithDictionarySet(options, &history, vort.ZlibDictionarySet.fromEntries(&miss_entries))
+        try D.initWithDictionarySet(options, &history, vort.ZlibDictionarySet.fromEntries(&miss_entries))
     else if (std.mem.eql(u8, config.initializer, "set-hit"))
-        try Decoder.initWithDictionarySet(options, &history, vort.ZlibDictionarySet.fromEntries(entries))
+        try D.initWithDictionarySet(options, &history, vort.ZlibDictionarySet.fromEntries(entries))
+    else if (std.mem.eql(u8, config.initializer, "set-partial"))
+        try D.initWithDictionarySet(options, &history, vort.ZlibDictionarySet.fromEntries(entries[0..1]))
     else if (std.mem.eql(u8, config.initializer, "correct"))
-        try Decoder.initWithDictionary(options, &history, dictionaries[0])
+        try D.initWithDictionary(options, &history, dictionaries[0])
     else if (std.mem.eql(u8, config.initializer, "wrong"))
-        try Decoder.initWithDictionary(options, &history, "initial wrong dictionary")
+        try D.initWithDictionary(options, &history, "initial wrong dictionary")
     else
-        try Decoder.init(options, &history);
+        try D.init(options, &history);
     if (decoder.requiredDictionaryId() != null) return error.PrematureDictionaryId;
     if (decoder.provideDictionary(dictionaries[0])) |_| return error.UnexpectedInitialDictionaryProvide else |err| {
         if (err != error.InvalidStreamState) return err;
@@ -95,7 +115,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (report.@"error" != null or !std.mem.eql(u8, actual.items, expected)) return error.DecodeMismatch;
     if (config.reset_after) {
         decoder.reset();
-        const reset = decoder.snapshot();
+        const reset = try snapshotOf(&decoder);
         if (reset.total_input != 0 or reset.total_output != 0 or reset.stream_count != 0 or decoder.requiredDictionaryId() != null)
             return error.ResetStateMismatch;
         var replay: std.ArrayList(u8) = .empty;
@@ -105,7 +125,7 @@ pub fn main(init: std.process.Init) !void {
         if (!std.mem.eql(u8, actual.items, replay.items)) return error.ResetOutputMismatch;
         report.reset_checks = 1;
     }
-    const snapshot_json = try std.json.Stringify.valueAlloc(init.gpa, decoder.snapshot(), .{});
+    const snapshot_json = try std.json.Stringify.valueAlloc(init.gpa, try snapshotOf(&decoder), .{});
     defer init.gpa.free(snapshot_json);
     const snapshot = try std.json.parseFromSlice(std.json.Value, init.gpa, snapshot_json, .{});
     defer snapshot.deinit();
@@ -122,6 +142,7 @@ pub fn main(init: std.process.Init) !void {
         .steps = report.steps,
         .zero_output_steps = report.zero_output_steps,
         .zero_input_steps = report.zero_input_steps,
+        .backpressure_steps = report.backpressure_steps,
         .requests = report.requests.items,
         .@"error" = report.@"error",
         .error_input_progress = report.error_input_progress,
@@ -138,6 +159,27 @@ pub fn main(init: std.process.Init) !void {
     try stdout.interface.flush();
 }
 
+/// Normalize the facade's two-byte detection phase for the zlib-only probe.
+/// Use the facade's own progress, not the replayed header's child progress.
+fn snapshotOf(decoder: anytype) !Decoder.Snapshot {
+    if (@TypeOf(decoder.*) == Decoder) return decoder.snapshot();
+    const parent = decoder.snapshot();
+    var child: Decoder.Snapshot = switch (parent.detail) {
+        .zlib => |selected| selected,
+        .detecting => std.mem.zeroes(Decoder.Snapshot),
+        .gzip => return error.UnexpectedWrapper,
+    };
+    if (parent.format == .zlib and (child.total_input != parent.total_input or child.total_output != parent.total_output or
+        child.member_end_offset != parent.member_end_offset or child.done != parent.done)) return error.FacadeProgressMismatch;
+    child.total_input = parent.total_input;
+    child.total_output = parent.total_output;
+    child.last_step_progress = parent.last_step_progress;
+    child.last_error_name = parent.last_error_name;
+    child.last_error_input_offset = parent.last_error_input_offset;
+    child.last_error_output_offset = parent.last_error_output_offset;
+    return child;
+}
+
 fn read(init: std.process.Init, path: []const u8, limit: usize) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(limit));
 }
@@ -148,7 +190,7 @@ fn publish(allocator: std.mem.Allocator, actual: *std.ArrayList(u8), expected: [
     try actual.appendSlice(allocator, produced);
 }
 
-fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, expected: []const u8, dictionaries: []const []u8, config: Config, actual: *std.ArrayList(u8)) !Report {
+fn decode(allocator: std.mem.Allocator, decoder: anytype, encoded: []const u8, expected: []const u8, dictionaries: []const []u8, config: Config, actual: *std.ArrayList(u8)) !Report {
     var report = Report{};
     errdefer report.requests.deinit(allocator);
     const micro_input = [_]usize{ 1, 0, 2, 3, 0, 17, 64 };
@@ -160,12 +202,12 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
         const end = report.input_read + @min(encoded.len - report.input_read, input_len);
         @memset(&guard, 0xa5);
         const output = guard[8 .. 8 + output_len];
-        const before = decoder.snapshot();
+        const before = try snapshotOf(decoder);
         report.steps += 1;
         report.zero_input_steps += @intFromBool(end == report.input_read);
         report.zero_output_steps += @intFromBool(output.len == 0);
         const stepped = decoder.step(encoded[report.input_read..end], output) catch |err| {
-            const after = decoder.snapshot();
+            const after = try snapshotOf(decoder);
             if (after.total_input < before.total_input or after.total_output < before.total_output) return error.InvalidErrorProgress;
             const input_progress = after.total_input - before.total_input;
             const output_progress = after.total_output - before.total_output;
@@ -195,7 +237,7 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
                 if (decoder.step("", &retry_output)) |_| return error.UnexpectedDictionaryWaitSuccess else |wait_error| {
                     if (wait_error != error.NeedDictionary) return wait_error;
                 }
-                const waited = decoder.snapshot();
+                const waited = try snapshotOf(decoder);
                 if (waited.total_input != after.total_input or waited.total_output != after.total_output or
                     waited.last_step_progress.input_read != 0 or waited.last_step_progress.output_written != 0)
                     return error.DictionaryWaitProgress;
@@ -211,7 +253,7 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
                         if (wrong_error != error.DictionaryMismatch) return wrong_error;
                     }
                     request.wrong_dictionary_attempts += 1;
-                    const rejected = decoder.snapshot();
+                    const rejected = try snapshotOf(decoder);
                     if (decoder.requiredDictionaryId() != id or rejected.total_input != after.total_input or
                         rejected.total_output != after.total_output) return error.WrongDictionaryStateModified;
                 }
@@ -222,8 +264,9 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
                             if (wrong_error != error.DictionaryMismatch) return wrong_error;
                         }
                         request.wrong_dictionary_attempts += 1;
-                        if (decoder.requiredDictionaryId() != id or decoder.snapshot().total_input != after.total_input or
-                            decoder.snapshot().total_output != after.total_output) return error.WrongDictionaryStateModified;
+                        const rejected = try snapshotOf(decoder);
+                        if (decoder.requiredDictionaryId() != id or rejected.total_input != after.total_input or
+                            rejected.total_output != after.total_output) return error.WrongDictionaryStateModified;
                     }
                 }
                 if (config.finish_on_need) {
@@ -238,7 +281,7 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
                 };
                 @memset(transient, 0x3f);
                 allocator.free(transient);
-                if (decoder.requiredDictionaryId() != null or decoder.snapshot().last_error_name.len != 0)
+                if (decoder.requiredDictionaryId() != null or (try snapshotOf(decoder)).last_error_name.len != 0)
                     return error.DictionaryRecoveryState;
                 try report.requests.append(allocator, request);
                 continue;
@@ -248,9 +291,10 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
             report.error_output_progress = output_progress;
             return report;
         };
+        report.backpressure_steps += @intFromBool(stepped.status == .need_output);
         if (stepped.progress.input_read > end - report.input_read or stepped.progress.output_written > output.len)
             return error.InvalidProgress;
-        const after = decoder.snapshot();
+        const after = try snapshotOf(decoder);
         if (after.total_input - before.total_input != stepped.progress.input_read or
             after.total_output - before.total_output != stepped.progress.output_written or
             after.last_step_progress.input_read != stepped.progress.input_read or
@@ -269,7 +313,7 @@ fn decode(allocator: std.mem.Allocator, decoder: *Decoder, encoded: []const u8, 
                 report.@"error" = @errorName(err);
                 return report;
             };
-            if (decoder.snapshot().done) return report;
+            if ((try snapshotOf(decoder)).done) return report;
             return error.StreamDidNotFinish;
         }
     }

@@ -1,9 +1,11 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const metadata_events = @import("../metadata_events.zig");
+const metadata_limits = @import("../metadata_limits.zig");
 
 /// Byte-progressive decoder for the Brotli stored/uncompressed subset emitted
 /// by Vort. Only a bounded header prefix is retained; aligned meta-block bytes
-/// stream directly from caller input to caller output. Metadata is skipped
+/// stream directly from caller input to caller output. Metadata can be observed
 /// without buffering. Compressed meta-blocks return UnsupportedBrotliFeature so
 /// callers can choose the general incremental facade instead.
 pub const Decoder = struct {
@@ -16,6 +18,7 @@ pub const Decoder = struct {
     staged_bits: u6 = 0,
     payload_remaining: usize = 0,
     metadata: bool = false,
+    final_meta_block: bool = false,
     total_input: Counter = 0,
     total_output: Counter = 0,
     stream_input: Counter = 0,
@@ -36,10 +39,20 @@ pub const Decoder = struct {
 
     pub const Counter = core.StreamCount;
     pub const Error = core.Error;
+    pub const MetadataEvent = metadata_events.Event;
+    pub const MetadataObserver = metadata_events.Observer;
     pub const Options = struct {
         max_output_len: Counter = std.math.maxInt(Counter),
+        /// Maximum total declared metadata body bytes per Brotli stream.
+        max_metadata_bytes: Counter = std.math.maxInt(Counter),
+        /// Maximum metadata blocks per Brotli stream, including empty blocks.
+        max_metadata_blocks: Counter = std.math.maxInt(Counter),
         metadata_output: []u8 = &.{},
         metadata_block_lengths: []usize = &.{},
+        /// Called synchronously during step. Chunk bytes are borrowed for
+        /// the callback only. Do not reenter the decoder or mutate its
+        /// input, output, or other buffers during the callback.
+        metadata_observer: ?MetadataObserver = null,
     };
     pub const Phase = enum { window, header, payload, done };
     const WindowState = enum { first, low3, tail };
@@ -77,6 +90,12 @@ pub const Decoder = struct {
             .metadata_block_lengths = options.metadata_block_lengths,
         };
     }
+    /// Change the observer between calls to step. Only future events are
+    /// delivered; null detaches without changing decode state or captures.
+    pub fn setMetadataObserver(self: *Decoder, observer: ?MetadataObserver) void {
+        self.options.metadata_observer = observer;
+    }
+
     pub fn reset(self: *Decoder) void {
         self.* = .{
             .options = self.options,
@@ -176,12 +195,16 @@ pub const Decoder = struct {
                 const next_input = try self.checkInput(n);
                 if (self.metadata) {
                     const next_metadata = core.stream_count.addLocal(self.metadata_total, n) catch return self.fail(.payload, error.IntegerOverflow);
-                    if (n == self.payload_remaining) _ = try self.nextMetadataBlockCount();
+                    const next_count = if (n == self.payload_remaining) try self.nextMetadataBlockCount() else null;
+                    const bytes = input[input_read..][0..n];
+                    if (self.options.metadata_observer) |observer|
+                        observer.emitChunk(self.metadata_block_count, self.current_metadata_len - self.payload_remaining, bytes);
                     const capture_len = @min(n, self.metadata_output.len -| self.metadata_written);
                     if (capture_len != 0)
-                        @memcpy(self.metadata_output[self.metadata_written..][0..capture_len], input[input_read..][0..capture_len]);
+                        @memcpy(self.metadata_output[self.metadata_written..][0..capture_len], bytes[0..capture_len]);
                     self.metadata_written += capture_len;
                     self.metadata_total = next_metadata;
+                    if (next_count) |count| self.recordMetadataBlock(count);
                 } else {
                     const next_output = try self.checkOutput(n);
                     @memcpy(output[output_written..][0..n], input[input_read..][0..n]);
@@ -194,9 +217,8 @@ pub const Decoder = struct {
                 if (self.payload_remaining != 0) {
                     return result(input_read, output_written, if (!self.metadata and output_written == output.len) .need_output else .need_input);
                 }
-                if (self.metadata) try self.recordMetadataBlock();
                 self.metadata = false;
-                self.phase = .header;
+                self.phase = if (self.final_meta_block) .done else .header;
             }
 
             if (self.phase == .done) {
@@ -235,12 +257,16 @@ pub const Decoder = struct {
                 switch (self.header_state) {
                     .is_last => {
                         const is_last = try self.readBits(input, &input_read, 1) orelse return result(input_read, output_written, .need_input);
-                        self.header_state = if (is_last != 0) .last_empty else .nibbles;
+                        self.final_meta_block = is_last != 0;
+                        self.header_state = if (self.final_meta_block) .last_empty else .nibbles;
                         continue;
                     },
                     .last_empty => {
                         const empty = try self.readBits(input, &input_read, 1) orelse return result(input_read, output_written, .need_input);
-                        if (empty == 0) return self.fail(.header, error.UnsupportedBrotliFeature);
+                        if (empty == 0) {
+                            self.header_state = .nibbles;
+                            continue;
+                        }
                         self.header_state = .padding;
                         self.metadata = false;
                         self.payload_remaining = 0;
@@ -251,6 +277,7 @@ pub const Decoder = struct {
                             self.metadata = true;
                             self.header_state = .metadata_reserved;
                         } else {
+                            if (self.final_meta_block) return self.fail(.header, error.UnsupportedBrotliFeature);
                             self.metadata = false;
                             self.length_width = @intCast((4 + code) * 4);
                             self.header_state = .block_len;
@@ -303,9 +330,21 @@ pub const Decoder = struct {
                             self.phase = .done;
                             continue;
                         }
-                        if (self.metadata and self.payload_remaining == 0) try self.recordMetadataBlock();
+                        if (self.metadata) {
+                            metadata_limits.validate(
+                                self.metadata_total,
+                                self.metadata_block_count,
+                                self.payload_remaining,
+                                self.options.max_metadata_bytes,
+                                self.options.max_metadata_blocks,
+                            ) catch |err| return self.fail(.header, err);
+                            const next_count = if (self.payload_remaining == 0) try self.nextMetadataBlockCount() else null;
+                            if (self.options.metadata_observer) |observer|
+                                observer.emitStart(self.metadata_block_count, self.current_metadata_len, self.final_meta_block);
+                            if (next_count) |count| self.recordMetadataBlock(count);
+                        }
                         self.normalizeAlignedPayload(&input_read);
-                        self.phase = if (self.payload_remaining == 0) .header else .payload;
+                        self.phase = if (self.payload_remaining != 0) .payload else if (self.final_meta_block) .done else .header;
                         self.header_state = .is_last;
                         continue;
                     },
@@ -328,8 +367,7 @@ pub const Decoder = struct {
     fn nextMetadataBlockCount(self: *Decoder) Error!Counter {
         return core.stream_count.add(self.metadata_block_count, 1) catch return self.fail(self.phase, error.IntegerOverflow);
     }
-    fn recordMetadataBlock(self: *Decoder) Error!void {
-        const next_count = try self.nextMetadataBlockCount();
+    fn recordMetadataBlock(self: *Decoder, next_count: Counter) void {
         if (self.metadata_block_count < core.stream_count.fromLocal(self.metadata_block_lengths.len))
             self.metadata_block_lengths[core.stream_count.toLocal(self.metadata_block_count) catch unreachable] = self.current_metadata_len;
         self.metadata_block_count = next_count;

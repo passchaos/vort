@@ -1,0 +1,12 @@
+*.bin binary
+*.xz binary
+*.patch -text
+*.log -text
+*.stderr -text
+*.stdout -text
+*.patch -whitespace
+*.log -whitespace
+*.stderr -whitespace
+*.stdout -whitespace
+producer/README.md -whitespace
+output-budget-producer/README.md -whitespace

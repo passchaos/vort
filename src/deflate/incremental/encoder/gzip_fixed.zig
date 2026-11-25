@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const counts = core.stream_count;
 const Count = core.StreamCount;
+const step_borrows = @import("step_borrows.zig");
 
 /// Incremental gzip wrapper around the fixed-Huffman raw-DEFLATE stream core.
 /// Header metadata, CRC-32/ISIZE footer, flush and caller I/O accounting are
@@ -107,6 +108,8 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMember(self: *Self, header: Codec.HeaderOptions) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.member_count, 1);
+            try step_borrows.validateHeaderTransition(self, header);
+            try Codec.validateHeader(header);
             self.options.header = header;
             self.resetMember();
         }
@@ -117,6 +120,8 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.member_count, 1);
             try Codec.RawEncoder.validateOptions(options.raw);
+            try step_borrows.validateHeaderTransition(self, options.header);
+            try Codec.validateHeader(options.header);
             self.options = options;
             self.raw.resetWithOptions(options.raw);
             self.resetMemberWrapper();
@@ -126,6 +131,9 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMemberExactSize(self: *Self, header: Codec.HeaderOptions, expected_input_len: Count) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.member_count, 1);
+            try Codec.RawEncoder.validateExactSizeOptions(self.raw.options, expected_input_len);
+            try step_borrows.validateHeaderTransition(self, header);
+            try Codec.validateHeader(header);
             self.options.header = header;
             self.resetMemberExactSize(expected_input_len);
         }
@@ -133,7 +141,9 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMemberExactSizeWithOptions(self: *Self, options: Options, expected_input_len: Count) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             _ = try counts.addLocal(self.member_count, 1);
-            try Codec.RawEncoder.validateOptions(options.raw);
+            try Codec.RawEncoder.validateExactSizeOptions(options.raw, expected_input_len);
+            try step_borrows.validateHeaderTransition(self, options.header);
+            try Codec.validateHeader(options.header);
             self.options = options;
             self.raw.resetWithOptions(options.raw);
             self.resetMemberExactSize(expected_input_len);
@@ -210,6 +220,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (caller_output.len != 0 and output.len == 0 and
                 (self.pending_offset != self.pending.items.len or !self.header_written or !self.footer_written))
                 return error.IntegerOverflow;
+            try step_borrows.validate(self, input, output);
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {

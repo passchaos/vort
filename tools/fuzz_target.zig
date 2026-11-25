@@ -18,69 +18,8 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         error.TruncatedFrame, error.InvalidMagic, error.TrailingData, error.IntegerOverflow => {},
         else => return err,
     }
-    if (vort.decodeRawDeflateAlloc(allocator, data)) |decoded| {
-        allocator.free(decoded);
-    } else |err| switch (err) {
-        error.TruncatedFrame,
-        error.InvalidDeflateBlockType,
-        error.StoredLengthMismatch,
-        error.InvalidHuffmanCode,
-        error.InvalidDynamicBlockHeader,
-        error.InvalidMatch,
-        error.UnsupportedDeflateFeature,
-        error.TrailingData,
-        error.OutputTooSmall,
-        => {},
-        else => return err,
-    }
-    // Brotli and Zstd share the core decode error set. Feed every fuzz input
-    // through their one-shot allocating decoders too, so malformed entropy
-    // payloads and resource-limit paths get the same coverage as raw Deflate.
-    if (vort.br.decodeStreamAlloc(allocator, data)) |decoded| {
-        allocator.free(decoded);
-    } else |err| switch (err) {
-        error.TruncatedFrame,
-        error.CorruptFrame,
-        error.InvalidHuffmanCode,
-        error.InvalidMatch,
-        error.NeedDictionary,
-        error.DictionaryMismatch,
-        error.UnsupportedBrotliFeature,
-        error.TrailingData,
-        error.OutputTooSmall,
-        error.WorkingMemoryLimitExceeded,
-        error.OutputLimitExceeded,
-        error.IntegerOverflow,
-        error.ChecksumMismatch,
-        error.SizeMismatch,
-        error.InputTooSmall,
-        error.RangeOutOfBounds,
-        => {},
-        else => return err,
-    }
-    if (vort.zstd.decodeFrameAlloc(allocator, data)) |decoded| {
-        allocator.free(decoded);
-    } else |err| switch (err) {
-        error.TruncatedFrame,
-        error.CorruptFrame,
-        error.InvalidHuffmanCode,
-        error.InvalidMatch,
-        error.NeedDictionary,
-        error.DictionaryMismatch,
-        error.UnsupportedZstdFeature,
-        error.TrailingData,
-        error.OutputTooSmall,
-        error.WorkingMemoryLimitExceeded,
-        error.OutputLimitExceeded,
-        error.IntegerOverflow,
-        error.ChecksumMismatch,
-        error.SizeMismatch,
-        error.InputTooSmall,
-        error.RangeOutOfBounds,
-        error.InvalidMagic,
-        => {},
-        else => return err,
-    }
+    try @import("fuzz_target/codecs.zig").fuzzOne(allocator, data);
+    try @import("fuzz_target/puffin.zig").fuzzOne(allocator, data);
     if (vort.parseBgzf(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidBgzfStream,
@@ -1589,7 +1528,17 @@ fn fuzzSevenZipSourceValue(
     }
 }
 
+pub fn runCodecSmoke(allocator: std.mem.Allocator, comptime visit: anytype) !usize {
+    return @import("fuzz_target/codecs.zig").smoke(allocator, visit);
+}
+
+pub fn runPuffinSmoke(allocator: std.mem.Allocator, comptime visit: anytype) !usize {
+    return @import("fuzz_target/puffin.zig").smoke(allocator, visit);
+}
+
 pub fn main(init: std.process.Init) !void {
+    const codec_seeds = try runCodecSmoke(init.gpa, fuzzOne);
+    const puff_roundtrips = try runPuffinSmoke(init.gpa, fuzzOne);
     const samples = [_][]const u8{
         "",
         "VORT",
@@ -2057,6 +2006,7 @@ pub fn main(init: std.process.Init) !void {
         samples.len + 40,
         data.len,
     });
+    try stdout.print("codec fuzz seeds={d} puffin owned-bit roundtrips={d}\n", .{ codec_seeds, puff_roundtrips });
     try stdout.flush();
 }
 

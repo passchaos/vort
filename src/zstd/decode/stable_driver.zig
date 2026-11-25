@@ -4,15 +4,32 @@ const core = @import("../../core.zig");
 const stable = @import("stable_output.zig");
 const prefix_stream = @import("../prefix/decode_stream.zig");
 
-pub fn validateDictionary(output: []u8, dictionary: anytype) core.Error!void {
+pub fn validateDictionary(output: []const u8, dictionary: anytype) core.Error!void {
     try stable.validateAlias(output, dictionary.content);
     if (dictionary.standard_bytes) |bytes| try stable.validateAlias(output, bytes);
+    if (dictionary.prepared) |prepared| try stable.validateAlias(output, std.mem.asBytes(prepared));
+}
+
+pub fn validateDictionarySet(writers: []const []const u8, output: []const u8, dictionary_set: anytype) core.Error!void {
+    const entries = dictionary_set.dictionaries;
+    const len = std.math.mul(usize, entries.len, @sizeOf(@TypeOf(entries[0]))) catch return error.IntegerOverflow;
+    const descriptors = @as([*]const u8, @ptrCast(entries.ptr))[0..len];
+    // Stable output must not overwrite the catalog itself. As before, its
+    // overlap with an individual dictionary is checked at frame admission.
+    try stable.validateAlias(output, descriptors);
+    for (writers) |writer| try stable.validateAlias(writer, descriptors);
+    for (entries) |dictionary| {
+        for (writers) |writer| try validateDictionary(writer, dictionary);
+    }
 }
 
 pub fn bind(owner: anytype, output: []u8) !void {
     if (!prefix_stream.setterEligible(owner)) return error.InvalidStreamState;
     if (owner.dictionary) |dictionary| try validateDictionary(output, dictionary);
     if (owner.frame_dictionary) |dictionary| try validateDictionary(output, dictionary);
+    if (owner.dictionary_set) |dictionary_set| try validateDictionarySet(&.{
+        owner.direct_history.allocatedSlice(), owner.decoded_scratch.allocatedSlice(),
+    }, output, dictionary_set);
     try stable.validateAlias(output, owner.direct_history.allocatedSlice());
     try stable.validateAlias(output, owner.decoded_scratch.allocatedSlice());
     try stable.validateAlias(output, owner.frame_scratch.allocatedSlice());

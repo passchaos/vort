@@ -1,0 +1,30 @@
+1/27 zstd.test.Zstd incremental next-frame borrow serial...serial transition profile changed=false
+OK
+2/27 zstd.test.Zstd incremental next-frame borrow parallel...parallel transition old profile changed=false limit=67108864
+OK
+3/27 zstd.test_0...OK
+4/27 zstd.decode.budget.test_0...OK
+5/27 io.requested_heap_budget.test_0...OK
+6/27 tests.zstd_stream_counter_contracts.test_0...OK
+7/27 tests.zstd_large_history_contracts.test_0...OK
+8/27 zstd.incremental.encoder.frame.test_0...OK
+9/27 tests.zstd_hq_search_contracts.test_0...OK
+10/27 zstd.match.hq_tree.test_0...OK
+11/27 zstd.match.hq_parser.test_0...OK
+12/27 zstd.match.lazy2.test_0...OK
+13/27 zstd.match.hq_parser.tests.test_0...OK
+14/27 zstd.match.hq_parser.frontier_parser.test_0...OK
+15/27 zstd.encode.total_budget.test_0...OK
+16/27 zstd.encode.controls.test_0...OK
+17/27 checksum.xxh64_stream.test_0...OK
+18/27 zstd.match.controlled_source.test_0...OK
+19/27 lz77.test_0...OK
+20/27 lz77.test_1...OK
+21/27 zstd.encode.repeated_pattern.test_0...OK
+22/27 zstd.literals.cut_histogram.test_0...OK
+23/27 zstd.match.controlled_fast.test_0...OK
+24/27 zstd.match.adaptive_tree.test_0...OK
+25/27 zstd.match.hq_parser.row_tags.test_0...OK
+26/27 zstd.match.hq_parser.search_edges.test_0...OK
+27/27 zstd.match.hq_parser.prepared_price.test_0...OK
+All 27 tests passed.

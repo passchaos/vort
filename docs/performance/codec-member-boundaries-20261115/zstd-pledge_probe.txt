@@ -1,0 +1,7 @@
+exit_code=0
+policy=prevalidated_frame fragmented=false first_status=done accepted=9
+policy=prevalidated_frame fragmented=true error=SizeMismatch accepted=1
+policy=block_stream fragmented=false first_status=done accepted=9
+policy=block_stream fragmented=true first_status=need_input accepted=1
+  second_status=done accepted=8
+one-shot decoded=0

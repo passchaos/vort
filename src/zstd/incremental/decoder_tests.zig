@@ -388,3 +388,60 @@ test "zstd explicit prevalidated frame policy retains complete-frame validation"
     try std.testing.expectEqualSlices(u8, suffix, stopped.trailingInput());
     try stopped.finish();
 }
+
+test "zstd native incremental decoder enforces exact output size" {
+    const payload = "exact incremental zstd payload " ** 3;
+    const encoded = try zstd.encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+
+    var exact = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .input_policy = .prevalidated_frame,
+        .expected_output_len = payload.len,
+    });
+    defer exact.deinit();
+    var output: [payload.len]u8 = undefined;
+    var written: usize = 0;
+    var result = try exact.step(encoded.frame[0 .. encoded.frame.len / 2], output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, result.status);
+    result = try exact.step(encoded.frame[encoded.frame.len / 2 ..], output[0..11]);
+    written += result.progress.output_written;
+    while (result.status != .done) {
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+        const end = @min(output.len, written + 11);
+        result = try exact.step("", output[written..end]);
+        written += result.progress.output_written;
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try exact.finish();
+
+    var too_small = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .input_policy = .prevalidated_frame,
+        .expected_output_len = payload.len - 1,
+    });
+    defer too_small.deinit();
+    @memset(&output, 0xa5);
+    try std.testing.expectError(error.SizeMismatch, too_small.step(encoded.frame, &output));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", too_small.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", too_small.diagnostics().last_error_phase_name);
+    const header = try zstd.inspectNativeFrameHeader(encoded.frame);
+    const failed = too_small.snapshot();
+    try std.testing.expectEqual(core.Progress{ .input_read = header.payload_offset }, failed.last_step_progress);
+    try std.testing.expectEqual(@as(core.StreamCount, 0), failed.output_written);
+    for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+
+    var too_large = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .input_policy = .prevalidated_frame,
+        .expected_output_len = payload.len + 1,
+    });
+    defer too_large.deinit();
+    _ = try too_large.step(encoded.frame, &output);
+    const pending = try too_large.step("", output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, pending.status);
+    try std.testing.expectError(error.SizeMismatch, too_large.finish());
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", too_large.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", too_large.diagnostics().last_error_phase_name);
+}

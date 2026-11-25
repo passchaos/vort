@@ -1,0 +1,4 @@
+1/3 replay.test.Brotli captured strict suffix policy...OK
+2/3 replay.test.Brotli captured output headroom difference...OK
+3/3 replay.test.Brotli captured RAW attachment agrees with modern reference...OK
+All 3 tests passed.

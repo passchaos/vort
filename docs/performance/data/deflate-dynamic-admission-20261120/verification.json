@@ -1,0 +1,87 @@
+[
+  {
+    "label": "real-before",
+    "root": "src/dynamic_tree_probe.zig",
+    "filter": "Deflate real dynamic-tree differential observation",
+    "exit_code": 0,
+    "stderr": "before.stderr",
+    "note": "both mutated real samples accepted; original controls accepted",
+    "stderr_sha256": "cfbeff0fb3dec98a91b2eab0b2989f04bdf3a4af26c59deb24b6630829e01130"
+  },
+  {
+    "label": "real-after",
+    "root": "src/dynamic_tree_probe.zig",
+    "filter": "Deflate real dynamic-tree differential observation",
+    "exit_code": 0,
+    "stderr": "after.stderr",
+    "note": "both mutated real samples rejected InvalidHuffmanCode; originals decode unchanged",
+    "stderr_sha256": "09384c055654d110f9cfaae476f406bcc45f865f03105482100da39e06e32d09"
+  },
+  {
+    "label": "final-native",
+    "root": "src/deflate.zig",
+    "filter": "Deflate dynamic tree admission contracts",
+    "exit_code": 0,
+    "stderr": "final-native.stderr",
+    "tests_passed": 12,
+    "stderr_sha256": "5dde333ff107ed32f76bd28ffdba4eb730028efced928e20a9260b9fb208eca2"
+  },
+  {
+    "label": "final-x86",
+    "root": "src/deflate.zig",
+    "filter": "Deflate dynamic tree admission contracts",
+    "target": "x86-linux-musl",
+    "exit_code": 0,
+    "stderr": "final-x86.stderr",
+    "tests_passed": 12,
+    "stderr_sha256": "5dde333ff107ed32f76bd28ffdba4eb730028efced928e20a9260b9fb208eca2"
+  },
+  {
+    "label": "final-wasi",
+    "root": "src/deflate.zig",
+    "filter": "Deflate dynamic tree admission contracts",
+    "target": "wasm32-wasi",
+    "exit_code": 0,
+    "stderr": "final-wasi.stderr",
+    "result": "final-wasi.json",
+    "tests_passed": 12,
+    "stack_bytes": 8388608,
+    "stderr_sha256": "5150c8191d35ae2e4085b4fc7a7c9c8ff21cc2248e801b95bc8fcf14d5ad5f60"
+  },
+  {
+    "label": "existing-deflate-dynamic",
+    "root": "src/deflate.zig",
+    "filter": "dynamic",
+    "exit_code": 0,
+    "stderr": "dynamic-existing-after.stderr",
+    "tests_passed": 74,
+    "stderr_sha256": "d9ad57765819be78cb0dc6b985ca5110810a96fe196e227a5ac6112fb4cf0adf"
+  },
+  {
+    "label": "existing-deflate64-dynamic",
+    "root": "src/deflate64.zig",
+    "filter": "dynamic",
+    "exit_code": 0,
+    "stderr": "deflate64-existing-after.stderr",
+    "tests_passed": 7,
+    "stderr_sha256": "cf0efe45feab72f0c9740bd566798dc594e1947aa2787beb2d629f95db29626a"
+  },
+  {
+    "label": "invalid-legacy-fixtures-initial-deflate",
+    "root": "src/deflate.zig",
+    "filter": "dynamic",
+    "exit_code": 1,
+    "stderr": "dynamic-existing.stderr",
+    "note": "one old invalid CODES/LENS repeat fixture blocked correct admission; repaired, not weakened",
+    "stderr_sha256": "f0d2004299ff0fa301d1c496c4cde76b88d3a43b5d21d95f7babf3aa5335c130"
+  },
+  {
+    "label": "invalid-legacy-fixtures-initial-deflate64",
+    "root": "src/deflate64.zig",
+    "filter": "dynamic",
+    "exit_code": 1,
+    "stderr": "deflate64-existing.stderr",
+    "note": "invalid CODES and RLE overrun hid no-EOB check; repaired to exercise EOB",
+    "stderr_sha256": "3a9dab697110318dad5e42106094d23d7fbc03c07881c3d02ec296f71daeb685"
+  }
+]

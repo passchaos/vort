@@ -1,0 +1,16 @@
+thread 3094275 panic: index out of bounds: index 320, len 316
+/tmp/vort-puffin-empty-distance.6tqeoW/src/android_ota/puffin_codec.zig:512:37: 0x11e9f7c in parseDynamicTables (puffin_public_probe.zig)
+        @memset(all_lengths[index..][0..count], value);
+                                    ^
+/tmp/vort-puffin-empty-distance.6tqeoW/src/android_ota/puffin_codec.zig:260:43: 0x11e478d in puffDeflatePaddedAlloc (puffin_public_probe.zig)
+                    try parseDynamicTables(allocator, &reader, &metadata);
+                                          ^
+/tmp/vort-puffin-empty-distance.6tqeoW/src/puffin_public_probe.zig:10:57: 0x11d82ef in main (puffin_public_probe.zig)
+        const result = api.puffAndroidDeflatePaddedAlloc(a, &counts.raw, 0, counts.raw.len * 8, 4096) catch |err| {
+                                                        ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:699:88: 0x11d8ed0 in callMain (std.zig)
+    if (fn_info.params[0].type.? == std.process.Init.Minimal) return wrapMain(root.main(.{
+                                                                                       ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:190:5: 0x11d8201 in _start (std.zig)
+    asm volatile (switch (native_arch) {
+    ^

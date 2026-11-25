@@ -1,0 +1,33 @@
+cd /tmp/vort-puffin-padding-audit-iph4ew0a
+python3 -c 'from pathlib import Path; import zlib; b=bytes.fromhex('"'"'9a3061c20440000000ffff'"'"'); Path('"'"'padding-0.raw'"'"').write_bytes(b); assert zlib.decompress(b,-15).hex()=='"'"'90909090'"'"''
+python3 -c 'from pathlib import Path; import zlib; b=bytes.fromhex('"'"'9a3061c204403e0000ffff'"'"'); Path('"'"'padding-31.raw'"'"').write_bytes(b); assert zlib.decompress(b,-15).hex()=='"'"'90909090'"'"''
+python3 -c 'from pathlib import Path; import zlib; b=bytes.fromhex('"'"'9a3061c20440400000ffff'"'"'); Path('"'"'padding-32.raw'"'"').write_bytes(b); assert zlib.decompress(b,-15).hex()=='"'"'90909090'"'"''
+python3 -c 'from pathlib import Path; import zlib; b=bytes.fromhex('"'"'9a3061c20440800000ffff'"'"'); Path('"'"'padding-64.raw'"'"').write_bytes(b); assert zlib.decompress(b,-15).hex()=='"'"'90909090'"'"''
+python3 -c 'from pathlib import Path; import zlib; b=bytes.fromhex('"'"'9a3061c28409807c0000ffff'"'"'); Path('"'"'sixbit-padding-31.raw'"'"').write_bytes(b); assert zlib.decompress(b,-15).hex()=='"'"'9090909090'"'"''
+python3 -c 'from pathlib import Path; import zlib; b=bytes.fromhex('"'"'9a3061c2840980800000ffff'"'"'); Path('"'"'sixbit-padding-32.raw'"'"').write_bytes(b); assert zlib.decompress(b,-15).hex()=='"'"'9090909090'"'"''
+# padding-0-puff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort puff-android-deflate padding-0.raw padding-0.puff 0 88
+# padding-0-huff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate padding-0.puff padding-0.huff 0 88
+# padding-31-puff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort puff-android-deflate padding-31.raw padding-31.puff 0 88
+# padding-31-huff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate padding-31.puff padding-31.huff 0 88
+# padding-32-puff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort puff-android-deflate padding-32.raw padding-32.puff 0 88
+# padding-32-huff observed returncode=1
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate padding-32.puff padding-32.huff 0 88
+# padding-32-huff-as-fixed56 observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate padding-32.puff padding-32.huff-as-fixed56 0 56
+# padding-64-puff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort puff-android-deflate padding-64.raw padding-64.puff 0 88
+# padding-64-huff observed returncode=1
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate padding-64.puff padding-64.huff 0 88
+# sixbit-padding-31-puff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort puff-android-deflate sixbit-padding-31.raw sixbit-padding-31.puff 0 96
+# sixbit-padding-31-huff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate sixbit-padding-31.puff sixbit-padding-31.huff 0 96
+# sixbit-padding-32-puff observed returncode=0
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort puff-android-deflate sixbit-padding-32.raw sixbit-padding-32.puff 0 96
+# sixbit-padding-32-huff observed returncode=1
+/home/passchaos/project-z/vort/.zig-cache/o/94c6127c9bf0c497b17c2dde6fd44b87/vort huff-android-deflate sixbit-padding-32.puff sixbit-padding-32.huff 0 96

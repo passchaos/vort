@@ -58,9 +58,13 @@ pub fn chooseAlloc(
         return error.IntegerOverflow;
     const cost_bytes = std.math.mul(usize, max_trees, @sizeOf([256]u16)) catch
         return error.IntegerOverflow;
+    const view_bytes = std.math.mul(usize, context_count, @sizeOf(joint_assignment.SparseView)) catch
+        return error.IntegerOverflow;
+    const move_bytes = std.math.mul(usize, context_count, @sizeOf(kernels.TreeMove)) catch
+        return error.IntegerOverflow;
     const scratch_bytes = std.math.add(
         usize,
-        histogram_bytes,
+        histogram_bytes + view_bytes + move_bytes,
         tree_bytes + cost_bytes + 3 * context_count + 2 * type_count,
     ) catch return error.IntegerOverflow;
     if (scratch_bytes > options.scratch_budget_bytes) return error.ScratchBudgetExceeded;
@@ -112,7 +116,17 @@ pub fn chooseAlloc(
     }
     if (populated_count < 2) return null;
 
+    // The sparse symbol list of a context is invariant across every
+    // tree-count/seed/iteration candidate, so build it once here. Scanning all
+    // 256 bins inside the assignment loop dominated the planner otherwise.
+    const sparse_views = try allocator.alloc(joint_assignment.SparseView, context_count);
+    defer allocator.free(sparse_views);
+    for (populated[0..populated_count]) |context_index|
+        sparse_views[context_index] = joint_assignment.sparseView(&contexts[context_index]);
+
     const requested_counts = [_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256 };
+    const tree_moves = try allocator.alloc(kernels.TreeMove, context_count);
+    defer allocator.free(tree_moves);
     var best_score: u64 = std.math.maxInt(u64);
     var best_tree_count: usize = 0;
     for (requested_counts) |requested| {
@@ -128,16 +142,30 @@ pub fn chooseAlloc(
             kernels.aggregateTrees(contexts, candidate_assignment, requested, trees, literal_count);
             for (0..options.iterations) |_| {
                 joint_assignment.prepare(trees[0..requested], cost_matrix[0 .. requested * 256], requested);
-                var changed = false;
+                var move_count: usize = 0;
                 for (populated[0..populated_count]) |context_index| {
-                    const best_tree = joint_assignment.chooseGrouped(&contexts[context_index], cost_matrix[0 .. requested * 256], requested, requested).tree;
-                    if (candidate_assignment[context_index] != best_tree) {
+                    const best_tree = joint_assignment.chooseGroupedView(&contexts[context_index], &sparse_views[context_index], cost_matrix[0 .. requested * 256], requested, requested).tree;
+                    const previous = candidate_assignment[context_index];
+                    if (previous != best_tree) {
                         candidate_assignment[context_index] = @intCast(best_tree);
-                        changed = true;
+                        tree_moves[move_count] = .{
+                            .context = @intCast(context_index),
+                            .from = previous,
+                            .to = @intCast(best_tree),
+                        };
+                        move_count += 1;
                     }
                 }
-                kernels.aggregateTrees(contexts, candidate_assignment, requested, trees, literal_count);
-                if (!changed) break;
+                if (move_count == 0) break;
+                // Re-aggregate only the contexts that changed tree. The
+                // u32-bounded path keeps counts as exact disjoint sums, so
+                // subtract/add reproduces a full aggregation bit-for-bit;
+                // larger populations retain the checked full merge.
+                if (literal_count <= std.math.maxInt(u32)) {
+                    kernels.moveContexts(contexts, trees, tree_moves[0..move_count]);
+                } else {
+                    kernels.aggregateTrees(contexts, candidate_assignment, requested, trees, literal_count);
+                }
             }
 
             var remap: [literal_entropy_plan.max_tree_count]u8 = @splat(0xff);

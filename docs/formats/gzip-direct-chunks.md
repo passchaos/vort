@@ -20,7 +20,11 @@ the fixed header, XLEN/FEXTRA, zero-terminated FNAME/FCOMMENT and FHCRC through 
 byte cursor, then feeds the existing stored/fixed/dynamic inflater through the
 shared chunked bit reader. Footer location comes from the actual final DEFLATE
 bit position rather than `input_len - 8`, so strict trailing-data behavior is
-unchanged.
+unchanged. Opt in with `GzipDecodeOptions.allow_trailing_zero_padding` to
+accept an all-zero suffix, even across empty chunks and arbitrary splits.
+The direct path checks the suffix in place without extra scratch. Successful
+`GzipDecoder` progress includes the padding bytes; concatenated probes report
+those bytes in `stream_input_bytes` without counting them as another member.
 
 Error priority matches contiguous gzip decoding:
 

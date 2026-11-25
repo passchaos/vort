@@ -1,0 +1,42 @@
+check-deflate-dynamic-admission
++- test-deflate-dynamic-admission-wasm
+   +- install generated to deflate-dynamic-admission-wasm.json
+      +- run node w
+1/12 deflate.test_0...OK
+2/12 deflate.test.Deflate dynamic tree admission contracts...OK
+3/12 bitstream.test_0...OK
+4/12 deflate64.test_0...OK
+5/12 deflate.semantic.rolling_window.test_0...OK
+6/12 lz77.test_0...OK
+7/12 lz77.test_1...OK
+8/12 deflate.bt_optimal.test_0...OK
+9/12 deflate.incremental.tests.test_0...OK
+10/12 deflate.incremental.tests.step_borrows.test_0...OK
+11/12 deflate.incremental.tests.dictionary_borrows.test_0...OK
+12/12 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+All 12 tests passed.
+(node:3074000) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+failed command: node tools/wasi_test_gate.js deflate "Deflate dynamic tree admission contracts" ./.zig-cache/o/a9d7f583d58f0402b26424131fcae1a2/vort-deflate-dynamic-admission-wasm-tests.wasm
+
+Build Summary: 17/17 steps succeeded; 24/24 tests passed
+check-deflate-dynamic-admission success
++- test-deflate-dynamic-admission success
+|  +- run test vort-deflate-dynamic-admission-tests 12 pass (12 total) 38ms MaxRSS:10M
+|     +- compile test vort-deflate-dynamic-admission-tests Debug native success 1s MaxRSS:197M
++- test-deflate-dynamic-admission-x86 success
+|  +- run test vort-deflate-dynamic-admission-x86-tests 12 pass (12 total) 48ms MaxRSS:10M
+|     +- compile test vort-deflate-dynamic-admission-x86-tests Debug x86-linux-musl success 4s MaxRSS:518M
++- test-deflate-dynamic-admission-wasm success
+   +- install generated to deflate-dynamic-admission-wasm.json success
+      +- run node success 195ms
+         +- compile test vort-deflate-dynamic-admission-wasm-tests Debug wasm32-wasi success 4s MaxRSS:690M
+check-library-tests success
++- compile test vort-tests Debug native success 24s MaxRSS:1G
+   +- WriteFile cached
+   +- compile obj vort-br-record-optimal Debug native cached 4ms MaxRSS:40M
+   +- WriteFile cached
+   +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:40M
+   +- compile obj vort-br-record-optimal Debug native (reused)
+   +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+

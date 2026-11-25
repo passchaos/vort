@@ -15,6 +15,7 @@ const deflate_dense_text_section = switch (builtin.object_format) {
 };
 const bitstream = @import("bitstream.zig");
 const core = @import("core.zig");
+const deflate_dynamic_admission = @import("deflate/dynamic/admission.zig");
 
 pub const Error = core.Error;
 
@@ -76,12 +77,16 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 @setEvalBranchQuota(20_000);
                 if (lengths.len > max_symbols) return error.CorruptFrame;
                 var counts: [max_code_bits + 1]u16 = @splat(0);
+                var active_symbols: [max_symbols]u16 = undefined;
+                var active_len: usize = 0;
                 var max_bits_seen: u4 = 0;
-                for (lengths) |code_bits| {
+                for (lengths, 0..) |code_bits, symbol| {
                     if (code_bits > max_code_bits) return error.CorruptFrame;
                     if (code_bits != 0) {
                         counts[code_bits] += 1;
                         max_bits_seen = @max(max_bits_seen, code_bits);
+                        active_symbols[active_len] = @intCast(symbol);
+                        active_len += 1;
                     }
                 }
                 if (max_bits_seen == 0) return .{};
@@ -103,8 +108,8 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 }
 
                 var encoder = Encoder{};
-                for (lengths, 0..) |code_bits, symbol| {
-                    if (code_bits == 0) continue;
+                for (active_symbols[0..active_len]) |symbol| {
+                    const code_bits = lengths[symbol];
                     encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
                     encoder.bits[symbol] = code_bits;
                     next_code[code_bits] += 1;
@@ -1123,6 +1128,7 @@ pub fn parseDynamicLengthsAfterHeader(final: bool, reader: anytype) Error!Dynami
 }
 
 pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!DynamicLengths {
+    try deflate_dynamic_admission.validate(.code_lengths, &header.code_length_lengths);
     const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
     const code_decoder = FastDecoder(19, 7).init(code_lengths);
     const total = header.hlit + header.hdist;
@@ -1165,6 +1171,8 @@ pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!Dyn
     // consistently report a malformed dynamic header instead of decoding until
     // the bitstream happens to run out.
     if (parsed.literal_lengths[256] == 0) return error.InvalidDynamicBlockHeader;
+    try deflate_dynamic_admission.validate(.literal_lengths, parsed.literal_lengths[0..header.hlit]);
+    try deflate_dynamic_admission.validate(.distances, parsed.distance_lengths[0..header.hdist]);
     return parsed;
 }
 
@@ -2557,21 +2565,46 @@ test "dynamic header parser reads RFC1951 fields" {
 }
 
 test "dynamic length parser expands repeat symbols" {
-    // Synthetic dynamic block header:
-    // - final dynamic block, HLIT=257, HDIST=1, HCLEN=18
-    // - code-length alphabet uses symbols 1, 3, 17, 18, all 3 bits wide
-    // - length stream expands to: one literal length 3, 255 zeros, one length 1, one distance length 1.
-    const bytes = [_]u8{ 0x05, 0xc0, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02, 0x20, 0xfb, 0xa7, 0x06 };
-    var reader = bitstream.BitReader.init(&bytes);
+    // Complete CODES and LENS keep this fixture focused on repeat expansion.
+    // The former four width-three CODES leaves and LENS {3,1} were both
+    // incomplete trees; accepting them was not a legal Deflate contract.
+    var lengths: [19]u4 = @splat(0);
+    lengths[1] = 2;
+    lengths[3] = 2; // Unused leaf completes CODES.
+    lengths[17] = 2;
+    lengths[18] = 2;
+    const encoder = try CodeLengthTable.Encoder.init(&lengths);
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 0b101, 3);
+    try writer.writeBits(std.testing.allocator, 0, 5);
+    try writer.writeBits(std.testing.allocator, 0, 5);
+    try writer.writeBits(std.testing.allocator, 14, 4);
+    for (code_length_order[0..18]) |symbol|
+        try writer.writeBits(std.testing.allocator, lengths[symbol], 3);
+    try encoder.writeSymbol(&writer, std.testing.allocator, 1);
+    try encoder.writeSymbol(&writer, std.testing.allocator, 18);
+    try writer.writeBits(std.testing.allocator, 127, 7); // 138 zeros
+    try encoder.writeSymbol(&writer, std.testing.allocator, 18);
+    try writer.writeBits(std.testing.allocator, 103, 7); // 114 zeros
+    try encoder.writeSymbol(&writer, std.testing.allocator, 17);
+    try writer.writeBits(std.testing.allocator, 0, 3); // three zeros
+    try encoder.writeSymbol(&writer, std.testing.allocator, 1); // EOB
+    try encoder.writeSymbol(&writer, std.testing.allocator, 1); // distance
+    const bytes = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    var reader = bitstream.BitReader.init(bytes);
     const parsed = try parseDynamicLengths(&reader);
     try std.testing.expectEqual(@as(u16, 257), parsed.header.hlit);
     try std.testing.expectEqual(@as(u16, 1), parsed.header.hdist);
-    try std.testing.expectEqual(@as(u4, 3), parsed.literal_lengths[0]);
+    try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[0]);
     for (parsed.literal_lengths[1..256]) |bits| try std.testing.expectEqual(@as(u4, 0), bits);
     try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[256]);
     try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
-    try std.testing.expectEqual(@as(u4, 3), parsed.literal_max_bits);
+    try std.testing.expectEqual(@as(u4, 1), parsed.literal_max_bits);
     try std.testing.expectEqual(@as(u4, 1), parsed.distance_max_bits);
+    try std.testing.expectEqual(@as(u16, 1), parsed.code_length_symbol_histogram[17]);
+    try std.testing.expectEqual(@as(u16, 2), parsed.code_length_symbol_histogram[18]);
 }
 
 test "dynamic length parser rejects invalid repeat symbols" {

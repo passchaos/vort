@@ -1,0 +1,13 @@
+{
+  "recorded_utc": "2026-11-20T15:26:33.272764+00:00",
+  "exit_code": 0,
+  "seed": "0x20261121",
+  "build_steps": "7/7",
+  "valid_wires": 14680,
+  "external_valid_checks": 13824,
+  "truncation_cuts": 409213,
+  "mutation_total": 497970,
+  "raw_zlib_gzip_vort_only_mutations": 0,
+  "external_output_mismatches": 0,
+  "scope": "Independent functional seed; reference-capacity and input-consumption policy differences remain counted observations."
+}

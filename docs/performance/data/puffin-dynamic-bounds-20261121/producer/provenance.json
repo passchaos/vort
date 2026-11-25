@@ -1,0 +1,227 @@
+{
+  "captured_head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "base": "current frozen working source, not a HEAD/index overlay",
+  "source_repository": "/home/passchaos/project-z/vort",
+  "finalized_utc": "2026-11-20T16:01:39.207645+00:00",
+  "main_source_files_verified_unchanged": 2093,
+  "before_source_manifest_sha256": "1e4c9c1db041671ca0a61ac470a3f3c4116f61dc082c4379a52b5b3b13d5ac44",
+  "after_source_manifest_sha256": "6c820a99c76ad3fd8d1f59503f9ff9d454f158b4c20c11b58a8d0dc7a0908e1f",
+  "codec_source_sha256": "98ff040b156f6ba79c298133f0ecfa353f384542d5426f312a81be4beed80c7f",
+  "patch_sha256": "1ac63a4552aef3ad23bce2c8b4cf537e8881a2e90768d63d7afcd3a566d8812c",
+  "changed_files": [
+    {
+      "path": "src/android_ota/puffin_codec.zig",
+      "before_sha256": "caaacbe43fcd23a8b6a6e906ac0a2c1f163d12224f527f3f2a95cfb363d1afe2",
+      "after_sha256": "98ff040b156f6ba79c298133f0ecfa353f384542d5426f312a81be4beed80c7f"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests.zig",
+      "before_sha256": null,
+      "after_sha256": "9fe8bb8d4e7a09107a0db73d7d20cee12288904e311a309cc149709fdd61ce72"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests/fixtures.zig",
+      "before_sha256": null,
+      "after_sha256": "db0a260e64305fdffe284585ec900181c3d3b4476fb1678b1d974a3c0330a301"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests/invalid.zig",
+      "before_sha256": null,
+      "after_sha256": "a9bff5fad9a259619cb55a5203923d38a5067a0712ba29a225e5cea52ab4acdb"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests/malformed_count.zig",
+      "before_sha256": null,
+      "after_sha256": "89f2562dedf6fbe4eced7527880bc8b00cc124c9b4cce54683a41999c81eaa7d"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests/real_sample.zig",
+      "before_sha256": null,
+      "after_sha256": "d1f390d780704218dde90f6c0ce112a4fabb8ef87101fd950ca46d97eb3dd238"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests/resources.zig",
+      "before_sha256": null,
+      "after_sha256": "01c32a8ce45cb3e6866ba7098a767729f082c640b791da63d2141b4f9b670e01"
+    },
+    {
+      "path": "src/android_ota/puffin_codec_tests/valid.zig",
+      "before_sha256": null,
+      "after_sha256": "dc8d24592f0c58f294d90e1c12504d9e143a35f54e9ef615051758d81d128dd6"
+    }
+  ],
+  "public_alias_observer_sha256": "1620c77ce9930cf6db74152ba82938361394dbc28cf1d9778f5438ce5fb997cf",
+  "focused_runner_sha256": "6b8e68e9a03f61caeb61bec08af44837a9fdb2aafc0c600611d7b555800f59e7",
+  "zig_version": "0.16.0",
+  "build_mode": "Debug",
+  "targets": {
+    "native": "14/14 passed",
+    "x86-linux-musl": "14/14 passed",
+    "wasm32-wasi": "14/14 passed"
+  },
+  "wasi_artifact": {
+    "label": "puffin-final",
+    "test_filter": "Puffin",
+    "wasm_path": "/tmp/vort-puffin-empty-distance.6tqeoW/puffin-final.wasm",
+    "wasm_sha256": "15f12ad6651617d8290d0435f742ffe2da9bb1bb37c6a2f1e6ad1d447db6f4bf",
+    "wasm_bytes": 2877402,
+    "exit_code": 0,
+    "imports": [
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_time_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_res_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "poll_oneoff",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pwrite",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pread",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_times",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_size",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_sync",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_seek",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_link",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_symlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_readlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_rename",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_remove_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_readdir",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_create_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get",
+        "kind": "function"
+      }
+    ]
+  },
+  "cache_scope": "all local/global caches inside this temporary directory",
+  "aosp_source_commit": "56246e65146cbf7b736343c95a3e8ed970b9d106",
+  "aosp_evidence_scope": "pinned source audit and existing Vort Puffin contracts; no local AOSP executable was available",
+  "semantic_scope": "Puffin metadata/token conversion; no ordinary Deflate tree completeness or inflate/history validation added",
+  "workspace_mutations": "none; isolated edits and tests only"
+}

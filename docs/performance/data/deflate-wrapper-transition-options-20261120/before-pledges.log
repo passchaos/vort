@@ -1,0 +1,31 @@
+1/12 deflate.test_0...OK
+2/12 deflate.test.Deflate isolated before impossible exact pledge...expected error.OutputLimitExceeded, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x124254b in expectError__anon_43370 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate/incremental/tests/wrapper_transition_options/helpers.zig:48:5: 0x1246a87 in reject__anon_43300 (deflate.zig)
+    try t.expectError(expected_error, next(encoder, variant, options, dictionary, pledge));
+    ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate/incremental/tests/wrapper_transition_options/pledges.zig:29:5: 0x125e19e in one__anon_42962 (deflate.zig)
+    try h.reject(&encoder, &heap, variant, options, "", cap + 1, error.OutputLimitExceeded, &caller);
+    ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate/incremental/tests/wrapper_transition_options/pledges.zig:40:9: 0x12890b7 in contracts__anon_42930 (deflate.zig)
+        try one(D, E, .zlib_exact, 0);
+        ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate.zig:23799:5: 0x12895e7 in test.Deflate isolated before impossible exact pledge (deflate.zig)
+    try @import("deflate/incremental/tests/wrapper_transition_options/pledges.zig").contracts(@This());
+    ^
+3/12 io.requested_heap_budget.test_0...OK
+4/12 lz77.test_0...OK
+5/12 lz77.test_1...OK
+6/12 bitstream.test_0...OK
+7/12 deflate.incremental.encoder.match_finder.rolling_hash.test_0...OK
+8/12 deflate.bt_optimal.test_0...OK
+9/12 deflate.incremental.tests.test_0...OK
+10/12 deflate.incremental.tests.step_borrows.test_0...OK
+11/12 deflate.incremental.tests.dictionary_borrows.test_0...OK
+12/12 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+11 passed; 0 skipped; 1 failed.
+error: the following test command failed with exit code 1:
+.zig-cache/o/4917e92900b420c54c45b436fffe5bbc/test --seed=0x5df477d9

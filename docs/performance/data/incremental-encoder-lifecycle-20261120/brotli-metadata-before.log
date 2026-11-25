@@ -1,0 +1,116 @@
+1/35 br.test_0...OK
+2/35 br.incremental.stored.encoder.test_0...OK
+3/35 br.incremental.copy_decoder.test_0...OK
+4/35 br.incremental.owned_copy_decoder.test_0...OK
+5/35 br.encoder.distance.test_0...OK
+6/35 br.encoder.code_length_rle.test_0...OK
+7/35 br.encoder.hq_options.test_0...OK
+8/35 br.encoder.hq_types.test_0...OK
+9/35 br.encoder.hq_parser.test_0...OK
+10/35 br.encoder.total_budget.test_0...OK
+11/35 tests.br_total_memory_contracts.test_0...OK
+12/35 br.encoder.stored_memory_owner.test_0...OK
+13/35 br.encoder.stored_memory_reuse.test_0...OK
+14/35 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/35 br.encoder.hq_dictionary.test_0...OK
+16/35 br.encoder.hq_codec.alias.test_0...OK
+17/35 br.encoder.static_dictionary_matcher.test_0...OK
+18/35 br.encoder.stored_bit_bound.test_0...OK
+19/35 br.encoder.total_budget.tests.test_0...OK
+20/35 br.encoder.hq_parser.tests.test_0...OK
+21/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata stored keeps accepted metadata...slices differ. first difference occurs at index 0 (0x0)
+
+============ expected this output: =============  len: 4 (0x4)
+
+2C 00 4D 03                                       ,.M.
+
+============= instead found this: ==============  len: 1 (0x1)
+
+06                                                .
+
+================================================
+
+FAIL (TestExpectedEqual)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:379:5: 0x128b82d in expectEqualSlices__anon_45192 (std.zig)
+    return error.TestExpectedEqual;
+    ^
+/tmp/vort-br-metadata-finish-b6uSnw/src/br/incremental/stored/finish_metadata_tests.zig:90:17: 0x128cc84 in check__anon_44881 (br.zig)
+                try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+                ^
+/tmp/vort-br-metadata-finish-b6uSnw/src/br/incremental/stored/finish_metadata_tests.zig:111:5: 0x128e9b7 in test.Brotli encoder finish pending metadata stored keeps accepted metadata (br.zig)
+    try check(br.IncrementalStoredStreamEncoder);
+    ^
+22/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata planned keeps accepted metadata...slices differ. first difference occurs at index 0 (0x0)
+
+============ expected this output: =============  len: 4 (0x4)
+
+2C 00 4D 03                                       ,.M.
+
+============= instead found this: ==============  len: 1 (0x1)
+
+06                                                .
+
+================================================
+
+FAIL (TestExpectedEqual)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:379:5: 0x128b82d in expectEqualSlices__anon_45192 (std.zig)
+    return error.TestExpectedEqual;
+    ^
+/tmp/vort-br-metadata-finish-b6uSnw/src/br/incremental/stored/finish_metadata_tests.zig:90:17: 0x17d42a5 in check__anon_463724 (br.zig)
+                try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+                ^
+/tmp/vort-br-metadata-finish-b6uSnw/src/br/incremental/stored/finish_metadata_tests.zig:115:5: 0x17d6047 in test.Brotli encoder finish pending metadata planned keeps accepted metadata (br.zig)
+    try check(br.IncrementalPlannedStreamEncoder);
+    ^
+23/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata static dictionary keeps accepted metadata...slices differ. first difference occurs at index 0 (0x0)
+
+============ expected this output: =============  len: 4 (0x4)
+
+2C 00 4D 03                                       ,.M.
+
+============= instead found this: ==============  len: 1 (0x1)
+
+06                                                .
+
+================================================
+
+FAIL (TestExpectedEqual)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:379:5: 0x128b82d in expectEqualSlices__anon_45192 (std.zig)
+    return error.TestExpectedEqual;
+    ^
+/tmp/vort-br-metadata-finish-b6uSnw/src/br/incremental/stored/finish_metadata_tests.zig:90:17: 0x17d02ac in check__anon_463696 (br.zig)
+                try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+                ^
+/tmp/vort-br-metadata-finish-b6uSnw/src/br/incremental/stored/finish_metadata_tests.zig:119:5: 0x17d1ff7 in test.Brotli encoder finish pending metadata static dictionary keeps accepted metadata (br.zig)
+    try check(br.IncrementalStaticDictionaryStreamEncoder);
+    ^
+24/35 br.incremental.stored.finish_metadata_tests.test.Brotli encoder finish pending metadata captures no metadata wire controls...WIRE stored 0 06
+WIRE stored 1 50001041424344454603
+WIRE stored 2 700010414243444546474803
+WIRE stored 3 700010414243444546474828000841424344454603
+WIRE stored 4 70001074696d652074696d380008652074696d652074100008696d6503
+WIRE planned 0 06
+WIRE planned 1 50001041424344454603
+WIRE planned 2 700010414243444546474803
+WIRE planned 3 70001041424344454647482800001e02200889cb
+WIRE planned 4 70001074696d652074696d3800001e02200c090a040002696d6503
+WIRE static 0 06
+WIRE static 1 a200003cc0068ced6d40c01200e98e
+WIRE static 2 e200003c00038e313713b8040028a73b
+WIRE static 3 7000003c00038e313713b8040028a77b14008007d880b1bd0d08580220dd11
+WIRE static 4 7000003c545a5b150249e0c896e200007808ba120491b8e93f4300003c64595a5b60128006
+OK
+25/35 io.requested_heap_budget.test_0...OK
+26/35 bitstream.test_0...OK
+27/35 lz77.test_0...OK
+28/35 lz77.test_1...OK
+29/35 br.encoder.hq_tree.test_0...OK
+30/35 br.encoder.scoped_static_dictionary.test_0...OK
+31/35 br.encoder.literal_context_policy.test_0...OK
+32/35 br.encoder.histogram_model.log_q8.test_0...OK
+33/35 br.encoder.joint_context.kernels.test_0...OK
+34/35 br.encoder.hq_parser.command_storage.test_0...OK
+35/35 br.encoder.joint_context.kernels_tests.test_0...OK
+32 passed; 0 skipped; 3 failed.
+error: the following test command failed with exit code 1:
+cache/o/7292d75f74c7806c82c3c76258fd1790/vort-br-metadata-finish-tests --seed=0x732e6e58

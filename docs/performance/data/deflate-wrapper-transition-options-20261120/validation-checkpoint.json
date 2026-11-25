@@ -1,0 +1,24 @@
+{
+  "recorded_utc": "2026-11-20T13:46:41.824604+00:00",
+  "goal_status": "active",
+  "completed": {
+    "expanded_narrow": "12/12",
+    "cross_architecture": "33/33 build steps;192/192 native/x86 runner tests;actual WASI three families",
+    "library_compile": "14/14 build steps",
+    "libz_params_interop": "8/8 build steps;runtime zlib1.2.11",
+    "independent_before": "two target assertion failures; each 11 auxiliary passes"
+  },
+  "remaining_job": {
+    "terminal_exit_code": 0,
+    "session_id": 65704,
+    "log": "full-validation.log",
+    "receipt": "full-validation-receipt.json"
+  },
+  "git_state": {
+    "head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+    "upstream": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+    "controlled_changes": "staged; uncommitted per AGENTS.md due to original separate LZ77 experiment",
+    "preserved_lz77_diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a"
+  },
+  "next_action": "Full frozen snapshot is terminal. Apply and validate the separate reporting and dynamic-tree admission increments."
+}

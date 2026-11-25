@@ -1,0 +1,106 @@
+{
+  "generator_functions": [
+    {
+      "function": "writePattern",
+      "unchanged": true,
+      "before_sha256": "38deca5a29206069ddbd297637b362e85b0435d535f35f698e2b39ca7756b2a0",
+      "after_sha256": "38deca5a29206069ddbd297637b362e85b0435d535f35f698e2b39ca7756b2a0"
+    },
+    {
+      "function": "cutPositions",
+      "unchanged": true,
+      "before_sha256": "93cf9cf958e698498e792c6142d507ec47fcd84493b55e39d7e39f5adf4d6c96",
+      "after_sha256": "93cf9cf958e698498e792c6142d507ec47fcd84493b55e39d7e39f5adf4d6c96"
+    },
+    {
+      "function": "buildBaselineWire",
+      "unchanged": true,
+      "before_sha256": "c36aed55a1c81f52b16f506c3675a5b6d9f4b06df0646738de5f5fe6c4704ea4",
+      "after_sha256": "c36aed55a1c81f52b16f506c3675a5b6d9f4b06df0646738de5f5fe6c4704ea4"
+    },
+    {
+      "function": "buildStandardDictionaryCase",
+      "unchanged": true,
+      "before_sha256": "27b73eef7fe79b0a2655078d0735062a9177888ecb3bc34edbf74ac1dd9fa57e",
+      "after_sha256": "27b73eef7fe79b0a2655078d0735062a9177888ecb3bc34edbf74ac1dd9fa57e"
+    },
+    {
+      "function": "buildSerializedBrotliCase",
+      "unchanged": true,
+      "before_sha256": "8b8c3244a634e97788ef94b3a885484f4eae87932d20255893d441875ea3f5bd",
+      "after_sha256": "8b8c3244a634e97788ef94b3a885484f4eae87932d20255893d441875ea3f5bd"
+    },
+    {
+      "function": "buildDictionary",
+      "unchanged": true,
+      "before_sha256": "030a51e395e97d37fb8712ccaaec4aed05ce570427bad8d979e1412eac199c6d",
+      "after_sha256": "030a51e395e97d37fb8712ccaaec4aed05ce570427bad8d979e1412eac199c6d"
+    },
+    {
+      "function": "buildGzipHeaderOptions",
+      "unchanged": true,
+      "before_sha256": "9a10165e1fc2d2c9f328620c723df22071d9f535cac9dd062d3ba7f7c79c0555",
+      "after_sha256": "9a10165e1fc2d2c9f328620c723df22071d9f535cac9dd062d3ba7f7c79c0555"
+    },
+    {
+      "function": "freeGzipHeaderOptions",
+      "unchanged": true,
+      "before_sha256": "4eaa8b807a6147e739ed1ac2027aa744659a68f12e56861ffe426b8d606eb31b",
+      "after_sha256": "4eaa8b807a6147e739ed1ac2027aa744659a68f12e56861ffe426b8d606eb31b"
+    },
+    {
+      "function": "buildVariants",
+      "unchanged": true,
+      "before_sha256": "283be73299601636144c4700dd108725f50cba468f56b990ab01ec12fc99ccf6",
+      "after_sha256": "283be73299601636144c4700dd108725f50cba468f56b990ab01ec12fc99ccf6"
+    },
+    {
+      "function": "mutateWire",
+      "unchanged": true,
+      "before_sha256": "847d30481b9ab09eb891dc7aad7e551b20b1adcf03bbdd90b308b2cdd6708658",
+      "after_sha256": "847d30481b9ab09eb891dc7aad7e551b20b1adcf03bbdd90b308b2cdd6708658"
+    },
+    {
+      "function": "levelsFor",
+      "unchanged": true,
+      "before_sha256": "f2bc063b4968b50b0dbe418ec9f1f940ef711c0203b52c430e4833e1ed386b4c",
+      "after_sha256": "f2bc063b4968b50b0dbe418ec9f1f940ef711c0203b52c430e4833e1ed386b4c"
+    },
+    {
+      "function": "runCase",
+      "unchanged": true,
+      "before_sha256": "c8fe200eeb28a6a11b518bc26a485b3e33b8b51ff94438cfe0be04ab86305b79",
+      "after_sha256": "c8fe200eeb28a6a11b518bc26a485b3e33b8b51ff94438cfe0be04ab86305b79"
+    },
+    {
+      "function": "runPatternCase",
+      "unchanged": true,
+      "before_sha256": "dcd0a16e24b045c16437fc1fcffdb1f5c5984924b3ef97955ce895595c8d0c1a",
+      "after_sha256": "dcd0a16e24b045c16437fc1fcffdb1f5c5984924b3ef97955ce895595c8d0c1a"
+    }
+  ],
+  "decoder_verdict_functions": [
+    {
+      "function": "checkWire",
+      "unchanged_after_removing_only_reporting_hooks": true
+    },
+    {
+      "function": "compareMutation",
+      "unchanged_after_removing_only_reporting_hooks": true
+    },
+    {
+      "function": "referenceDecode",
+      "unchanged_after_removing_only_reporting_hooks": true
+    },
+    {
+      "function": "zlibInflate",
+      "unchanged_after_removing_only_reporting_hooks": true
+    },
+    {
+      "function": "vortDecode",
+      "unchanged_after_removing_only_reporting_hooks": true
+    }
+  ],
+  "rng_struct_byte_identical": true,
+  "rng_sha256": "0977491a28680acd9555f9794fdb5c970c460ebffef1ff9d74717693a627dcde"
+}

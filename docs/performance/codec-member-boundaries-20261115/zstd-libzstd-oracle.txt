@@ -1,0 +1,7 @@
+system libzstd 1.4.8
+known FCS empty raw: wire=28b52ffd2000010000 is_error=0 result=0
+unknown FCS empty compressed: wire=28b52ffd00001d0000040000 is_error=0 result=0
+unknown FCS checksum empty compressed: wire=28b52ffd04001d000004000099e9d851 is_error=0 result=0
+known FCS empty compressed: wire=28b52ffd8000000000001d0000040000 is_error=0 result=0
+known FCS checksum empty compressed: wire=28b52ffd8400000000001d000004000099e9d851 is_error=0 result=0
+known FCS checksum empty raw: wire=28b52ffd240001000099e9d851 is_error=0 result=0

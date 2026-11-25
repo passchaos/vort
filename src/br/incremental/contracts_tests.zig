@@ -165,8 +165,13 @@ test "Brotli stream contracts memory retained across frames and explicit reconfi
     try decoder.resetWithOptions(.{ .max_working_memory = 0 });
     try std.testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
     try std.testing.expectEqual(@as(usize, 0), decoder.peakWorkingMemoryBytes());
+    // No pledge: admit the complete three-byte stored meta-block header
+    // (including WBITS and padding) before requesting history, not its body.
+    const stored_header_len = 3;
+    try std.testing.expectEqualStrings("history!", wire[stored_header_len..][0..output.len]);
     try std.testing.expectError(error.WorkingMemoryLimitExceeded, decoder.step(wire, &output));
-    try expectFailedProgress(&decoder, 1, 0);
+    try expectFailedProgress(&decoder, stored_header_len, 0);
+    try std.testing.expectEqual(@as(br.Counter, stored_header_len), decoder.snapshot().total_compressed);
     try decoder.resetWithOptions(.{ .expected_output_len = 8, .max_working_memory = 8 });
     try drain(&decoder, wire, &output, 2, 3);
 }
@@ -229,14 +234,13 @@ test "Brotli stream contracts metadata dictionaries history caps and moved state
     try std.testing.expect(decoder.snapshot().last_step_progress.output_written >= 4);
 }
 
-test "Brotli stream contracts large headers account replacement peak and retained storage" {
-    const wire = try br.IncrementalTestSupport.encodeLargeCompressedHeader(std.testing.allocator);
-    defer std.testing.allocator.free(wire);
+// Run the large decoder owners in distinct stack frames; only one needs to
+// be live during each probe, including in Debug WASI.
+noinline fn retainedHeaderPeak(wire: []const u8, retained: usize) !usize {
     var baseline = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 1 });
     defer baseline.deinit();
     // Model an owned capacity retained from a preceding stream with a tighter
     // header cap. Its replacement must count both old and new heap storage.
-    const retained = br.default_incremental_compressed_header_bytes + 1;
     try baseline.compressed_header.ensureTotalCapacityPrecise(baseline.budget.allocator(), retained);
     baseline.compressed_header.items.len = retained;
     var output: [1]u8 = undefined;
@@ -246,19 +250,6 @@ test "Brotli stream contracts large headers account replacement peak and retaine
     const peak = baseline.peakWorkingMemoryBytes();
     try std.testing.expect(peak > live);
     try std.testing.expectEqual(peak, live + retained);
-    var exact = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 1, .max_working_memory = peak });
-    defer exact.deinit();
-    try exact.compressed_header.ensureTotalCapacityPrecise(exact.budget.allocator(), retained);
-    exact.compressed_header.items.len = retained;
-    try drain(&exact, wire, &output, 257, 1);
-    try std.testing.expectEqual(peak, exact.peakWorkingMemoryBytes());
-    var below = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 1, .max_working_memory = peak - 1 });
-    defer below.deinit();
-    try below.compressed_header.ensureTotalCapacityPrecise(below.budget.allocator(), retained);
-    below.compressed_header.items.len = retained;
-    try std.testing.expectError(error.WorkingMemoryLimitExceeded, below.step(wire, &output));
-    try std.testing.expect(below.peakWorkingMemoryBytes() < peak);
-    try std.testing.expectEqual(@as(usize, 0), below.snapshot().total_output);
     const capacity = baseline.snapshot().owned_compressed_header_capacity;
     try baseline.nextFrame(.{ .expected_output_len = 1 });
     try drain(&baseline, wire, &output, 4096, 1);
@@ -271,6 +262,36 @@ test "Brotli stream contracts large headers account replacement peak and retaine
     defer std.testing.allocator.free(baseline.options.compressed_header_scratch);
     try drain(&baseline, wire, &output, 4096, 1);
     try std.testing.expectEqual(@as(usize, 1), baseline.peakWorkingMemoryBytes());
+    return peak;
+}
+
+noinline fn checkRetainedHeaderCap(wire: []const u8, retained: usize, peak: usize, comptime exact: bool) !void {
+    var decoder = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 1,
+        .max_working_memory = if (exact) peak else peak - 1,
+    });
+    defer decoder.deinit();
+    try decoder.compressed_header.ensureTotalCapacityPrecise(decoder.budget.allocator(), retained);
+    decoder.compressed_header.items.len = retained;
+    var output: [1]u8 = @splat(0xa5);
+    if (exact) {
+        try drain(&decoder, wire, &output, 257, 1);
+        try std.testing.expectEqualSlices(u8, "x", &output);
+        try std.testing.expectEqual(peak, decoder.peakWorkingMemoryBytes());
+    } else {
+        try std.testing.expectError(error.WorkingMemoryLimitExceeded, decoder.step(wire, &output));
+        try std.testing.expect(decoder.peakWorkingMemoryBytes() < peak);
+        try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().total_output);
+    }
+}
+
+test "Brotli stream contracts large headers account replacement peak and retained storage" {
+    const wire = try br.IncrementalTestSupport.encodeLargeCompressedHeader(std.testing.allocator);
+    defer std.testing.allocator.free(wire);
+    const retained = br.default_incremental_compressed_header_bytes + 1;
+    const peak = try retainedHeaderPeak(wire, retained);
+    try checkRetainedHeaderCap(wire, retained, peak, true);
+    try checkRetainedHeaderCap(wire, retained, peak, false);
 }
 
 test "Brotli stream contracts standard and large window resource bounds match reference output" {

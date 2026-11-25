@@ -1,0 +1,33 @@
+{
+  "recorded_utc": "2026-11-20T13:19:59.901740+00:00",
+  "runtime_zlib": "1.2.11",
+  "reference_api": "Python zlib.decompressobj(raw -15), matched output headroom4097",
+  "samples": [
+    {
+      "sample": 0,
+      "wire_hex": "010000ffff96",
+      "decoded_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "decoded_len": 0,
+      "reference_eof": true,
+      "unused_data_hex": "96",
+      "unconsumed_tail_hex": "",
+      "consumed_bytes": 5,
+      "original_wire_bytes": 5,
+      "prefix_contract_accepts": true,
+      "strict_full_input_contract_accepts": false
+    },
+    {
+      "sample": 1,
+      "wire_hex": "030042",
+      "decoded_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "decoded_len": 0,
+      "reference_eof": true,
+      "unused_data_hex": "42",
+      "unconsumed_tail_hex": "",
+      "consumed_bytes": 2,
+      "original_wire_bytes": 2,
+      "prefix_contract_accepts": true,
+      "strict_full_input_contract_accepts": false
+    }
+  ]
+}

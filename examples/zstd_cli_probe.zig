@@ -1,6 +1,8 @@
 //! Thin validation surface using the same modules as vort CLI.
 const std = @import("std");
 const controls = @import("cli/zstd_controls.zig");
+const seekable = @import("cli/zstd_seekable.zig");
+const seekable_range = @import("cli/zstd_seekable_range.zig");
 pub fn main(init: std.process.Init) !void {
     var buffer: [2048]u8 = undefined;
     var writer = std.Io.File.stdout().writerStreaming(init.io, &buffer);
@@ -8,6 +10,27 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const command = args.next() orelse return error.MissingCommand;
-    if (std.mem.eql(u8, command, "encode-zstd-native-hex")) try controls.encodeTextHex(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-zstd-native-bytes-hex")) try controls.encodeBytesHex(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-zstd-native-file-hex")) try controls.encodeFileHex(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-zstd-native-file")) try controls.encodeFile(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-zstd-level-file")) try controls.encodeLevelFile(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-zstd-native-stream-file")) try controls.encodeStreamFile(init, &args, &writer.interface) else return error.UnknownCommand;
+    if (!try dispatch(command, init, &args, &writer.interface)) return error.UnknownCommand;
     try writer.interface.flush();
+}
+
+pub fn dispatch(command: []const u8, init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !bool {
+    if (std.mem.eql(u8, command, "encode-zstd-native-hex")) {
+        try controls.encodeTextHex(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-bytes-hex")) {
+        try controls.encodeBytesHex(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-file-hex")) {
+        try controls.encodeFileHex(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-file")) {
+        try controls.encodeFile(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-level-file")) {
+        try controls.encodeLevelFile(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-stream-file")) {
+        try controls.encodeStreamFile(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-seekable-file")) {
+        try seekable.encodeFile(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-zstd-seekable-range-file")) {
+        try seekable_range.decodeFile(init, args, stdout);
+    } else return false;
+    return true;
 }

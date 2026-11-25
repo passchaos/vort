@@ -72,6 +72,115 @@ into Deflate64-style sticky failures. A caller must use the encoder's reported
 progress/snapshot and preserve the event body across retry; already accepted
 plaintext or delivered output is not rolled back by an entire-call guarantee.
 
+## Streamed body encoding
+
+Stored, planned and static-dictionary incremental encoders also support
+`beginMetadata(len)` followed by `stepMetadata(body, output)`. Use this for
+known-length metadata that is produced or delivered in pieces. The request
+first emits any earlier plaintext and the same aligned metadata header as
+`writeMetadata`. Then the encoder copies each consumed body prefix directly
+into caller output. It borrows nothing across calls and does not allocate or
+stage a metadata-sized body. Ordinary block and header workspace may still
+be allocated under the existing encoder policy.
+
+- Admit one block of 0 to 16 MiB. `beginMetadata` only declares the length;
+  even an empty block must be driven through `stepMetadata` to emit its wire.
+- Use `progress.input_read` to release or reoffer the body prefix, and
+  `progress.output_written` to deliver wire bytes. A call may report
+  `need_output` after draining preceding wire or the header, even with spare
+  capacity; the next call resumes without replay. `need_input` may mean more
+  body is required. The request is complete when `metadata_pending` clears;
+  while pending, `metadata_bytes` is the remaining body length.
+- The offered body must not exceed that remaining length (`SizeMismatch`).
+  Body and output must be disjoint and independent of encoder storage.
+  `step` and `finish` refuse an active streamed request with
+  `InvalidStreamState`; complete it first, then continue plaintext or finish.
+  `reset` abandons the current stream, including an unfinished request;
+  previously emitted bytes cannot be withdrawn.
+- Snapshot source totals and `max_input_len` still count only plaintext.
+  Encoded totals include header and body. Keep legacy `writeMetadata` when
+  the complete body is available and its existing drain/finish behavior is
+  desired.
+
+`check-encoder-lifecycle` exercises legacy wire equality at the metadata
+length-width transitions, tiny output slices, and quota/backing-allocation
+refusal and retry. All three encoders pass a full 16 MiB body through reused
+4 KiB input with a 4 KiB allocator and a zero plaintext quota. The independent
+libbrotli 1.2.0 decoder described below consumed a 271-byte wire from the new
+stored-encoder path on three input partitions, recovering an empty metadata
+event, all 257 bytes of the second metadata event, and `ABC` plaintext.
+
+## Incremental decode observation
+
+`IncrementalStreamDecoder`, `IncrementalCopyStreamDecoder`,
+`IncrementalLiteralStreamDecoder` and `IncrementalStoredStreamDecoder` offer
+`Options.metadata_observer`. It can be used alone or alongside fixed
+`metadata_output` and `metadata_block_lengths` captures. Those captures keep
+their existing capacity and truncation semantics. The observer sees all
+accepted metadata bytes even when a capture is absent or full.
+
+```zig
+var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(history, .{
+    .metadata_observer = .{ .context = &collector, .on_event = Collector.onMetadata },
+});
+```
+
+The callback signature is `fn (?*anyopaque, Decoder.MetadataEvent) void`.
+A `.start` event announces the metadata block index, declared body length and
+`final` flag after header and padding validation. Empty blocks emit only that
+event. A nonempty block follows with one or more `.chunk` events containing
+the same index, a byte offset within the body and a transient read-only slice.
+Chunk boundaries may vary with input fragmentation. The block has arrived in
+full when its chunks cover the announced length; a truncated block can emit
+a start and an incomplete prefix. An event does not certify later stream
+bytes or the stream's decoded-size check. A Huffman lookup in a preceding
+compressed meta-block can already have accepted a whole aligned byte. The
+copy/progressive decoder delivers such body bytes in order before reading new
+input, without charging them again to input progress. An empty metadata block
+preserves any retained bytes for the next meta-block.
+
+Metadata delivery does not use plaintext output space or quotas and does not
+retain the body or allocate memory for it. It observes the decoder's normal
+wire order: an earlier plaintext block may still require output space before
+the decoder reaches subsequent metadata. Callback state is caller-owned and
+must remain independent of the decoder and all active input, output, history,
+scratch and capture storage. Callbacks must not reenter the decoder or mutate
+that storage. Copy any chunk bytes needed after the callback.
+
+All four decoders support `setMetadataObserver(observer)` between calls to
+`step`; pass `null` to detach. The change takes effect only for future events.
+When changing observers after a block has started, the new observer may receive
+chunks without a `.start`, with the original block index and byte offsets.
+Events observed or skipped before the change are not replayed. Captures,
+metadata quotas and progress are unaffected. A plain `reset` keeps the current
+observer; reconfiguring or starting the next stream with explicit options uses
+that observer instead. Metadata indices restart at zero for each stream.
+
+`max_metadata_bytes` and `max_metadata_blocks` independently bound metadata
+body bytes and block count per Brotli stream. Both default to unlimited. The
+full declared body length is checked against the remaining quota after header
+and alignment validation, before its observer start, body read, or fixed capture. An
+empty block uses one block credit and zero body bytes. These limits also apply
+when metadata is being discarded and do not consume plaintext output quota.
+A refused block returns `OutputLimitExceeded`; previously delivered plaintext
+and metadata remain committed. Reset or next-stream/frame starts new counters
+with the applicable stream options.
+
+The decoder tests send the full 16 MiB metadata limit through one reused
+8 KiB input slice for each of the four decoders. The owned metadata-only case
+runs with a zero requested-heap limit and reports zero peak working bytes.
+The native, x86 and actual WASI cases run through the three
+`test-codec-member-boundaries` variants. A separate libbrotli 1.2.0 callback
+probe observed three metadata blocks (5,130 bytes), including empty and final
+blocks, and exactly three plaintext bytes on four input partitions. Nonzero
+alignment padding produced no event. The reference used the local decoder
+build with SHA-256 `3acf45976e96498b954bb104b06ef5b8e1cd08b5e0d8d6826c233ed1f07c0469`
+and matching common library `3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739`.
+On the upstream metadata fixture `01 0b 00 2a 03`, split `2 / 1 / 2`, the
+same reference accepted installation after the first split and replacement
+after the start event. The replacement received only `2a`, with no prior
+start replay and no plaintext. The four Vort decoders cover the same switch.
+
 ## Evidence scope
 
 The initial 64 KiB encoder policy and its dated benchmark outputs remain attached

@@ -1,0 +1,13 @@
+error: InvalidPuffinStream
+/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:528:27: 0x36b17c0 in writeDynamicTables (root.zig)
+    if (metadata.len < 3) return error.InvalidPuffinStream;
+                          ^
+/home/passchaos/project-z/vort/src/android_ota/puffin_codec.zig:352:21: 0x36adeac in huffDeflateAlloc (root.zig)
+                    try writeDynamicTables(metadata[1..], &writer);
+                    ^
+/home/passchaos/project-z/vort/examples/cli/android_ota.zig:559:20: 0x1436610 in huffDeflate (cli.zig)
+    const output = try vort.huffAndroidDeflateAlloc(
+                   ^
+/home/passchaos/project-z/vort/examples/cli.zig:397:9: 0x1729572 in main (cli.zig)
+        try android_ota_cli.huffDeflate(init, &args, stdout);
+        ^

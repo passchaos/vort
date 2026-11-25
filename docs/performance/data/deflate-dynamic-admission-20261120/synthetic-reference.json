@@ -1,0 +1,153 @@
+{
+  "zlib_version": "1.2.11",
+  "zlib_runtime_version": "1.2.11",
+  "valid_controls": 5,
+  "invalid_controls": 10,
+  "vectors": [
+    {
+      "kind": "complete",
+      "wire_bytes": 139,
+      "wire_sha256": "efcdc91c556dc4dd28710575cedd6d32cd0ba3c03336eafa49d017671a6aea76",
+      "zdict_hex": null,
+      "expected_accept": true,
+      "accepted": true,
+      "output_bytes": 1,
+      "unused_bytes": 0,
+      "output_sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd"
+    },
+    {
+      "kind": "empty_distance",
+      "wire_bytes": 139,
+      "wire_sha256": "29de91526253cecf5e2e4ac8846cf37908abcd5d30d00c48f9847d94b1b4f703",
+      "zdict_hex": null,
+      "expected_accept": true,
+      "accepted": true,
+      "output_bytes": 1,
+      "unused_bytes": 0,
+      "output_sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd"
+    },
+    {
+      "kind": "singleton_distance",
+      "wire_bytes": 139,
+      "wire_sha256": "6f652c1fed5f8485ee232efb61ebb413ff46c122c962cea28fe3a6bf3928c944",
+      "zdict_hex": null,
+      "expected_accept": true,
+      "accepted": true,
+      "output_bytes": 1,
+      "unused_bytes": 0,
+      "output_sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd"
+    },
+    {
+      "kind": "singleton_literal",
+      "wire_bytes": 139,
+      "wire_sha256": "9825c1f8afcbc5bcc3dee58aa87e30b5773dbbb264c6b6b0d807124269adfbc1",
+      "zdict_hex": null,
+      "expected_accept": true,
+      "accepted": true,
+      "output_bytes": 0,
+      "unused_bytes": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "kind": "dictionary_match",
+      "wire_bytes": 140,
+      "wire_sha256": "a6751961e36b94a14a4107ed74ca450518c19fdee3e4235e63e816e91edec6a1",
+      "zdict_hex": "41",
+      "expected_accept": true,
+      "accepted": true,
+      "output_bytes": 3,
+      "unused_bytes": 0,
+      "output_sha256": "cb1ad2119d8fafb69566510ee712661f9f14b83385006ef92aec47f523a38358"
+    },
+    {
+      "kind": "incomplete_codes",
+      "wire_bytes": 139,
+      "wire_sha256": "8a9df2223fccada757411c4193a5ed84813a2c4215ba0a546e7d348c70c9e8d0",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid code lengths set"
+    },
+    {
+      "kind": "incomplete_literal",
+      "wire_bytes": 140,
+      "wire_sha256": "d01492eb5fb68572f3741e8378af8061dbeaad5d4e2824c53b0b89aa7c256825",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid literal/lengths set"
+    },
+    {
+      "kind": "long_literal_singleton",
+      "wire_bytes": 140,
+      "wire_sha256": "5cac88cbbe709f7f52f8dfceb9467b666bb6fcad49093aaddb91d117dc0fe6e9",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid literal/lengths set"
+    },
+    {
+      "kind": "incomplete_distance",
+      "wire_bytes": 139,
+      "wire_sha256": "a2722a64fe881f15bcb9aaf94a49c76f38d61d77e3b896f7b450f6c4f70cec66",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "kind": "long_distance_singleton",
+      "wire_bytes": 139,
+      "wire_sha256": "ced77b44681a64f38291b0b55d8fc3517b2627b4000e4e7011fe27f73a962866",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "kind": "oversubscribed_codes",
+      "wire_bytes": 10,
+      "wire_sha256": "607824cf496dada022429f639dd2201b074b55ff4bbc05f89f19e993d687e4f3",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid code lengths set"
+    },
+    {
+      "kind": "oversubscribed_literal",
+      "wire_bytes": 139,
+      "wire_sha256": "3740314b2be8e2f7c6c7644bbfa31de0b4cc66815008c356591599cba76481f6",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid literal/lengths set"
+    },
+    {
+      "kind": "oversubscribed_distance",
+      "wire_bytes": 140,
+      "wire_sha256": "78a3739227a6acdf8844bfc721f9cb60d4006dab963125a6641a5944cdce26c6",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid distances set"
+    },
+    {
+      "kind": "missing_eob",
+      "wire_bytes": 139,
+      "wire_sha256": "5d6b3efdcfb5246592271f5974df35b2805a68222b822791d23673e68bda6280",
+      "zdict_hex": null,
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid code -- missing end-of-block"
+    },
+    {
+      "kind": "empty_distance_match",
+      "wire_bytes": 141,
+      "wire_sha256": "7432ad642e75a636ee4113cd8fc090aa7b078c3da659c1aa10251b26ecde9d2c",
+      "zdict_hex": "41",
+      "expected_accept": false,
+      "accepted": false,
+      "error": "Error -3 while decompressing data: invalid distance code"
+    }
+  ]
+}

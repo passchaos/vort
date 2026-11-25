@@ -1,0 +1,339 @@
+//! Verified plaintext range reads over the terminal Zstd seek table.
+const std = @import("std");
+const history_workspace = @import("../decode/history_workspace.zig");
+const seekable = @import("../seekable.zig");
+const frame = @import("frame.zig");
+const Range = @import("input.zig").Range;
+const output_alias = @import("output_alias.zig");
+const minimum_page_len = @import("reverse_bit_reader.zig").minimum_page_len;
+const seek_table = @import("seek_table.zig");
+const Error = @import("decode_api.zig").Error;
+
+pub const RangeProgress = struct {
+    /// Verified plaintext published to the caller's output prefix.
+    output_written: usize = 0,
+    /// The requested offset plus `output_written`, including on rejection.
+    next_decoded_offset: u64,
+    /// Selected data frames whose intersections have been published.
+    frames_committed: usize = 0,
+};
+
+pub const RangeOutcome = union(enum) {
+    complete: RangeProgress,
+    failed: Failure,
+
+    pub const Failure = struct {
+        err: Error,
+        progress: RangeProgress,
+        /// Null when the range or buffers were rejected before frame execution.
+        frame: ?Frame,
+    };
+
+    pub const Frame = struct {
+        frame_index: u32,
+        compressed_offset: u64,
+        /// The encoded ID, including 0, or null before header validation.
+        dictionary_id: ?u32,
+    };
+};
+
+const RangeObservation = struct {
+    progress: RangeProgress,
+    failed_frame: ?RangeOutcome.Frame = null,
+};
+
+const Selection = struct {
+    entry: seekable.Entry,
+    /// Offsets within the entry's decoded data.
+    start: u64,
+    end: u64,
+
+    fn len(self: Selection) error{IntegerOverflow}!usize {
+        // Only a single frame intersection needs to be locally addressable.
+        return std.math.cast(usize, self.end - self.start) orelse error.IntegerOverflow;
+    }
+
+    fn frameLayout(self: Selection, table: seek_table.Table) frame.Error!frame.DataFrameLayout {
+        const entry = self.entry;
+        if (entry.compressed_offset > table.frame_offset or
+            entry.compressed_size > table.frame_offset - entry.compressed_offset)
+            return error.CorruptFrame;
+        const input = try Range.init(table.source, entry.compressed_offset, entry.compressed_size);
+        return frame.parseDataFrameHeader(input, .standard);
+    }
+};
+
+const Selections = struct {
+    entries: []const seekable.Entry,
+    position: u64,
+    end: u64,
+
+    fn init(index: seek_table.Index, offset: u64, length: u64) seek_table.Error!Selections {
+        if (offset > index.decompressed_size or length > index.decompressed_size - offset)
+            return error.RangeOutOfBounds;
+        if (length == 0) return .{ .entries = &.{}, .position = offset, .end = offset };
+        const first = try index.frameIndexForDecompressedOffset(offset);
+        if (first >= index.entries.len) return error.CorruptFrame;
+        return .{ .entries = index.entries[first..], .position = offset, .end = offset + length };
+    }
+
+    fn next(self: *Selections) seekable.Error!?Selection {
+        if (self.position == self.end) return null;
+        while (self.entries.len != 0) {
+            const entry = self.entries[0];
+            self.entries = self.entries[1..];
+            if (entry.decompressed_size == 0) continue;
+            const frame_end = std.math.add(u64, entry.decompressed_offset, entry.decompressed_size) catch
+                return error.IntegerOverflow;
+            if (self.position < entry.decompressed_offset or self.position >= frame_end)
+                return error.CorruptFrame;
+            const end = @min(self.end, frame_end);
+            const selected: Selection = .{
+                .entry = entry,
+                .start = self.position - entry.decompressed_offset,
+                .end = end - entry.decompressed_offset,
+            };
+            self.position = end;
+            return selected;
+        }
+        return error.CorruptFrame;
+    }
+
+    fn scratchLen(self: Selections, max_frame_size: u64) seekable.Error!usize {
+        var selected = self;
+        var len: usize = 0;
+        while (try selected.next()) |part| {
+            if (part.entry.decompressed_size > max_frame_size) return error.OutputLimitExceeded;
+            len = @max(len, try part.len());
+        }
+        return len;
+    }
+};
+
+pub const Requirements = struct {
+    history: usize = 0,
+    staging: usize = 0,
+    literal_page: usize = 0,
+    sequence_page: usize = 0,
+    /// Largest selected intersection, not the largest full decoded frame.
+    range_scratch: usize = 0,
+};
+
+pub fn Facade(comptime Decode: type) type {
+    return struct {
+        pub const Options = struct {
+            /// ID-less binding or fallback when the catalog does not contain a declared ID.
+            dictionary: @FieldType(Decode.Options, "dictionary") = null,
+            dictionary_set: @FieldType(Decode.Options, "dictionary_set") = null,
+            /// Caps each complete selected frame, even for a one-byte range.
+            frame_decoded_max: u64 = std.math.maxInt(u64),
+            /// Reject each selected frame whose advertised window exceeds this limit.
+            max_window_size: u64 = std.math.maxInt(u64),
+        };
+
+        pub const WriteError = Error || std.Io.Writer.Error;
+
+        /// Read only selected data-frame headers to size a reusable decode workspace.
+        pub fn requirements(index: seek_table.Index, offset: u64, length: usize, options: Options) Error!Requirements {
+            return requirementsWide(index, offset, length, options);
+        }
+
+        /// Size workspace for a range that does not need to fit one local slice.
+        pub fn requirementsWide(index: seek_table.Index, offset: u64, length: u64, options: Options) Error!Requirements {
+            var selections = try Selections.init(index, offset, length);
+            const scratch_len = try selections.scratchLen(options.frame_decoded_max);
+            if (length == 0) return .{};
+            var needed: Requirements = .{
+                .literal_page = minimum_page_len,
+                .sequence_page = minimum_page_len,
+                .range_scratch = scratch_len,
+            };
+            while (try selections.next()) |part| {
+                const parsed = try admit(part, try part.frameLayout(index.table), frameOptions(part, options));
+                needed.staging = @max(needed.staging, parsed.frame.header.block_size_max);
+                needed.history = @max(needed.history, try history_workspace.requiredLen(
+                    parsed.frame.header.window_size,
+                    parsed.dictionary_content.len,
+                ));
+            }
+            return needed;
+        }
+
+        /// Verify each selected frame before writing its requested intersection.
+        /// Does not flush the writer. A later failure can leave an output prefix.
+        pub fn decodeToWriter(
+            index: seek_table.Index,
+            offset: u64,
+            length: u64,
+            writer: *std.Io.Writer,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+        ) WriteError!u64 {
+            var selections = try Selections.init(index, offset, length);
+            if (length == 0) return 0;
+            const scratch_len = try selections.scratchLen(options.frame_decoded_max);
+            if (range_scratch.len < scratch_len) return error.OutputTooSmall;
+            try validateBuffers(index, writer.buffer, workspace, range_scratch, options);
+            const writer_state = std.mem.asBytes(writer);
+            try output_alias.validateRegions(writer_state, &.{ writer.buffer, std.mem.sliceAsBytes(index.entries), range_scratch });
+            try output_alias.validateWorkspace(writer_state, workspace);
+            try output_alias.validateOptions(writer_state, options);
+
+            while (try selections.next()) |part| {
+                const scratch = range_scratch[0..try part.len()];
+                try decodeSelection(index.table, part, workspace, scratch, frameOptions(part, options), null);
+                try writer.writeAll(scratch);
+            }
+            return length;
+        }
+
+        /// Decode exactly output.len plaintext bytes. Each intersecting frame
+        /// is verified in full; only its requested slice is staged for publication.
+        pub fn decodeInto(
+            index: seek_table.Index,
+            offset: u64,
+            output: []u8,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+        ) Error!usize {
+            return decodeIntoObserved(index, offset, output, workspace, range_scratch, options, null);
+        }
+
+        /// Report the exact published prefix on success or failure. Retry a
+        /// refused frame at `next_decoded_offset` with the unwritten output.
+        pub fn decodeIntoWithProgress(
+            index: seek_table.Index,
+            offset: u64,
+            output: []u8,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+        ) RangeOutcome {
+            var observation: RangeObservation = .{ .progress = .{ .next_decoded_offset = offset } };
+            _ = decodeIntoObserved(index, offset, output, workspace, range_scratch, options, &observation) catch |err|
+                return .{ .failed = .{ .err = err, .progress = observation.progress, .frame = observation.failed_frame } };
+            return .{ .complete = observation.progress };
+        }
+
+        fn decodeIntoObserved(
+            index: seek_table.Index,
+            offset: u64,
+            output: []u8,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+            observation: ?*RangeObservation,
+        ) Error!usize {
+            var selections = try Selections.init(index, offset, output.len);
+            if (output.len == 0) return 0;
+            const scratch_len = try selections.scratchLen(options.frame_decoded_max);
+            if (range_scratch.len < scratch_len) return error.OutputTooSmall;
+            try validateBuffers(index, output, workspace, range_scratch, options);
+
+            var written: usize = 0;
+            while (try selections.next()) |part| {
+                const scratch = range_scratch[0..try part.len()];
+                var dictionary_id: ?u32 = null;
+                decodeSelection(index.table, part, workspace, scratch, frameOptions(part, options), if (observation != null) &dictionary_id else null) catch |err| {
+                    if (observation) |observed| observed.failed_frame = .{
+                        .frame_index = part.entry.frame_index,
+                        .compressed_offset = part.entry.compressed_offset,
+                        .dictionary_id = dictionary_id,
+                    };
+                    return err;
+                };
+                @memcpy(output[written..][0..scratch.len], scratch);
+                written += scratch.len;
+                if (observation) |observed| {
+                    observed.progress.output_written = written;
+                    observed.progress.next_decoded_offset = offset + written;
+                    observed.progress.frames_committed += 1;
+                }
+            }
+            return written;
+        }
+
+        fn validateBuffers(
+            index: seek_table.Index,
+            output: []u8,
+            workspace: Decode.Workspace,
+            scratch: []u8,
+            options: Options,
+        ) Error!void {
+            const entries = std.mem.sliceAsBytes(index.entries);
+            try output_alias.validateRegions(entries, &.{ output, scratch });
+            try output_alias.validateWorkspace(entries, workspace);
+            try output_alias.validateOperation(output, workspace, options);
+            try output_alias.validateRegions(output, &.{scratch});
+            try output_alias.validateWorkspace(scratch, workspace);
+            try output_alias.validateOptions(scratch, options);
+        }
+
+        fn frameOptions(part: Selection, options: Options) Decode.Options {
+            return .{
+                .dictionary = options.dictionary,
+                .dictionary_set = options.dictionary_set,
+                .frame_decoded_max = part.entry.decompressed_size,
+                .max_window_size = options.max_window_size,
+            };
+        }
+
+        fn admit(part: Selection, layout: frame.DataFrameLayout, options: Decode.Options) Error!Decode.Parsed {
+            if (layout.header.window_size > options.max_window_size) return error.OutputLimitExceeded;
+            if (layout.header.content_size) |size| {
+                if (size != part.entry.decompressed_size) return error.SizeMismatch;
+            }
+            return Decode.admitFrame(layout, options);
+        }
+
+        fn decodeSelection(
+            table: seek_table.Table,
+            part: Selection,
+            workspace: Decode.Workspace,
+            scratch: []u8,
+            options: Decode.Options,
+            dictionary_id: ?*?u32,
+        ) Error!void {
+            const layout = try part.frameLayout(table);
+            if (dictionary_id) |id| id.* = layout.header.dictionary_id;
+            const parsed = try admit(part, layout, options);
+            var history: history_workspace.Binding = undefined;
+            var state: Decode.FrameState = undefined;
+            var executor = try Decode.openFrame(parsed, workspace, options, &history, &state);
+            var copied: usize = 0;
+            while (true) {
+                const snapshot = executor.snapshot();
+                switch (snapshot.phase) {
+                    .done => break,
+                    .drain => {
+                        const bytes = try executor.committedBytes();
+                        const block_start = snapshot.frame_decoded - bytes.len;
+                        const start = @max(part.start, block_start);
+                        const end = @min(part.end, snapshot.frame_decoded);
+                        if (end > start) {
+                            const block_offset: usize = @intCast(start - block_start);
+                            const len: usize = @intCast(end - start);
+                            @memcpy(scratch[copied..][0..len], bytes[block_offset..][0..len]);
+                            copied += len;
+                        }
+                        try executor.discardCommittedBlock();
+                    },
+                    else => executor.execute() catch |err| switch (err) {
+                        // The caller policy was checked against the table. A frame
+                        // that decodes beyond its own entry is a wire size mismatch.
+                        error.OutputLimitExceeded => return error.SizeMismatch,
+                        else => return err,
+                    },
+                }
+            }
+            if (state.frame_decoded != part.entry.decompressed_size or copied != scratch.len or
+                try executor.frameEndOffset() != try parsed.frame.available.end())
+                return error.SizeMismatch;
+            if (part.entry.checksum) |expected| {
+                if (try executor.frameContentChecksum() != expected) return error.ChecksumMismatch;
+            }
+        }
+    };
+}

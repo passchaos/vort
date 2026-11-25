@@ -3,7 +3,18 @@ const core = @import("../../core.zig");
 const stream_count = core.stream_count;
 const progressive_bits = @import("bit_reader.zig");
 const shared_dictionary = @import("../shared_dictionary.zig");
+const dictionary_attachments = @import("dictionary_attachments.zig");
+const SerializedDictionary = @import("../serialized_dictionary.zig").Dictionary;
 const empty_reference = @import("../summary/empty_reference.zig");
+const metadata_events = @import("metadata_events.zig");
+const metadata_limits = @import("metadata_limits.zig");
+const history_growth = @import("history_growth.zig");
+
+/// Internal bridge used by the allocator-owning facade. Do not retain the
+/// reservation, which borrows the owner for this call only.
+pub fn stepOwned(decoder: anytype, input: []const u8, output: []u8, reservation: history_growth.Reservation) @TypeOf(decoder.*).Error!core.StepResult {
+    return decoder.stepInternal(input, output, reservation);
+}
 
 /// Progressive decoder for compressed Brotli streams with explicit distances.
 /// History is caller-owned, which makes memory use visible and lets overlapping
@@ -60,6 +71,7 @@ pub fn Decoder(comptime Codec: type) type {
         update_distance_ring: bool = false,
         shared_dictionary_validated: bool = false,
         shared_dictionary_size: usize = 0,
+        attachments: dictionary_attachments.State = .{},
         dictionary_source: DictionarySource = .static,
         compound_cursor: shared_dictionary.Cursor = undefined,
         dictionary_scratch: [shared_dictionary.max_static_output_len]u8 = undefined,
@@ -75,6 +87,9 @@ pub fn Decoder(comptime Codec: type) type {
         frame_count: Counter = 0,
         fatal_error: ?Error = null,
         header_storage_exhausted: bool = false,
+        /// Internal failure cause for the owned facade. Caller-owned history
+        /// keeps its existing InvalidMatch error for an undersized ring.
+        history_capacity_exceeded: bool = false,
         error_input_offset: ?Counter = null,
         error_output_offset: ?Counter = null,
         last_step_progress: core.Progress = .{},
@@ -82,8 +97,12 @@ pub fn Decoder(comptime Codec: type) type {
         last_error_phase: Phase = .window,
 
         const Self = @This();
+        const owned_history = @hasDecl(Codec, "owned_history");
+        const Reservation = if (owned_history) ?history_growth.Reservation else @TypeOf(null);
         pub const Error = Codec.Error;
         pub const Counter = core.StreamCount;
+        pub const MetadataEvent = metadata_events.Event;
+        pub const MetadataObserver = metadata_events.Observer;
         pub const embedded_compressed_header_capacity: usize = Codec.max_stream_header_bytes;
         pub const Options = struct {
             max_output_len: Counter = std.math.maxInt(Counter),
@@ -98,6 +117,12 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Maximum total metadata body bytes in one Brotli stream.
+            max_metadata_bytes: Counter = std.math.maxInt(Counter),
+            /// Maximum metadata blocks in one stream, including empty blocks.
+            max_metadata_blocks: Counter = std.math.maxInt(Counter),
+            /// Receive metadata synchronously, independent of fixed capture.
+            metadata_observer: ?MetadataObserver = null,
             /// Complete one Brotli stream and retain whole-byte lookahead for
             /// an outer member dispatcher instead of rejecting trailing data.
             allow_trailing_data: bool = false,
@@ -152,6 +177,47 @@ pub fn Decoder(comptime Codec: type) type {
                 .metadata_block_lengths = options.metadata_block_lengths,
             };
         }
+        /// Append a borrowed RAW prefix for this frame before accepting input.
+        /// An empty poll does not lock the dictionary. Empty attachments use
+        /// no slot; rejected attachments leave the old binding unchanged.
+        pub fn attachRawDictionary(self: *Self, prefix: []const u8) Error!void {
+            try self.checkAttachmentBoundary();
+            if (prefix.len == 0) return;
+            if (@hasDecl(Codec, "validateDecodeOptions")) try Codec.validateDecodeOptions(self.options.decode);
+            self.shared_dictionary_size = try self.attachments.append(self.options.decode.shared_dictionary, prefix, &self.attachmentWriters());
+            self.shared_dictionary_validated = true;
+        }
+
+        /// Borrow one parsed serialized dictionary for the current frame.
+        /// The view and all backing bytes stay immutable until the frame ends.
+        pub fn attachSerializedDictionary(self: *Self, dictionary: *const SerializedDictionary) Error!void {
+            try self.checkAttachmentBoundary();
+            if (@hasDecl(Codec, "validateDecodeOptions")) try Codec.validateDecodeOptions(self.options.decode);
+            self.shared_dictionary_size = try self.attachments.attachSerialized(self.options.decode.shared_dictionary, dictionary, &self.attachmentWriters());
+            self.shared_dictionary_validated = true;
+        }
+
+        fn checkAttachmentBoundary(self: *const Self) Error!void {
+            if (self.phase != .window or self.total_input != 0 or self.finished or self.fatal_error != null)
+                return error.InvalidStreamState;
+        }
+
+        fn attachmentWriters(self: *const Self) [5][]const u8 {
+            return .{
+                std.mem.asBytes(self),
+                self.history,
+                self.options.compressed_header_scratch,
+                self.metadata_output,
+                std.mem.sliceAsBytes(self.metadata_block_lengths),
+            };
+        }
+
+        /// Change the observer between calls to step. Only future events are
+        /// delivered; null detaches without changing decode state or captures.
+        pub fn setMetadataObserver(self: *Self, observer: ?MetadataObserver) void {
+            self.options.metadata_observer = observer;
+        }
+
         pub fn reset(self: *Self) void {
             self.resetWithOptions(self.options);
         }
@@ -270,13 +336,17 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            return self.stepInternal(input, output, null);
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, output: []u8, reservation: Reservation) Error!core.StepResult {
             self.last_step_progress = .{};
             if (self.fatal_error) |err| return err;
             self.header_storage_exhausted = false;
             const before_input = self.total_input;
             const before_output = self.total_output;
             var accepted_input: usize = 0;
-            const outcome = self.stepImpl(input, output, &accepted_input);
+            const outcome = self.stepImpl(input, output, &accepted_input, reservation);
             // stepImpl preflights the full offered input before parsing. Its
             // accepted prefix therefore fits, including when parsing failed.
             self.total_input = stream_count.addLocal(self.total_input, accepted_input) catch unreachable;
@@ -299,14 +369,14 @@ pub fn Decoder(comptime Codec: type) type {
             if (@hasDecl(Codec, "validateDecodeOptions"))
                 Codec.validateDecodeOptions(self.options.decode) catch |err|
                     return self.fail(self.phase, err);
-            self.shared_dictionary_size = self.options.decode.shared_dictionary.totalSize() catch |err| switch (err) {
+            self.shared_dictionary_size = self.effectiveDictionary().totalSize() catch |err| switch (err) {
                 error.IntegerOverflow => return self.fail(self.phase, error.IntegerOverflow),
                 error.TooManyRawPrefixes, error.RawDictionaryTooLarge => return self.fail(self.phase, error.CorruptFrame),
             };
             self.shared_dictionary_validated = true;
         }
 
-        fn stepImpl(self: *Self, input: []const u8, output: []u8, accepted_input: *usize) Error!core.StepResult {
+        fn stepImpl(self: *Self, input: []const u8, output: []u8, accepted_input: *usize, reservation: Reservation) Error!core.StepResult {
             if (self.options.expected_output_len) |expected| {
                 if (expected > self.outputLimit()) return self.fail(self.phase, error.OutputLimitExceeded);
             }
@@ -651,8 +721,9 @@ pub fn Decoder(comptime Codec: type) type {
                             if (self.total_output > self.outputLimit() or self.stored_remaining > self.outputLimit() - self.total_output) return self.fail(.trailer, error.OutputLimitExceeded);
                             if (self.options.expected_output_len) |expected|
                                 if (self.total_output > expected or self.stored_remaining > expected - self.total_output) return self.fail(.trailer, error.SizeMismatch);
-                            if (self.history.len == 0) return self.fail(.trailer, error.OutputTooSmall);
+                            if (reservation == null and self.history.len == 0) return self.fail(.trailer, error.OutputTooSmall);
                             if (self.final_meta_block) {
+                                try self.admitHistory(reservation);
                                 try self.beginCompressedHeader();
                                 break;
                             }
@@ -664,6 +735,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.trailer, err),
                             };
                             if (value == 0) {
+                                try self.admitHistory(reservation);
                                 try self.beginCompressedHeader();
                                 break;
                             }
@@ -675,17 +747,39 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
-                            if (self.metadata and self.metadata_remaining == 0) {
-                                try self.recordMetadataBlock();
-                                self.phase = .trailer;
-                            } else self.phase = if (self.metadata) .metadata else .stored;
+                            if (value != 0 or self.staged_bit_count % 8 != 0) return self.fail(.trailer, error.CorruptFrame);
+                            // Huffman lookahead can leave complete bytes after
+                            // the padding. They belong to the aligned body or
+                            // the next meta-block, not to the padding.
+                            if (self.metadata) {
+                                metadata_limits.validate(
+                                    self.metadata_total,
+                                    self.metadata_block_count,
+                                    self.metadata_remaining,
+                                    self.options.max_metadata_bytes,
+                                    self.options.max_metadata_blocks,
+                                ) catch |err| return self.fail(.trailer, err);
+                                const next_count = if (self.metadata_remaining == 0) try self.nextMetadataBlockCount() else null;
+                                if (self.options.metadata_observer) |observer|
+                                    observer.emitStart(self.metadata_block_count, self.metadata_remaining, self.final_meta_block);
+                                if (next_count) |count| {
+                                    try self.finishMetadataBlock(count);
+                                } else self.phase = .metadata;
+                            } else {
+                                try self.admitHistory(reservation);
+                                self.phase = .stored;
+                            }
                             self.next_header_state = .is_last;
                             break;
                         },
                     };
                 },
                 .stored => {
+                    while (self.staged_bit_count != 0 and self.stored_remaining != 0 and output_written < output.len) {
+                        try self.emit(output, &output_written, @truncate(self.staged_bits));
+                        self.dropAlignedBytes(1);
+                        self.stored_remaining -= 1;
+                    }
                     const n = @min(self.stored_remaining, @min(input.len - input_read, output.len - output_written));
                     for (input[input_read..][0..n]) |value| {
                         try self.emit(output, &output_written, value);
@@ -697,21 +791,25 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = .trailer;
                 },
                 .metadata => {
+                    const retained = @min(self.metadata_remaining, self.staged_bit_count / 8);
+                    if (retained != 0) {
+                        var staged: [@sizeOf(u128)]u8 = undefined;
+                        for (staged[0..retained], 0..) |*byte, index|
+                            byte.* = @truncate(self.staged_bits >> @intCast(index * 8));
+                        const next_count = try self.acceptMetadataBytes(staged[0..retained]);
+                        self.dropAlignedBytes(retained);
+                        if (next_count) |count| {
+                            try self.finishMetadataBlock(count);
+                            continue;
+                        }
+                    }
                     const n = @min(self.metadata_remaining, input.len - input_read);
-                    const next_metadata_total = stream_count.addLocal(self.metadata_total, n) catch
-                        return self.fail(.metadata, error.IntegerOverflow);
-                    if (n == self.metadata_remaining)
-                        _ = stream_count.add(self.metadata_block_count, 1) catch return self.fail(.metadata, error.IntegerOverflow);
-                    const capture = @min(n, self.metadata_output.len -| self.metadata_written);
-                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], input[input_read..][0..capture]);
-                    self.metadata_written += capture;
-                    self.metadata_total = next_metadata_total;
-                    self.current_metadata_len += n;
-                    input_read += n;
-                    self.metadata_remaining -= n;
-                    if (self.metadata_remaining != 0) return result(input_read, output_written, .need_input);
-                    try self.recordMetadataBlock();
-                    self.phase = .trailer;
+                    if (n != 0) {
+                        const next_count = try self.acceptMetadataBytes(input[input_read..][0..n]);
+                        input_read += n;
+                        if (next_count) |count| try self.finishMetadataBlock(count);
+                    }
+                    if (self.phase == .metadata) return result(input_read, output_written, .need_input);
                 },
                 .dictionary => {
                     if (self.dictionary_source == .compound) {
@@ -719,7 +817,7 @@ pub fn Decoder(comptime Codec: type) type {
                         // its bounded span before advancing dictionary state.
                         const n_bound = @min(self.pending_copy, output.len - output_written);
                         _ = try self.outputEnd(n_bound);
-                        const n = self.compound_cursor.copyInto(output[output_written..][0..n_bound]);
+                        const n = self.copyCompound(output[output_written..][0..n_bound]);
                         if (n != 0) {
                             try self.commitDictionarySpan(output[output_written..][0..n]);
                             output_written += n;
@@ -776,6 +874,13 @@ pub fn Decoder(comptime Codec: type) type {
                     return result(input_read, output_written, .done);
                 },
             };
+        }
+
+        fn admitHistory(self: *Self, reservation: Reservation) Error!void {
+            if (owned_history) {
+                if (reservation) |storage| self.history = storage.admit(self.total_output, self.stored_remaining) catch |err|
+                    return self.fail(.trailer, err);
+            }
         }
 
         fn emit(self: *Self, output: []u8, output_written: *usize, value: u8) Error!void {
@@ -867,13 +972,27 @@ pub fn Decoder(comptime Codec: type) type {
             const distance = self.copy_distance;
             if (distance == 0 or distance > self.maxBackwardDistance()) return false;
             const remaining = self.decoded_len - self.total_output;
-            if (distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
+            if (distance > self.history.len) {
+                self.history_capacity_exceeded = true;
+                return self.fail(.copy, error.InvalidMatch);
+            }
             if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
             if (self.update_distance_ring) pushLastDistance(&self.last_distances, distance);
             self.update_distance_ring = false;
             self.phase = .copy;
             return true;
         }
+        fn effectiveDictionary(self: *const Self) shared_dictionary.Dictionary {
+            return self.attachments.view(self.options.decode.shared_dictionary);
+        }
+
+        fn copyCompound(self: *Self, output: []u8) usize {
+            if (self.attachments.len == 0) return self.compound_cursor.copyInto(output);
+            self.compound_cursor.raw_prefixes = self.effectiveDictionary().raw_prefixes;
+            defer self.compound_cursor.raw_prefixes = &.{};
+            return self.compound_cursor.copyInto(output);
+        }
+
         fn beginCopy(self: *Self) Error!void {
             const remaining = self.decoded_len - self.total_output;
             const max_backward_distance = self.maxBackwardDistance();
@@ -887,14 +1006,17 @@ pub fn Decoder(comptime Codec: type) type {
                     // A caller may intentionally provide a history ring smaller
                     // than the protocol window. Such a reference is still a
                     // history match, not a compound-dictionary distance.
-                    if (distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
+                    if (distance > self.history.len) {
+                        self.history_capacity_exceeded = true;
+                        return self.fail(.copy, error.InvalidMatch);
+                    }
                     if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
                     if (self.update_distance_ring) pushLastDistance(&self.last_distances, distance);
                     self.update_distance_ring = false;
                     self.phase = .copy;
                 },
                 .compound => |address| {
-                    const cursor = self.options.decode.shared_dictionary.cursor(address, self.pending_copy) catch |err| switch (err) {
+                    const cursor = self.effectiveDictionary().cursor(address, self.pending_copy) catch |err| switch (err) {
                         error.CompoundDictionaryOutOfBounds, error.IntegerOverflow => return self.fail(.copy, error.InvalidMatch),
                         error.TooManyRawPrefixes, error.RawDictionaryTooLarge => return self.fail(.copy, error.CorruptFrame),
                     };
@@ -902,6 +1024,9 @@ pub fn Decoder(comptime Codec: type) type {
                     if (self.update_distance_ring) pushLastDistance(&self.last_distances, self.copy_distance);
                     self.update_distance_ring = false;
                     self.compound_cursor = cursor;
+                    // Only cursor progress crosses a call when prefix descriptors
+                    // are inline. A moved decoder must reborrow its own array.
+                    if (self.attachments.len != 0) self.compound_cursor.raw_prefixes = &.{};
                     self.dictionary_source = .compound;
                     self.phase = .dictionary;
                 },
@@ -913,7 +1038,7 @@ pub fn Decoder(comptime Codec: type) type {
                         self.previous[1],
                         self.previous[0],
                     );
-                    const word = self.options.decode.shared_dictionary.staticWord(
+                    const word = self.effectiveDictionary().staticWord(
                         context,
                         address,
                         self.pending_copy,
@@ -1059,14 +1184,39 @@ pub fn Decoder(comptime Codec: type) type {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(.trailer, error.SizeMismatch);
         }
-        fn recordMetadataBlock(self: *Self) Error!void {
-            const count = stream_count.add(self.metadata_block_count, 1) catch
+        fn dropAlignedBytes(self: *Self, length: usize) void {
+            std.debug.assert(self.stream_bits % 8 == 0 and self.staged_bit_count % 8 == 0);
+            std.debug.assert(length <= self.staged_bit_count / 8);
+            self.staged_bits = if (length == @sizeOf(u128)) 0 else self.staged_bits >> @intCast(length * 8);
+            self.staged_bit_count -= @intCast(length * 8);
+        }
+        fn acceptMetadataBytes(self: *Self, bytes: []const u8) Error!?Counter {
+            const n = bytes.len;
+            const next_total = stream_count.addLocal(self.metadata_total, n) catch
+                return self.fail(.metadata, error.IntegerOverflow);
+            const next_count = if (n == self.metadata_remaining) try self.nextMetadataBlockCount() else null;
+            if (self.options.metadata_observer) |observer|
+                observer.emitChunk(self.metadata_block_count, self.current_metadata_len, bytes);
+            const capture = @min(n, self.metadata_output.len -| self.metadata_written);
+            if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], bytes[0..capture]);
+            self.metadata_written += capture;
+            self.metadata_total = next_total;
+            self.current_metadata_len += n;
+            self.metadata_remaining -= n;
+            return next_count;
+        }
+        fn nextMetadataBlockCount(self: *Self) Error!Counter {
+            return stream_count.add(self.metadata_block_count, 1) catch
                 return self.fail(self.phase, error.IntegerOverflow);
+        }
+        fn finishMetadataBlock(self: *Self, next_count: Counter) Error!void {
             if (self.metadata_block_count < self.metadata_block_lengths.len)
                 self.metadata_block_lengths[@intCast(self.metadata_block_count)] = self.current_metadata_len;
-            self.metadata_block_count = count;
+            self.metadata_block_count = next_count;
             self.current_metadata_len = 0;
             self.metadata = false;
+            if (self.final_meta_block) try self.validateFinalOutputSize();
+            self.phase = if (self.final_meta_block) .padding else .trailer;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };

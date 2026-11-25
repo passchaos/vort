@@ -1,0 +1,14 @@
+{
+  "recorded_utc": "2026-11-20T13:08:17.073194+00:00",
+  "purpose": "Available independent modern references for adjudicating captured acceptance differences; no corpus replay result yet",
+  "runtime_versions": {
+    "brotli_encoded": 16785408,
+    "zstd": "1.6.0"
+  },
+  "artifact_sha256": {
+    "/home/passchaos/Work/brotli/build-vort/libbrotlicommon.so.1.2.0": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+    "/home/passchaos/Work/brotli/build-vort/libbrotlidec.so.1.2.0": "3acf45976e96498b954bb104b06ef5b8e1cd08b5e0d8d6826c233ed1f07c0469",
+    "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+  },
+  "brotli_load_policy": "Isolated child process loads matching absolute common library first; LD_LIBRARY_PATH restricted to its build directory"
+}

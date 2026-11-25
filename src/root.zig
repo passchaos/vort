@@ -34,6 +34,7 @@ pub const hadoop_lzo_index = @import("hadoop_lzo_index.zig");
 pub const bitstream = @import("bitstream.zig");
 pub const BitCount = @import("io/bit_count.zig").BitCount;
 pub const huffman = @import("huffman.zig");
+pub const rans = @import("rans.zig");
 pub const lz77 = @import("lz77.zig");
 pub const dictionary = @import("dictionary.zig");
 pub const long_distance = @import("long_distance.zig");
@@ -1189,6 +1190,18 @@ pub const brDecodedStreamPrefixSize = br.decodedStreamPrefixSize;
 pub const brDecodedStreamPrefixSizeWithOptions = br.decodedStreamPrefixSizeWithOptions;
 pub const brDecodedStreamPrefixSizeLimited = br.decodedStreamPrefixSizeLimited;
 pub const brDecodedStreamPrefixSizeLimitedWithOptions = br.decodedStreamPrefixSizeLimitedWithOptions;
+
+pub const BrotliDecodePreflightOptions = br.DecodePreflightOptions;
+pub const BrotliDecodePreflightError = br.DecodePreflightError;
+pub const BrotliDirectChunkPreflightWorkspace = br.DirectChunkPreflightWorkspace;
+pub const brDecodedStreamSizeWithPreflight = br.decodedStreamSizeWithPreflight;
+pub const brDecodedStreamPrefixSizeWithPreflight = br.decodedStreamPrefixSizeWithPreflight;
+pub const brDecodeStreamIntoWithPreflight = br.decodeStreamIntoWithPreflight;
+pub const brDecodeStreamPrefixIntoWithPreflight = br.decodeStreamPrefixIntoWithPreflight;
+pub const brDecodedStreamChunksSizeWithPreflight = br.decodedStreamChunksSizeWithPreflight;
+pub const brDecodedStreamPrefixChunksSizeWithPreflight = br.decodedStreamPrefixChunksSizeWithPreflight;
+pub const brDecodeStreamChunksIntoWithPreflight = br.decodeStreamChunksIntoWithPreflight;
+pub const brDecodeStreamPrefixChunksIntoWithPreflight = br.decodeStreamPrefixChunksIntoWithPreflight;
 pub const brSummarizeStream = br.summarizeStream;
 pub const brSummarizeStreamWithOptions = br.summarizeStreamWithOptions;
 pub const brSummarizeStreamLimited = br.summarizeStreamLimited;
@@ -2486,6 +2499,9 @@ pub const ZstdSourceFrameDecodeResult = zstd.SourceFrameDecodeResult;
 pub const ZstdSourceStreamDecodeOptions = zstd.SourceStreamDecodeOptions;
 pub const ZstdSourceStreamInfo = zstd.SourceStreamInfo;
 pub const ZstdSourceStreamDecodeResult = zstd.SourceStreamDecodeResult;
+pub const ZstdSourceStreamCheckpoint = zstd.SourceStreamCheckpoint;
+pub const ZstdSourceStreamProgress = zstd.SourceStreamProgress;
+pub const ZstdSourceStreamOutcome = zstd.SourceStreamOutcome;
 pub const ZstdSourceStreamElement = zstd.SourceStreamElement;
 pub const ZstdSourceStreamDataFrameInfo = zstd.SourceStreamDataFrameInfo;
 pub const ZstdSourceStreamSkippableFrameInfo = zstd.SourceStreamSkippableFrameInfo;
@@ -2505,12 +2521,50 @@ pub const zstdDecodeSourceFrameAppend = zstd.decodeSourceFrameAppend;
 pub const zstdDecodeSourceFrameAlloc = zstd.decodeSourceFrameAlloc;
 pub const zstdInspectSourceStream = zstd.inspectSourceStream;
 pub const zstdDecodeSourceStreamInto = zstd.decodeSourceStreamInto;
+pub const zstdDecodeSourceStreamIntoWithProgress = zstd.decodeSourceStreamIntoWithProgress;
+pub const zstdDecodeVerifiedSourceStreamIntoWithProgress = zstd.decodeVerifiedSourceStreamIntoWithProgress;
 pub const zstdDecodeSourceStreamAppend = zstd.decodeSourceStreamAppend;
 pub const zstdDecodeSourceStreamAlloc = zstd.decodeSourceStreamAlloc;
+
+pub const ZstdSourceSeekTable = zstd.SourceSeekTable;
+pub const ZstdSourceSeekIndex = zstd.SourceSeekIndex;
+pub const ZstdSourceSeekableDecodeOptions = zstd.SourceSeekableDecodeOptions;
+pub const ZstdSourceSeekableRangeRequirements = zstd.SourceSeekableRangeRequirements;
+pub const zstdOpenSourceSeekTable = zstd.openSourceSeekTable;
+pub const zstdSourceSeekableRangeRequirements = zstd.sourceSeekableRangeRequirements;
+pub const zstdDecodeSourceSeekableRangeInto = zstd.decodeSourceSeekableRangeInto;
+pub const ZstdSourceSeekableRangeProgress = zstd.SourceSeekableRangeProgress;
+pub const ZstdSourceSeekableRangeOutcome = zstd.SourceSeekableRangeOutcome;
+pub const zstdDecodeSourceSeekableRangeIntoWithProgress = zstd.decodeSourceSeekableRangeIntoWithProgress;
+pub const ZstdSourceSeekableRangeWriteError = zstd.SourceSeekableRangeWriteError;
+pub const zstdSourceSeekableRangeRequirementsWide = zstd.sourceSeekableRangeRequirementsWide;
+pub const zstdDecodeSourceSeekableRangeToWriter = zstd.decodeSourceSeekableRangeToWriter;
+pub const ZstdSourceSeekableEncodeRequirements = zstd.SourceSeekableEncodeRequirements;
+pub const ZstdSourceSeekableEncodeWorkspace = zstd.SourceSeekableEncodeWorkspace;
+pub const ZstdSourceSeekableEncodeResult = zstd.SourceSeekableEncodeResult;
+pub const ZstdSourceSeekableEncodeError = zstd.SourceSeekableEncodeError;
+pub const zstdSourceSeekableEncodeRequirements = zstd.sourceSeekableEncodeRequirements;
+pub const zstdEncodeSourceSeekableTo = zstd.encodeSourceSeekableTo;
+pub const zstdEncodeSourceSeekableToWithDictionary = zstd.encodeSourceSeekableToWithDictionary;
+pub const ZstdSeekableReaderEncodeError = zstd.SeekableReaderEncodeError;
+pub const zstdEncodeSeekableReaderToWriter = zstd.encodeSeekableReaderToWriter;
+pub const zstdEncodeSeekableReaderToWriterWithDictionary = zstd.encodeSeekableReaderToWriterWithDictionary;
+
+test "root Zstd source seekable consumer contracts" {
+    try @import("tests/zstd_source_decode/seekable.zig").contracts(@This());
+}
+
+test "root Zstd source seekable dictionary rotation" {
+    try @import("tests/zstd_source_decode/seekable_dictionary.zig").contracts(@This());
+}
 pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;
 pub const zstdDecodedFrameSizeWithOptions = zstd.decodedFrameSizeWithOptions;
+pub const zstdDecodeFrameChunksAllocWithOptions = zstd.decodeFrameChunksAllocWithOptions;
+pub const zstdDecodeFrameChunksIntoWithOptions = zstd.decodeFrameChunksIntoWithOptions;
+pub const zstdDecodeFrameChunksAppendWithOptions = zstd.decodeFrameChunksAppendWithOptions;
+pub const zstdDecodedFrameChunksSizeWithOptions = zstd.decodedFrameChunksSizeWithOptions;
 pub const zstdDecodeFrameAllocWithPrefix = zstd.decodeFrameAllocWithPrefix;
 pub const zstdDecodeFrameIntoWithPrefix = zstd.decodeFrameIntoWithPrefix;
 pub const zstdDecodeFrameAppendWithPrefix = zstd.decodeFrameAppendWithPrefix;
@@ -2879,6 +2933,7 @@ pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const zstdNativeIncrementalCompressedBlockWorkspaceLen = zstd.NativeIncrementalFrameDecoder.compressed_block_workspace_len;
 pub const zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen = zstd.NativeIncrementalFrameDecoder.requiredCompressedBlockWorkspaceLenForWindow;
+pub const zstdNativeIncrementalCompressedBlockWorkspaceRequiredLenForLimits = zstd.NativeIncrementalFrameDecoder.requiredCompressedBlockWorkspaceLenForLimits;
 pub const zstdNativeIncrementalHistoryWorkspaceRequiredLen = zstd.NativeIncrementalFrameDecoder.requiredHistoryWorkspaceLen;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
 pub const ZstdPreparedDecodeDictionary = zstd.PreparedDecodeDictionary;
@@ -2901,6 +2956,7 @@ pub const ZstdNativeSkippableFrameHeader = zstd.NativeSkippableFrameHeader;
 
 test "root Zstd compressed workspace consumers" {
     try @import("tests/zstd_compressed_workspace_consumers.zig").contracts(@This());
+    try std.testing.expectEqual(@as(usize, 2048), zstdNativeIncrementalCompressedBlockWorkspaceRequiredLenForLimits(32768, 2048));
 }
 
 test "root Zstd history workspace consumers" {
@@ -2958,6 +3014,11 @@ pub const zstdEncodeNativeSeekableStreamAppendWithDictionarySet = zstd.encodeNat
 pub const zstdEncodeNativeSeekableStreamIntoSliceWithDictionarySet = zstd.encodeNativeSeekableStreamIntoSliceWithDictionarySet;
 pub const zstdNativeSeekableRangeScratchLen = zstd.nativeSeekableRangeScratchLen;
 pub const zstdNativeSeekableRangeScratchLenWithIndex = zstd.nativeSeekableRangeScratchLenWithIndex;
+pub const ZstdNativeSeekableRangeDecodeOptions = zstd.NativeSeekableRangeDecodeOptions;
+pub const zstdDecodeNativeSeekableRangeIntoWithOptions = zstd.decodeNativeSeekableRangeIntoWithOptions;
+pub const zstdDecodeNativeSeekableRangeAllocWithOptions = zstd.decodeNativeSeekableRangeAllocWithOptions;
+pub const zstdDecodeNativeSeekableRangeIntoWithIndexAndOptions = zstd.decodeNativeSeekableRangeIntoWithIndexAndOptions;
+pub const zstdDecodeNativeSeekableRangeAllocWithIndexAndOptions = zstd.decodeNativeSeekableRangeAllocWithIndexAndOptions;
 pub const zstdDecodeNativeSeekableRangeInto = zstd.decodeNativeSeekableRangeInto;
 pub const zstdDecodeNativeSeekableRangeAlloc = zstd.decodeNativeSeekableRangeAlloc;
 pub const zstdDecodeNativeSeekableRangeIntoWithDictionary = zstd.decodeNativeSeekableRangeIntoWithDictionary;
@@ -3506,6 +3567,8 @@ pub const ZlibIncrementalBestEncoder = deflate.ZlibIncrementalBestEncoder;
 pub const GzipIncrementalBestEncoder = deflate.GzipIncrementalBestEncoder;
 pub const RawDeflateIncrementalStoredDecoder = deflate.RawDeflateIncrementalStoredDecoder;
 pub const RawDeflateIncrementalFixedLiteralDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+pub const DeflateBlockBoundaryPosition = deflate.BlockBoundaryPosition;
+pub const DeflateBlockRestartPoint = deflate.BlockRestartPoint;
 pub const RawDeflateSyncPoint = deflate.RawDeflateSyncPoint;
 pub const RawDeflateSyncScanner = deflate.RawDeflateSyncScanner;
 pub const RawDeflateSyncScanResult = deflate.RawDeflateSyncScanResult;
@@ -4020,6 +4083,18 @@ pub const GzipDecodeOptions = deflate.GzipDecodeOptions;
 pub const GzipHeaderOptions = deflate.GzipHeaderOptions;
 pub const GzipHeaderInfo = deflate.GzipHeaderInfo;
 pub const GzipMemberInfo = deflate.GzipMemberInfo;
+pub const GzipSourceIndex = deflate.GzipSourceIndex;
+pub const GzipSourceIndexEntry = deflate.GzipSourceIndexEntry;
+pub const GzipSourceIndexOptions = deflate.GzipSourceIndexOptions;
+pub const GzipSourceIndexWorkspace = deflate.GzipSourceIndexWorkspace;
+pub const GzipSourceRangeOutcome = deflate.GzipSourceRangeOutcome;
+pub const GzipSourceRangeProgress = deflate.GzipSourceRangeProgress;
+pub const buildGzipSourceIndex = deflate.buildGzipSourceIndex;
+
+test "root Gzip source index contracts" {
+    try @import("tests/gzip_source_index.zig").contracts(@This());
+    try @import("tests/gzip_verified_range_extents.zig").contracts(@This());
+}
 pub const parseGzipHeaderInfo = deflate.parseGzipHeaderInfo;
 pub const parseGzipHeaderInfoFromChunks = deflate.parseGzipHeaderInfoFromChunks;
 pub const inspectGzipMemberAlloc = deflate.inspectGzipMemberAlloc;
@@ -4214,6 +4289,7 @@ test {
     _ = deflate;
     _ = bitstream;
     _ = huffman;
+    _ = rans;
     _ = lz77;
     _ = dictionary;
     _ = long_distance;
@@ -5166,7 +5242,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodedBlockBound;
 
     _ = ZstdError;
-    try std.testing.expectEqual(@as(c_int, 1), zstdDefaultCompressionLevel);
+    try std.testing.expectEqual(@as(c_int, 3), zstdDefaultCompressionLevel);
     _ = zstdEncodeFrameAlloc;
     _ = zstdEncodeFrameWithLevelAlloc;
     _ = zstdEncodeFrameWithOptionsAlloc;
@@ -5408,6 +5484,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeIncrementalFrameDecoder;
     _ = zstdNativeIncrementalCompressedBlockWorkspaceLen;
     _ = zstdNativeIncrementalCompressedBlockWorkspaceRequiredLen;
+    _ = zstdNativeIncrementalCompressedBlockWorkspaceRequiredLenForLimits;
     _ = zstdNativeIncrementalHistoryWorkspaceRequiredLen;
     _ = ZstdNativeDictionary;
     _ = ZstdNativeDictionaryTrainOptions;
@@ -8028,7 +8105,12 @@ test "root native incremental reset recovers after extra input size mismatch" {
     _ = try zstd_decoder.step(zstd_frame.frame, zstd_output[0..0]);
     const zstd_done = try zstd_decoder.step("", &zstd_output);
     try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
-    try std.testing.expectError(error.SizeMismatch, zstd_decoder.step(zstd_frame.frame[0..1], zstd_output[0..0]));
+    // Post-done bytes start a concatenated next member. A single buffered byte
+    // is only queued (need_input); a complete non-empty member exceeds the
+    // already-fulfilled cumulative pledge and is rejected at frame admission.
+    const zstd_buffered = try zstd_decoder.step(zstd_frame.frame[0..1], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_buffered.status);
+    try std.testing.expectError(error.SizeMismatch, zstd_decoder.step(zstd_frame.frame[1..], zstd_output[0..0]));
     try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
     zstd_decoder.reset();

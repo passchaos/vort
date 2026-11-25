@@ -126,6 +126,9 @@ The library is under active development. Its current capabilities include:
   workflows; [the FastCover baseline](docs/performance/fast-cover-training-x86.md)
   records functional coverage and the remaining training-time/output gaps,
   standardized seekable-stream encoding with output-bound, caller-owned-buffer, reusable encoder, and deterministic caller-selected parallel frame APIs, plus zero-allocation terminal seek-table parsing/iteration and bounded range decode (including preset-dictionary encoding, dictionary-set frame selection, optional per-frame checksum verification, decompressed-offset lookup, and a reusable caller-owned cumulative index with O(1) entry access and O(log n) offset lookup),
+  [source-backed seekable range decode](docs/formats/zstd-source-seekable.md)
+  with verified per-frame publication, bounded callback reads and no complete
+  compressed input buffer,
   caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, reusable native scratch encoder/decoder APIs, a persistent bounded single-frame parallel encoder with owned caller input, flush/finish, dictionaries, skippables, exact failed progress and explicit ZIP integration, plus a reusable level-aware frame encoder that preserves adaptive selection policy while retaining primary scratch,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
@@ -377,6 +380,11 @@ The library is under active development. Its current capabilities include:
   changes through `DeflateParams` and `requestParams()`; raw recovery APIs scan
   full-flush `00 00 ff ff` markers and decode or incrementally resume the next
   independent segment after payload corruption;
+- incremental gzip supports [rsync-friendly boundaries](docs/formats/gzip-rsyncable.md),
+  also available as `encode-gzip-best-file <in> <out> [level] --rsyncable`;
+  `decode-gzip-file - -` and `encode-gzip-best-file - -` provide
+  [binary standard-stream I/O](docs/formats/gzip-stdio-cli.md), with
+  concatenated-member validation when decoding;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
@@ -739,6 +747,41 @@ allocating summary history share the same budget; caller-buffer and fixed
 summary paths retain zero requested heap. Incremental decoders explicitly
 reject these one-shot policy fields and keep their independent resource options.
 See the [decode memory contract](docs/formats/brotli-decode-memory.md).
+[Caller-history preflight](docs/formats/brotli-long-distance-preflight.md)
+validates strict or prefix input, exact decoded sizes and logical caps for
+long-distance Brotli streams before publishing output, without heap allocation.
+
+Incremental Deflate, Brotli and Zstd encoders validate caller buffer borrows
+before publishing output or changing state. Conflicting input, output, retained
+capacity, dictionary or metadata storage returns `InvalidBlockPlan` and can be
+retried with independent buffers. See the
+[incremental encode borrow contract](docs/formats/incremental-encode-borrows.md).
+
+Brotli preserves accepted metadata when finish follows the request immediately.
+Zstd next-frame transitions admit new dictionary/prefix and profile lifetimes
+before publication, allowing ended observer and prefix storage to change roles.
+See the [encoder lifecycle contract](docs/formats/encoder-lifecycle.md).
+
+Brotli metadata setters and next-stream setup reject conflicting retained
+storage before publishing requests or resetting state, and support independent
+storage retry on the same encoder.
+
+Zstd dictionary/prefix setters and zlib/gzip member transitions also admit new
+borrowed storage before changing bindings or resetting member state. Rejected
+calls preserve the old binding or completed-member boundary for direct retry.
+
+Gzip member transitions also reject invalid header fields before reset. Zlib
+and gzip exact-size transitions reject input pledges above the next raw input
+cap, leaving the completed encoder available for a corrected transition.
+
+Zstd skippable requests validate borrowed payload and the full pending wire
+size before acceptance. Rejected new requests leave the idle boundary usable;
+accepted output continues to drain when output limits are restored.
+
+Dynamic Deflate and Deflate64 codebooks receive format-specific validity
+checks before the new block emits output. Legal one-bit singleton and unused
+empty-distance trees remain supported; malformed incomplete trees retain
+the documented [one-shot and incremental errors](docs/formats/deflate-dynamic-huffman.md).
 
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
@@ -1017,7 +1060,9 @@ zig build run-snappy-report-gate
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
 zig build run -- encode-zstd-native-file-hex README.md literal_only true true
 zig build run -- encode-zstd-native-file README.md /tmp/vort-readme.zst literal_only true true
+zig build run -- encode-zstd-native-stream-file - - < README.md > /tmp/vort-readme.zst
 zig build run -- decode-zstd-native-file-to /tmp/vort-readme.zst /tmp/vort-readme.out 1048576
+zig build run -- decode-zstd-native-file-to - - 1048576 < /tmp/vort-readme.zst > /tmp/vort-readme.out
 zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
 zig build run -- size-zstd-native-hex 28b52ffd240529000068656c6c6fa36d9f88 5
 zig build run-zstd-native-cli-diff
@@ -1588,8 +1633,11 @@ defer zstd_incremental_encoder.deinit();
 // RawDeflateSyncScanner finds full-flush LEN/NLEN markers across arbitrary
 // caller chunks. findRawDeflateSyncPoint plus decodeRawDeflateAfterSync*, or
 // RawDeflateIncrementalFixedLiteralDecoder.resumeAfterSync(), recover the raw
-// independent suffix. Wrapped zlib/gzip checksums cannot be reconstructed after
-// discarded corrupt output, so this recovery surface is intentionally raw.
+// independent suffix. ZlibIncrementalDecoder.resumeAfterSync(skipped_payload_bytes)
+// and GzipIncrementalDecoder.resumeAfterSync(skipped_payload_bytes) resume the
+// same member after the marker; ZlibOrGzipIncrementalDecoder forwards to the
+// detected wrapper. Use ignore_adler or ignore_crc32/ignore_isize because the
+// member checksums cannot be reconstructed from discarded corrupt output.
 // RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
 // representations per block while retaining the same rolling history core.
 // Hash and lazy-parser levels additionally retain a bounded 32 KiB predecessor
@@ -2315,6 +2363,13 @@ The full repository graph passes 2719/2719 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
+
+### Brotli standard streams
+
+Use `vort encode-br-stream-file - -` to compress and
+`vort decode-br-file-to - -` to decompress through a binary pipe. See the
+[Brotli CLI standard-stream contract](docs/formats/brotli-stdio-cli.md) for
+limits, Large Window opt-in, and failure behavior.
 
 ### Brotli HQ encoding
 

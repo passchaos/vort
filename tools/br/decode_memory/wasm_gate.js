@@ -39,7 +39,7 @@ process.stdout.write(JSON.stringify({
     library_source_sha256: hash(fs.readFileSync(path.join(projectRoot, "src/br.zig"))),
     build_source_sha256: hash(fs.readFileSync(path.join(projectRoot, "build/br_decode_memory.zig"))),
     gate_sha256: hash(fs.readFileSync(__filename)),
-    test_filters: ["Brotli decode total memory", "Brotli incremental decode policy"],
+    test_filters: ["Brotli decode total memory", "Brotli incremental decode policy", "Brotli owned history growth", "Brotli stream contracts"],
     execution: "Zig test runner through WASI _start",
     exit_code: exitCode,
     imports,

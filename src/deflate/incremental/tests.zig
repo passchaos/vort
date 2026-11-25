@@ -14,6 +14,7 @@ const semantic_window_tests = @import("tests/semantic_window.zig");
 const step_borrow_tests = @import("tests/step_borrows.zig");
 const semantic_borrow_tests = @import("tests/step_borrows/semantic.zig");
 const sync_recovery_tests = @import("tests/sync_recovery.zig");
+const size_preflight_tests = @import("tests/size_preflight.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
 const zlib_dictionary_tests = @import("decoder/zlib_dictionary_tests.zig");
 const dictionary_borrow_tests = @import("tests/dictionary_borrows.zig");
@@ -21,6 +22,12 @@ const dictionary_borrow_tests = @import("tests/dictionary_borrows.zig");
 test {
     _ = block_flush_tests;
     _ = block_boundary_tests;
+    _ = @import("tests/block_boundary_positions.zig");
+    _ = @import("tests/block_restart.zig");
+    _ = @import("tests/rsyncable.zig");
+    _ = @import("tests/dictionary_append.zig");
+    _ = @import("tests/semantic_handoff.zig");
+    _ = @import("tests/gzip_zero_padding.zig");
     _ = compact_tables_tests;
     _ = gzip_concatenated_tests;
     _ = full_flush_tests;
@@ -32,9 +39,11 @@ test {
     _ = step_borrow_tests;
     _ = semantic_borrow_tests;
     _ = sync_recovery_tests;
+    _ = size_preflight_tests;
     _ = wrapper_continuation_tests;
     _ = zlib_dictionary_tests;
     _ = dictionary_borrow_tests;
+    _ = @import("fuzz_driver.zig");
     _ = @import("encoder/png_ultrafast/root.zig");
 }
 

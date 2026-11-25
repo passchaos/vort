@@ -1,0 +1,11 @@
+{
+  "recorded_utc": "2026-11-20T12:47:52.244369+00:00",
+  "historical_checkpoint": "validation-checkpoint.json",
+  "prior_session_id": 15705,
+  "prior_session_terminal_exit_code": 0,
+  "snapshot": "../incremental-encoder-lifecycle-20261120/source-before-brotli-setters.json",
+  "log": "../incremental-encoder-lifecycle-20261120/library-tests-releasesafe.log",
+  "observed_result": "5716 passed; 2 skipped; 11/11 build steps succeeded",
+  "scope": "Earlier source snapshot; does not establish later setter/skippable/wrapper-option execution.",
+  "log_sha256": "1d54373e3dddae340ea5a338782020c6aeb711abb30629159333e4dbd1751d08"
+}

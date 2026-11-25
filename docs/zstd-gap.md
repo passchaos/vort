@@ -2231,6 +2231,35 @@ failure, cumulative cap enforcement, magicless streams, state errors, and root
 exports. Native, Linux x86 and actual WASI runs share the `Zstd source` filter.
 No performance or RSS claim follows.
 
+### Source window and decoded-size admission
+
+`SourceFrameDecodeOptions` and `SourceStreamDecodeOptions` now offer
+`max_window_size` (unlimited by default). The same advertised-window cap as in
+incremental decoding applies independently to every inspected or decoded data
+frame, in standard and magicless mode. A window above the cap returns
+`OutputLimitExceeded` after reading the complete frame header but before
+resolving its dictionary, reading any block bytes, or growing or writing
+output for that frame. Caller workspace sizing remains a separate requirement.
+The cursor's `next` still exposes the data header; a rejected `decodeInto` or
+`inspectPending` leaves the frame pending so callers can retry or choose
+`skipData`. `skipData` ignores the window and decoded caps because it only
+walks checked ranges, not decoded history or output.
+
+Header-only inspection rejects when the known decoded size **or its lower
+bound** exceeds the per-frame or cumulative cap. For a compressed frame with
+no declared size, Raw/RLE blocks still contribute their known decoded bytes.
+That lower bound and the sizes of subsequent frames still count when the stream
+size is unknown; `total_decoded` stays null in that case. A declared content
+size smaller than the Raw/RLE contribution returns `SizeMismatch`. Inspection
+never reads block payloads and cannot prove that unknown compressed output
+fits; use an actual decode for that guarantee.
+
+`zig build -j3 check-zstd-source-reverse --summary all` passed 44 tests each on
+native, Linux x86 and executed wasm32-wasi. The new contracts check forbidden
+source reads, untouched workspace and output, no-allocation refusals, and
+cursor retry. Zstd CLI 1.4.8 independently decoded both valid mixed-size test
+streams to the expected plaintext (12 and 24 bytes).
+
 ## 2026-11-09: rsyncable parallel jobs
 
 `ZstdParallelOptions.rsyncable` now cuts one-shot parallel frame Jobs at

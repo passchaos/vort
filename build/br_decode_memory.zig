@@ -1,9 +1,12 @@
 const std = @import("std");
 const public_build = @import("wide_sizes.zig");
 
+const stream_contracts = "Brotli stream contracts";
 const filters: []const []const u8 = &.{
     "Brotli decode total memory",
     "Brotli incremental decode policy",
+    "Brotli owned history growth",
+    stream_contracts,
 };
 
 fn codecModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
@@ -37,7 +40,7 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     const decode_tests = b.addTest(.{
         .name = "vort-br-decode-tests",
         .root_module = native_tests.root_module,
-        .filters = &.{ "decode", "Decode", "summary", "Summary", "summar", "Brotli compressed chunk join" },
+        .filters = &.{ "decode", "Decode", "summary", "Summary", "summar", "Brotli compressed chunk join", stream_contracts },
     });
     b.step("test-br-decode", "Run complete Brotli decoder, summary and borrowed-input contracts")
         .dependOn(&b.addRunArtifact(decode_tests).step);

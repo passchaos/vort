@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const step_borrows = @import("step_borrows.zig");
 
 /// Incremental raw-DEFLATE stored-block encoder. One RFC 1951 stored block is
 /// retained; encoded bytes drain through arbitrary caller output. Block, sync,
@@ -57,12 +58,13 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn clone(self: *const Self, allocator: std.mem.Allocator) CloneError!Self {
             var cloned = self.*;
             cloned.allocator = allocator;
-            cloned.state.bytes = .empty;
+            if (comptime @hasField(@TypeOf(self.state), "bytes")) cloned.state.bytes = .empty;
             cloned.plain = .empty;
             cloned.pending = .empty;
             errdefer cloned.deinit();
 
-            cloned.state.bytes = try self.state.bytes.clone(allocator);
+            if (comptime @hasField(@TypeOf(self.state), "bytes"))
+                cloned.state.bytes = try self.state.bytes.clone(allocator);
             cloned.plain = try self.plain.clone(allocator);
             cloned.pending = try self.pending.clone(allocator);
             return cloned;
@@ -152,6 +154,7 @@ pub fn Encoder(comptime Codec: type) type {
                     return error.IntegerOverflow;
             }
 
+            try step_borrows.validate(self, input, output[0..output_limit]);
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {

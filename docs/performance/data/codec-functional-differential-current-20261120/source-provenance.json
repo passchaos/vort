@@ -1,0 +1,64 @@
+{
+  "captured_utc": "2026-11-20T12:57:39.402032+00:00",
+  "head": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "zig_version": "0.16.0",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "compiler_optimize": "ReleaseFast",
+  "seed_hex": "0x20261120",
+  "command": [
+    "zig",
+    "build",
+    "-j2",
+    "-Doptimize=ReleaseFast",
+    "run-codec-differential-fuzz",
+    "--summary",
+    "all",
+    "--",
+    "--deep",
+    "--seed=0x20261120"
+  ],
+  "reference_libraries": {
+    "z": {
+      "soname": "libz.so.1",
+      "runtime_version": "1.2.11"
+    },
+    "zstd": {
+      "soname": "libzstd.so.1",
+      "runtime_version": "1.4.8"
+    },
+    "brotli": {
+      "soname": "libbrotlidec.so.1",
+      "runtime_version_encoded": 16777225,
+      "runtime_version": "1.0.9"
+    }
+  },
+  "source_manifest": "source-snapshot.json",
+  "source_manifest_sha256": "4ee989270879fc6d8c976b1cdb3bcf203b1aba9b92d4ba6f7ebb3315e53de813",
+  "all_source_hashes_verified": 2621,
+  "scope": "Functional interoperability and robustness only; full-library build/test runs concurrently. This is not throughput or memory evidence.",
+  "source_manifest_origin": "../deflate-wrapper-transition-options-20261120/source-provenance.json",
+  "tool_artifact": {
+    "path": "/home/passchaos/project-z/vort/.zig-cache/o/9012efd7dc1175bc36d1788b06d8e559/vort-codec-differential-fuzz",
+    "bytes": 21415104,
+    "sha256": "d2d9a0787bf70eaf4f4d02dc39d42532d1f27ac4db876cbc8930c59fd69bd3c0"
+  },
+  "additional_completed_commands": [
+    [
+      "zig",
+      "build",
+      "-j2",
+      "-Doptimize=Debug",
+      "run-codec-differential-fuzz",
+      "--summary",
+      "all",
+      "--",
+      "--deep",
+      "--seed=0x20261120"
+    ]
+  ],
+  "debug_tool_artifact": {
+    "path": "/home/passchaos/project-z/vort/.zig-cache/o/5d04bb6bb5d74995154fcc553c75e516/vort-codec-differential-fuzz",
+    "bytes": 117804569,
+    "sha256": "104bd50e48d3920cb1effc4b65384d9172bba4ae6f3b7124500a7ccb48e683f4"
+  }
+}

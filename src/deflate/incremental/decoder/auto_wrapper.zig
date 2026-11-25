@@ -4,6 +4,8 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 const Count = core.StreamCount;
 const clone_storage = @import("../clone_storage.zig");
+const block_position = @import("../block_boundary_position.zig");
+const block_restart = @import("../block_restart.zig");
 const step_borrows = @import("step_borrows.zig");
 const dictionary_borrows = @import("dictionary_borrows.zig");
 
@@ -15,6 +17,7 @@ pub fn Decoder(comptime Codec: type) type {
         active: Active = .detecting,
         prefix: [2]u8 = undefined,
         prefix_received: u2 = 0,
+        detection_input_finished: bool = false,
         detection_error_name: []const u8 = "",
         detection_error_input_offset: ?Count = null,
         last_step_progress: core.Progress = .{},
@@ -24,14 +27,22 @@ pub fn Decoder(comptime Codec: type) type {
         pub const CloneError = Codec.ZlibDecoder.CloneError;
         pub const CloneStorage = Codec.ZlibDecoder.CloneStorage;
         pub const DictionarySet = Codec.DictionarySet;
+        pub const HeaderObserver = Codec.GzipDecoder.HeaderObserver;
+        pub const HeaderEvent = Codec.GzipDecoder.HeaderEvent;
+        pub const HeaderField = Codec.GzipDecoder.HeaderField;
+        pub const MemberHeader = Codec.GzipDecoder.MemberHeader;
         pub const Format = Codec.Format;
         pub const Phase = enum { detecting, zlib, gzip };
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum members of the detected wrapper, including empty ones.
+            max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
             allow_concatenated: bool = false,
             allow_trailing_data: bool = false,
             ignore_zlib_adler: bool = false,
+            /// Limit the declared window only when zlib is selected.
+            max_zlib_window_bits: u4 = 15,
             ignore_gzip_crc32: bool = false,
             ignore_gzip_isize: bool = false,
             max_gzip_header_metadata_len: usize = 1 << 20,
@@ -89,6 +100,7 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn reset(self: *Self) void {
             self.active = .detecting;
             self.prefix_received = 0;
+            self.detection_input_finished = false;
             self.detection_error_name = "";
             self.detection_error_input_offset = null;
             self.last_step_progress = .{};
@@ -197,24 +209,71 @@ pub fn Decoder(comptime Codec: type) type {
             };
         }
 
+        pub fn blockBoundaryPosition(self: *const Self) ?block_position.Position {
+            return switch (self.active) {
+                .detecting => null,
+                .zlib => |*decoder| decoder.blockBoundaryPosition(),
+                .gzip => |*decoder| decoder.blockBoundaryPosition(),
+            };
+        }
+
+        pub fn captureBlockRestart(self: *const Self, history_output: []u8) Error!block_restart.Point {
+            const receiver = std.mem.asBytes(self);
+            return switch (self.active) {
+                .detecting => error.InvalidStreamState,
+                .zlib => |*decoder| block_restart.captureWrapper(decoder, receiver, history_output),
+                .gzip => |*decoder| block_restart.captureWrapper(decoder, receiver, history_output),
+            };
+        }
+
+        /// Forward raw-DEFLATE full-flush recovery to the detected wrapper.
+        /// Detection must have completed; the caller scans the payload for the
+        /// marker and supplies the skipped byte count.
+        pub fn resumeAfterSync(self: *Self, skipped_input: usize) Error!void {
+            switch (self.active) {
+                .detecting => return error.InvalidStreamState,
+                .zlib => |*decoder| try decoder.resumeAfterSync(skipped_input),
+                .gzip => |*decoder| try decoder.resumeAfterSync(skipped_input),
+            }
+        }
+
         pub fn finish(self: *Self) Error!void {
             self.last_step_progress = .{};
             return switch (self.active) {
-                .detecting => self.failDetection(error.TruncatedFrame),
+                .detecting => blk: {
+                    self.detection_input_finished = true;
+                    break :blk self.failDetection(error.TruncatedFrame);
+                },
                 .zlib => |*decoder| decoder.finish(),
                 .gzip => |*decoder| decoder.finish(),
             };
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            return self.stepInternal(input, output, false);
+            return self.stepInternal(input, output, false, null);
+        }
+
+        /// Forward this call's synchronous header observer to gzip, if
+        /// selected. Zlib emits no events. The observer is never retained;
+        /// the same borrowing rules as for GzipDecoder apply.
+        pub fn stepWithHeaderEvents(self: *Self, input: []const u8, output: []u8, observer: HeaderObserver) Error!core.StepResult {
+            return self.stepInternal(input, output, false, observer);
         }
 
         pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            return self.stepInternal(input, output, true);
+            return self.stepInternal(input, output, true, null);
         }
 
-        fn stepInternal(self: *Self, input: []const u8, output: []u8, block_boundary: bool) Error!core.StepResult {
+        /// Combine block-boundary stepping with gzip header observation.
+        pub fn stepToBlockBoundaryWithHeaderEvents(self: *Self, input: []const u8, output: []u8, observer: HeaderObserver) Error!core.StepResult {
+            return self.stepInternal(input, output, true, observer);
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, output: []u8, block_boundary: bool, observer: ?HeaderObserver) Error!core.StepResult {
+            if (self.detection_input_finished) {
+                self.last_step_progress = .{};
+                return self.failDetection(if (input.len == 0) error.TruncatedFrame else error.TrailingData);
+            }
             const semantic_admitted = try self.admitStep(input, output);
             const workspace = switch (self.active) {
                 .detecting => null,
@@ -259,7 +318,15 @@ pub fn Decoder(comptime Codec: type) type {
             const child_result = switch (self.active) {
                 .detecting => unreachable,
                 .zlib => |*decoder| if (block_boundary) decoder.stepToBlockBoundary(remaining, output) else decoder.step(remaining, output),
-                .gzip => |*decoder| if (block_boundary) decoder.stepToBlockBoundary(remaining, output) else decoder.step(remaining, output),
+                .gzip => |*decoder| blk: {
+                    if (observer) |sink| {
+                        break :blk if (block_boundary)
+                            decoder.stepToBlockBoundaryWithHeaderEvents(remaining, output, sink)
+                        else
+                            decoder.stepWithHeaderEvents(remaining, output, sink);
+                    }
+                    break :blk if (block_boundary) decoder.stepToBlockBoundary(remaining, output) else decoder.step(remaining, output);
+                },
             };
             const stepped = child_result catch |err| {
                 const child_progress = self.childLastProgress();
@@ -331,6 +398,8 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn bootstrapSelected(self: *Self) Error!void {
+            // Replay just the two detection bytes. Neither wrapper can have
+            // finished a gzip fixed header or produced plaintext here.
             var no_output: [0]u8 = .{};
             const boot = switch (self.active) {
                 .detecting => unreachable,
@@ -434,9 +503,11 @@ pub fn Decoder(comptime Codec: type) type {
         fn zlibOptions(options: Options) Codec.ZlibDecoder.Options {
             return .{
                 .max_output_len = options.max_output_len,
+                .max_members = options.max_members,
                 .expected_output_len = options.expected_output_len,
                 .allow_concatenated = options.allow_concatenated,
                 .ignore_adler = options.ignore_zlib_adler,
+                .max_window_bits = options.max_zlib_window_bits,
                 .allow_trailing_data = options.allow_trailing_data,
             };
         }
@@ -444,6 +515,7 @@ pub fn Decoder(comptime Codec: type) type {
         fn gzipOptions(options: Options) Codec.GzipDecoder.Options {
             return .{
                 .max_output_len = options.max_output_len,
+                .max_members = options.max_members,
                 .expected_output_len = options.expected_output_len,
                 .max_header_metadata_len = options.max_gzip_header_metadata_len,
                 .ignore_crc32 = options.ignore_gzip_crc32,

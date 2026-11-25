@@ -140,3 +140,36 @@ test "rolling matcher wide counters recover logical position after token growth 
     for (retried.tokens, block) |token, byte| try std.testing.expectEqual(byte, token.literal);
     try std.testing.expectEqual(try core.stream_count.addLocal(prior_position, block.len), matcher.absolute_position);
 }
+
+test "rolling matcher keeps periodic match distances near the pattern" {
+    const allocator = std.testing.allocator;
+    const pattern = "{\"time\":123456,\"level\":\"info\",\"message\":\"incremental lazy hash chain\",\"request\":\"abcdef0123456789\"}\n";
+    var input: [64 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = pattern[i % pattern.len];
+    var matcher: Matcher = .{};
+    defer matcher.deinit(allocator);
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(allocator);
+    const options: lz77.GreedyOptions = .{
+        .window_len = lz77.default_window_len,
+        .max_chain = 64,
+        .nice_len = 80,
+        .lazy_min_gain = 1,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+        .min_savings_bits = 1,
+    };
+    const plan = try matcher.plan(allocator, &tokens, &input, "", options, true);
+    var match_count: usize = 0;
+    var distance_sum: usize = 0;
+    for (plan.tokens) |token| switch (token) {
+        .literal => {},
+        .match => |m| {
+            match_count += 1;
+            distance_sum += m.distance;
+        },
+    };
+    try std.testing.expect(match_count > 100);
+    const average = distance_sum / match_count;
+    try std.testing.expect(average <= pattern.len * 2);
+}

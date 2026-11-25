@@ -78,22 +78,22 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn setPrefix(self: *Self, bytes: []const u8) Error!void {
-            try self.owner.setPrefix(bytes);
+            try self.owner.setPrefix(bytes, std.mem.asBytes(self));
             self.options = self.owner.options;
         }
 
         pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
-            try self.owner.setPrefixWithDictionary(dictionary);
+            try self.owner.setPrefixWithDictionary(dictionary, std.mem.asBytes(self));
             self.options = self.owner.options;
         }
 
         pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
-            try self.owner.setDictionary(dictionary);
+            try self.owner.setDictionary(dictionary, std.mem.asBytes(self));
             self.options = self.owner.options;
         }
 
         pub fn clearDictionary(self: *Self) Error!void {
-            try self.owner.clearDictionary();
+            try self.owner.clearDictionary(std.mem.asBytes(self));
             self.options = self.owner.options;
         }
 
@@ -173,12 +173,12 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         fn next(self: *Self, options: Options, expected: ?Count, dictionary: ?Codec.Dictionary, metadata_id: ?u32) Error!void {
-            try self.owner.nextFrame(options, expected, dictionary, metadata_id, true);
+            try self.owner.nextFrame(options, expected, dictionary, metadata_id, true, std.mem.asBytes(self));
             self.options = self.owner.options;
         }
 
         fn nextRetainingPrefix(self: *Self, options: Options, expected: ?Count) Error!void {
-            try self.owner.nextFrame(options, expected, null, null, false);
+            try self.owner.nextFrame(options, expected, null, null, false, std.mem.asBytes(self));
             self.options = self.owner.options;
         }
 
@@ -189,13 +189,23 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            defer self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
-            return self.owner.step(input, output, settings.limits(Codec, self.options));
+            const already_done = self.owner.state.done and input.len == 0;
+            const result = self.owner.step(input, output, settings.limits(Codec, self.options), std.mem.asBytes(self)) catch |err| {
+                if (err != error.InvalidBlockPlan and self.owner.streamed_skippable == null) self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+                return err;
+            };
+            if (!already_done) self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+            return result;
         }
 
         pub fn stepWithDirective(self: *Self, input: []const u8, output: []u8, directive: prefix.Directive) Error!core.StepResult {
-            defer self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
-            return self.owner.stepWithDirective(input, output, settings.limits(Codec, self.options), directive);
+            const already_done = self.owner.state.done and input.len == 0;
+            const result = self.owner.stepWithDirective(input, output, settings.limits(Codec, self.options), directive, std.mem.asBytes(self)) catch |err| {
+                if (err != error.InvalidBlockPlan and self.owner.streamed_skippable == null) self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+                return err;
+            };
+            if (!already_done) self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+            return result;
         }
 
         pub fn flush(self: *Self) void {
@@ -209,8 +219,28 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn writeSkippable(self: *Self, skippable_id: u4, payload: []const u8) Error!void {
-            defer self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
-            try self.owner.writeSkippable(skippable_id, payload, settings.limits(Codec, self.options));
+            var mutation_started = false;
+            defer if (mutation_started) {
+                self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+            };
+            try self.owner.writeSkippable(skippable_id, payload, settings.limits(Codec, self.options), std.mem.asBytes(self), &mutation_started);
+        }
+
+        /// Begin a skippable frame at the same boundary as writeSkippable.
+        /// Only the inline header is pending output; no payload is retained.
+        /// After stepSkippable returns done, use nextFrame for a data frame.
+        pub fn beginSkippable(self: *Self, id: u4, payload_len: u32) Error!void {
+            try self.owner.beginSkippable(id, payload_len, settings.limits(Codec, self.options), std.mem.asBytes(self));
+            self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+        }
+
+        /// Deliver the header and a slice of the pledged payload. Advance
+        /// slices by StepResult.progress or failedProgress on output refusal.
+        /// Payload consumption is per-call progress only, not data-frame input.
+        pub fn stepSkippable(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            const result = try self.owner.stepSkippable(input, output, settings.limits(Codec, self.options), std.mem.asBytes(self));
+            self.options.frame.dictionary_id = self.owner.options.frame.dictionary_id;
+            return result;
         }
 
         pub fn snapshot(self: *const Self) Snapshot {

@@ -60,9 +60,8 @@ def main() -> int:
     # in ReleaseFast, so the generous ceilings still distinguish the old
     # 11-15 second JSON cliff from normal same-machine variance.
     assert int(json_rows[1]["vort_ns"]) <= 2_000_000_000, json_rows
-    # Level 3 still runs lazy and the legacy ratio candidates; leave enough
-    # headroom for shared-machine variance while keeping the former 15-second
-    # recursive-planner cliff impossible to reintroduce.
+    # Level 3 now follows the zstd-aligned controlled greedy policy; the
+    # ceiling still rules out the former 15-second recursive-planner cliff.
     assert int(json_rows[3]["vort_ns"]) <= 8_000_000_000, json_rows
     # The expanded planner must retain the measured JSON improvement over the
     # old 32-sequence 16,893-byte baseline on every level.
@@ -70,12 +69,13 @@ def main() -> int:
     assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
     # Levels 1 and 3 use bounded speed-oriented single-state repeat-beam
-    # policies. Their audited three-byte JSON tradeoffs remain substantially
-    # smaller than the corresponding libzstd frames; levels 9+ retain the
-    # two-state 640-byte result.
-    assert int(json_rows[1]["vort_bytes"]) <= 643, json_rows
+    # policies. Level 1 is now speed-first (`fast_compressed` primary, no
+    # adaptive ladder), so its ceiling records the deliberate ratio tradeoff
+    # while remaining far below the corresponding libzstd frame; levels 9+
+    # retain the two-state 640-byte result.
+    assert int(json_rows[1]["vort_bytes"]) <= 694, json_rows
     assert int(json_rows[1]["vort_bytes"]) < int(json_rows[1]["reference_bytes"]), json_rows
-    assert int(json_rows[3]["vort_bytes"]) <= 643, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 923, json_rows
     # The level-9 repeat-aware beam closes the structured JSON gap to one byte
     # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
     # independent because they intentionally omit that ratio-oriented parser.
@@ -83,11 +83,11 @@ def main() -> int:
     assert int(json_rows[22]["vort_bytes"]) <= 640, json_rows
     # A one-block result below 1/32 of this low-alphabet corpus is decisive at
     # levels 3 and 9. Keep both early returns visible rather than allowing them
-    # to regress to the former full adaptive split search. Level 1 is the
-    # stable low-latency reference; a 4x ceiling leaves scheduler headroom while
-    # still rejecting the previous roughly 4.4x level-3 cliff.
-    assert int(json_rows[3]["vort_ns"]) < int(json_rows[1]["vort_ns"]) * 4, json_rows
-    assert int(json_rows[9]["vort_ns"]) < int(json_rows[1]["vort_ns"]) * 4, json_rows
+    # to regress to the former full adaptive split search. Level 1 is now
+    # intentionally much faster than the ratio ladder, so guard levels 3 and 9
+    # with absolute ceilings instead of a ratio to the speed-first level.
+    assert int(json_rows[3]["vort_ns"]) <= 8_000_000_000, json_rows
+    assert int(json_rows[9]["vort_ns"]) <= 8_000_000_000, json_rows
     text_rows = {int(row["level"]): row for row in rows if row["case"] == "text"}
     # Selecting compressed Huffman weights for low-byte alphabets closes all
     # but one byte of the repetitive-text gap to the locked libzstd row.
@@ -95,40 +95,40 @@ def main() -> int:
     assert int(text_rows[22]["vort_bytes"]) <= 80, text_rows
     binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
     assert int(binary_rows[1]["vort_bytes"]) <= 8_607, binary_rows
-    assert int(binary_rows[3]["vort_bytes"]) <= 8_607, binary_rows
+    assert int(binary_rows[3]["vort_bytes"]) <= 8_874, binary_rows
     assert int(binary_rows[9]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[22]["vort_bytes"]) <= 8_607, binary_rows
-    # Wide-alphabet level 3 returns its already-computed primary frame instead
-    # of evaluating the adaptive split ladder. Compare it with level 9, which
-    # runs the same consensus path, instead of making this guard fail whenever
-    # an independent level-1 optimization makes the denominator faster. Keep a
-    # generous absolute ceiling as a second guard against the former multi-
-    # millisecond split-ladder cliff.
+    # Level 3 now uses the aligned controlled greedy parser rather than the
+    # adaptive split ladder. Keep a generous absolute ceiling and require it
+    # to stay within 1.25x of the level-9 ratio ladder.
     assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[9]["vort_ns"]) * 5 // 4, binary_rows
     assert int(binary_rows[3]["vort_ns"]) <= 8_000_000, binary_rows
     # Ratio levels accept a wide primary only after it reaches the audited 3:1
-    # decisive threshold. Inside that primary, matching double-fast and
-    # At level 1, a 4:15 double-fast result can return before repeat-beam as an
-    # explicit fastest-level tradeoff. Level 3 has a stricter 1:16 shortcut;
-    # level 9 retains independent repeat-beam consensus. The
-    # benchmark uses three iterations and rounds so these relations do not
-    # depend on a single scheduler sample. Keep level 1 at least 1.5x faster
-    # than level 3, and keep the two consensus levels within 25% of each other.
+    # decisive threshold. At level 1, a 4:15 double-fast result can return
+    # before repeat-beam as an explicit fastest-level tradeoff. Level 3 has a
+    # stricter 1:16 shortcut; level 9 retains independent repeat-beam
+    # consensus. The benchmark uses three iterations and rounds so these
+    # relations do not depend on a single scheduler sample. Keep level 1 at
+    # least 1.5x faster than level 3.
     assert int(binary_rows[1]["vort_ns"]) * 3 < int(binary_rows[3]["vort_ns"]) * 2, binary_rows
-    consensus_times = [int(binary_rows[level]["vort_ns"]) for level in (3, 9)]
-    assert max(consensus_times) * 4 < min(consensus_times) * 5, binary_rows
+    # Level 3 now uses the aligned controlled greedy parser. Its small-input
+    # cost is not ordered against the level-9 ladder, so keep only the absolute
+    # ceiling against the former recursive-planner cliff.
     tradeoff_rows = {int(row["level"]): row for row in rows if row["case"] == "level3_tradeoff"}
-    # Level 3 accepts the audited one-byte ratio tradeoff at a 1:16 block
-    # ratio, while level 9 retains exhaustive arbitration and its smaller wire.
-    assert int(tradeoff_rows[3]["vort_bytes"]) == 2_038, tradeoff_rows
+    # Level 3 uses the aligned greedy parser with the 24-candidate budget
+    # (2,102 bytes here), while level 9 retains exhaustive arbitration and its
+    # smaller 2,037-byte wire.
+    assert int(tradeoff_rows[3]["vort_bytes"]) == 2_102, tradeoff_rows
     assert int(tradeoff_rows[9]["vort_bytes"]) == 2_037, tradeoff_rows
     assert int(tradeoff_rows[22]["vort_bytes"]) == 2_037, tradeoff_rows
-    assert int(tradeoff_rows[3]["vort_ns"]) * 3 < int(tradeoff_rows[9]["vort_ns"]), tradeoff_rows
+    assert int(tradeoff_rows[3]["vort_ns"]) <= 8_000_000, tradeoff_rows
     multiblock_rows = {int(row["level"]): row for row in rows if row["case"] == "multiblock"}
     # Cross-block sequence-table reuse removes repeated FSE descriptions while
-    # preserving exact candidate arbitration at every level.
-    assert int(multiblock_rows[1]["vort_bytes"]) == 27_363, multiblock_rows
-    assert int(multiblock_rows[3]["vort_bytes"]) == 27_517, multiblock_rows
+    # preserving exact candidate arbitration. Level 1 is speed-first and does
+    # not run the adaptive split ladder, so its frame is intentionally larger
+    # than the level-3+ arbitration result on this cross-block corpus.
+    assert int(multiblock_rows[1]["vort_bytes"]) == 34_228, multiblock_rows
+    assert int(multiblock_rows[3]["vort_bytes"]) == 26_786, multiblock_rows
     assert int(multiblock_rows[9]["vort_bytes"]) == 27_363, multiblock_rows
     assert int(multiblock_rows[22]["vort_bytes"]) == 26_679, multiblock_rows
     assert int(multiblock_rows[22]["vort_bytes"]) < int(multiblock_rows[9]["vort_bytes"]), multiblock_rows

@@ -1,0 +1,13 @@
+{
+  "status": "isolated-tested-patch-ready",
+  "created_utc": "2026-11-20T10:56:56.827838+00:00",
+  "repo_applied": false,
+  "patch_sha256": "8cdc86953d2e0c35651b413a14e176d138b8b3263b49ea1b1e5acb8c9c3b96c2",
+  "tests": {
+    "new": "43/43",
+    "existing_step": "46/46",
+    "existing_finish": "35/35",
+    "existing_bridge": "26/26"
+  },
+  "next_action": "Apply as the next functional increment after preserving the current validation snapshot."
+}

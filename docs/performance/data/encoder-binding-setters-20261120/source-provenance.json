@@ -1,0 +1,93 @@
+{
+  "schema": "vort.encoder-binding-setters-source.v1",
+  "created_utc": "2026-11-20T11:50:15.002040+00:00",
+  "base_revision": "22e5ca2495dc140103ffc9ef41de389fd593ba07",
+  "files": [
+    {
+      "path": "build/encoder_lifecycle.zig",
+      "bytes": 2606,
+      "sha256": "27be38a8ab53359174e479db5a1ccd7501b47b777c1e85837aba0b8f264cbd79"
+    },
+    {
+      "path": "src/deflate.zig",
+      "bytes": 1202748,
+      "sha256": "385e66cdbfe362ce7a9fe29e740c20ccb22ee1483f8647c2b39e436fda165687"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/step_borrows.zig",
+      "bytes": 3825,
+      "sha256": "efc031221935b257fb301a4d20429f5f249a7506590c8671a866b333e142a0bf"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/zlib_fixed.zig",
+      "bytes": 15451,
+      "sha256": "c33398e8f3d8c67f1e17918b74e00c31ae65468ceb8ec0e76729f165faea41e3"
+    },
+    {
+      "path": "src/deflate/incremental/encoder/gzip_fixed.zig",
+      "bytes": 14835,
+      "sha256": "bc2de4672dda48b92c704495922e83bf36813b1207af06f8aaafd9e3f97fd6fd"
+    },
+    {
+      "path": "src/zstd.zig",
+      "bytes": 2478332,
+      "sha256": "cda8f6e9f2e34193da2b683bce8ebd3d940c4328bb91f93e34863a71613790fd"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/frame.zig",
+      "bytes": 32726,
+      "sha256": "f0325e2843f1f9cd3b776ce7858b8ab8a3134dd23a856a44a2bc4a5a241910a6"
+    },
+    {
+      "path": "src/zstd/incremental/encoder/setter_borrow_tests.zig",
+      "bytes": 14226,
+      "sha256": "7c398c3e1e977a9260bdf3cbbf5ef4ef83757203be6172b3a445a7087c52704c"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/encoder.zig",
+      "bytes": 11751,
+      "sha256": "37c486fcd0f69be9919fe25ab4a3f282c29e21c0f6dae0b7df75163aeb57b7c0"
+    },
+    {
+      "path": "src/zstd/incremental_parallel/owner.zig",
+      "bytes": 33340,
+      "sha256": "bdfcbae3287b1d64a897249fba1085e56300c3713b440846e297cbeee5bd20f9"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encoder_transition_borrows/matrix.zig",
+      "bytes": 3371,
+      "sha256": "c9ead90b476ea42cec8220b9c61f645435a8d547a72cef5f2c82e7f725ebe6e4"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encoder_transition_borrows/helpers.zig",
+      "bytes": 6941,
+      "sha256": "0ddb5c4d7b8d324f2b379d0fa97257a6cc0e0a5f478a15204f25626be5f12ae5"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encoder_transition_borrows/shared.zig",
+      "bytes": 1729,
+      "sha256": "7e8d1f4adee849dc3f43ea7bd29778996b036f438f5b0c508256752e8df8050d"
+    },
+    {
+      "path": "src/deflate/incremental/tests/encoder_transition_borrows.zig",
+      "bytes": 1413,
+      "sha256": "44c3756337f436a701c84a587f5678e36fc26b59f0729bc3e481b9f722f9b133"
+    }
+  ],
+  "protected_lz77_diff_sha256": "374771a486e92b6560a14b00b657e574390d72711190a7f7c1fafc065295c60a",
+  "validated": {
+    "deflate_transition": "12/12 full matrix runner",
+    "zstd_setter": "29/29",
+    "zstd_prefix": "27/27",
+    "zstd_step": "26/26",
+    "cross_architecture": "33/33 steps;180/180 native/x86 runner tests;actual WASI deflate/br/zstd ok",
+    "full_current_test_compilation": "14/14 steps",
+    "current_zstd_reference": "171/171 complete matrix,libzstd1.6.0"
+  },
+  "original_full_test": {
+    "session_id": 15705,
+    "build_pid": 3002054,
+    "test_pid": 3023971,
+    "stage": "executing pre-setter snapshot; result not yet terminal"
+  }
+}

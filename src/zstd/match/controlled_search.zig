@@ -136,7 +136,11 @@ const Cursor = struct {
     prefix: u32,
 
     fn init(index: Index, source: Source, position: usize) Cursor {
-        return .{ .block = index.block_previous[position], .prefix = index.prefix_head[hash(source, source.prefixLen() + position)] };
+        const prefix_len = source.prefixLen();
+        return .{
+            .block = index.block_previous[position],
+            .prefix = if (prefix_len == 0) invalid else index.prefix_head[hash(source, prefix_len + position)],
+        };
     }
 
     fn next(self: *Cursor, index: Index, source: Source) ?usize {
@@ -158,12 +162,13 @@ fn findBest(index: Index, source: Source, position: usize, literal_len: usize, r
     if (parameters.profile) |profile| profile.add("positions_tested", 1);
     var work: Work = .{ .remaining = parameters.search_budget, .profile = parameters.profile };
     var best: Match = .{};
+    var best_price: u32 = 0;
     const absolute = source.prefixLen() + position;
     for (repeatDistances(reps, literal_len)) |distance| {
         if (distance == 0 or distance > absolute or distance > source.window_len) continue;
         if (!work.probe(true)) break;
         const candidate = matchAt(source, position, absolute - distance);
-        if (better(candidate, best, literal_len, reps)) best = candidate;
+        consider(candidate, &best, &best_price, literal_len, reps);
     }
     var cursor = Cursor.init(index, source, position);
     while (work.remaining > 0) {
@@ -171,7 +176,7 @@ fn findBest(index: Index, source: Source, position: usize, literal_len: usize, r
         _ = work.probe(false);
         if (absolute - candidate_position > source.window_len) continue;
         const candidate = matchAt(source, position, candidate_position);
-        if (better(candidate, best, literal_len, reps)) best = candidate;
+        consider(candidate, &best, &best_price, literal_len, reps);
     }
     return best;
 }
@@ -212,12 +217,21 @@ fn planLinear(records: *std.ArrayList(Record), gpa: std.mem.Allocator, source: S
     }
 }
 
-fn better(candidate: Match, current: Match, literal_len: usize, reps: [3]usize) bool {
-    if (candidate.length != current.length) return candidate.length > current.length;
-    if (candidate.length == 0) return false;
-    const candidate_price = sequencePrice(literal_len, candidate.length, candidate.distance, reps);
-    const current_price = sequencePrice(literal_len, current.length, current.distance, reps);
-    return candidate_price < current_price or (candidate_price == current_price and candidate.distance < current.distance);
+inline fn consider(candidate: Match, best: *Match, best_price: *u32, literal_len: usize, reps: [3]usize) void {
+    if (candidate.length > best.length) {
+        best.* = candidate;
+        best_price.* = sequencePrice(literal_len, candidate.length, candidate.distance, reps);
+    } else if (candidate.length == best.length and candidate.length != 0) {
+        // Cache the incumbent price; otherwise every equal-length candidate
+        // recomputes both sides of the same comparison.
+        const candidate_price = sequencePrice(literal_len, candidate.length, candidate.distance, reps);
+        if (candidate_price < best_price.* or
+            (candidate_price == best_price.* and candidate.distance < best.distance))
+        {
+            best.* = candidate;
+            best_price.* = candidate_price;
+        }
+    }
 }
 
 fn gain(candidate: Match, literal_len: usize, reps: [3]usize) i64 {
@@ -441,11 +455,19 @@ fn hash(source: Source, position: usize) usize {
     return (word *% 2654435761) >> 17;
 }
 
+inline fn loadWord(bytes: []const u8, offset: usize) u64 {
+    return std.mem.readInt(u64, bytes[offset..][0..8], .little);
+}
+
 /// Exact vector extension across virtual span boundaries. Immutable lookahead
 /// verifies overlapping copies by the same recurrence as Source.match's oracle.
 fn matchAt(source: Source, position: usize, candidate: usize) Match {
     const absolute = source.prefixLen() + position;
     if (candidate >= absolute or absolute - candidate > source.window_len or source.block.len - position < minimum_match) return .{};
+    // One-shot blocks have no dictionary or prefix history, so every compared
+    // byte lives in the block and the span selection can be skipped.
+    if (source.dictionary.len == 0 and source.history.len == 0)
+        return matchAtBlock(source.block, position, candidate, absolute);
     var length: usize = 0;
     const maximum = source.block.len - position;
     while (length < maximum) {
@@ -453,14 +475,64 @@ fn matchAt(source: Source, position: usize, candidate: usize) Match {
         const span = if (at < source.dictionary.len) source.dictionary[at..] else if (at < source.prefixLen()) source.history[at - source.dictionary.len ..] else source.block[at - source.prefixLen() ..];
         const limit = @min(span.len, maximum - length);
         var offset: usize = 0;
+        // Most hash candidates match only a few bytes. Check one or two words
+        // before entering the 32-byte vector loop so short matches avoid the
+        // wider load and loop bookkeeping.
+        if (limit >= 8) {
+            const difference = loadWord(span, 0) ^ loadWord(source.block[position + length ..], 0);
+            if (difference != 0)
+                return finishMatch(length + (@as(usize, @ctz(difference)) >> 3), absolute - candidate);
+            offset = 8;
+            if (limit >= 16) {
+                const second = loadWord(span, 8) ^ loadWord(source.block[position + length ..], 8);
+                if (second != 0)
+                    return finishMatch(length + 8 + (@as(usize, @ctz(second)) >> 3), absolute - candidate);
+                offset = 16;
+            }
+        }
         while (offset + 32 <= limit) : (offset += 32) {
             const left: @Vector(32, u8) = span[offset..][0..32].*;
             const right: @Vector(32, u8) = source.block[position + length + offset ..][0..32].*;
-            if (std.simd.firstTrue(left != right)) |lane|
-                return finishMatch(length + offset + lane, absolute - candidate);
+            // A direct bool-vector bitcast lowers to vpcmpeqb/vpmovmskb/tzcnt;
+            // std.simd.firstTrue lowers to a portable iota/blend/min reduction.
+            const mismatches: u32 = @bitCast(left != right);
+            if (mismatches != 0)
+                return finishMatch(length + offset + @as(usize, @ctz(mismatches)), absolute - candidate);
         }
         while (offset < limit) : (offset += 1)
             if (span[offset] != source.block[position + length + offset]) return finishMatch(length + offset, absolute - candidate);
+        length += limit;
+    }
+    return finishMatch(length, absolute - candidate);
+}
+
+fn matchAtBlock(block: []const u8, position: usize, candidate: usize, absolute: usize) Match {
+    var length: usize = 0;
+    const maximum = block.len - position;
+    while (length < maximum) {
+        const limit = maximum - length;
+        var offset: usize = 0;
+        if (limit >= 8) {
+            const difference = loadWord(block, candidate + length) ^ loadWord(block, position + length);
+            if (difference != 0)
+                return finishMatch(length + (@as(usize, @ctz(difference)) >> 3), absolute - candidate);
+            offset = 8;
+            if (limit >= 16) {
+                const second = loadWord(block, candidate + length + 8) ^ loadWord(block, position + length + 8);
+                if (second != 0)
+                    return finishMatch(length + 8 + (@as(usize, @ctz(second)) >> 3), absolute - candidate);
+                offset = 16;
+            }
+        }
+        while (offset + 32 <= limit) : (offset += 32) {
+            const left: @Vector(32, u8) = block[candidate + length + offset ..][0..32].*;
+            const right: @Vector(32, u8) = block[position + length + offset ..][0..32].*;
+            const mismatches: u32 = @bitCast(left != right);
+            if (mismatches != 0)
+                return finishMatch(length + offset + @as(usize, @ctz(mismatches)), absolute - candidate);
+        }
+        while (offset < limit) : (offset += 1)
+            if (block[candidate + length + offset] != block[position + length + offset]) return finishMatch(length + offset, absolute - candidate);
         length += limit;
     }
     return finishMatch(length, absolute - candidate);

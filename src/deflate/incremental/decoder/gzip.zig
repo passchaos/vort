@@ -5,7 +5,10 @@ const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
+const block_position = @import("../block_boundary_position.zig");
+const block_restart = @import("../block_restart.zig");
 const step_borrows = @import("step_borrows.zig");
+const header_events = @import("gzip_header_events.zig");
 
 /// Incremental gzip decoder with opt-in concatenated-member support. The raw
 /// decoder stops at the final DEFLATE block and leaves the footer unconsumed.
@@ -38,6 +41,7 @@ pub fn Decoder(comptime Codec: type) type {
         member_count: Count = 0,
         member_offset: Count = 0,
         member_end_offset: ?Count = null,
+        padding_started: bool = false,
         prefix: member_prefix.Prefix = .{},
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
@@ -51,8 +55,14 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Error = Codec.Error;
         pub const CloneError = Codec.RawDecoder.CloneError;
         pub const CloneStorage = Codec.RawDecoder.CloneStorage;
+        pub const MemberHeader = header_events.MemberHeader;
+        pub const HeaderField = header_events.Field;
+        pub const HeaderEvent = header_events.Event;
+        pub const HeaderObserver = header_events.Observer;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum gzip members per logical stream, including empty ones.
+            max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
             max_header_metadata_len: usize = 1 << 20,
             ignore_crc32: bool = false,
@@ -63,6 +73,10 @@ pub fn Decoder(comptime Codec: type) type {
             /// the next member; a split candidate prefix can be recovered with
             /// `trailingPrefix` after this decoder reaches done.
             allow_trailing_data: bool = false,
+            /// Consume an all-zero tail after the last validated footer.
+            /// Once padding starts, no later member is allowed. Call finish
+            /// at EOF. Mutually exclusive with allow_trailing_data.
+            allow_trailing_zero_padding: bool = false,
         };
         pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, between_members, done };
         pub const Snapshot = struct {
@@ -93,6 +107,7 @@ pub fn Decoder(comptime Codec: type) type {
         };
 
         pub fn init(options: Options, history: []u8) Error!Self {
+            if (options.allow_trailing_data and options.allow_trailing_zero_padding) return error.InvalidBlockPlan;
             return .{
                 .options = options,
                 .raw = try Codec.RawDecoder.initWithHistory(.{
@@ -135,6 +150,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.member_count = 0;
             self.member_offset = 0;
             self.member_end_offset = null;
+            self.padding_started = false;
             self.prefix.reset();
             self.configureRawForMember();
             self.last_error_name = "";
@@ -187,7 +203,7 @@ pub fn Decoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) Error!void {
             self.input_finished = true;
-            if (self.options.allow_concatenated and self.phase == .between_members) {
+            if (self.phase == .between_members) {
                 try self.validateExpectedOutput();
                 self.phase = .done;
                 return;
@@ -205,7 +221,7 @@ pub fn Decoder(comptime Codec: type) type {
             return self.prefix.bytes[0..self.prefix.received];
         }
         /// Compressed offset immediately after the last validated footer.
-        /// Unlike total_input this excludes an accepted trailing-data probe.
+        /// Unlike total_input this excludes trailing probes and zero padding.
         pub fn memberEndOffset(self: *const Self) ?Count {
             return self.member_end_offset;
         }
@@ -214,17 +230,66 @@ pub fn Decoder(comptime Codec: type) type {
         /// compressed-block boundary, an input/output wait, or completion.
         /// `block_boundary` reports a stop between blocks with remaining input.
         pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            return self.stepAdmitted(input, output, true);
+            return self.stepAdmitted(input, output, true, null);
+        }
+
+        /// Combine block-boundary stepping with synchronous header events.
+        /// The same borrowing rules as `stepWithHeaderEvents` apply.
+        pub fn stepToBlockBoundaryWithHeaderEvents(self: *Self, input: []const u8, output: []u8, observer: HeaderObserver) Error!core.StepResult {
+            return self.stepAdmitted(input, output, true, observer);
         }
         pub fn atBlockBoundary(self: *const Self) bool {
             return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
         }
 
-        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            return self.stepAdmitted(input, output, false);
+        /// Absolute payload checkpoint or the end of the last validated footer.
+        pub fn blockBoundaryPosition(self: *const Self) ?block_position.Position {
+            if (self.last_error_name.len != 0) return null;
+            return switch (self.phase) {
+                .raw => block_position.inWrapper(self.raw.blockBoundaryPosition() orelse return null, self.raw.total_input, self.total_input, self.total_output),
+                .done => block_position.atByte(self.member_end_offset orelse return null, self.total_output),
+                else => null,
+            };
         }
 
-        fn stepAdmitted(self: *Self, input: []const u8, output: []u8, boundary: bool) Error!core.StepResult {
+        /// Capture the next payload block for raw restart, not wrapper replay.
+        pub fn captureBlockRestart(self: *const Self, history_output: []u8) Error!block_restart.Point {
+            return block_restart.captureWrapper(self, std.mem.asBytes(self), history_output);
+        }
+
+        /// Resume raw-DEFLATE decoding after an external scanner consumed the
+        /// `00 00 ff ff` full-flush marker. The wrapper stays in the same
+        /// member; its cumulative counters advance by the skipped payload
+        /// bytes. The member checksums cannot be reconstructed after corrupted
+        /// input, so callers that need the recovered suffix should use
+        /// `ignore_crc32` and `ignore_isize` (the footer is still consumed).
+        pub fn resumeAfterSync(self: *Self, skipped_input: usize) Error!void {
+            if (self.phase != .raw) return error.InvalidStreamState;
+            const resumed_input = try count.addLocal(self.total_input, skipped_input);
+            try self.raw.resumeAfterSync(skipped_input);
+            self.total_input = resumed_input;
+            self.last_error_name = "";
+            self.last_error_phase = .header;
+            self.last_error_member_index = null;
+            self.last_error_member_offset = null;
+            self.last_error_input_offset = null;
+            self.last_error_output_offset = null;
+        }
+
+        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            return self.stepAdmitted(input, output, false, null);
+        }
+
+        /// Observe member headers during this step without buffering them.
+        /// Pass an observer on every call that may consume header bytes; the
+        /// observer is not retained and omitted events are not replayed.
+        /// Do not reenter or mutate the decoder, input, output, history or
+        /// workspace from the callback. Copy borrowed field bytes to keep them.
+        pub fn stepWithHeaderEvents(self: *Self, input: []const u8, output: []u8, observer: HeaderObserver) Error!core.StepResult {
+            return self.stepAdmitted(input, output, false, observer);
+        }
+
+        fn stepAdmitted(self: *Self, input: []const u8, output: []u8, boundary: bool, observer: ?HeaderObserver) Error!core.StepResult {
             const semantic_admitted = try self.admitStep(input, output);
             if (boundary) self.pause_requested = true;
             defer if (boundary) {
@@ -235,7 +300,7 @@ pub fn Decoder(comptime Codec: type) type {
             defer self.raw.semantic_decoder = workspace;
             self.last_step_progress = .{};
             const before = wrapper_count.Before.init(self.total_input, self.total_output);
-            const stepped = self.stepInternal(input, output) catch |err| {
+            const stepped = self.stepInternal(input, output, observer) catch |err| {
                 self.last_step_progress = try before.progress(self.total_input, self.total_output);
                 return self.fail(self.phase, err);
             };
@@ -251,7 +316,7 @@ pub fn Decoder(comptime Codec: type) type {
             return step_borrows.rawAdmission(std.mem.asBytes(self), &self.raw, input, writers);
         }
 
-        fn stepInternal(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        fn stepInternal(self: *Self, input: []const u8, output: []u8, observer: ?HeaderObserver) Error!core.StepResult {
             if (self.input_finished) {
                 if (input.len != 0) return self.fail(self.phase, error.TrailingData);
                 return .{ .status = if (self.phase == .done) .done else .need_input };
@@ -271,8 +336,14 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
+                    wrapper_count.admitMember(self.member_count, self.options.max_members) catch |err| return self.fail(.header, err);
                     self.flags = self.header[3];
-                    self.advanceOptionalPhase();
+                    if (observer) |sink| sink.emit(.{ .start = MemberHeader.fromFixed(
+                        &self.header,
+                        self.member_count,
+                        self.member_offset,
+                    ) });
+                    self.advanceOptionalPhase(observer);
                 },
                 .extra_len => {
                     while (self.xlen_received < 2) {
@@ -293,16 +364,25 @@ pub fn Decoder(comptime Codec: type) type {
                     const n = @min(self.optional_remaining, input.len - input_read);
                     if (n != 0) {
                         const next_input = try count.addLocal(self.total_input, n);
-                        self.header_crc.update(input[input_read..][0..n]);
+                        const bytes = input[input_read..][0..n];
+                        const previous_remaining = self.optional_remaining;
+                        self.header_crc.update(bytes);
                         self.optional_remaining -= n;
                         input_read += n;
                         self.total_input = next_input;
+                        if (observer) |sink| {
+                            const size = std.mem.readInt(u16, &self.xlen_bytes, .little);
+                            sink.emitField(self.member_count, .extra, size - previous_remaining, bytes);
+                        }
                     }
                     if (self.optional_remaining != 0) return result(input_read, output_written, .need_input);
                     self.flags &= ~@as(u8, 0x04);
-                    self.advanceOptionalPhase();
+                    self.advanceOptionalPhase(observer);
                 },
                 .filename, .comment => {
+                    const start = input_read;
+                    const offset = self.optional_remaining;
+                    var terminated = false;
                     while (input_read < input.len) {
                         const next_input = try count.addLocal(self.total_input, 1);
                         const next_optional = std.math.add(usize, self.optional_remaining, 1) catch return self.fail(self.phase, error.IntegerOverflow);
@@ -311,16 +391,21 @@ pub fn Decoder(comptime Codec: type) type {
                         input_read += 1;
                         self.total_input = next_input;
                         self.optional_remaining = next_optional;
-                        if (self.optional_remaining > self.options.max_header_metadata_len) return self.fail(self.phase, error.OutputLimitExceeded);
+                        if (next_optional > self.options.max_header_metadata_len) return self.fail(self.phase, error.OutputLimitExceeded);
                         if (byte == 0) {
-                            self.flags &= if (self.phase == .filename) ~@as(u8, 0x08) else ~@as(u8, 0x10);
-                            self.optional_remaining = 0;
-                            self.advanceOptionalPhase();
+                            terminated = true;
                             break;
                         }
                     }
-                    if (input_read == input.len and (self.phase == .filename or self.phase == .comment))
-                        return result(input_read, output_written, .need_input);
+                    if (observer) |sink| {
+                        const field: HeaderField = if (self.phase == .filename) .filename else .comment;
+                        const end = input_read - @intFromBool(terminated);
+                        sink.emitField(self.member_count, field, offset, input[start..end]);
+                    }
+                    if (!terminated) return result(input_read, output_written, .need_input);
+                    self.flags &= if (self.phase == .filename) ~@as(u8, 0x08) else ~@as(u8, 0x10);
+                    self.optional_remaining = 0;
+                    self.advanceOptionalPhase(observer);
                 },
                 .header_crc => {
                     while (self.header_crc_received < 2) {
@@ -334,7 +419,7 @@ pub fn Decoder(comptime Codec: type) type {
                     const expected = std.mem.readInt(u16, &self.header_crc_bytes, .little);
                     if (expected != @as(u16, @truncate(self.header_crc.digest()))) return self.fail(.header_crc, error.BadGzipHeader);
                     self.flags &= ~@as(u8, 0x02);
-                    self.phase = .raw;
+                    self.completeHeader(observer);
                 },
                 .raw => {
                     // Drain symbols already present in the raw bit reservoir
@@ -395,10 +480,21 @@ pub fn Decoder(comptime Codec: type) type {
                     try count.advance(&self.member_count, 1);
                     self.member_end_offset = self.total_input;
                     self.prefix.reset();
-                    self.phase = if (self.options.allow_concatenated) .between_members else .done;
+                    self.phase = if (self.options.allow_concatenated or self.options.allow_trailing_zero_padding) .between_members else .done;
                 },
                 .between_members => {
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
+                    if (self.padding_started or (self.options.allow_trailing_zero_padding and input[input_read] == 0)) {
+                        const suffix = input[input_read..];
+                        var zeros: usize = 0;
+                        while (zeros < suffix.len and suffix[zeros] == 0) : (zeros += 1) {}
+                        self.total_input = try count.addLocal(self.total_input, zeros);
+                        self.padding_started = true;
+                        input_read += zeros;
+                        if (input_read != input.len) return self.fail(.between_members, error.TrailingData);
+                        return result(input_read, output_written, .need_input);
+                    }
+                    if (!self.options.allow_concatenated) return self.fail(.between_members, error.TrailingData);
                     if (!self.options.allow_trailing_data) {
                         self.beginMember(self.total_input);
                         continue;
@@ -432,7 +528,7 @@ pub fn Decoder(comptime Codec: type) type {
             if (!std.mem.eql(u8, self.header[0..2], &.{ 0x1f, 0x8b })) return self.fail(.header, error.BadGzipHeader);
             if (self.header[2] != 8 or (self.header[3] & 0xe0) != 0) return self.fail(.header, error.BadGzipHeader);
         }
-        fn advanceOptionalPhase(self: *Self) void {
+        fn advanceOptionalPhase(self: *Self, observer: ?HeaderObserver) void {
             if ((self.flags & 0x04) != 0) {
                 self.phase = .extra_len;
             } else if ((self.flags & 0x08) != 0) {
@@ -442,8 +538,15 @@ pub fn Decoder(comptime Codec: type) type {
             } else if ((self.flags & 0x02) != 0) {
                 self.phase = .header_crc;
             } else {
-                self.phase = .raw;
+                self.completeHeader(observer);
             }
+        }
+        fn completeHeader(self: *Self, observer: ?HeaderObserver) void {
+            self.phase = .raw;
+            if (observer) |sink| sink.emit(.{ .complete = .{
+                .member_index = self.member_count,
+                .header_end_offset = self.total_input,
+            } });
         }
         fn beginMember(self: *Self, offset: Count) void {
             // RFC 1952 members are independent streams: a later member cannot

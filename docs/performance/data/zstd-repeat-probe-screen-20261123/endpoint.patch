@@ -1,0 +1,107 @@
+diff --git a/src/zstd/match/double_fast.zig b/src/zstd/match/double_fast.zig
+index b5a4d0f2..64b1ba4d 100644
+--- a/src/zstd/match/double_fast.zig
++++ b/src/zstd/match/double_fast.zig
+@@ -2,6 +2,7 @@ const std = @import("std");
+ const lz77 = @import("../../lz77.zig");
+ const sequence_plan = @import("double_fast/sequence_plan.zig");
+ const sequence_parser = @import("double_fast/sequence_parser.zig");
++const repeat_probe = @import("double_fast/repeat_probe.zig");
+
+ // Upstream dfast gives both tables enough index bits to avoid letting common
+ // four-byte JSON/source prefixes continuously evict useful candidates. These
+@@ -20,11 +21,7 @@ pub const sequence_plan_input_min = sequence_parser.input_len_min;
+ // rep0 matches displaced cheaper local structure on JSON and binary blocks.
+ const max_long_rep_probe_distance = 512;
+
+-const Match = struct {
+-    position: usize = 0,
+-    length: usize = 0,
+-    distance: usize = 0,
+-};
++const Match = repeat_probe.Match;
+
+ /// Experimental Zstd double-fast parser. The control flow follows upstream
+ /// zstd's `zstd_double_fast.c`: a four-byte table supplies cheap nearby
+@@ -105,12 +102,14 @@ pub fn planReuse(
+             position += 1;
+             continue;
+         }
+-        if (reps[0] <= position) {
+-            const current_rep = matchAtDistance(input, position, reps[0], options);
+-            if (current_rep.length + 1 >= best.length and
+-                repeatRank(current_rep.distance, reps, position - anchor) <
+-                    repeatRank(best.distance, reps, position - anchor))
+-            {
++        // A rep0 match can replace this candidate only at a better repcode
++        // rank. Check that policy before evaluating its full match length.
++        if (reps[0] <= position and
++            repeatRank(reps[0], reps, position - anchor) <
++                repeatRank(best.distance, reps, position - anchor))
++        {
++            const current_rep = repeat_probe.atLeast(input, position, reps[0], options, best.length - 1);
++            if (current_rep.length + 1 >= best.length) {
+                 best = current_rep;
+             }
+         }
+@@ -123,7 +122,7 @@ pub fn planReuse(
+             // repcodes around hash hits.
+             for (reps[1..]) |distance| {
+                 if (distance > position) continue;
+-                const recent = matchAtDistance(input, position, distance, options);
++                const recent = repeat_probe.atLeast(input, position, distance, options, best.length - 1);
+                 if (recent.length + 1 >= best.length) {
+                     best = recent;
+                     break;
+diff --git a/src/zstd/match/double_fast/sequence_parser.zig b/src/zstd/match/double_fast/sequence_parser.zig
+index 8882dbeb..d178883e 100644
+--- a/src/zstd/match/double_fast/sequence_parser.zig
++++ b/src/zstd/match/double_fast/sequence_parser.zig
+@@ -2,6 +2,7 @@ const std = @import("std");
+ const builtin = @import("builtin");
+ const lz77 = @import("../../../lz77.zig");
+ const sequence_plan = @import("sequence_plan.zig");
++const repeat_probe = @import("repeat_probe.zig");
+
+ const text_section = switch (builtin.object_format) {
+     .elf => ".vort_zstd_fast_records",
+@@ -21,11 +22,7 @@ const max_long_rep_probe_distance = 512;
+ pub const input_len_min = 64 * 1024 + 1;
+ pub const input_len_max = 128 * 1024;
+
+-const Match = struct {
+-    position: usize = 0,
+-    length: usize = 0,
+-    distance: usize = 0,
+-};
++const Match = repeat_probe.Match;
+
+ /// Wide-block double-fast parser that records only match metadata. The token
+ /// parser remains independent so compact-record code generation cannot perturb
+@@ -123,19 +120,19 @@ fn planReuseImpl(
+             position += 1;
+             continue;
+         }
+-        if (reps[0] <= position) {
+-            const current_rep = matchAtDistance(input, position, reps[0], options);
+-            if (current_rep.length + 1 >= best.length and
+-                repeatRank(current_rep.distance, reps, position - anchor) <
+-                    repeatRank(best.distance, reps, position - anchor))
+-            {
++        if (reps[0] <= position and
++            repeatRank(reps[0], reps, position - anchor) <
++                repeatRank(best.distance, reps, position - anchor))
++        {
++            const current_rep = repeat_probe.atLeast(input, position, reps[0], options, best.length - 1);
++            if (current_rep.length + 1 >= best.length) {
+                 best = current_rep;
+             }
+         }
+         if (repeatRank(best.distance, reps, position - anchor) == 3) {
+             for (reps[1..]) |distance| {
+                 if (distance > position) continue;
+-                const recent = matchAtDistance(input, position, distance, options);
++                const recent = repeat_probe.atLeast(input, position, distance, options, best.length - 1);
+                 if (recent.length + 1 >= best.length) {
+                     best = recent;
+                     break;

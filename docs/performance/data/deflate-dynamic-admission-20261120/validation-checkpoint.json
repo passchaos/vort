@@ -1,0 +1,55 @@
+{
+  "recorded_utc": "2026-11-20T16:46:06.627986+00:00",
+  "goal_status": "active",
+  "mainline_functional_gate": "17/17 build steps;24/24 native/x86;actual WASI;complete library compilation",
+  "mainline_deep_gate": "7/7;14684 valid;408571 cuts;498324 mutations;8 raw+2 gzip invalid accepts removed;ordered input/mutation digests unchanged",
+  "pending_work": [
+    "Continue targeted mutation/replay coverage for codec and converter boundaries",
+    "Whole-operation performance adoption remains a separate stable-host gate; record patch remains unadopted"
+  ],
+  "benchmark_agent": "/root/brotli_encoder_borrows",
+  "source_provenance": "source-provenance.json",
+  "git_state": "Controlled changes staged; original LZ77 experiment unstaged and preserved; uncommitted per AGENTS.md",
+  "benchmark_decision": "Stopped without a clean15-sweep epoch; record patch remains unadopted; broker affinity restoration independently verified",
+  "remaining_job": {
+    "session_id": 34953,
+    "command": "zig build -j2 test check check-wasm --summary all",
+    "log": "full-final-gate.log",
+    "terminal_exit_code": 0,
+    "receipt": "full-final-gate-receipt.json"
+  },
+  "next_isolated_functional_work": {
+    "agent": "/root/deflate_encoder_borrow_tests",
+    "directory": "/tmp/vort-puffin-empty-distance.6tqeoW",
+    "verified_public_probes": "empty-DIST Puff/Huff218B exact991bits restores124B; invalid HLIT/HDIST now refused",
+    "pending_final_regressions": [],
+    "frozen_validation": "14/14 native, x86 and actual WASI; patch SHA 1ac63a4552aef3ad23bce2c8b4cf537e8881a2e90768d63d7afcd3a566d8812c",
+    "maximum_distance_followup": "Separate main-owner extension preserves distance32768 at every bit offset; isolated public Android OTA root38/38 passes",
+    "evidence": "../puffin-dynamic-bounds-20261121/producer/provenance.json",
+    "producer_changed_main_source": false,
+    "mainline_integrated": true
+  },
+  "next_isolated_resource_work": {
+    "agent": "/root/deflate_encoder_borrow_tests",
+    "directory": "/tmp/vort-puffin-output-budget.1nBVFt",
+    "before": "65535B stored/fixed literals cap16: FBA1024 OutOfMemory; heap OutputLimitExceeded after320654 cumulative requested bytes/17alloc; cleanup balanced",
+    "after_probe": "FBA1024 OutputLimitExceeded; heap389 cumulative requested bytes/3alloc; cleanup balanced",
+    "scope": "Logical serialized output quota, including pending literals; physical allocator capacity is separate",
+    "pending": [],
+    "producer_changed_main_source": false,
+    "mainline_integrated": true
+  },
+  "puffin_mainline": {
+    "source": "../puffin-dynamic-bounds-20261121/mainline-source-provenance.json",
+    "debug": "20/20 steps;246/246 native;39/39 actual WASI;whole library compiled",
+    "releasefast": "11/11 steps;78/78 native/x86;39/39 actual WASI",
+    "cli": "7/7 steps;help smoke exit0",
+    "integrated": [
+      "empty distance/count/bit/token checks",
+      "maximum distance32768",
+      "SKIP5 padding representability guard",
+      "early serialized-output quota"
+    ],
+    "full_execution_scope": "408-step/5827-pass/two-skip full execution precedes Puffin integration"
+  }
+}

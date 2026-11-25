@@ -10,6 +10,9 @@ const total_budget = @import("../../encode/total_budget.zig");
 const controls = @import("../../encode/controls.zig");
 const prefix = @import("../../prefix/binding.zig");
 const prefix_errors = @import("prefix_errors.zig");
+const step_borrows = @import("step_borrows.zig");
+const skippable_wire = @import("../../frame/skippable.zig");
+const skippable_stream = @import("../skippable_stream.zig");
 
 /// Build an incremental Zstd frame encoder. One bounded block is retained;
 /// completed raw, RLE, or entropy-coded blocks drain through arbitrary caller
@@ -41,6 +44,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         stream_output: Count = 0,
         frame_count: Count = 0,
         skippable_only: bool = false,
+        streamed_skippable: ?skippable_stream.State = null,
 
         const Self = @This();
         const allow_zero_dictionary_id = if (@hasDecl(Codec, "allow_zero_dictionary_id")) Codec.allow_zero_dictionary_id else false;
@@ -56,6 +60,8 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             pending_output: usize,
             frame_count: Count,
             frame_index: Count,
+            skippable_streaming: bool = false,
+            skippable_remaining: u32 = 0,
             finishing: bool,
             done: bool,
         };
@@ -136,26 +142,31 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         }
         pub fn setPrefixWithDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
             if (!self.setterEligible()) return error.InvalidStreamState;
+            const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateSetterBorrows(selected);
             self.clearBinding();
-            self.dictionary = if (prefix.hasBytes(dictionary)) dictionary else null;
+            self.dictionary = selected;
             self.dictionary_id = if (self.dictionary) |dict| dict.id else null;
             self.options = withPrefix(self.options, self.dictionary_id orelse 0);
             self.prefix_state.install(dictionary);
         }
         pub fn setDictionary(self: *Self, dictionary: Codec.Dictionary) Error!void {
             if (!self.setterEligible()) return error.InvalidStreamState;
+            const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
+            try self.validateSetterBorrows(selected);
             if (prefix.hasBytes(dictionary)) {
                 if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
                 if (@hasDecl(Codec, "validatePrefixMetadata")) try Codec.validatePrefixMetadata(dictionary);
             }
             self.clearBinding();
-            self.dictionary = if (prefix.hasBytes(dictionary)) dictionary else null;
+            self.dictionary = selected;
             self.dictionary_id = if (self.dictionary) |dict| dict.id else null;
             if (@hasField(Codec.Options, "dictionary_id")) self.options.dictionary_id = self.dictionary_id orelse 0;
             if (@hasField(Codec.Options, "dictionary_usage")) self.options.dictionary_usage = .persistent;
         }
         pub fn clearDictionary(self: *Self) Error!void {
             if (!self.setterEligible()) return error.InvalidStreamState;
+            try self.validateSetterBorrows(null);
             self.clearBinding();
         }
         fn clearCodingState(self: *Self) void {
@@ -261,6 +272,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.dictionary_id = dictionary_id;
             self.dictionary = dictionary;
             self.skippable_only = false;
+            self.streamed_skippable = null;
             self.prefix_failure = null;
         }
         pub fn nextFrame(self: *Self, options: Codec.Options) Error!void {
@@ -276,6 +288,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             const id = if (retained) self.dictionary_id else null;
             const dictionary = if (retained) self.dictionary else null;
             const configured = if (retained) withPrefix(options, id orelse 0) else options;
+            try self.validateNextFrameBorrows(configured, dictionary);
             try Codec.validate(configured, expected, id);
             try self.bindAllocator(configured);
             self.resetFrame(configured, expected, id, dictionary);
@@ -293,6 +306,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 const selected = if (prefix.hasBytes(dictionary)) @as(?Codec.Dictionary, dictionary) else null;
                 const id: ?u32 = if (selected) |dict| dict.id else null;
                 const configured = withPrefix(options, id orelse 0);
+                try self.validateNextFrameBorrows(configured, selected);
                 try Codec.validate(configured, expected_input_len, id);
                 try self.bindAllocator(configured);
                 self.resetFrame(configured, expected_input_len, id, selected);
@@ -300,6 +314,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 return;
             }
             if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
+            try self.validateNextFrameBorrows(options, dictionary);
             try Codec.validate(options, expected_input_len, dictionary.id);
             try self.bindAllocator(options);
             self.resetFrame(options, expected_input_len, dictionary.id, dictionary);
@@ -312,14 +327,17 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 .frame_input = self.total_input,
                 .frame_output = self.total_output,
                 .buffered_input = self.block.items.len,
-                .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_output = if (self.streamed_skippable) |*active| active.pendingHeaderLen() else self.pending.items.len - self.pending_offset,
                 .frame_count = self.frame_count,
                 .frame_index = if (self.done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
+                .skippable_streaming = self.streamed_skippable != null,
+                .skippable_remaining = if (self.streamed_skippable) |active| active.remaining else 0,
                 .finishing = self.finishing,
                 .done = self.done,
             };
         }
         pub fn finish(self: *Self) void {
+            if (self.streamed_skippable != null) return;
             self.finishing = true;
             self.flush_requested = false;
         }
@@ -328,7 +346,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         /// are idempotent; the request drains through the normal tiny-output
         /// path and callers may resume input once `need_input` is returned.
         pub fn flush(self: *Self) void {
-            if (!self.finishing and !self.done) self.flush_requested = true;
+            if (!self.finishing and !self.done and self.streamed_skippable == null) self.flush_requested = true;
         }
         /// Queue a standard Zstd skippable frame at a fresh or drained boundary.
         /// Start the next data frame with `nextFrame` after this drains.
@@ -338,6 +356,8 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             }
             if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
             if ((!self.done and !prefixUsage(self.options)) or !self.setterEligible()) return error.InvalidBlockPlan;
+            _ = std.math.add(usize, skippable_wire.encoded_len, payload.len) catch return error.IntegerOverflow;
+            try self.validateSkippableBorrows(payload);
             _ = self.prefix_state.activate(.skippable);
             self.prefix_state.busy = true;
             errdefer self.completePrefix();
@@ -348,6 +368,39 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 return @errorCast(self.allocation.mapError(err));
             self.done = false;
             self.skippable_only = true;
+        }
+        /// Start a standard skippable frame at the same boundary as
+        /// `writeSkippable`, with an inline header and no borrowed body.
+        pub fn beginSkippable(self: *Self, skippable_id: u4, payload_len: u32) Error!void {
+            if (@hasField(Codec.Options, "format")) {
+                if (self.options.format == .magicless) return error.InvalidBlockPlan;
+            }
+            if ((!self.done and !prefixUsage(self.options)) or !self.setterEligible()) return error.InvalidBlockPlan;
+            try self.validateSkippableBorrows("");
+            const wire_len = skippable_stream.wireLen(payload_len);
+            _ = try count.add(self.total_output, wire_len);
+            _ = try count.add(self.stream_output, wire_len);
+            _ = self.prefix_state.activate(.skippable);
+            self.prefix_state.busy = true;
+            self.streamed_skippable = .init(skippable_id, payload_len);
+            self.skippable_only = true;
+            self.done = false;
+        }
+        /// Output the inline header and copy body bytes directly into caller
+        /// output. Input progress counts only body bytes, none are retained.
+        /// `.done` completes this skippable frame without advancing data count.
+        pub fn stepSkippable(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            const active = if (self.streamed_skippable) |*value| value else return error.InvalidStreamState;
+            try self.validateStepBorrows(input, output);
+            var progress: core.Progress = .{};
+            const status = try active.step(input, output, &progress, &self.total_output, &self.stream_output, std.math.maxInt(Count));
+            if (status == .done) {
+                self.streamed_skippable = null;
+                self.skippable_only = false;
+                self.done = true;
+                self.completePrefix();
+            }
+            return .{ .progress = progress, .status = status };
         }
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             return self.stepCommon(input, output, null);
@@ -363,24 +416,77 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             return self.stepCommon(input, output, directive);
         }
         fn stepCommon(self: *Self, input: []const u8, output: []u8, directive: ?prefix.Directive) Error!core.StepResult {
+            if (self.streamed_skippable != null) return error.InvalidStreamState;
+            if (!self.done or input.len != 0) try self.validateStepBorrows(input, output);
             if (self.prefix_failure) |err| return err;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
             if ((self.finishing or self.flush_requested or self.skippable_only) and input.len != 0) return error.TrailingData;
+            // A deterministic pledge refusal must not activate a prefix,
+            // accept a partial offer, or drain already pending wire bytes.
+            const offered_end = count.addLocal(self.total_input, input.len) catch |err| return self.failedPrefix(err);
+            _ = count.addLocal(self.stream_input, input.len) catch |err| return self.failedPrefix(err);
+            if (!self.skippable_only and !self.finishing) if (self.expected_input_len) |expected| {
+                if (offered_end > expected or (directive == .end and offered_end != expected)) return error.SizeMismatch;
+            };
             const activated = self.prefix_state.activate(if (self.skippable_only) .skippable else .frame);
             self.prefix_state.busy = true;
             if (activated and !self.skippable_only) if (@hasDecl(Codec, "validatePrefixMetadata")) {
                 if (self.dictionary) |dictionary| Codec.validatePrefixMetadata(dictionary) catch |err| return self.failedPrefix(err);
             };
-            // A call may accept input across several blocks. Refuse an
-            // unrepresentable offered slice before draining a frame header or
-            // pending block; commit counters only as bytes are accepted below.
-            _ = count.addLocal(self.total_input, input.len) catch |err| return self.failedPrefix(err);
-            _ = count.addLocal(self.stream_input, input.len) catch |err| return self.failedPrefix(err);
+            if (self.finishing and !self.skippable_only) if (self.expected_input_len) |expected| {
+                if (self.total_input != expected) return self.failedPrefix(error.SizeMismatch);
+            };
             self.bindAllocator(self.options) catch |err| return self.failedPrefix(err);
             return self.stepImpl(input, output, directive) catch |err| return self.failedPrefix(@errorCast(self.allocation.mapError(err)));
+        }
+        fn validateStepBorrows(self: *const Self, input: []const u8, output: []u8) Error!void {
+            var admission = try step_borrows.Admission.init(input, output, self.options);
+            if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            if (self.dictionary) |dictionary| try admission.dictionary(dictionary);
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateNextFrameBorrows(self: *const Self, options: Codec.Options, dictionary: ?Codec.Dictionary) Error!void {
+            var admission = try step_borrows.Admission.init("", &.{}, options);
+            // An exclusive lease replaces its profile before configure reports.
+            // A shared lease retains its external owner's profile binding.
+            if (self.allocation.shared) if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            if (dictionary) |selected| try admission.dictionary(selected);
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateSetterBorrows(self: *const Self, dictionary: ?Codec.Dictionary) Error!void {
+            var admission = try step_borrows.Admission.init("", &.{}, self.options);
+            // Setters keep the current allocator/profile binding, including an
+            // exclusive lease whose next step may select another profile.
+            if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            if (dictionary) |selected| try admission.dictionary(selected);
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateSkippableBorrows(self: *const Self, payload: []const u8) Error!void {
+            var admission = try step_borrows.Admission.init(payload, &.{}, self.options);
+            if (self.allocation.lease) |lease| if (lease.state) |state| {
+                if (state.profile) |profile| try admission.observer(std.mem.asBytes(profile));
+            };
+            // The payload is copied by this call. Skippable emission does not
+            // read dictionary contents or prepared entropy state.
+            try self.validateOwnedBorrows(&admission);
+        }
+        fn validateOwnedBorrows(self: *const Self, admission: *const step_borrows.Admission) Error!void {
+            try admission.owned(std.mem.asBytes(self));
+            try admission.list(self.block);
+            try admission.list(self.pending);
+            try admission.list(self.history.bytes);
+            try admission.list(self.history.index.recent_entries);
+            try admission.list(self.history.index.long_entries);
+            if (self.allocation.lease) |lease| if (lease.state) |state| try admission.owned(std.mem.asBytes(state));
         }
         fn stepImpl(self: *Self, input: []const u8, output: []u8, directive: ?prefix.Directive) Error!core.StepResult {
             // Final completion must remain representable before any of this

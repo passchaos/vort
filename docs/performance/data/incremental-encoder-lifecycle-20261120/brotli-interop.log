@@ -1,0 +1,12 @@
+br_upstream_multiblock_diff=ok cases=98 one_shot_cases=8 large_window_decode_cases=7 broad_generated_cases=7056 broad_progressive_cases=7056 real_file_cases=0 real_progressive_cases=0 real_options_per_file=4 real_quality_mask=0x911 real_mode_mask=0x7 real_window_mask=0x1110400 planned_window_cases=35 planned_literal_split_cases=13 planned_command_split_cases=9 planned_distance_split_cases=10 planned_distance_parameter_cases=1 planned_chunked_window_cases=4 planned_quality_block_size_cases=5 planned_stream_segmentation_cases=2 planned_large_window_cases=2 planned_large_quality_cases=1 planned_metadata_cases=5 planned_extended_dictionary_cases=1 progress_matrix_streams=26 progress_matrix_runs=1401 summaries_unsupported=0 caller_history_summaries=8 allocating_summary_history_cases=1 high_tree_truncation_cases=64 wide_literal_type_cases=0 maximum_literal_type_cases=1 maximum_command_type_cases=1 complete_static_transform_cases=1 incremental_static_transform_cases=121 incremental_static_multiblock_cases=1 extended_header_cases=1 extended_header_owned_cases=1 operation_schedule_cases=8 invalid_operation_schedule_cases=2 reference_version=1000009
+Build Summary: 7/7 steps succeeded
+run-br-upstream-multiblock-diff success
++- run exe vort-br-upstream-multiblock-diff success 25s
+   +- compile exe vort-br-upstream-multiblock-diff ReleaseFast native success 2m MaxRSS:3G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:39M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:39M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)
+

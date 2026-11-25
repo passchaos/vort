@@ -99,6 +99,8 @@ def main() -> int:
             ("--encoded-input", str(frame)),
             ("--input", str(source), "--name", "bad,name"),
             ("--input", str(source), "--case", "tiny"),
+            # Library override is all-or-nothing; a partial set must be rejected.
+            ("--input", str(source), "--libbrotli-dec", "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1"),
         ):
             failed = run(executable, *invalid_args, check=False)
             assert failed.returncode != 0, (invalid_args, failed.stdout, failed.stderr)

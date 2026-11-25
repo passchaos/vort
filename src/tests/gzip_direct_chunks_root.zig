@@ -25,4 +25,13 @@ pub fn contracts(comptime V: type) !void {
 
     try decoder.resetFromChunksWithOptionsExactSizeDirect(&chunks, &output, .{}, output.len);
     try std.testing.expectError(error.SizeMismatch, decoder.resetFromChunksWithOptionsExactSizeDirect(&chunks, &output, .{}, output.len + 1));
+
+    const named = [_]u8{ 0x1f, 0x8b, 0x08, 0x08, 0, 0, 0, 0, 0x04, 0x03, 'a', 0 };
+    const named_chunks = [_][]const u8{ named[0..11], named[11..], frame[10..] };
+    @memset(&output, 0xa5);
+    const capped: V.GzipDecodeOptions = .{ .max_header_metadata_len = 1 };
+    try std.testing.expectError(error.OutputLimitExceeded, V.decodeGzipChunksIntoWithOptions(&named_chunks, &output, capped));
+    try std.testing.expect(std.mem.allEqual(u8, &output, 0xa5));
+    try std.testing.expectEqual(@as(usize, 5), try V.decodeGzipChunksIntoWithOptions(&named_chunks, &output, .{ .max_header_metadata_len = 2 }));
+    try std.testing.expectEqualStrings("hello", &output);
 }

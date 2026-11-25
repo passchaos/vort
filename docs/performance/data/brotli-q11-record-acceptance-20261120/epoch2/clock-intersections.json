@@ -1,0 +1,12 @@
+{
+  "actual_sample_clock_intersections": [
+    {
+      "interval": [
+        977360674686442,
+        977360801400159
+      ],
+      "actual_clock_intersections": []
+    }
+  ],
+  "ratio_values_not_used": true
+}

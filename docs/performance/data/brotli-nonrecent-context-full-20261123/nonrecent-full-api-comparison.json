@@ -1,0 +1,12 @@
+{
+  "schema": "vort.brotli.full-api-comparison.v1",
+  "ok": true,
+  "api_entries": 144,
+  "contract_failures": {
+    "baseline": 0,
+    "variant": 0
+  },
+  "memory_changes": [],
+  "memory_policy": "successful peaks may decrease; each own cap/cap-1 contract enforced",
+  "differences": []
+}

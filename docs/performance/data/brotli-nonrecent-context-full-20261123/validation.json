@@ -1,0 +1,33 @@
+{
+  "baseline_revision": "b929184e4f815773f9fde0d2c40224a0a5dcf938",
+  "candidate_sources": {
+    "src/br.zig": "972057aefed5052f4b859ace1aa47c9a49a5e7f29019ba58be5ce8efb0ec0e53",
+    "src/br/encoder/prepared_command_distance.zig": "dc6f61fb847bea9fd67b6d56337179f51e671e06b5e50948e48125039d3c22f8",
+    "src/br/encoder/context_candidate_group.zig": "9fd325f49f8a007feb1c68502c46789a86917358cad82b546ed564930ffe33c0",
+    "src/br/encoder/prepared_literal_emission.zig": "e27d744129586b65c22dab300f6174083bb2b16416d456148485bc21662d6ea4",
+    "src/br/encoder/nonrecent_context_tests.zig": "ddb7977a9d587e6ac1fb6b5c28b403edb5eaaa83c9cd6db540c2a3702110fc6b",
+    "src/br/encoder/nonrecent_context_resources_tests.zig": "70ba0e39f73af66a990f6224a94855a1f294c0aec9bf6cfec62173b396476c09",
+    "src/br/encoder/nonrecent_context_fixtures/dickens-8k.txt": "602ff7349c8ca821c5d560915480aff05096986b89396b059b09ebce046dc48c",
+    "proof-artifacts/nonrecent-context.patch": "000519b3f4d285385d4603790e6cf486ee72f1506b02adbda6389573a7a66e67"
+  },
+  "candidate_executable_sha256": "0dfc1f4f5fe3fd7da8bee8bbe01c5fa47b12d772a4678fd926eb3b0bd1a662f0",
+  "fixed_matrix": {
+    "target_sizes": [
+      8192,
+      65536
+    ],
+    "control_sizes": [
+      4096
+    ],
+    "target_rows": 48,
+    "control_rows": 24,
+    "source_eligibility_cutoff": 8192
+  },
+  "fullwire_passed": 50,
+  "expanded_public_api_entries": 156,
+  "public_api_differences": 0,
+  "actual_x86_wasm_passed": true,
+  "adopted": false,
+  "reason": "target geomean below1.03 and3rows below0.98 despite CIexcludingparity",
+  "power_policy": "CPU2,physicalcore2,SMTsibling10,intel_pstate/powersave,ReleaseFast,singlethread,libbrotli1.2.0quality/generic/window16 matched"
+}

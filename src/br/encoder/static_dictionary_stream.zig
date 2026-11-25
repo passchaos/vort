@@ -69,7 +69,7 @@ pub fn encodeChunksWithOptionsAppendReuse(
         if (chunk.len == 0) continue;
         try feed(Encoder, encoder, out, allocator, chunk, &scratch);
         if (chunk_index != info.last_non_empty.?) {
-            encoder.flush();
+            encoder.endChunk();
             try drainFlush(Encoder, encoder, out, allocator, &scratch);
         }
     }

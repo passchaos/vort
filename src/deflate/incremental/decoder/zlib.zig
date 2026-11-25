@@ -3,8 +3,11 @@ const core = @import("../../../core.zig");
 const count = core.stream_count;
 const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
+const zlib_header = @import("../../zlib_header.zig");
 const wrapper_count = @import("wrapper_count.zig");
 const clone_storage = @import("../clone_storage.zig");
+const block_position = @import("../block_boundary_position.zig");
+const block_restart = @import("../block_restart.zig");
 const step_borrows = @import("step_borrows.zig");
 const dictionary_borrows = @import("dictionary_borrows.zig");
 
@@ -52,6 +55,10 @@ pub fn Decoder(comptime Codec: type) type {
         pub const CloneStorage = Codec.RawDecoder.CloneStorage;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
+            /// Maximum CMF/CINFO-declared window (8 through 15 bits).
+            max_window_bits: u4 = 15,
+            /// Maximum zlib members per logical stream, including empty ones.
+            max_members: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
             allow_concatenated: bool = false,
             /// Ignore the Adler comparison while still reading a full footer
@@ -296,6 +303,35 @@ pub fn Decoder(comptime Codec: type) type {
             return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
         }
 
+        /// Absolute payload checkpoint or the end of the last validated footer.
+        pub fn blockBoundaryPosition(self: *const Self) ?block_position.Position {
+            if (self.last_error_name.len != 0) return null;
+            return switch (self.phase) {
+                .raw => block_position.inWrapper(self.raw.blockBoundaryPosition() orelse return null, self.raw.total_input, self.total_input, self.total_output),
+                .done => block_position.atByte(self.member_end_offset orelse return null, self.total_output),
+                else => null,
+            };
+        }
+
+        /// Capture the next payload block for raw restart, not wrapper replay.
+        pub fn captureBlockRestart(self: *const Self, history_output: []u8) Error!block_restart.Point {
+            return block_restart.captureWrapper(self, std.mem.asBytes(self), history_output);
+        }
+
+        /// Resume raw-DEFLATE decoding after an external scanner consumed the
+        /// `00 00 ff ff` full-flush marker. The wrapper stays in the same
+        /// member; its cumulative counters advance by the skipped payload
+        /// bytes. The member checksum cannot be reconstructed after corrupted
+        /// input, so callers that need the recovered suffix should use
+        /// `ignore_adler` (the footer is still consumed).
+        pub fn resumeAfterSync(self: *Self, skipped_input: usize) Error!void {
+            if (self.phase != .raw) return error.InvalidStreamState;
+            const resumed_input = try count.addLocal(self.total_input, skipped_input);
+            try self.raw.resumeAfterSync(skipped_input);
+            self.total_input = resumed_input;
+            self.clearError();
+        }
+
         fn admitStep(self: *const Self, input: []const u8, output: []u8) Error!bool {
             const writers = if (self.input_finished or self.phase == .done)
                 output[0..0]
@@ -334,6 +370,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
+                    wrapper_count.admitMember(self.stream_count, self.options.max_members) catch |err| return self.fail(.header, err);
                     self.phase = if ((self.header[1] & 0x20) != 0) .dictid else .raw;
                 },
                 .dictid => {
@@ -426,6 +463,7 @@ pub fn Decoder(comptime Codec: type) type {
                         switch (probed.decision) {
                             .need_input => return result(input_read, output_written, .need_input),
                             .trailing => {
+                                try self.validateExpectedOutput();
                                 self.phase = .done;
                                 return result(input_read, output_written, .done);
                             },
@@ -449,10 +487,8 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn validateHeader(self: *Self) Error!void {
-            const cmf = self.header[0];
-            const flg = self.header[1];
-            if ((cmf & 0x0f) != 8 or (cmf >> 4) > 7) return self.fail(.header, error.BadZlibHeader);
-            if ((@as(u16, cmf) << 8 | flg) % 31 != 0) return self.fail(.header, error.BadZlibHeader);
+            const window_bits = zlib_header.windowBits(self.header[0], self.header[1]) catch |err| return self.fail(.header, err);
+            zlib_header.admitWindow(window_bits, self.options.max_window_bits) catch |err| return self.fail(.header, err);
         }
         fn beginStream(self: *Self) void {
             self.raw.reset();

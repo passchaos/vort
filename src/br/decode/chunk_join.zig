@@ -3,9 +3,27 @@
 const std = @import("std");
 const alias = @import("alias.zig");
 const shared = @import("../shared_dictionary.zig");
-const serialized = @import("../serialized_dictionary.zig");
 
 pub const Error = error{ IntegerOverflow, OutputTooSmall, InvalidBlockPlan, CorruptFrame };
+
+pub const PreflightBorrows = struct {
+    history: []const u8,
+    output: []const u8,
+    profile: []const u8 = &.{},
+    decoder: []const u8 = &.{},
+    prior_output: []const u8 = &.{},
+};
+
+/// Check every writable preflight borrow before joining or recording progress.
+/// An eager reset may reuse its previous destination, but neither history nor
+/// the compressed join may overwrite previously published data.
+pub fn validatePreflight(chunks: []const []const u8, scratch: []u8, dictionary: shared.Dictionary, borrows: PreflightBorrows) Error!void {
+    const b = borrows;
+    try validateObserver(chunks, scratch, &.{ b.history, b.output, b.decoder, b.prior_output }, dictionary, b.profile);
+    try validateObserver(chunks, scratch, &.{ b.output, b.decoder, b.prior_output }, dictionary, b.history);
+    try validateObserver(chunks, scratch, &.{b.decoder}, dictionary, b.output);
+    try validateObserver(chunks, scratch, &.{b.prior_output}, dictionary, b.decoder);
+}
 
 pub fn join(chunks: []const []const u8, scratch: []u8, protected: []const []const u8, dictionary: shared.Dictionary) Error![]const u8 {
     // Check both table extents before reading their first descriptor. In
@@ -28,7 +46,7 @@ pub fn join(chunks: []const []const u8, scratch: []u8, protected: []const []cons
         else => return error.CorruptFrame,
     };
     if (dictionary.serialized) |view| {
-        if (!nestedCountsSafe(view)) return error.CorruptFrame;
+        if (!alias.serializedCountsSafe(view)) return error.CorruptFrame;
     }
     if (try dictionaryOverlaps(joined, dictionary)) return error.InvalidBlockPlan;
 
@@ -75,12 +93,6 @@ pub fn validateObserver(chunks: []const []const u8, scratch: []u8, protected: []
     if (try dictionaryOverlaps(observer_span, dictionary)) return error.InvalidBlockPlan;
 }
 
-fn nestedCountsSafe(view: *const serialized.Dictionary) bool {
-    return view.word_list_count <= view.word_lists.len and
-        view.transform_list_count <= view.transform_lists.len and
-        view.dictionary_count <= view.dictionaries.len;
-}
-
 fn dictionaryOverlaps(span: []const u8, dictionary: shared.Dictionary) Error!bool {
     // An excessive count is rejected by scalar validation in join. Protect a
     // representable descriptor-table span without traversing a forged array;
@@ -93,23 +105,7 @@ fn dictionaryOverlaps(span: []const u8, dictionary: shared.Dictionary) Error!boo
     if (dictionary.raw_prefixes.len <= shared.max_raw_prefixes) {
         for (dictionary.raw_prefixes) |prefix| if (alias.overlaps(span, prefix)) return true;
     }
-    if (dictionary.serialized) |view| {
-        if (alias.overlaps(span, std.mem.asBytes(view)) or
-            alias.overlaps(span, view.encoded) or
-            alias.overlaps(span, view.raw_prefix)) return true;
-        // The geometry pass can still protect each bounded active table when
-        // another count is malformed. join rejects the malformed view before
-        // using any of these descriptor arrays for decoding.
-        if (view.word_list_count <= view.word_lists.len) {
-            for (view.word_lists[0..view.word_list_count]) |words| if (alias.overlaps(span, words.data)) return true;
-        }
-        if (view.transform_list_count <= view.transform_lists.len) {
-            for (view.transform_lists[0..view.transform_list_count]) |transforms| {
-                if (alias.overlaps(span, transforms.prefix_suffix) or alias.overlaps(span, transforms.transforms)) return true;
-                if (transforms.params) |params| if (alias.overlaps(span, params)) return true;
-            }
-        }
-    }
+    if (dictionary.serialized) |view| if (alias.serializedDictionaryOverlaps(span, view)) return true;
     return false;
 }
 

@@ -55,8 +55,14 @@ const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
 const snappy_framing_cli = @import("cli/snappy_framing.zig");
 const zstd_controls_cli = @import("cli/zstd_controls.zig");
+const zstd_decode_cli = @import("cli/zstd_decode.zig");
+const zstd_seekable_cli = @import("cli/zstd_seekable.zig");
+const zstd_seekable_range_cli = @import("cli/zstd_seekable_range.zig");
+const decoded_output = @import("cli/decode_output.zig");
 const fast_cover_cli = @import("cli/fast_cover.zig");
 const brotli_cli = @import("cli/brotli.zig");
+const deflate_cli = @import("cli/deflate.zig");
+const parseCompressionOptions = deflate_cli.parseCompressionOptions;
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -487,30 +493,19 @@ pub fn main(init: std.process.Init) !void {
         try brotli_cli.encodeStoredHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-hex")) {
         const hex = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try brotli_cli.parseLocalOutputLimit(args.next());
+        var arguments = try brotli_cli.parseDecodeArguments(&args);
+        const dictionary = try arguments.dictionary.load(init.io, init.gpa);
+        defer dictionary.deinit(init.gpa);
+        arguments.options.shared_dictionary = dictionary.shared();
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = if (max_output_len) |limit|
-            try vort.brDecodeStreamAllocLimited(init.gpa, compressed, limit)
-        else
-            try vort.brDecodeStreamAlloc(init.gpa, compressed);
+        const decoded = try brotli_cli.decodeAlloc(init.gpa, compressed, arguments);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "br", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "encode-br-stored-file")) {
         try brotli_cli.encodeStoredFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-file-to")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try brotli_cli.parseLocalOutputLimit(args.next());
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = if (max_output_len) |limit|
-            try vort.brDecodeStreamAllocLimited(init.gpa, compressed, limit)
-        else
-            try vort.brDecodeStreamAlloc(init.gpa, compressed);
-        defer init.gpa.free(decoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-        try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+        try brotli_cli.decodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bzip2-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1067,14 +1062,19 @@ pub fn main(init: std.process.Init) !void {
         try zip_stream_cli.extractArchive(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-br-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
+        var arguments = try brotli_cli.parseDecodeArguments(&args);
+        const dictionary = try arguments.dictionary.load(init.io, init.gpa);
+        defer dictionary.deinit(init.gpa);
+        arguments.options.shared_dictionary = dictionary.shared();
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
-        const decoded_len = if (max_output_len) |limit|
-            try vort.brDecodedStreamSizeLimited(compressed, limit)
-        else
-            try vort.brDecodedStreamSize(compressed);
-        try stdout.print("br_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+        const summary = try vort.brSummarizeStreamAllocLimitedWithOptions(
+            init.gpa,
+            compressed,
+            arguments.max_output_len orelse std.math.maxInt(vort.StreamCount),
+            arguments.options,
+        );
+        try stdout.print("br_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, summary.decoded_bytes });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
@@ -1476,61 +1476,12 @@ pub fn main(init: std.process.Init) !void {
         try zstd_controls_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-stream-file")) {
         try zstd_controls_cli.encodeStreamFile(init, &args, stdout);
-    } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
-        const compressed = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(compressed);
-        const decoded = if (max_output_len) |limit|
-            try vort.zstdDecodeNativeFrameAllocLimited(init.gpa, compressed, limit)
-        else
-            try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
-        defer init.gpa.free(decoded);
-        try printDecoded(stdout, "zstd_native", compressed.len, decoded);
-    } else if (std.mem.eql(u8, command, "decode-zstd-native-file")) {
-        const path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = if (max_output_len) |limit|
-            try vort.zstdDecodeNativeFrameAllocLimited(init.gpa, compressed, limit)
-        else
-            try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
-        defer init.gpa.free(decoded);
-        try printDecoded(stdout, "zstd_native", compressed.len, decoded);
-    } else if (std.mem.eql(u8, command, "decode-zstd-native-file-to")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = if (max_output_len) |limit|
-            try vort.zstdDecodeNativeFrameAllocLimited(init.gpa, compressed, limit)
-        else
-            try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
-        defer init.gpa.free(decoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
-    } else if (std.mem.eql(u8, command, "size-zstd-native-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
-        const compressed = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(compressed);
-        const decoded_len = if (max_output_len) |limit|
-            try vort.zstdDecodedNativeFrameSizeLimited(compressed, limit)
-        else
-            try vort.zstdDecodedNativeFrameSize(compressed);
-        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
-    } else if (std.mem.eql(u8, command, "size-zstd-native-file")) {
-        const path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded_len = if (max_output_len) |limit|
-            try vort.zstdDecodedNativeFrameSizeLimited(compressed, limit)
-        else
-            try vort.zstdDecodedNativeFrameSize(compressed);
-        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-zstd-seekable-file")) {
+        try zstd_seekable_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-zstd-seekable-range-file")) {
+        try zstd_seekable_range_cli.decodeFile(init, &args, stdout);
+    } else if (try zstd_decode_cli.dispatch(command, init, &args, stdout)) {
+        // The shared dispatcher writes results for native Zstd decode and size commands.
     } else if (std.mem.eql(u8, command, "summary-zstd-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
@@ -1887,15 +1838,7 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
         try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-gzip-best-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(data);
-        const options = parseCompressionOptions(args.next());
-        const encoded = try vort.encodeGzipBestAlloc(init.gpa, data, options);
-        defer init.gpa.free(encoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
+        try deflate_cli.encodeGzipBestFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-raw-dict-best-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -2344,19 +2287,8 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
-    } else if (std.mem.eql(u8, command, "decode-gzip-file") or std.mem.eql(u8, command, "decode-gzip-concat-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = if (max_output_len) |limit|
-            try vort.decodeGzipConcatenatedAllocLimited(init.gpa, compressed, limit)
-        else
-            try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
-        defer init.gpa.free(decoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-        try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (deflate_cli.isGzipDecodeFileCommand(command)) {
+        try deflate_cli.decodeGzipFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-gzip-header-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
@@ -2679,7 +2611,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-bgzf-range <in> <out> <start_virtual> <end_virtual> [max_output]
         \\                              Decode an indexed BGZF virtual range
         \\  encode-br-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
-        \\  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+        \\  encode-br-stream-file <in|-> <out|-> [quality] [generic|text|font] [window_bits] [br_options]
+        \\    '-' selects streaming stdin or binary stdout; requested profiles go to stderr
         \\  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
         \\    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
         \\    --block-len=BYTES selects a one-shot quality-scheduled meta-block target
@@ -2696,6 +2629,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Complete lengths can require more work; finite beam search is not globally optimal
         \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
         \\    --max-total-memory=bytes --memory-profile (all planned qualities)
+        \\    br_dictionary_options: --dictionary=PATH --max-dictionary-bytes=BYTES
+        \\                              RAW history file; defaults to a 32 MiB file cap
         \\    --metadata=TEXT emits caller metadata for planned or stored streams
         \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap
         \\                              Zero beam/iterations selects the public quality defaults
@@ -2704,15 +2639,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Stream totals and file pledges use wide counters; one-shot inputs remain limited to 128 MiB
         \\  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
         \\                              Encode text as dependency-free Brotli stored-stream hex
-        \\  decode-br-hex [hex] [max_output]
+        \\  decode-br-hex <hex> [max_output] [--large-window] [br_dictionary_options]
         \\                              Decode dependency-free Brotli stored-stream hex
         \\  encode-br-stored-file <in> <out> [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\    stored_memory_options: --max-total-memory=BYTES --memory-profile
         \\                              Total budget covers encoder-owned requested heap; 0 rejects allocated wire
         \\                              Memory profile reports released encoder heap after output handoff
-        \\  decode-br-file-to <in> <out> [max_output]
-        \\                              Decode dependency-free Brotli stored stream file
+        \\  decode-br-file-to <in|-> <out|-> [max_output] [--large-window] [br_dictionary_options]
+        \\                              Decode Brotli; '-' selects streaming stdin or binary stdout
         \\  encode-bzip2-file <in> <out> [block_size_100k]
         \\                              Encode a deterministic Bzip2 stream
         \\  decode-bzip2-file <in> <out> [max_output]
@@ -2884,7 +2819,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Incrementally extract one Stored/Deflate ZIP entry
         \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
         \\                              Sequentially parse and extract a supported ZIP entry
-        \\  size-br-file <path> [max_output]
+        \\  size-br-file <path> [max_output] [--large-window] [br_dictionary_options]
         \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode text as dependency-free native-subset Zstandard hex
@@ -2893,7 +2828,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
-        \\  encode-zstd-native-stream-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\  encode-zstd-native-stream-file <in|-> <out|-> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\    '-' selects stdin or binary stdout; stdin omits content size by default
+        \\    --stream-size=BYTES pledges the exact stdin length and enables content size by default
         \\    zstd_options: --level=N | --level N (-131072..22)
         \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)
@@ -2915,7 +2852,14 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  Window_Log selects frame metadata; history bytes separately cap reachable matches
         \\                  Stream-file only: --max-input-len=BYTES --max-output-len=BYTES (source/encoded byte caps)
         \\                  Stream totals and file pledges remain wide; one-shot files/hex use addressable buffers
-        \\    Negative level -N selects fast acceleration N. New controls default to level 1.
+        \\    Negative level -N selects fast acceleration N. New controls default to level 3.
+        \\  encode-zstd-seekable-file <in|-> <out|-> [--frame-size=BYTES] [--max-frames=N]
+        \\    [--seek-checksum=true|false] [--frame-checksum=true|false] [--max-total-memory=BYTES]
+        \\    Write a seekable Zstd archive; --max-frames is required for stdin
+        \\  decode-zstd-seekable-range-file <in> <out|-> <offset> <length> [--max-frames=N]
+        \\    [--max-window-size=BYTES] [--max-frame-decoded-size=BYTES]
+        \\    [--dictionary=PATH ...] [--max-dictionary-bytes=BYTES]
+        \\    Verify and extract a plaintext byte range from a seekable Zstd file
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
         \\    history_bytes is the selected history target; the standard dictionary header adds bytes. dict_id must be nonzero.
@@ -2928,12 +2872,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-file [path] [max_output]
         \\                              Decode dependency-free native-subset Zstandard file
-        \\  decode-zstd-native-file-to <in> <out> [max_output]
-        \\                              Decode dependency-free native-subset Zstandard file to output
+        \\  decode-zstd-native-file-to <in|-> <out|-> [max_output]
+        \\                              Decode Zstandard; '-' selects streaming stdin or binary stdout
+        \\                              Streaming endpoints default to a 128 MiB decode window
         \\  size-zstd-native-hex [hex] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
+        \\    All five Zstd decode/size commands also accept --max-window-size=BYTES
+        \\    (or --max-window-size BYTES), independent of the optional output limit.
         \\  summary-zstd-native-file [path] [text|json]
         \\                              Summarize dependency-free native-subset Zstandard frame/stream blocks
         \\  encode-lz4-native-file <in> <out> [lz4_options]
@@ -3039,8 +2986,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Inspect a zlib FDICT file using a preset dictionary file
         \\  decode-gzip-hex [hex] [max_output]
         \\                              Decode gzip-wrapped deflate hex to text
-        \\  decode-gzip-file <in> <out> [max_output]
-        \\                              Decode a gzip file with an optional output limit
+        \\  decode-gzip-file <in|-> <out|-> [max_output] [--allow-zero-padding]
+        \\  decode-gzip-concat-file <in|-> <out|-> [max_output] [--allow-zero-padding]
+        \\                              --allow-zero-padding accepts an all-zero suffix after the final member
+        \\                              Decode gzip members; '-' selects streaming stdin or binary stdout
         \\  inspect-gzip-header-hex [hex] [text|json]
         \\                              Print parsed gzip header metadata for hex input
         \\  inspect-gzip-header-file <in> [text|json]
@@ -3069,8 +3018,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode a zlib-compatible file with adaptive block splitting
         \\  encode-raw-best-file <in> <out> [level]
         \\                              Encode raw deflate file bytes with best-block selection
-        \\  encode-gzip-best-file <in> <out> [level]
-        \\                              Encode a gzip-compatible file with best-block selection
+        \\  encode-gzip-best-file <in|-> <out|-> [level] [--rsyncable] [gzip_stream_options]
+        \\                              '-' selects streaming stdin or binary stdout
+        \\                              --rsyncable streams with content-defined boundaries
+        \\    gzip_stream_options: --max-input-len=BYTES --max-output-len=BYTES (with '-' or --rsyncable)
         \\  encode-raw-dict-best-file <in> <out> <dict> [level]
         \\                              Encode raw deflate file bytes using preset dictionary history
         \\  encode-raw-dict-best-split-file <in> <out> <dict> <block_len> [level]
@@ -3125,26 +3076,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
     , .{vort.zstd.native_explicit_window_match_len_max});
 }
 
-fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
-    if ((hex.len & 1) != 0) return error.InvalidHexInput;
-    const bytes = try allocator.alloc(u8, hex.len / 2);
-    errdefer allocator.free(bytes);
-    var i: usize = 0;
-    while (i < bytes.len) : (i += 1) {
-        bytes[i] = try std.fmt.parseInt(u8, hex[i * 2 .. i * 2 + 2], 16);
-    }
-    return bytes;
-}
-
-fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize, decoded: []const u8) !void {
-    try stdout.print("{s}_compressed_bytes={d} decoded_bytes={d} crc32={d} text={s}\n", .{
-        label,
-        compressed_len,
-        decoded.len,
-        vort.crc32(decoded),
-        decoded,
-    });
-}
+const hexToOwnedBytes = decoded_output.hexToOwnedBytes;
+const printDecoded = decoded_output.printDecoded;
 
 fn printSnappyBlockSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.SnappyBlockSummary) !void {
     try stdout.print(
@@ -3945,22 +3878,6 @@ fn parseHeaderInspectOutputFormat(text: ?[]const u8) !HeaderInspectOutputFormat 
     if (std.mem.eql(u8, value, "text")) return .text;
     if (std.mem.eql(u8, value, "json")) return .json;
     return error.InvalidSidecarValidationMode;
-}
-
-fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
-    const value = text orelse return vort.optionsForCompressionLevel(.default);
-    if (std.mem.eql(u8, value, "fastest")) return vort.optionsForCompressionLevel(.fastest);
-    if (std.mem.eql(u8, value, "fast")) return vort.optionsForCompressionLevel(.fast);
-    if (std.mem.eql(u8, value, "hash")) return .{ .parser = .hash };
-    if (std.mem.eql(u8, value, "default")) return vort.optionsForCompressionLevel(.default);
-    if (std.mem.eql(u8, value, "best")) return vort.optionsForCompressionLevel(.best);
-    if (std.mem.eql(u8, value, "filtered")) return .{ .strategy = .filtered };
-    if (std.mem.eql(u8, value, "huffman") or std.mem.eql(u8, value, "huffman-only")) return .{ .strategy = .huffman_only };
-    if (std.mem.eql(u8, value, "rle")) return .{ .strategy = .rle };
-    if (std.mem.eql(u8, value, "greedy")) return .{ .parser = .greedy };
-    if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
-    if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
-    return vort.optionsForCompressionLevel(.default);
 }
 
 fn parseOptionalBool(text: ?[]const u8, default: bool) !bool {

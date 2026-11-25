@@ -1,0 +1,51 @@
+{
+  "code_revision": "1862c75aba7a8eba3ba0479bacd44b8718d52edd",
+  "source_sha256": {
+    "src/br.zig": "b412a8147b204739a7449efd49848080dd46fed83d7f65739fa0bb02d32fdd92",
+    "src/br/incremental/copy_decoder.zig": "1ae4f73d08021dac3198c0a287d1cb89721883189de6fc9dee5f19d1f94d6752",
+    "src/br/incremental/owned_copy_decoder.zig": "0b85f07a7a4d6d91d8eb42214153de14b0a6868f90a58c7718c03d2be94276dd",
+    "src/br/incremental/owned_counter_tests.zig": "f27128b76d06ce0fab4aa455140979c016a931e73c83bf5af0aa5eec25783890",
+    "src/br/incremental/history_error_tests.zig": "ad006eae63decaf26e291c4e34d52d63ad5fbad6b47379922616451a12feecd1",
+    "src/deflate.zig": "7f7b9c963173b2b93e817d3ccd8f88cb4d054fb2da30c0e4acdac551de7bca38",
+    "src/deflate/zlib/incremental_decode_window_tests.zig": "bfb5ff2b4d44204ed89057a01209723342bd3c5bc2b95365da6d19a0fe8c80ef",
+    "src/deflate/zlib/fixtures/small-cinfo-distance-257.zlib": "a24a3f00d36d06382e512e99b4b11fe8fad62642bb55f27c7d016253f74b630b"
+  },
+  "completed_checks": {
+    "command": "zig build -j2 check check-wasm --summary all",
+    "exit_code": 0,
+    "steps_succeeded": 406,
+    "steps_total": 406,
+    "tests_passed": 86,
+    "tests_total": 86
+  },
+  "post_rebase": {
+    "brotli_history_tests_passed": 24,
+    "zlib_stream_tests_passed": 50
+  },
+  "full_debug": {
+    "command": "zig build -j2 test check check-wasm --summary all",
+    "exit_code": 0,
+    "steps_succeeded": 410,
+    "steps_total": 410,
+    "tests_passed": 5834,
+    "tests_total": 5836,
+    "tests_skipped": 2,
+    "test_step_tests_passed": 5748,
+    "test_step_tests_total": 5750
+  },
+  "full_release_safe": {
+    "status": "cancelled",
+    "exit_code": 143,
+    "reason": "Additional full optimized compilation stopped after the full Debug gate, native/Wasm checks and change-specific ReleaseSafe tests passed. No full ReleaseSafe success is claimed."
+  },
+  "release_safe_focused": {
+    "brotli_history_errors": {
+      "passed": 24,
+      "total": 24
+    },
+    "deflate_advertised_window": {
+      "passed": 9,
+      "total": 9
+    }
+  }
+}

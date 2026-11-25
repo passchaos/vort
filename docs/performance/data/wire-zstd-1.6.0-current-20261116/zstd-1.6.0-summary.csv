@@ -1,0 +1,2 @@
+reference,files,min,median,max,vort_slower,vort_faster_or_equal
+libzstd 1.6.0,12,0.3264,0.7601,0.7951,12,0

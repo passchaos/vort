@@ -1,0 +1,31 @@
+1/12 deflate.test_0...OK
+2/12 deflate.test.Deflate isolated before header option admission...expected error.BadGzipHeader, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x125e58b in expectError__anon_43388 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate/incremental/tests/wrapper_transition_options/helpers.zig:48:5: 0x1262ae9 in reject__anon_43318 (deflate.zig)
+    try t.expectError(expected_error, next(encoder, variant, options, dictionary, pledge));
+    ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate/incremental/tests/wrapper_transition_options/headers.zig:31:5: 0x127ba12 in one__anon_42961 (deflate.zig)
+    try h.reject(&encoder, &heap, variant, invalid, "", h.encode.suffix.len, error.BadGzipHeader, caller);
+    ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate/incremental/tests/wrapper_transition_options/headers.zig:52:13: 0x12ca177 in contracts__anon_42924 (deflate.zig)
+            try one(D, E, variant, false);
+            ^
+/tmp/vort-deflate-wrapper-options-before.gZvHHg/src/deflate.zig:23795:5: 0x12ca857 in test.Deflate isolated before header option admission (deflate.zig)
+    try @import("deflate/incremental/tests/wrapper_transition_options/headers.zig").contracts(@This());
+    ^
+3/12 io.requested_heap_budget.test_0...OK
+4/12 lz77.test_0...OK
+5/12 lz77.test_1...OK
+6/12 bitstream.test_0...OK
+7/12 deflate.incremental.encoder.match_finder.rolling_hash.test_0...OK
+8/12 deflate.bt_optimal.test_0...OK
+9/12 deflate.incremental.tests.test_0...OK
+10/12 deflate.incremental.tests.step_borrows.test_0...OK
+11/12 deflate.incremental.tests.dictionary_borrows.test_0...OK
+12/12 deflate.incremental.encoder.png_ultrafast.root.test_0...OK
+11 passed; 0 skipped; 1 failed.
+error: the following test command failed with exit code 1:
+.zig-cache/o/4f4cce053946318eb9fcea369dc6e490/test --seed=0xb6a800c

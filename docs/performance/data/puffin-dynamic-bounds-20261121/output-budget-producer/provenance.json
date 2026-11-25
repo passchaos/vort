@@ -1,0 +1,219 @@
+{
+  "base_directory": "/tmp/vort-puffin-empty-distance.6tqeoW",
+  "base_archive_sha256": "7e660a45c3eaf6a496de2fdcf6befc69d4a0a451d98a27a0b4b6a9f7bf5553e5",
+  "base_patch_sha256": "1ac63a4552aef3ad23bce2c8b4cf537e8881a2e90768d63d7afcd3a566d8812c",
+  "base_codec_sha256": "98ff040b156f6ba79c298133f0ecfa353f384542d5426f312a81be4beed80c7f",
+  "candidate_codec_sha256": "1a41b03c836751a3b714a99820a29532d26d4e00f07719dd0ec374ba42dc82b2",
+  "patch_sha256": "c5ec56791e623e85400621972356918a7bffce41872b8e5aa8139858099967af",
+  "source_before_manifest_sha256": "6c820a99c76ad3fd8d1f59503f9ff9d454f158b4c20c11b58a8d0dc7a0908e1f",
+  "source_after_manifest_sha256": "bcdc4dd9c7e54764587d6d097a1f078c8a8d909577764c02fcc8616201320c79",
+  "changed_files": [
+    {
+      "path": "src/android_ota/puffin_codec.zig",
+      "before_sha256": "98ff040b156f6ba79c298133f0ecfa353f384542d5426f312a81be4beed80c7f",
+      "after_sha256": "1a41b03c836751a3b714a99820a29532d26d4e00f07719dd0ec374ba42dc82b2"
+    },
+    {
+      "path": "src/android_ota/puffin_output_budget_tests.zig",
+      "before_sha256": null,
+      "after_sha256": "dfb0a500d3b07b23732d0b8e5f095f52518fa7793ff194ce5fd4afac70a1d7a9"
+    }
+  ],
+  "finalized_utc": "2026-11-20T16:36:59.548714+00:00",
+  "zig_version": "0.16.0",
+  "build_mode": "Debug",
+  "targets": {
+    "native": 15,
+    "x86-linux-musl": 15,
+    "wasm32-wasi": 15
+  },
+  "wasi": {
+    "label": "puffin-output-budget",
+    "test_filter": "Puffin",
+    "wasm_path": "/tmp/vort-puffin-output-budget.1nBVFt/puffin-budget-final.wasm",
+    "wasm_sha256": "423b553f2b6a9c3ac2ad678a30ef6e6c33c47292b3b14955d9c23772b51f58b1",
+    "wasm_bytes": 2936892,
+    "exit_code": 0,
+    "imports": [
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_time_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_res_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "poll_oneoff",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pwrite",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pread",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_times",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_size",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_sync",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_seek",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_link",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_symlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_readlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_rename",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_remove_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_readdir",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_create_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get",
+        "kind": "function"
+      }
+    ]
+  },
+  "observer_sha256": "5d72b6ed90c738759978669dc951e7b46c8bf1671ec691fc62bd16237ce3b2c4",
+  "before_case": {
+    "input_literal_bytes": 65535,
+    "kinds": [
+      "stored",
+      "fixed"
+    ],
+    "output_cap": 16,
+    "fixed_heap_bytes": 1024,
+    "fixed_heap_error": "OutOfMemory",
+    "fixed_heap_allocated_freed_bytes": 874,
+    "growing_heap_error": "OutputLimitExceeded",
+    "growing_heap_allocated_freed_bytes": 320654,
+    "growing_heap_allocations": 17
+  },
+  "after_case": {
+    "fixed_heap_error": "OutputLimitExceeded",
+    "fixed_heap_allocated_freed_bytes": 389,
+    "growing_heap_error": "OutputLimitExceeded",
+    "growing_heap_allocated_freed_bytes": 389,
+    "growing_heap_allocations": 3
+  },
+  "error_order": "already parsed format error stays its format error; known next token/literal exceeding cap returns OutputLimitExceeded immediately; later malformed/trailing input is not parsed",
+  "memory_scope": "logical encoded output cap, not a physical allocator cap; metadata scratch and ArrayList capacity growth are outside this logical limit",
+  "mutation_scope": "only this new temporary directory; original frozen archive/source, main-ready and main source not edited",
+  "cache_scope": {
+    "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-puffin-output-budget.1nBVFt/.zig-cache",
+    "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-puffin-output-budget.1nBVFt/.zig-global-cache"
+  }
+}

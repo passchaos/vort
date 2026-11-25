@@ -1,0 +1,66 @@
+--- a/src/android_ota/puffin_codec_tests/fixtures.zig
++++ b/src/android_ota/puffin_codec_tests/fixtures.zig
+@@ -3,7 +3,7 @@
+ const huffman = @import("../../huffman.zig");
+ const a = std.testing.allocator;
+ 
+-pub const Mode = enum { empty_distance, incomplete, incomplete_codes, singleton_eob, max_counts, match, empty_distance_use, empty_codes, empty_literal };
++pub const Mode = enum { empty_distance, incomplete, incomplete_codes, singleton_eob, max_counts, match, max_distance, empty_distance_use, empty_codes, empty_literal };
+ pub const Fixture = struct {
+     raw: []u8,
+     puff: []u8,
+@@ -29,8 +29,8 @@
+     var distance: [30]u4 = @splat(0);
+     var codes: [19]u4 = @splat(0);
+     @memset(codes[0..16], 4);
+-    const hlit: usize = if (mode == .match or mode == .empty_distance_use) 258 else if (mode == .max_counts) 286 else 257;
+-    const hdist: usize = if (mode == .max_counts) 30 else 1;
++    const hlit: usize = if (mode == .match or mode == .max_distance or mode == .empty_distance_use) 258 else if (mode == .max_counts) 286 else 257;
++    const hdist: usize = if (mode == .max_counts or mode == .max_distance) 30 else 1;
+     const hclen: usize = if (mode == .empty_codes) 4 else 19;
+     switch (mode) {
+         .incomplete_codes => @memset(codes[0..16], 5),
+@@ -43,11 +43,11 @@
+             literal['A'] = 0;
+             literal[256] = 7;
+         },
+-        .match, .empty_distance_use => {
++        .match, .max_distance, .empty_distance_use => {
+             literal = @splat(0);
+             literal[256] = 1;
+             literal[257] = 1;
+-            if (mode == .match) distance[0] = 1;
++            if (mode != .empty_distance_use) distance[if (mode == .max_distance) 29 else 0] = 1;
+         },
+         .empty_codes => codes = @splat(0),
+         .empty_literal => literal = @splat(0),
+@@ -85,13 +85,14 @@
+     try appendMetadata(&puff, metadata.items);
+     if (mode != .empty_literal and mode != .empty_codes) {
+         const literal_encoder = try huffman.HuffmanTable(286).Encoder.init(literal[0..hlit]);
+-        if (mode == .match or mode == .empty_distance_use) {
++        if (mode == .match or mode == .max_distance or mode == .empty_distance_use) {
+             try literal_encoder.writeSymbol(&writer, a, 257);
+-            if (mode == .match) {
++            if (mode != .empty_distance_use) {
+                 const distance_encoder = try huffman.HuffmanTable(30).Encoder.init(distance[0..hdist]);
+-                try distance_encoder.writeSymbol(&writer, a, 0);
++                try distance_encoder.writeSymbol(&writer, a, if (mode == .max_distance) 29 else 0);
++                if (mode == .max_distance) try writer.writeBits(a, 8191, 13);
+             }
+-            try puff.appendSlice(a, &.{ 0x80, 0, 0 }); // length 3, distance 1
++            try puff.appendSlice(a, if (mode == .max_distance) &.{ 0x80, 0x7f, 0xff } else &.{ 0x80, 0, 0 }); // length 3; distance 32768 or 1
+         } else if (mode != .singleton_eob) {
+             try literal_encoder.writeSymbol(&writer, a, 'A');
+             try puff.appendSlice(a, &.{ 0, 'A' });
+--- a/src/android_ota/puffin_codec_tests/valid.zig
++++ b/src/android_ota/puffin_codec_tests/valid.zig
+@@ -28,7 +28,7 @@
+     try protectedRoundtrip(C, &real.raw, &real.puff, 0, real.exact_bits);
+     inline for (.{
+         fixtures.Mode.empty_distance, fixtures.Mode.incomplete, fixtures.Mode.incomplete_codes, fixtures.Mode.singleton_eob,
+-        fixtures.Mode.max_counts,     fixtures.Mode.match,
++        fixtures.Mode.max_counts,     fixtures.Mode.match,      fixtures.Mode.max_distance,
+     }) |mode| {
+         for (0..8) |offset| {
+             var fixture = try fixtures.make(mode, @intCast(offset));

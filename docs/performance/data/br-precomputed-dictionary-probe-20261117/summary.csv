@@ -1,0 +1,2 @@
+case,base_bytes,new_bytes,byte_delta,base_ns_median,new_ns_median,ns_speedup,base_mib_s,new_mib_s
+file0_dickens,43953,43953,0,2166505689,1303374958,1.6622,0.12,0.19

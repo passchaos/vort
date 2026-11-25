@@ -1,0 +1,109 @@
+{
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 106,
+      "sha256": "d443fccf47b94220bb89b7763938544094ba45830a9829f3ec86307c519f5f0a"
+    },
+    {
+      "path": "after.log",
+      "bytes": 3037,
+      "sha256": "f7da35e708ced089a0167a948b2c88c9ecf4e1b820e5afe43a27040e2bf9e258"
+    },
+    {
+      "path": "before.log",
+      "bytes": 8210,
+      "sha256": "50bb50a4dafeff88e81a988c33690bb8234b8ee07d099b7f6240c4829be253f1"
+    },
+    {
+      "path": "cross-architecture.log",
+      "bytes": 8697,
+      "sha256": "22b0e81b51a91457342e93717db262f45fcde48195baf4ebeed4743fa82efd46"
+    },
+    {
+      "path": "current-source.json",
+      "bytes": 1389,
+      "sha256": "8d85f24b6939af6c9248e5a295e780c0ec63c83fa798fca08003a83a033b6d9f"
+    },
+    {
+      "path": "delivery.json",
+      "bytes": 450,
+      "sha256": "d64121058c839d5534f4e715b4f426fec6901c173860f31d0e1c583b00a4eafb"
+    },
+    {
+      "path": "encoder-before.zig",
+      "bytes": 18001,
+      "sha256": "8b64f422089b4e1286b05eeb14f0fd15a93255bacf13d7b986086efa5378687f"
+    },
+    {
+      "path": "existing-bridge.log",
+      "bytes": 1674,
+      "sha256": "b885d0e8401f009075187d5b2d015cbb493d9e896ebfe28c94613af03c7dea17"
+    },
+    {
+      "path": "existing-finish.log",
+      "bytes": 1919,
+      "sha256": "85bb7fb332c311f0d40b9b1eb34667310a4382bc3cb2b3c7c884fe8f6ec35d3d"
+    },
+    {
+      "path": "existing-step.log",
+      "bytes": 3399,
+      "sha256": "cf5c66480a993658a270ac4f0dfa9626bbb829a5f58e875bf6b36a01755c2a10"
+    },
+    {
+      "path": "integrated-finish.log",
+      "bytes": 373,
+      "sha256": "dc38e2a775bc4feb69b88b1cdd12994340bea59128ecc5e5ec7015eb698bc2ee"
+    },
+    {
+      "path": "integrated-step.log",
+      "bytes": 372,
+      "sha256": "995aa1c0198606efb38ad26b66565372c49453f92cc33a50df2032a763548e5d"
+    },
+    {
+      "path": "integrated.log",
+      "bytes": 374,
+      "sha256": "6ed5abf800300d8fa796c28950d1f9e68f17190edc0de04d7aec8c023e992562"
+    },
+    {
+      "path": "interop.log",
+      "bytes": 1743,
+      "sha256": "e1c76073df7755d928b78e93474e921290c852e43376e20cc46a6cc9a1751d80"
+    },
+    {
+      "path": "library-compile.log",
+      "bytes": 1049,
+      "sha256": "f15e34def4d9d5dcafc7d6ee862b291d2c8fd08066961cb19080f14a8c337ee9"
+    },
+    {
+      "path": "lifecycle-borrows.patch",
+      "bytes": 23435,
+      "sha256": "8cdc86953d2e0c35651b413a14e176d138b8b3263b49ea1b1e5acb8c9c3b96c2"
+    },
+    {
+      "path": "prior-release-safe-terminal.json",
+      "bytes": 628,
+      "sha256": "ccf23448bcd3b37b26b17d34bac1c5e2633f105ec09b53210119497308e5b753"
+    },
+    {
+      "path": "provenance.sha256",
+      "bytes": 860,
+      "sha256": "cdb7bf15512cc0dde5349e3ca6d096f5ed1b7b92ce883e4a7568490b43946ef0"
+    },
+    {
+      "path": "step-borrows-before.zig",
+      "bytes": 11073,
+      "sha256": "701713b7de8b2e40409d069fbb0d2c51424d2636682de8f33f420374f97d9b36"
+    },
+    {
+      "path": "validation-checkpoint.json",
+      "bytes": 1387,
+      "sha256": "85b08f36d3b25f3af45000f85df9d1c99affc6271fa8fcf24647a44580ab18f4"
+    },
+    {
+      "path": "wasi-receipt.json",
+      "bytes": 8850,
+      "sha256": "ba942880d832aa45f06cc13aee7123acf6c4cb69c936ce9f3c22163a02e6aa3c"
+    }
+  ]
+}

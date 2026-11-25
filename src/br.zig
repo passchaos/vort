@@ -87,12 +87,16 @@ extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) cal
 extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
 extern fn vortBrRefineRecordDistances(input: [*]const u8, input_len: usize, tokens: [*]record_optimal_abi.Token, token_count: usize) callconv(.c) u8;
 const header_profile = @import("br/header_profile.zig");
+/// Deterministic bounded fuzz driver for the owned incremental decoder;
+/// shared by the in-graph tests and the standalone smoke executable.
+pub const incremental_fuzz = @import("br/incremental/fuzz_driver.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_literal = @import("br/incremental/literal_decoder.zig");
 const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
 const incremental_copy = @import("br/incremental/copy_decoder.zig");
 const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
 const incremental_contracts_tests = @import("br/incremental/contracts_tests.zig");
+const incremental_history_error_tests = @import("br/incremental/history_error_tests.zig");
 const incremental_owned_copy = @import("br/incremental/owned_copy_decoder.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
@@ -149,6 +153,7 @@ pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
 pub const QualityCommandStateProfile = encoder_stats.QualityCommandStateProfile;
 pub const QualityQ8Profile = quality_profile.Profile;
+pub const QualityQ8ProfileEvent = quality_profile.Event;
 
 test "Brotli literal entropy contracts" {
     try @import("tests/br_literal_entropy_contracts.zig").contracts(@This());
@@ -161,6 +166,7 @@ pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedMode = quality_schedule.Mode;
 pub const SharedDictionary = shared_dictionary.Dictionary;
+pub const shared_dictionary_max_raw_size = shared_dictionary.max_raw_size;
 pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
 pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
 pub const SerializedSharedDictionaryMatcher = serialized_dictionary_matcher.Matcher;
@@ -1311,6 +1317,18 @@ pub const DecodeOptions = struct {
     shared_dictionary: SharedDictionary = .{},
 };
 
+/// Explicit mutable scratch and size policy for transactionally preflighting
+/// a complete Brotli stream. The history is borrowed only during the call;
+/// keep it disjoint from compressed input, dictionaries, output and observers.
+pub const DecodePreflightOptions = struct {
+    history: []u8,
+    max_output_len: Counter = std.math.maxInt(Counter),
+    expected_output_len: ?Counter = null,
+    decode: DecodeOptions = .{},
+};
+
+pub const DecodePreflightError = Error || error{PreflightHistoryTooSmall};
+
 /// Progress for decoding exactly the first Brotli stream in a larger byte
 /// sequence. `input_read` ends after the stream's validated zero padding;
 /// `output_written` is the decoded byte count published to caller storage.
@@ -1323,6 +1341,15 @@ pub const DecodedPrefixSize = struct {
     input_read: usize,
     decoded_bytes: Counter,
 };
+
+/// Reusable caller-owned state for preflight without a contiguous compressed copy.
+pub const DirectChunkPreflightWorkspace = @import("br/decode/direct_chunk_preflight.zig").Workspace(struct {
+    pub const Decoder = IncrementalCopyStreamDecoder;
+    pub const Error = DecodePreflightError;
+    pub const PreflightOptions = DecodePreflightOptions;
+    pub const PrefixSize = DecodedPrefixSize;
+    pub const PrefixResult = DecodePrefixResult;
+});
 
 /// Owned counterpart of `DecodePrefixResult`. `bytes` belongs to the caller.
 pub const DecodedPrefix = struct {
@@ -1413,7 +1440,13 @@ const DecodeBudgetCodec = struct {
         var reader = bitstream.BitReader.init(stream);
         _ = try readWindowInfo(&reader, options);
         while (true) switch (try readStreamMetaBlockHeader(&reader)) {
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    _ = try finishStreamPrefix(reader);
+                    return true;
+                }
+            },
             .end => {
                 _ = try finishStreamPrefix(reader);
                 return true;
@@ -1440,6 +1473,7 @@ const IncrementalOwnedCodec = struct {
     pub const Error = br.Error;
     pub const DecodeOptions = br.DecodeOptions;
     pub const ProgressiveDecoder = br.IncrementalCopyStreamDecoder;
+    pub const stepWithHistory = incremental_copy.stepOwned;
     pub const HistoryPlan = struct { allocation_len: usize, capped: bool };
 
     pub fn validateDecodeOptions(options: br.DecodeOptions) br.Error!void {
@@ -1458,8 +1492,6 @@ const IncrementalOwnedCodec = struct {
         };
         const advertised = (@as(usize, 1) << window.bits) - 16;
         const required = stream_count.bounded(output_bound, advertised);
-        if (required == 0) return .{ .allocation_len = 0, .capped = false };
-        if (max_history_len == 0) return error.OutputLimitExceeded;
         return .{
             .allocation_len = @min(required, max_history_len),
             .capped = max_history_len < required,
@@ -1524,6 +1556,7 @@ const IncrementalLiteralCodec = struct {
 const IncrementalCopyCodec = struct {
     pub const Error = br.Error;
     pub const DecodeOptions = br.DecodeOptions;
+    pub const owned_history = true;
 
     pub fn validateDecodeOptions(options: br.DecodeOptions) br.Error!void {
         try validateIncrementalDecodeOptions(options);
@@ -1776,6 +1809,7 @@ fn readSingleSymbolPrefixForIncremental(comptime alphabet_size: usize, reader: *
 }
 
 const IncrementalStoredEncoderCodec = struct {
+    pub const byte_aligned_flush = true;
     pub const Error = br.Error;
     pub const StreamOptions = br.StoredStreamOptions;
     pub const max_block_len = br.max_uncompressed_meta_block_len;
@@ -1825,6 +1859,7 @@ const IncrementalStoredEncoderCodec = struct {
         try writeMetadataMetaBlock(allocator, &writer, metadata);
         state.bit_index = writer.bit_index;
     }
+    pub const writeMetadataHeader = writeIncrementalMetadataHeader;
     pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writer.writeBits(allocator, 1, 1);
@@ -1836,6 +1871,7 @@ const IncrementalStoredEncoderCodec = struct {
 pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
 
 const IncrementalPlannedEncoderCodec = struct {
+    pub const byte_aligned_flush = true;
     pub const Error = br.Error;
     pub const StreamOptions = br.PlannedStreamChunksOptions;
     pub const max_block_len = hq_options.max_block_len;
@@ -2094,6 +2130,7 @@ const IncrementalPlannedEncoderCodec = struct {
         try writeMetadataMetaBlock(allocator, &writer, metadata);
         state.bit_index = writer.bit_index;
     }
+    pub const writeMetadataHeader = writeIncrementalMetadataHeader;
 
     pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
@@ -2121,6 +2158,7 @@ pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(I
 /// command and output capacity in caller-owned state, while the shared generic
 /// incremental core supplies resumable input/output progress and stream reuse.
 const IncrementalStaticDictionaryEncoderCodec = struct {
+    pub const byte_aligned_flush = true;
     pub const Error = br.Error;
     pub const StreamOptions = br.StoredStreamOptions;
     pub const max_block_len = br.max_uncompressed_meta_block_len;
@@ -2244,6 +2282,8 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
         try writeMetadataMetaBlock(allocator, &writer, metadata);
         state.bit_index = writer.bit_index;
     }
+
+    pub const writeMetadataHeader = writeIncrementalMetadataHeader;
 
     pub fn writeFinal(
         allocator: std.mem.Allocator,
@@ -2390,11 +2430,36 @@ pub const StaticDictionaryStreamEncoder = struct {
     }
 };
 
+test "Brotli final metadata public decode contracts" {
+    try @import("br/incremental/final_metadata_tests.zig").contracts(@This());
+}
+
+test "Brotli stream contracts preserve aligned Huffman lookahead" {
+    try @import("br/incremental/aligned_reservoir_tests.zig").contracts(@This());
+}
+
+test "Brotli metadata observer contracts" {
+    try @import("br/incremental/metadata_event_tests.zig").contracts(@This());
+}
+
+test "Brotli metadata observer switches without replay" {
+    try @import("br/incremental/metadata_switch_tests.zig").contracts(@This());
+}
+
+test "Brotli metadata quota contracts" {
+    try @import("br/incremental/metadata_limit_tests.zig").contracts(@This());
+}
+
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
+    _ = @import("br/incremental/fuzz_driver.zig");
     _ = incremental_copy_tests;
     _ = incremental_contracts_tests;
+    _ = @import("br/incremental/raw_attachment_tests.zig");
+    _ = @import("br/incremental/serialized_attachment_tests.zig");
+    _ = incremental_history_error_tests;
+    _ = @import("br/incremental/history_growth_tests.zig");
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = incremental_stored_encoder;
@@ -2428,6 +2493,9 @@ test {
     _ = hq_types;
     _ = hq_codec;
     _ = new_hq_parser;
+    _ = @import("br/encoder/stateful_plan.zig");
+    _ = @import("br/encoder/stateful_optimal.zig");
+    _ = @import("br/encoder/rep_optimal.zig");
     _ = total_budget;
     _ = @import("tests/br_total_memory_contracts.zig");
     _ = @import("tests/br_total_memory_transactions.zig");
@@ -4219,6 +4287,9 @@ pub const CompressedHeaderFamily = header_profile.Family;
 
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
+/// Candidate beam for the `.ratio` optimal proposal stage. The exact wire
+/// comparison still decides whether the candidate survives.
+const ratio_optimal_candidates: usize = 32;
 const SummaryError = Error || error{SummaryHistoryExhausted};
 
 pub const CompressedSupportLimits = struct {
@@ -5170,6 +5241,12 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
 }
 
 fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncodeOptions, window_bits: u5) LazyWireOptions {
+    // q11's complete-wire screen never retained a command block split: every
+    // winning wire uses one command type while the command split search
+    // consumes a large share of the encode time. Distance splits still win on
+    // very large plans (ooffice keeps eight distance types), so the distance
+    // search is limited to those plans instead of being disabled.
+    const q11 = schedule.quality == .q11;
     return .{
         .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .try_recent_distances = schedule.use_recent_distances,
@@ -5179,10 +5256,11 @@ fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncod
         .preferred_literal_context_mode = null,
         .try_literal_split = schedule.split.literal,
         .try_adaptive_literal_split = schedule.split.adaptive_literal or options.adaptive_literal_split,
-        .try_command_split = schedule.split.command,
-        .try_adaptive_command_split = schedule.split.adaptive_command or options.adaptive_command_split,
+        .try_command_split = schedule.split.command and !q11,
+        .try_adaptive_command_split = (schedule.split.adaptive_command or options.adaptive_command_split) and !q11,
         .try_distance_split = schedule.split.distance,
         .try_adaptive_distance_split = options.adaptive_distance_split orelse schedule.split.adaptive_distance,
+        .distance_split_min_commands = if (q11) 16 * 1024 else 0,
         .try_distance_context_trees = @intFromEnum(schedule.quality) >= 10,
         .large_window = options.large_window,
         .window_bits = window_bits,
@@ -5202,6 +5280,20 @@ pub fn benchmarkQualityQ8ProfileAlloc(
     io: std.Io,
     profile: *QualityQ8Profile,
 ) Error![]u8 {
+    if (input.len > 65536) return error.InvalidBlockPlan;
+    return benchmarkQualityProfileAlloc(allocator, input, io, .{ .quality = 8, .mode = .generic }, profile);
+}
+
+/// Traced one-shot quality encode for any documented preset. The complete wire
+/// remains the byte oracle; callers must not rank the instrumented call as a
+/// normal throughput sample.
+pub fn benchmarkQualityProfileAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    io: std.Io,
+    options: PlannedEncodeOptions,
+    profile: *QualityQ8Profile,
+) Error![]u8 {
     profile.reset();
     const trace: quality_profile.Recorder(true) = .{ .io = io, .profile = profile };
     var outer = trace.begin(.outer, input.len, 0);
@@ -5210,8 +5302,6 @@ pub fn benchmarkQualityQ8ProfileAlloc(
         profile.error_name = @errorName(err);
         outer.failure(err);
     }
-    if (input.len > 65536) return error.InvalidBlockPlan;
-    const options: PlannedEncodeOptions = .{ .quality = 8, .mode = .generic };
     try validatePlannedEncodeOptions(input.len, options);
     var lease = try total_budget.Lease.init(allocator, profile.request.max_total_working_memory, profile.request.memory_profile, 0);
     defer lease.deinit();
@@ -5567,7 +5657,14 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         } else {
             // Text-like large blocks search only their literal runs; the
             // all-literal alternate would rescan the complete input.
-            const proposal_count: usize = if (auto_long_window and input.len > 1024 * 1024 and !large_literal_share)
+            //
+            // The all-literal alternate also drops every near match, so it can
+            // only pay when literals dominate. When the near plan already
+            // matches most bytes, the alternate's wider-window distance codes
+            // cost far more than its far copies recover: on the 128 KiB
+            // Silesia planned-q9 rows the candidate landed 5.7-39.4 KB above
+            // the incumbent. Keep it only for literal-heavy blocks.
+            const proposal_count: usize = if (auto_long_window and !large_literal_share)
                 1
             else if (has_copies)
                 2
@@ -5647,11 +5744,39 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         const prepared_pair_supported = schedule.quality.int() == 8 and input.len >= 8 * 1024 and
             command_stream.commands.len <= prepared_parameter_distance.max_command_count and
             !options.large_window and options.metadata.len == 0 and !original_controller;
+        // The whole-candidate skip is a large-block policy. Small inputs keep
+        // the frozen legacy wires, where the forced-recent baseline can still
+        // be the unique winner.
+        const skip_search_without_alternative = input.len >= 64 * 1024;
+        var split_alternative: ?encoder_distance.Parameters = null;
         if (prepared_pair_supported) {
             if (comptime builtin.is_test) test_parameter_pair_path_calls += 1;
             if (try parameter_pair.against(ParameterPairStrategy, trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &distance_stats, distance_options, best)) |candidate| {
                 freeQualityRecorded(trace_enabled, trace, allocator, best);
                 best = candidate;
+            }
+        } else if (skip_search_without_alternative) {
+            // Keep the established parameter-only candidate as a floor only
+            // when a non-default parameter set exists. With no alternative the
+            // baseline never beat the existing best on the measured large-block
+            // corpus, so skip its full-wire materialization.
+            split_alternative = try chooseDistanceParameterAlternativeAlloc(
+                allocator,
+                command_stream.commands,
+                distance_options,
+            );
+            if (split_alternative) |alternative_parameters| {
+                const legacy_distance_candidate = try encodeCommandPlanWithDistanceParametersAllocRecorded(
+                    trace_enabled,
+                    trace.withOrigin(.lazy),
+                    allocator,
+                    input,
+                    command_stream.commands,
+                    alternative_parameters,
+                    &distance_stats,
+                    distance_options,
+                );
+                retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, legacy_distance_candidate);
             }
         } else {
             // Keep the established parameter-only candidate as a floor: it is
@@ -5670,17 +5795,20 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         }
         // Both the legacy and prepared-pair parameter paths must see the same
         // split-aware candidate so their complete wires stay comparable.
-        const distance_candidate = try encodeDistanceParameterSearchWithSplitsAllocRecorded(
-            trace_enabled,
-            trace.withOrigin(.lazy),
-            allocator,
-            input,
-            command_stream.commands,
-            &distance_stats,
-            wire_options,
-            distance_options,
-        );
-        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+        if (prepared_pair_supported or !skip_search_without_alternative or split_alternative != null) {
+            const distance_candidate = try encodeDistanceParameterSearchWithSplitsAllocRecorded(
+                trace_enabled,
+                trace.withOrigin(.lazy),
+                allocator,
+                input,
+                command_stream.commands,
+                split_alternative,
+                &distance_stats,
+                wire_options,
+                distance_options,
+            );
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+        }
     }
 
     // The repcode-aware command-state candidate is the quality win on
@@ -5871,6 +5999,19 @@ const QualityDictionaryProbe = struct {
     }
 };
 
+/// The static dictionary match at a position is independent of the optimal
+/// parse's cost model. q10/q11 run four parses over the same input, so probe
+/// each position once and reuse the result instead of repeating the longest
+/// dictionary lookup four times.
+const PrecomputedDictionaryProbe = struct {
+    matches: []const ?lz77.DictionaryMatch,
+
+    fn find(context: *anyopaque, position: usize) ?lz77.DictionaryMatch {
+        const self: *const PrecomputedDictionaryProbe = @ptrCast(@alignCast(context));
+        return self.matches[position];
+    }
+};
+
 /// Flat proxy cost for a static-dictionary copy: command/copy-length and
 /// distance symbols. Unmodeled parses price in bits, modeled parses in q8.
 const quality_dictionary_cost_bits: u16 = 22;
@@ -5892,11 +6033,19 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     }
     defer if (dictionary_indexes) |*indexes| indexes.deinit();
     var dictionary_probe: QualityDictionaryProbe = undefined;
+    var dictionary_matches: ?[]?lz77.DictionaryMatch = null;
+    var precomputed_probe: PrecomputedDictionaryProbe = undefined;
     var dictionary_provider: ?lz77.DictionaryProvider = null;
     if (dictionary_indexes) |*indexes| {
         dictionary_probe = .{ .index = indexes.compact(), .input = input };
-        dictionary_provider = .{ .context = &dictionary_probe, .find = QualityDictionaryProbe.find };
+        const matches = try allocator.alloc(?lz77.DictionaryMatch, input.len);
+        errdefer allocator.free(matches);
+        for (0..input.len) |position| matches[position] = QualityDictionaryProbe.find(&dictionary_probe, position);
+        dictionary_matches = matches;
+        precomputed_probe = .{ .matches = matches };
+        dictionary_provider = .{ .context = &precomputed_probe, .find = PrecomputedDictionaryProbe.find };
     }
+    defer if (dictionary_matches) |matches| allocator.free(matches);
     const optimal = blk: {
         var timer = trace.begin(.optimal_parse, input.len, 0);
         defer timer.finish();
@@ -5927,21 +6076,33 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     try considerStaticDictionaryCandidate(trace_enabled, trace, allocator, input, commands.commands, dictionary, wire_options, &best);
     if (!budget.entropy_feedback) return best;
 
-    var model = try entropy_feedback.build(allocator, input, commands.commands, search_window);
+    var model = blk: {
+        var timer = trace.begin(.other, input.len, commands.commands.len);
+        defer timer.finish();
+        break :blk try entropy_feedback.build(allocator, input, commands.commands, search_window);
+    };
     defer model.deinit(allocator);
-    const modeled = try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
-        .window_len = search_window,
-        .max_chain = budget.max_chain,
-        .nice_len = budget.nice_len,
-        .max_candidates = budget.max_candidates,
-        .min_match = 4,
-        .max_match = lz77.max_match_len,
-        .dictionary = dictionary_provider,
-        .dictionary_cost = quality_dictionary_cost_q8,
-    }, model.lz77Model());
+    const modeled = blk: {
+        var timer = trace.begin(.optimal_parse, input.len, 0);
+        defer timer.finish();
+        break :blk try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+            .window_len = search_window,
+            .max_chain = budget.max_chain,
+            .nice_len = budget.nice_len,
+            .max_candidates = budget.max_candidates,
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+            .dictionary = dictionary_provider,
+            .dictionary_cost = quality_dictionary_cost_q8,
+        }, model.lz77Model());
+    };
     defer modeled.deinit(allocator);
     if (modeled.stats.matches == 0) return best;
-    const modeled_commands = try command_plan.buildAlloc(allocator, input, modeled.tokens);
+    const modeled_commands = blk: {
+        var timer = trace.begin(.optimal_commands, input.len, modeled.tokens.len);
+        defer timer.finish();
+        break :blk try command_plan.buildAlloc(allocator, input, modeled.tokens);
+    };
     defer modeled_commands.deinit(allocator);
     var modeled_stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate = try encodeLazyCommandPlanAllocRecorded(
@@ -5956,21 +6117,33 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     try considerStaticDictionaryCandidate(trace_enabled, trace, allocator, input, modeled_commands.commands, dictionary, wire_options, &best);
     if (input.len >= 64 * 1024) {
-        var model2 = try entropy_feedback.build(allocator, input, modeled_commands.commands, search_window);
+        var model2 = blk: {
+            var timer = trace.begin(.other, input.len, modeled_commands.commands.len);
+            defer timer.finish();
+            break :blk try entropy_feedback.build(allocator, input, modeled_commands.commands, search_window);
+        };
         defer model2.deinit(allocator);
-        const modeled2 = try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
-            .window_len = search_window,
-            .max_chain = budget.max_chain,
-            .nice_len = budget.nice_len,
-            .max_candidates = budget.max_candidates,
-            .min_match = 4,
-            .max_match = lz77.max_match_len,
-            .dictionary = dictionary_provider,
-            .dictionary_cost = quality_dictionary_cost_q8,
-        }, model2.lz77Model());
+        const modeled2 = blk: {
+            var timer = trace.begin(.optimal_parse, input.len, 0);
+            defer timer.finish();
+            break :blk try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+                .window_len = search_window,
+                .max_chain = budget.max_chain,
+                .nice_len = budget.nice_len,
+                .max_candidates = budget.max_candidates,
+                .min_match = 4,
+                .max_match = lz77.max_match_len,
+                .dictionary = dictionary_provider,
+                .dictionary_cost = quality_dictionary_cost_q8,
+            }, model2.lz77Model());
+        };
         defer modeled2.deinit(allocator);
         if (modeled2.stats.matches != 0) {
-            const commands2 = try command_plan.buildAlloc(allocator, input, modeled2.tokens);
+            const commands2 = blk: {
+                var timer = trace.begin(.optimal_commands, input.len, modeled2.tokens.len);
+                defer timer.finish();
+                break :blk try command_plan.buildAlloc(allocator, input, modeled2.tokens);
+            };
             defer commands2.deinit(allocator);
             var stats2: encoder_stats.PlannedEncodeStats = .{};
             const candidate2 = try encodeLazyCommandPlanAllocRecorded(
@@ -5984,26 +6157,38 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
             );
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate2);
         }
-        var bonus_model2 = try entropy_feedback.buildWithRepcodeBonus(
-            allocator,
-            input,
-            modeled_commands.commands,
-            search_window,
-        );
+        var bonus_model2 = blk: {
+            var timer = trace.begin(.other, input.len, modeled_commands.commands.len);
+            defer timer.finish();
+            break :blk try entropy_feedback.buildWithRepcodeBonus(
+                allocator,
+                input,
+                modeled_commands.commands,
+                search_window,
+            );
+        };
         defer bonus_model2.deinit(allocator);
-        const bonus_modeled2 = try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
-            .window_len = search_window,
-            .max_chain = budget.max_chain,
-            .nice_len = budget.nice_len,
-            .max_candidates = budget.max_candidates,
-            .min_match = 4,
-            .max_match = lz77.max_match_len,
-            .dictionary = dictionary_provider,
-            .dictionary_cost = quality_dictionary_cost_q8,
-        }, bonus_model2.lz77Model());
+        const bonus_modeled2 = blk: {
+            var timer = trace.begin(.optimal_parse, input.len, 0);
+            defer timer.finish();
+            break :blk try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+                .window_len = search_window,
+                .max_chain = budget.max_chain,
+                .nice_len = budget.nice_len,
+                .max_candidates = budget.max_candidates,
+                .min_match = 4,
+                .max_match = lz77.max_match_len,
+                .dictionary = dictionary_provider,
+                .dictionary_cost = quality_dictionary_cost_q8,
+            }, bonus_model2.lz77Model());
+        };
         defer bonus_modeled2.deinit(allocator);
         if (bonus_modeled2.stats.matches != 0) {
-            const bonus_commands2 = try command_plan.buildAlloc(allocator, input, bonus_modeled2.tokens);
+            const bonus_commands2 = blk: {
+                var timer = trace.begin(.optimal_commands, input.len, bonus_modeled2.tokens.len);
+                defer timer.finish();
+                break :blk try command_plan.buildAlloc(allocator, input, bonus_modeled2.tokens);
+            };
             defer bonus_commands2.deinit(allocator);
             var bonus_stats2: encoder_stats.PlannedEncodeStats = .{};
             const bonus_candidate2 = try encodeLazyCommandPlanAllocRecorded(
@@ -6601,7 +6786,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,
-        .max_candidates = 128,
+        .max_candidates = ratio_optimal_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
     }, io, &optimal_profile);
@@ -6733,7 +6918,7 @@ pub fn profileLiteralContextSearch(
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,
-        .max_candidates = 128,
+        .max_candidates = ratio_optimal_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
     });
@@ -6891,12 +7076,12 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
     // the retained source corpus. The fixed-bit DP is only a proposal stage:
     // exact Brotli wire size decides whether the candidate survives.
     const optimal_plan = try lz77.optimalPlanAlloc(allocator, input, .{
-        // `optimalPlanAlloc` currently has a precomputed 32 KiB distance-cost
-        // table. The existing lazy and long-distance paths cover farther hits.
+        // The legacy ratio level keeps its established 32 KiB optimal window;
+        // the quality-scheduled q10/q11 path searches the full wire window.
         .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
         .max_chain = @min(parser_options.max_chain, 256),
         .nice_len = parser_options.nice_len,
-        .max_candidates = 128,
+        .max_candidates = ratio_optimal_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
     });
@@ -7069,6 +7254,57 @@ fn encodeCommandPlanWithDistanceParameterSearchAllocRecorded(comptime trace_enab
     return baseline;
 }
 
+/// Compare one non-default distance-parameter set against the default
+/// parameters without searching again. Callers that already selected the
+/// alternative share the same parameter choice across candidate families.
+fn encodeCommandPlanWithDistanceParametersAllocRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    alternative_parameters: encoder_distance.Parameters,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) Error![]u8 {
+    const initial_stats = stats.*;
+    var baseline_stats = initial_stats;
+    const baseline = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        null,
+        &baseline_stats,
+        options,
+    );
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
+
+    var alternative_options = options;
+    alternative_options.distance_parameters = alternative_parameters;
+    alternative_options.optimize_same_last_distance = false;
+    var alternative_stats = initial_stats;
+    const alternative = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        null,
+        &alternative_stats,
+        alternative_options,
+    );
+    if (trace.prefer(alternative, baseline)) {
+        freeQualityRecorded(trace_enabled, trace, allocator, baseline);
+        stats.* = alternative_stats;
+        return alternative;
+    }
+    freeQualityRecorded(trace_enabled, trace, allocator, alternative);
+    stats.* = baseline_stats;
+    return baseline;
+}
+
 /// Distance-parameter selection is a separate candidate family from the
 /// entropy splitter. Re-encode the winning parameter set through the lazy
 /// command path so command/distance/literal block types are also available to
@@ -7079,6 +7315,7 @@ fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
     allocator: std.mem.Allocator,
     input: []const u8,
     commands: []const command_plan.Command,
+    precomputed_alternative: ?encoder_distance.Parameters,
     stats: *encoder_stats.PlannedEncodeStats,
     wire_options: LazyWireOptions,
     distance_options: CommandPlanEncodeOptions,
@@ -7099,14 +7336,15 @@ fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
     );
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
 
-    const alternative_parameters = try chooseDistanceParameterAlternativeAlloc(
-        allocator,
-        commands,
-        distance_options,
-    ) orelse {
-        stats.* = baseline_stats;
-        return baseline;
-    };
+    const alternative_parameters = precomputed_alternative orelse
+        (try chooseDistanceParameterAlternativeAlloc(
+            allocator,
+            commands,
+            distance_options,
+        ) orelse {
+            stats.* = baseline_stats;
+            return baseline;
+        });
     var alternative_options = wire_options;
     alternative_options.distance_parameters = alternative_parameters;
     alternative_options.optimize_same_last_distance = false;
@@ -7312,7 +7550,9 @@ fn sortDistanceFrequencies(allocator: std.mem.Allocator, entries: []distance_par
     var dst = buffer;
     var max: usize = 0;
     for (entries) |entry| max = @max(max, entry.semantic_distance);
-    var shift: u6 = 0;
+    // Shift counts must follow the pointer width: usize is u32 on wasm32 and
+    // 32-bit x86 targets, where a u6 shift count does not type-check.
+    var shift: std.math.Log2Int(usize) = 0;
     while (true) {
         var counts = [_]usize{0} ** 256;
         for (src) |entry| counts[(entry.semantic_distance >> shift) & 0xff] += 1;
@@ -7347,7 +7587,9 @@ fn chooseDistanceParameterAlternativeAlloc(
     var semantic_count: usize = 0;
     var short_symbol_frequencies: [16]u32 = @splat(0);
     var last_distances = options.starting_last_distances;
+    var total_output_len: usize = 0;
     for (commands) |command| {
+        total_output_len += command.insert_len + command.outputLen();
         const wire_distance = if (command.has_copy) try commandWireDistance(
             command,
             options.window_bits,
@@ -7385,16 +7627,7 @@ fn chooseDistanceParameterAlternativeAlloc(
     if (semantic_count == 0 and allZeroFrequencies(16, &short_symbol_frequencies))
         return null;
 
-    std.mem.sort(
-        distance_parameter_search.DistanceFrequency,
-        semantic_distances[0..semantic_count],
-        {},
-        struct {
-            fn lessThan(_: void, lhs: distance_parameter_search.DistanceFrequency, rhs: distance_parameter_search.DistanceFrequency) bool {
-                return lhs.semantic_distance < rhs.semantic_distance;
-            }
-        }.lessThan,
-    );
+    try sortDistanceFrequencies(allocator, semantic_distances[0..semantic_count]);
     var unique_count: usize = 0;
     for (semantic_distances[0..semantic_count]) |entry| {
         if (unique_count != 0 and semantic_distances[unique_count - 1].semantic_distance == entry.semantic_distance) {
@@ -7409,11 +7642,26 @@ fn chooseDistanceParameterAlternativeAlloc(
         }
     }
 
-    const selection = distance_parameter_search.selectAlloc(allocator, .{
+    const parameter_input: distance_parameter_search.Input = .{
         .format = encoder_window_format.format(options.large_window),
         .distance_frequencies = semantic_distances[0..unique_count],
         .short_symbol_frequencies = short_symbol_frequencies,
-    }) catch |err| switch (err) {
+    };
+    // On large blocks, score a small representative shape subset first. When
+    // even that subset cannot clear the 64-byte gate, the exact 64-shape
+    // search cannot change the outcome on the measured corpus and is skipped.
+    if (total_output_len >= 64 * 1024) {
+        const coarse = distance_parameter_search.selectCoarseAlloc(allocator, parameter_input) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return error.InvalidBlockPlan,
+        };
+        const coarse_preferred = coarse.preferred();
+        if ((coarse_preferred.parameters.npostfix == coarse.baseline.parameters.npostfix and
+            coarse_preferred.parameters.ndirect_high == coarse.baseline.parameters.ndirect_high) or
+            coarse.baseline.totalBits() - coarse_preferred.totalBits() < 512)
+            return null;
+    }
+    const selection = distance_parameter_search.selectAlloc(allocator, parameter_input) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBlockPlan,
     };
@@ -7422,6 +7670,13 @@ fn chooseDistanceParameterAlternativeAlloc(
         preferred.parameters.ndirect_high == selection.baseline.parameters.ndirect_high) or
         preferred.totalBits() >= selection.baseline.totalBits())
         return null;
+    // The estimate excludes context and block-split effects. On blocks of at
+    // least 64 KiB, candidates below the 64-byte arbitration margin never won
+    // on the measured planned-q9 corpus, so skip their full-wire
+    // materialization. Smaller inputs keep the search because a few saved
+    // bytes can still matter there.
+    if (total_output_len >= 64 * 1024 and
+        selection.baseline.totalBits() - preferred.totalBits() < 512) return null;
     return preferred.parameters;
 }
 
@@ -9028,6 +9283,7 @@ fn considerPlannedMetaBlockCommands(
         policy.split.adaptive_command,
         policy.split.distance,
         policy.split.adaptive_distance,
+        0,
         .{
             .large_window = state.large_window,
             .window_bits = window_bits,
@@ -10447,6 +10703,11 @@ const LazyWireOptions = struct {
     try_adaptive_command_split: bool = false,
     try_distance_split: bool = false,
     try_adaptive_distance_split: bool = false,
+    /// Minimum command count before distance block splitting runs. Zero keeps
+    /// the historical eligibility. q11 raises it because the distance split
+    /// search only retained a smaller complete wire on very large plans in the
+    /// measured corpus while consuming a large share of the encode time.
+    distance_split_min_commands: usize = 0,
     /// Try a single-block-type wire with four copy-length distance context
     /// trees in addition to the temporal distance split candidates. Ratio
     /// qualities enable this only where the extra full encode is justified.
@@ -11841,6 +12102,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
         options.try_adaptive_command_split,
         options.try_distance_split,
         options.try_adaptive_distance_split,
+        options.distance_split_min_commands,
         .{
             .large_window = options.large_window,
             .window_bits = options.window_bits,
@@ -11858,7 +12120,11 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
     const baseline_stats = stats.*;
     errdefer stats.* = baseline_stats;
     var candidate_stats = baseline_stats;
-    const candidate: ?[]u8 = if (has_legacy_split)
+    // The combined adaptive candidate covers both symbol split dimensions and
+    // beat the legacy split wire in every measured planned-q9 call, so the
+    // legacy candidate is not materialized when the combined one exists.
+    const has_adaptive_combined = symbol_splits.adaptive_command != null and symbol_splits.adaptive_distance != null;
+    const candidate: ?[]u8 = if (has_legacy_split and !has_adaptive_combined)
         try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split)
     else if (adaptive_literal) |*split|
         try encodeCountedAdaptiveLiteralCandidateRecorded(
@@ -12048,7 +12314,12 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
         const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
         selection.consider(trace_enabled, trace, allocator, dynamic_distance_candidate, dynamic_distance_stats, freeQualityRecorded);
     }
-    if (has_legacy_split or adaptive_literal != null) if (symbol_splits.adaptive_command) |*adaptive_command| {
+    // This later standalone adaptive command wire is subsumed by the combined
+    // command+distance candidate whenever both plans exist, so skip its
+    // full-wire materialization when an adaptive distance plan is available.
+    // The initial candidate slot still falls back to the adaptive command
+    // wire when no counted adaptive literal plan exists.
+    if ((has_legacy_split or adaptive_literal != null) and symbol_splits.adaptive_distance == null) if (symbol_splits.adaptive_command) |*adaptive_command| {
         var adaptive_stats = baseline_stats;
         const adaptive_candidate = try encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(
             trace_enabled,
@@ -12613,7 +12884,14 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
     var selected_stats = initial_stats;
     var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &selected_stats, primary_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, selected);
-    if (literal_split == null and adaptive_literal_split == null) {
+    // The combined command+distance candidate keeps the winning context and
+    // re-encodes only the split structure. Re-running every losing alternate
+    // literal context there never won on the measured planned-q9 corpus
+    // (0/1096), so skip those alternates for the combined candidate only.
+    // The standalone adaptive distance candidate keeps its counted path,
+    // which must evaluate the same alternates as the materialized oracle.
+    const skip_alternate_contexts = adaptive_command_split != null and adaptive_distance_split != null;
+    if (!skip_alternate_contexts and literal_split == null and adaptive_literal_split == null) {
         for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |alternate_context| {
             var alternate_stats = initial_stats;
             const alternate = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &alternate_stats, .{
@@ -12699,6 +12977,7 @@ fn chooseCommandAndDistanceSplitsAlloc(
     try_adaptive_command_split: bool,
     try_distance_split: bool,
     try_adaptive_distance_split: bool,
+    distance_split_min_commands: usize,
     wire_context: PlannedWireContext,
 ) Error!EntropySymbolSplits {
     var command_accumulator = if (try_command_split) command_block_split.Accumulator.init(commands.len) else null;
@@ -12706,8 +12985,9 @@ fn chooseCommandAndDistanceSplitsAlloc(
     const collect_commands = command_accumulator != null or collect_adaptive_commands;
     // There cannot be more explicit distance symbols than commands, so short
     // plans cannot qualify. Keep candidate discovery bounded on large plans.
-    const collect_legacy_distances = try_distance_split and distance_block_split.eligible(commands.len);
-    const collect_adaptive_distances = try_adaptive_distance_split and distance_block_split.adaptiveEligible(commands.len);
+    const distance_split_enabled = commands.len >= distance_split_min_commands;
+    const collect_legacy_distances = try_distance_split and distance_split_enabled and distance_block_split.eligible(commands.len);
+    const collect_adaptive_distances = try_adaptive_distance_split and distance_split_enabled and distance_block_split.adaptiveEligible(commands.len);
     const collect_distances = collect_legacy_distances or collect_adaptive_distances;
     if (!collect_commands and !collect_distances) return .{};
     const command_symbols = if (collect_commands) try allocator.alloc(u16, commands.len) else null;
@@ -15132,9 +15412,19 @@ fn addStoredUncompressedMetaBlockBitsLen(bit_count: BitCount, block_len: usize) 
     return stored_bit_bound.uncompressed(bit_count, block_len);
 }
 
-fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: anytype, metadata: []const u8) Error!void {
-    const header = try metadata_header.plan(metadata.len);
+fn writeIncrementalMetadataHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: anytype, len: usize) Error!void {
+    var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+    try writeMetadataMetaBlockHeader(allocator, &writer, len);
+    state.bit_index = writer.bit_index;
+}
+
+fn writeMetadataMetaBlockHeader(allocator: std.mem.Allocator, writer: anytype, len: usize) Error!void {
+    const header = try metadata_header.plan(len);
     try header.write(allocator, writer);
+}
+
+fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: anytype, metadata: []const u8) Error!void {
+    try writeMetadataMetaBlockHeader(allocator, writer, metadata.len);
     try writer.writeAlignedBytes(allocator, metadata);
 }
 
@@ -15173,7 +15463,14 @@ pub fn decodeStreamPrefixAllocLimited(allocator: std.mem.Allocator, stream: []co
                 const bytes = try out.toOwnedSlice(allocator);
                 return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    const input_read = try finishStreamPrefix(reader);
+                    const bytes = try out.toOwnedSlice(allocator);
+                    return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
+                }
+            },
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
@@ -15254,7 +15551,14 @@ fn decodeStreamPrefixAllocLimitedWithOptionsInternal(allocator: std.mem.Allocato
                 const bytes = try out.toOwnedSlice(allocator);
                 return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    const input_read = try finishStreamPrefix(reader);
+                    const bytes = try out.toOwnedSlice(allocator);
+                    return .{ .bytes = bytes, .input_read = input_read, .output_written = bytes.len };
+                }
+            },
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
@@ -15470,7 +15774,7 @@ fn decodeStreamPrefixAppendExactSizeWithOptionsInternal(allocator: std.mem.Alloc
 
 const StreamMetaBlockHeader = union(enum) {
     end,
-    metadata,
+    metadata: bool,
     compressed: struct {
         decoded_len: usize,
         final: bool,
@@ -15489,7 +15793,7 @@ fn readStreamMetaBlockHeader(reader: *bitstream.BitReader) Error!StreamMetaBlock
         0b10 => 6,
         0b11 => 0,
     };
-    if (mnibbles == 0) return .metadata;
+    if (mnibbles == 0) return .{ .metadata = final };
 
     const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
     if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
@@ -15529,7 +15833,12 @@ pub fn decodeStreamPrefixInto(stream: []const u8, output: []u8) Error!DecodePref
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |header| {
                 try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
                 if (header.final) {
@@ -15582,7 +15891,12 @@ pub noinline fn decodeStreamPrefixIntoWithOptions(stream: []const u8, output: []
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |header| {
                 try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (header.final) {
@@ -15661,7 +15975,12 @@ noinline fn decodeLargeStreamPrefixInto(stream: []const u8, output: []u8) Error!
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |meta| {
                 try processLargeCompressedMetaBlock(&reader, output, &written, meta.decoded_len, &last_distances, window_bits);
                 if (meta.final) {
@@ -15688,7 +16007,12 @@ noinline fn decodeLargeStreamPrefixIntoWithOptions(stream: []const u8, output: [
             .end => {
                 return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    return .{ .input_read = try finishStreamPrefix(reader), .output_written = written };
+                }
+            },
             .compressed => |meta| {
                 try processLargeCompressedMetaBlockWithOptions(&reader, output, &written, meta.decoded_len, &last_distances, window);
                 if (meta.final) {
@@ -15703,6 +16027,44 @@ noinline fn decodeLargeStreamPrefixIntoWithOptions(stream: []const u8, output: [
             },
         }
     }
+}
+
+/// Transactionally validate the whole stream, its limits and physical output
+/// capacity using caller-owned history, then decode into `output`.
+pub fn decodeStreamIntoWithPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!usize {
+    try validateDecodePreflight(stream, output, options, null);
+    return (try decodeIntoAfterPreflight(stream, output, options, false)).output_written;
+}
+
+/// Decode the first validated stream; leave surrounding transport bytes unread.
+pub fn decodeStreamPrefixIntoWithPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!DecodePrefixResult {
+    try validateDecodePreflight(stream, output, options, null);
+    return decodeIntoAfterPreflight(stream, output, options, true);
+}
+
+/// Join compressed chunks in caller scratch, then preflight before writing output.
+pub fn decodeStreamChunksIntoWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!usize {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, output, options, null);
+    return (try decodeIntoAfterPreflight(joined, output, options, false)).output_written;
+}
+
+/// Preflight and decode the first stream. Its input boundary is measured
+/// across all chunks and excludes bytes after the first stream.
+pub fn decodeStreamPrefixChunksIntoWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodePreflightOptions) DecodePreflightError!DecodePrefixResult {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, output, options, null);
+    return decodeIntoAfterPreflight(joined, output, options, true);
+}
+
+fn decodeIntoAfterPreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions, prefix: bool) DecodePreflightError!DecodePrefixResult {
+    const size = try preflightSize(stream, options, prefix);
+    const decoded_len = try stream_count.toLocal(size.decoded_bytes);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const written = decodeStreamIntoWithOptions(stream[0..size.input_read], output[0..decoded_len], options.decode) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return .{ .input_read = size.input_read, .output_written = written };
 }
 
 pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len: usize) Error!usize {
@@ -15788,6 +16150,42 @@ pub fn decodeStreamPrefixIntoExactSizeWithOptions(stream: []const u8, output: []
     };
     if (result.output_written != expected_output_len) return error.SizeMismatch;
     return result;
+}
+
+/// Validate and measure one complete stream without allocating heap history.
+pub fn decodedStreamSizeWithPreflight(stream: []const u8, options: DecodePreflightOptions) DecodePreflightError!Counter {
+    try validateDecodePreflight(stream, &.{}, options, null);
+    return (try preflightSize(stream, options, false)).decoded_bytes;
+}
+
+/// Validate and measure the first stream, including its aligned input boundary.
+pub fn decodedStreamPrefixSizeWithPreflight(stream: []const u8, options: DecodePreflightOptions) DecodePreflightError!DecodedPrefixSize {
+    try validateDecodePreflight(stream, &.{}, options, null);
+    return preflightSize(stream, options, true);
+}
+
+/// Validate and measure a complete chunked stream using caller-owned scratch.
+pub fn decodedStreamChunksSizeWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!Counter {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, &.{}, options, null);
+    return (try preflightSize(joined, options, false)).decoded_bytes;
+}
+
+/// Measure only the first validated stream and return its joined byte offset.
+pub fn decodedStreamPrefixChunksSizeWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!DecodedPrefixSize {
+    const joined = try joinPreflightChunks(chunks, compressed_scratch, &.{}, options, null);
+    return preflightSize(joined, options, true);
+}
+
+fn preflightSize(stream: []const u8, options: DecodePreflightOptions, prefix: bool) DecodePreflightError!DecodedPrefixSize {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    var input_read = stream.len;
+    const summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, options.max_output_len, options.decode, &diagnostics, options.history, if (prefix) &input_read else null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => return error.PreflightHistoryTooSmall,
+        else => |public_err| return public_err,
+    };
+    if (options.expected_output_len) |expected|
+        if (summary.decoded_bytes != expected) return error.SizeMismatch;
+    return .{ .input_read = input_read, .decoded_bytes = summary.decoded_bytes };
 }
 
 pub fn decodedStreamSize(stream: []const u8) Error!Counter {
@@ -16174,6 +16572,18 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.metadata_bytes = std.math.add(Counter, summary.metadata_bytes, metadata_len) catch return error.IntegerOverflow;
             summary.uses_metadata = true;
             summary.stored_only = false;
+            if (is_last) {
+                const input_read = finishStreamPrefix(reader) catch |err| {
+                    recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                    return err;
+                };
+                if (prefix_input_read) |published| published.* = input_read else if (input_read != stream.len) {
+                    recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                    return error.TrailingData;
+                }
+                summary.input_bytes = input_read;
+                return summary;
+            }
             continue;
         }
         const len_minus_one = reader.readBits(u32, @intCast(mnibbles * 4)) catch |err| {
@@ -16941,6 +17351,13 @@ pub const StreamDecoder = struct {
         return self;
     }
 
+    /// Eagerly validate and decode using independent caller-owned history.
+    pub fn initWithPreflight(stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetWithPreflight(stream, output_scratch, options);
+        return self;
+    }
+
     pub fn initExactSize(stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!StreamDecoder {
         return initExactSizeWithOptions(stream, output_scratch, expected_output_len, .{});
     }
@@ -16962,6 +17379,13 @@ pub const StreamDecoder = struct {
         decode_budget.noHeap(options);
         var self = StreamDecoder{};
         try self.resetLimitedWithOptions(stream, output_scratch, max_output_len, options);
+        return self;
+    }
+
+    /// Eagerly decode one complete stream using independent compressed and history scratch.
+    pub fn initFromChunksWithPreflight(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetFromChunksWithPreflight(chunks, compressed_scratch, output_scratch, options);
         return self;
     }
 
@@ -17003,6 +17427,28 @@ pub const StreamDecoder = struct {
         try validateDecodeProfile(stream, options, &.{ output_scratch, std.mem.asBytes(self) });
         decode_budget.noHeap(options);
         return self.resetLimitedWithOptions(stream, output_scratch, std.math.maxInt(usize), options);
+    }
+
+    /// The history is not retained. Failed preflight leaves the previous
+    /// decoder position and destination unchanged, but records the error.
+    pub fn resetWithPreflight(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
+        try validateDecodePreflight(stream, output_scratch, options, self);
+        return self.installAfterPreflight(stream, output_scratch, options);
+    }
+
+    /// Join and validate before replacing the current decoded stream. Neither
+    /// scratch span is retained, and borrow refusal leaves the decoder untouched.
+    pub fn resetFromChunksWithPreflight(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
+        const joined = try joinPreflightChunks(chunks, compressed_scratch, output_scratch, options, self);
+        return self.installAfterPreflight(joined, output_scratch, options);
+    }
+
+    fn installAfterPreflight(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodePreflightOptions) DecodePreflightError!void {
+        const result = decodeIntoAfterPreflight(stream, output_scratch, options, false) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.installDecoded(result.input_read, output_scratch, result.output_written);
     }
 
     pub fn resetExactSize(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
@@ -17149,11 +17595,11 @@ pub const StreamDecoder = struct {
         };
     }
 
-    fn recordError(self: *StreamDecoder, err: Error) void {
+    fn recordError(self: *StreamDecoder, err: DecodePreflightError) void {
         self.last_error_name = @errorName(err);
         self.last_recoverability_hint = switch (err) {
             error.TruncatedFrame => .truncated_input,
-            error.UnsupportedBrotliFeature => .unsupported_feature,
+            error.UnsupportedBrotliFeature, error.PreflightHistoryTooSmall => .unsupported_feature,
             else => .payload_corrupt,
         };
     }
@@ -17179,8 +17625,30 @@ fn validateDecodeProfile(stream: []const u8, options: DecodeOptions, protected: 
     try validateChunkProfile(&.{stream}, &.{}, options, protected);
 }
 
+const decode_chunk_join = @import("br/decode/chunk_join.zig");
+
+fn preflightBorrows(output: []u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) decode_chunk_join.PreflightBorrows {
+    return .{
+        .history = options.history,
+        .output = output,
+        .profile = if (options.decode.memory_profile) |profile| std.mem.asBytes(profile) else &.{},
+        .decoder = if (eager) |state| std.mem.asBytes(state) else &.{},
+        .prior_output = if (eager) |state| state.decoded else &.{},
+    };
+}
+
+fn validateDecodePreflight(stream: []const u8, output: []u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) Error!void {
+    return decode_chunk_join.validatePreflight(&.{stream}, &.{}, options.decode.shared_dictionary, preflightBorrows(output, options, eager));
+}
+
+fn joinPreflightChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodePreflightOptions, eager: ?*const StreamDecoder) Error![]const u8 {
+    const borrows = preflightBorrows(output, options, eager);
+    try decode_chunk_join.validatePreflight(chunks, compressed_scratch, options.decode.shared_dictionary, borrows);
+    return joinDecodeChunks(chunks, compressed_scratch, options.decode, &.{ borrows.history, borrows.output, borrows.decoder, borrows.prior_output });
+}
+
 fn joinDecodeChunks(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions, protected: []const []const u8) Error![]const u8 {
-    return @import("br/decode/chunk_join.zig").join(chunks, compressed_scratch, protected, options.shared_dictionary);
+    return decode_chunk_join.join(chunks, compressed_scratch, protected, options.shared_dictionary);
 }
 
 fn readWindowBits(reader: *bitstream.BitReader) Error!void {
@@ -17944,7 +18412,13 @@ fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u
                 try ensureZeroPaddingAndEnd(reader);
                 return starts.toOwnedSlice(allocator);
             },
-            .metadata => try skipMetadataMetaBlock(&reader),
+            .metadata => |final| {
+                try skipMetadataMetaBlock(&reader);
+                if (final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return starts.toOwnedSlice(allocator);
+                }
+            },
             .compressed => |meta| {
                 try starts.append(allocator, reader.bitPosition());
                 const end = std.math.add(usize, written, meta.decoded_len) catch return error.IntegerOverflow;
@@ -28281,6 +28755,7 @@ test "br adaptive command split writes off-grid non-cyclic types" {
         true,
         false,
         false,
+        0,
         .{},
     );
     defer proposals.deinit(std.testing.allocator);
@@ -28428,6 +28903,7 @@ test "br adaptive distance split writes off-grid non-cyclic types" {
         false,
         true,
         true,
+        0,
         .{},
     );
     defer proposals.deinit(std.testing.allocator);
@@ -28532,6 +29008,7 @@ const AdaptiveDistanceCountedTestAdapter = struct {
             false,
             false,
             true,
+            0,
             .{},
         );
         errdefer splits.deinit(allocator);

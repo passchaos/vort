@@ -1,0 +1,89 @@
+{
+  "schema": "vort.zstd.incremental-parallel-campaign.v1",
+  "created_utc": "2026-11-20T08:32:21.230063+00:00",
+  "source_epoch": "22e5ca24-plus-encoder-borrow-admission",
+  "counts": {
+    "cases": 171,
+    "passed": 171,
+    "failed": 0
+  },
+  "reference": {
+    "library": {
+      "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+      "bytes": 896992,
+      "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+    },
+    "version": "1.6.0",
+    "version_number": 10600,
+    "header": {
+      "path": "/home/passchaos/Work/zstd/lib/zstd.h",
+      "bytes": 182200,
+      "sha256": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+    },
+    "resolved_parameters": {
+      "ZSTD_c_format": 10,
+      "ZSTD_d_format": 1000,
+      "ZSTD_c_compressionLevel": 100,
+      "ZSTD_c_windowLog": 101,
+      "ZSTD_c_contentSizeFlag": 200,
+      "ZSTD_c_checksumFlag": 201,
+      "ZSTD_c_dictIDFlag": 202,
+      "ZSTD_f_zstd1_magicless": 1
+    },
+    "parameter_scope": "experimental format aliases resolved from this exact local header"
+  },
+  "sources_preserved": true,
+  "source_sha256": "637805b59b978df3be7995e386a92a0a7abccee9ba41ba4ae9dcccce042a5cdd",
+  "checks": {
+    "matrix_explicit_strategies": [
+      "fast",
+      "double_fast",
+      "greedy",
+      "lazy",
+      "optimal",
+      "lazy2",
+      "btlazy2",
+      "btopt",
+      "btultra",
+      "btultra2"
+    ],
+    "observed_explicit_strategies": [
+      "btlazy2",
+      "btopt",
+      "btultra",
+      "btultra2",
+      "double_fast",
+      "fast",
+      "greedy",
+      "lazy",
+      "lazy2",
+      "optimal"
+    ],
+    "campaign_scope": "complete matrix",
+    "worker_overlap_required": true,
+    "observed_peak_active_workers": 2,
+    "campaign_actual_worker_overlap_passed": true,
+    "max_independent_sequence_count": 1330,
+    "same_geometry_controls": "worker1 and std.Io.failing, same job/flush boundaries; no unconditional legacy serial wire claim"
+  },
+  "long_input_memory": [
+    {
+      "format": "standard",
+      "lengths": [
+        262144,
+        1048576,
+        4194304
+      ],
+      "stable_retained_capacities": true
+    },
+    {
+      "format": "magicless",
+      "lengths": [
+        262144,
+        1048576,
+        4194304
+      ],
+      "stable_retained_capacities": true
+    }
+  ]
+}

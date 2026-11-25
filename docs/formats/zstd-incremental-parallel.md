@@ -113,8 +113,10 @@ history, frame hash and entropy state. `finish()` rejects further input and
 emits the final partial/full job. After an acknowledged flush with no new input,
 it adds an empty final job. The content XXH checksum is appended once, and `done`
 plus the data-frame count advance only after all terminal bytes are delivered.
-Finishing with fewer accepted bytes than the exact pledge produces sticky
-`SizeMismatch` until reset.
+Calling `finish()` with fewer accepted bytes than the exact pledge produces
+sticky `SizeMismatch` until reset. A `stepWithDirective(..., .end)` offer
+that cannot meet the pledge is instead refused before admission; a corrected
+slice is retryable on the same encoder.
 
 Surplus input, scalar input/job-admission caps and invalid offers are checked before
 sealing/delivery and are recoverable. Raising pending or cumulative output caps
@@ -160,6 +162,8 @@ preset ID zero is legal. Metadata-only nonzero-ID routes do not supply history
 and are limited to their raw-output contract. Standard skippable frames may be
 written only at done/drained boundaries, contribute delivered output bytes and
 do not advance data-frame count; magicless mode rejects skippable writing.
+The [streamed skippable encoder](zstd-skippable-stream.md) charges only its
+inline header to pending output and copies the body directly to caller output.
 
 ZIP incremental `zstd_parallel_options = null` preserves serial wire, allocation
 and existing resolution guards. An explicit option selects the new stable owning

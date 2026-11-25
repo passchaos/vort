@@ -1,0 +1,118 @@
+1/37 br.test_0...OK
+2/37 br.incremental.stored.encoder.test_0...OK
+3/37 br.incremental.copy_decoder.test_0...OK
+4/37 br.incremental.owned_copy_decoder.test_0...OK
+5/37 br.encoder.distance.test_0...OK
+6/37 br.encoder.code_length_rle.test_0...OK
+7/37 br.encoder.hq_options.test_0...OK
+8/37 br.encoder.hq_types.test_0...OK
+9/37 br.encoder.hq_parser.test_0...OK
+10/37 br.encoder.total_budget.test_0...OK
+11/37 tests.br_total_memory_contracts.test_0...OK
+12/37 br.encoder.stored_memory_owner.test_0...OK
+13/37 br.encoder.stored_memory_reuse.test_0...OK
+14/37 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/37 br.encoder.hq_dictionary.test_0...OK
+16/37 br.encoder.hq_codec.alias.test_0...OK
+17/37 br.encoder.static_dictionary_matcher.test_0...OK
+18/37 br.encoder.stored_bit_bound.test_0...OK
+19/37 br.encoder.total_budget.tests.test_0...OK
+20/37 br.encoder.hq_parser.tests.test_0...OK
+21/37 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows stored rejects metadata before publishing...expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12a3a8b in expectError__anon_45050 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:17:12: 0x12a7c80 in reject__anon_44983 (br.zig)
+    } else try std.testing.expectError(error.InvalidBlockPlan, encoder.writeMetadata(metadata));
+           ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:54:5: 0x12a9a0c in checkMetadata__anon_44878 (br.zig)
+    try reject(&encoder, &ledger, &profile, std.mem.asBytes(&encoder.flush_requested), null);
+    ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:113:5: 0x12ab4a7 in test.Brotli lifecycle borrows stored rejects metadata before publishing (br.zig)
+    try checkMetadata(br.IncrementalStoredStreamEncoder);
+    ^
+22/37 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows planned rejects metadata before publishing...expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12a3a8b in expectError__anon_45050 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:17:12: 0x1614847 in reject__anon_76814 (br.zig)
+    } else try std.testing.expectError(error.InvalidBlockPlan, encoder.writeMetadata(metadata));
+           ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:54:5: 0x180053d in checkMetadata__anon_464412 (br.zig)
+    try reject(&encoder, &ledger, &profile, std.mem.asBytes(&encoder.flush_requested), null);
+    ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:116:5: 0x18021b7 in test.Brotli lifecycle borrows planned rejects metadata before publishing (br.zig)
+    try checkMetadata(br.IncrementalPlannedStreamEncoder);
+    ^
+23/37 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows static dictionary rejects metadata before publishing...expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12a3a8b in expectError__anon_45050 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:17:12: 0x13c1e00 in reject__anon_68150 (br.zig)
+    } else try std.testing.expectError(error.InvalidBlockPlan, encoder.writeMetadata(metadata));
+           ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:54:5: 0x17fe370 in checkMetadata__anon_464397 (br.zig)
+    try reject(&encoder, &ledger, &profile, std.mem.asBytes(&encoder.flush_requested), null);
+    ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:119:5: 0x17ffe07 in test.Brotli lifecycle borrows static dictionary rejects metadata before publishing (br.zig)
+    try checkMetadata(br.IncrementalStaticDictionaryStreamEncoder);
+    ^
+24/37 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows stored rejects next stream before reset...expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12a3a8b in expectError__anon_45050 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:16:9: 0x12a7b1e in reject__anon_44983 (br.zig)
+        try std.testing.expectError(error.InvalidBlockPlan, encoder.nextStream(next));
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:92:5: 0x17fc6e5 in checkNextStream__anon_463041 (br.zig)
+    try reject(&encoder, &ledger, &profile, options.stream.metadata, options);
+    ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:122:5: 0x17fdfc7 in test.Brotli lifecycle borrows stored rejects next stream before reset (br.zig)
+    try checkNextStream(br.IncrementalStoredStreamEncoder);
+    ^
+25/37 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows planned rejects next stream before reset...expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12a3a8b in expectError__anon_45050 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:16:9: 0x16146e5 in reject__anon_76814 (br.zig)
+        try std.testing.expectError(error.InvalidBlockPlan, encoder.nextStream(next));
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:92:5: 0x1615bb4 in checkNextStream__anon_76611 (br.zig)
+    try reject(&encoder, &ledger, &profile, options.stream.metadata, options);
+    ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:125:5: 0x1617a07 in test.Brotli lifecycle borrows planned rejects next stream before reset (br.zig)
+    try checkNextStream(br.IncrementalPlannedStreamEncoder);
+    ^
+26/37 br.incremental.stored.lifecycle_borrows_tests.test.Brotli lifecycle borrows static dictionary rejects next stream before reset...expected error.InvalidBlockPlan, found void
+FAIL (TestExpectedError)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:65:9: 0x12a3a8b in expectError__anon_45050 (std.zig)
+        return error.TestExpectedError;
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:16:9: 0x13c1c9e in reject__anon_68150 (br.zig)
+        try std.testing.expectError(error.InvalidBlockPlan, encoder.nextStream(next));
+        ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:92:5: 0x13c2f09 in checkNextStream__anon_68097 (br.zig)
+    try reject(&encoder, &ledger, &profile, options.stream.metadata, options);
+    ^
+/tmp/vort-br-lifecycle-borrows-XjPFww/src/br/incremental/stored/lifecycle_borrows_tests.zig:128:5: 0x13c47e7 in test.Brotli lifecycle borrows static dictionary rejects next stream before reset (br.zig)
+    try checkNextStream(br.IncrementalStaticDictionaryStreamEncoder);
+    ^
+27/37 bitstream.test_0...OK
+28/37 io.requested_heap_budget.test_0...OK
+29/37 br.encoder.scoped_static_dictionary.test_0...OK
+30/37 br.encoder.literal_context_policy.test_0...OK
+31/37 lz77.test_0...OK
+32/37 lz77.test_1...OK
+33/37 br.encoder.hq_tree.test_0...OK
+34/37 br.encoder.histogram_model.log_q8.test_0...OK
+35/37 br.encoder.joint_context.kernels.test_0...OK
+36/37 br.encoder.hq_parser.command_storage.test_0...OK
+37/37 br.encoder.joint_context.kernels_tests.test_0...OK
+31 passed; 0 skipped; 6 failed.
+error: the following test command failed with exit code 1:
+cache/o/7405c0e1cceff8aa8c3524f5b9beedab/vort-br-lifecycle-tests --seed=0x26a4d5ae

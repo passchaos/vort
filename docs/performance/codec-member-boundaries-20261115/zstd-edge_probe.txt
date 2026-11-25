@@ -1,0 +1,33 @@
+exit_code=-6
+unknown FCS empty compressed policy=prevalidated_frame: status=done read=11
+  finish=ok
+checksum valid empty policy=prevalidated_frame: status=done read=13
+  finish=ok
+checksum truncated empty policy=prevalidated_frame: step_error=SizeMismatch read=12
+checksum mismatch empty policy=prevalidated_frame: step_error=ChecksumMismatch read=13
+known FCS nonempty no output policy=prevalidated_frame: status=need_output read=10
+  finish_error=OutputTooSmall
+unknown FCS empty compressed policy=block_stream: status=done read=11
+  finish=ok
+checksum valid empty policy=block_stream: status=done read=13
+  finish=ok
+checksum truncated empty policy=block_stream: status=need_input read=12
+  finish_error=TruncatedFrame
+checksum mismatch empty policy=block_stream: step_error=ChecksumMismatch read=13
+known FCS nonempty no output policy=block_stream: step_error=SizeMismatch read=6
+thread 1542970 panic: index out of bounds: index 0, len 0
+/home/passchaos/project-z/vort/src/zstd.zig:8047:47: 0x10b46b2 in fulfilledPledgeStartsDataMember (root)
+        const first = self.frame_scratch.items[0];
+                                              ^
+/home/passchaos/project-z/vort/src/zstd.zig:7328:65: 0x108ca6f in stepInternal (root)
+                        if (self.fulfilledPledgeStartsDataMember()) {
+                                                                ^
+/home/passchaos/project-z/vort/src/zstd.zig:7231:41: 0x1086c75 in step (root)
+        const result = self.stepInternal(input, output) catch |original| {
+                                        ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:698:59: 0x1036b23 in callMain (root)
+    if (fn_info.params.len == 0) return wrapMain(root.main());
+                                                          ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:190:5: 0x103670d in _start (root)
+    asm volatile (switch (native_arch) {
+    ^

@@ -2,6 +2,10 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const counts = core.stream_count;
 const working = @import("../../io/working_allocator.zig");
+const metadata_events = @import("metadata_events.zig");
+const history_growth = @import("history_growth.zig");
+const dictionary_attachments = @import("dictionary_attachments.zig");
+const SerializedDictionary = @import("../serialized_dictionary.zig").Dictionary;
 
 /// Allocator-owning facade for the true symbol-progressive Brotli decoder.
 /// It owns the bounded history ring and, only for an entropy header larger than
@@ -19,7 +23,9 @@ pub fn Decoder(comptime Codec: type) type {
         window_prefix_len: u2 = 0,
         window_prefix_offset: u2 = 0,
         decode_options_validated: bool = false,
+        attachments: dictionary_attachments.State = .{},
         history_capped: bool = false,
+        history_limit: usize = 0,
         phase: Phase = .input,
         last_status: core.StepResult.Status = .need_input,
         frame_input_read: Counter = 0,
@@ -38,6 +44,8 @@ pub fn Decoder(comptime Codec: type) type {
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Counter = core.StreamCount;
+        pub const MetadataEvent = metadata_events.Event;
+        pub const MetadataObserver = metadata_events.Observer;
         pub const Options = struct {
             max_compressed_len: Counter = std.math.maxInt(Counter),
             expected_compressed_len: ?Counter = null,
@@ -61,6 +69,12 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Maximum total metadata body bytes in one Brotli stream.
+            max_metadata_bytes: Counter = std.math.maxInt(Counter),
+            /// Maximum metadata blocks in one stream, including empty blocks.
+            max_metadata_blocks: Counter = std.math.maxInt(Counter),
+            /// Receive metadata synchronously, independent of fixed capture.
+            metadata_observer: ?MetadataObserver = null,
             allow_trailing_data: bool = false,
         };
         pub const Phase = enum { input, output, done };
@@ -114,6 +128,46 @@ pub fn Decoder(comptime Codec: type) type {
             self.history.deinit(self.budget.allocator());
             self.compressed_header.deinit(self.budget.allocator());
             std.debug.assert(self.budget.live == 0);
+        }
+
+        /// Append a borrowed RAW prefix for this frame before accepting input.
+        /// Does not reset counters or release retained decoder allocations.
+        pub fn attachRawDictionary(self: *Self, prefix: []const u8) Error!void {
+            try self.checkAttachmentBoundary();
+            if (prefix.len == 0) return;
+            try Codec.validateDecodeOptions(self.options.decode);
+            _ = try self.attachments.append(self.options.decode.shared_dictionary, prefix, &self.attachmentWriters());
+        }
+
+        /// Borrow one parsed serialized dictionary without resetting the
+        /// operation or replacing retained decoder allocations.
+        pub fn attachSerializedDictionary(self: *Self, dictionary: *const SerializedDictionary) Error!void {
+            try self.checkAttachmentBoundary();
+            try Codec.validateDecodeOptions(self.options.decode);
+            _ = try self.attachments.attachSerialized(self.options.decode.shared_dictionary, dictionary, &self.attachmentWriters());
+        }
+
+        fn checkAttachmentBoundary(self: *const Self) Error!void {
+            if (self.phase != .input or self.progressive != null or self.frame_input_read != 0 or
+                self.input_finished or self.fatal_error != null) return error.InvalidStreamState;
+        }
+
+        fn attachmentWriters(self: *const Self) [6][]const u8 {
+            return .{
+                std.mem.asBytes(self),
+                self.history.allocatedSlice(),
+                self.compressed_header.allocatedSlice(),
+                self.options.compressed_header_scratch,
+                self.options.metadata_output,
+                std.mem.sliceAsBytes(self.options.metadata_block_lengths),
+            };
+        }
+
+        /// Change the observer between calls to step. Only future events are
+        /// delivered; null detaches without changing decode state or captures.
+        pub fn setMetadataObserver(self: *Self, observer: ?MetadataObserver) void {
+            self.options.metadata_observer = observer;
+            if (self.progressive) |*decoder| decoder.setMetadataObserver(observer);
         }
 
         /// Retain allocations and start a new operation with the current caps.
@@ -318,6 +372,8 @@ pub fn Decoder(comptime Codec: type) type {
                     ) catch |err| return self.failWithProgress(self.phase, self.mapHistoryError(err), input_read, output_written);
                     self.window_prefix_offset += @intCast(inner.progress.input_read);
                     output_written += inner.progress.output_written;
+                    if (inner.status == .done and input_read != input.len and !self.options.allow_trailing_data)
+                        return self.failWithProgress(.done, error.TrailingData, input_read, output_written);
                     if (inner.status == .done or inner.status == .need_output)
                         return self.completeStep(input_read, output_written, inner.status);
                     if (self.window_prefix_offset < self.window_prefix_len) {
@@ -349,6 +405,8 @@ pub fn Decoder(comptime Codec: type) type {
                         return self.failWithProgress(.input, error.CorruptFrame, input_read, output_written);
                     continue;
                 }
+                if (inner.status == .done and input_read != input.len and !self.options.allow_trailing_data)
+                    return self.failWithProgress(.done, error.TrailingData, input_read, output_written);
                 return self.completeStep(input_read, output_written, inner.status);
             }
         }
@@ -409,21 +467,34 @@ pub fn Decoder(comptime Codec: type) type {
             return if (self.progressive) |*decoder| decoder.trailingInput() else &.{};
         }
 
+        fn growsHistoryOnDemand(self: *const Self) bool {
+            return @hasDecl(Codec, "stepWithHistory") and self.options.expected_output_len == null;
+        }
+
         fn prepareProgressive(self: *Self) Error!bool {
             if (self.progressive != null) return true;
             const output_bound = @min(
                 self.options.expected_output_len orelse self.options.max_output_len,
                 self.options.max_total_output_len -| self.total_output,
             );
+            const decode = if (@hasField(Codec.DecodeOptions, "shared_dictionary")) blk: {
+                var configured = self.options.decode;
+                configured.shared_dictionary = self.attachments.view(configured.shared_dictionary);
+                break :blk configured;
+            } else self.options.decode;
             const plan = (try Codec.historyPlanFromPrefix(
                 self.window_prefix[0..self.window_prefix_len],
                 output_bound,
                 self.options.max_history_len,
-                self.options.decode,
+                decode,
             )) orelse return false;
-            try self.history.ensureTotalCapacityPrecise(self.budget.allocator(), plan.allocation_len);
-            self.history.items.len = plan.allocation_len;
+            if (!self.growsHistoryOnDemand()) {
+                if (plan.capped and plan.allocation_len == 0) return error.OutputLimitExceeded;
+                try self.history.ensureTotalCapacityPrecise(self.budget.allocator(), plan.allocation_len);
+            }
+            self.history.items.len = @min(plan.allocation_len, self.history.capacity);
             self.history_capped = plan.capped;
+            self.history_limit = plan.allocation_len;
             const header_limit = self.compressedHeaderLimit();
             const header_scratch: []u8 = if (self.options.compressed_header_scratch.len >
                 Codec.ProgressiveDecoder.embedded_compressed_header_capacity)
@@ -438,7 +509,7 @@ pub fn Decoder(comptime Codec: type) type {
                     header_limit,
                 )]
             else
-                self.history.items[0..0];
+                &.{};
             self.progressive = Codec.ProgressiveDecoder.initWithOptions(self.history.items, .{
                 .max_output_len = self.options.max_output_len,
                 .max_total_output_len = self.options.max_total_output_len -| self.total_output,
@@ -447,8 +518,13 @@ pub fn Decoder(comptime Codec: type) type {
                 .compressed_header_scratch = header_scratch,
                 .metadata_output = self.options.metadata_output,
                 .metadata_block_lengths = self.options.metadata_block_lengths,
+                .max_metadata_bytes = self.options.max_metadata_bytes,
+                .max_metadata_blocks = self.options.max_metadata_blocks,
+                .metadata_observer = self.options.metadata_observer,
                 .allow_trailing_data = self.options.allow_trailing_data,
             });
+            if (@hasField(Codec.ProgressiveDecoder, "attachments"))
+                self.progressive.?.attachments = self.attachments;
             return true;
         }
 
@@ -494,8 +570,17 @@ pub fn Decoder(comptime Codec: type) type {
             const operation_output = try counts.add(self.total_output, frame_output);
             const remaining = @min(std.math.maxInt(Counter) - frame_output, std.math.maxInt(Counter) - operation_output);
             const bounded_output = output[0..counts.bounded(remaining, output.len)];
-            const before = self.progressive.?.snapshot();
-            const stepped = self.progressive.?.step(input, bounded_output) catch |err| {
+            const decoder = &self.progressive.?;
+            const before = decoder.snapshot();
+            const outcome = if (@hasDecl(Codec, "stepWithHistory") and self.growsHistoryOnDemand())
+                Codec.stepWithHistory(decoder, input, bounded_output, history_growth.Reservation{
+                    .storage = &self.history,
+                    .budget = &self.budget,
+                    .limit = self.history_limit,
+                })
+            else
+                decoder.step(input, bounded_output);
+            const stepped = outcome catch |err| {
                 const after = self.progressive.?.snapshot();
                 self.recordInnerProgress(.{
                     .input_read = localDelta(after.input_read, before.input_read, input.len),
@@ -530,10 +615,9 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn mapHistoryError(self: *const Self, err: Error) Error {
-            return if (self.history_capped and err == error.InvalidMatch)
-                error.OutputLimitExceeded
-            else
-                err;
+            if (err != error.InvalidMatch or !self.history_capped) return err;
+            const decoder = if (self.progressive) |*value| value else return err;
+            return if (decoder.history_capacity_exceeded) error.OutputLimitExceeded else err;
         }
 
         fn completeStep(self: *Self, input_read: usize, output_written: usize, initial_status: core.StepResult.Status) Error!core.StepResult {

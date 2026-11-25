@@ -116,7 +116,63 @@ and the copy decoder's void reset keep their established signatures, so those
 paths surface invalid options on the first step or finish. Dictionary errors
 retain precedence over the policy rejection.
 
+Without `expected_output_len`, the owned incremental decoder validates the
+window without allocating history. It reserves history when it admits a data
+meta-block, before any of that block's output, up to the advertised window,
+reachable output and `max_history_len`. Fresh empty and metadata-only streams
+need no history allocation, including Large Window streams; they can decode
+with both `max_working_memory` and `max_history_len` set to zero. Compressed
+header scratch remains a separate part of the working-memory budget.
+
+History growth preserves all earlier bytes needed by subsequent meta-blocks.
+The decoder can reserve geometric spare capacity within the frame's history
+limit; moving growth charges old and new allocations simultaneously. An exact
+output pledge still allows one upfront reservation. `reset` and `nextFrame`
+retain existing capacity, while `resetWithOptions` releases it.
+
+The owned incremental decoder's `max_history_len` may retain a smaller history
+ring than the format window. A valid history reference beyond that ring reports
+`OutputLimitExceeded`. Malformed zero distances, invalid static dictionary
+addresses and compound dictionary overruns retain `InvalidMatch` even with a
+history cap. The caller-history decoder reports `InvalidMatch` for an
+undersized ring as before. Both decoders preserve actual failed-call progress
+and sticky errors; reset and next-frame initialization clear the internal
+history-capacity failure cause.
+
+### Attaching RAW prefixes before input
+
+`IncrementalCopyStreamDecoder` and the owned `IncrementalStreamDecoder`
+provide `attachRawDictionary(prefix)`. Call it before the current frame
+accepts compressed input, including after a zero-input poll or a successful
+`nextFrame`. Repeated calls append borrowed prefix bytes after configured RAW
+prefixes and before any RAW tail in the serialized dictionary.
+Only the descriptors are copied; attaching allocates no heap and leaves
+retained workspace, quotas and stream counters unchanged. An eligible empty
+attachment is a no-op, unlike an explicit empty slot in the configured slice.
+
+Prefix bytes must remain valid and unchanged for the frame. An attachment
+overlapping decoder-owned or configured writable storage returns
+`InvalidBlockPlan`. Excess prefixes or total RAW bytes return `CorruptFrame`;
+length arithmetic overflow returns `IntegerOverflow`. A refusal keeps the prior
+binding and consumes no slot. After accepting input, completing a frame, or
+failing decoding, the method returns `InvalidStreamState`. Reset and next-frame
+transitions discard these attachments; dictionary options retain their normal
+lifetimes. See [serialized attachment](brotli-serialized-dictionary.md#attaching-before-stream-input)
+for adding a parsed view at the same boundary.
+
 ## Validation
+
+The upstream stream differential also covers unpledged owned and caller-history
+Brotli decoding with a RAW dictionary after the advertised 65,520-byte history
+has wrapped. It encodes a short flushed block, enough filler to wrap the ring,
+and a dictionary-dependent tail. Substituting a different same-length RAW
+attachment must change the tail while preserving the whole preceding prefix.
+All three schedules check complete input, exact output and the history cap:
+
+```sh
+zig build -Doptimize=ReleaseFast run-br-stream-contract-diff -- \
+  --brotli-lib-dir "$HOME/Work/brotli/build-vort"
+```
 
 Run the focused public contracts with:
 
@@ -133,8 +189,9 @@ requested-byte peak with the profile. Exact measured peak `D` succeeds and
 output and boundary identity, stored/RLE/entropy/multiple meta-blocks, Large
 Window, borrowed RAW and parsed serialized dictionaries, true OOM, aliases,
 existing capacity, prefix tails, truncation, malformed input, and output
-publication. The WASI gate executes the actual 32-bit Zig test artifact and
-writes `zig-out/br-decode-memory-wasm.json` with artifact/source identities.
+publication. The WASI gate executes the actual 32-bit Zig test artifact, including the
+owned-history and stream lifecycle contracts, and writes
+`zig-out/br-decode-memory-wasm.json` with artifact/source identities.
 Reference verification records its concrete library versions and native/x86
 receipts under `zig-out/br-decode-memory-reference/`.
 

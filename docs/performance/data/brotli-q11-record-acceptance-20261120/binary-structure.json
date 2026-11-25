@@ -1,0 +1,283 @@
+{
+  "before": {
+    "sections": {
+      "NULL": 0,
+      ".interp": 28,
+      ".note.ABI-tag": 32,
+      ".dynsym": 2160,
+      ".gnu.version": 180,
+      ".gnu.version_r": 240,
+      ".gnu.hash": 28,
+      ".hash": 728,
+      ".dynstr": 972,
+      ".rela.dyn": 48,
+      ".rela.plt": 2088,
+      ".rodata": 1240580,
+      ".eh_frame_hdr": 8300,
+      ".eh_frame": 48396,
+      ".text": 1948857,
+      ".init": 27,
+      ".fini": 13,
+      ".vort_br_wide_lookup10_aux": 7936,
+      ".vort_br_paired_literal": 15227,
+      ".vort_br_wide_lookup9": 27716,
+      ".vort_br_large_window": 38799,
+      ".vort_br_dictionary_index": 5276,
+      ".vort_br_command_state": 14644,
+      ".vort_br_adaptive_split": 86518,
+      ".vort_br_distance_params": 15070,
+      ".vort_br_counted_context": 15621,
+      ".plt": 1408,
+      ".data.rel.ro": 182288,
+      ".dynamic": 368,
+      ".got": 16,
+      ".got.plt": 720,
+      ".relro_padding": 816,
+      ".data": 19408,
+      ".bss": 262816,
+      ".debug_loc": 4609053,
+      ".debug_abbrev": 4616,
+      ".debug_info": 2089437,
+      ".debug_ranges": 759008,
+      ".debug_str": 459476,
+      ".debug_pubnames": 137864,
+      ".debug_pubtypes": 200965,
+      ".debug_line": 1378567,
+      ".comment": 19,
+      ".symtab": 151752,
+      ".shstrtab": 579,
+      ".strtab": 117231
+    },
+    "text_bytes": 1948857,
+    "gnu_stack_program_header": [
+      "GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x1000000 RW  0"
+    ],
+    "has_stack_sizes_section": false,
+    "largest_visible_constant_stack_subtractions": [
+      {
+        "function": "br.encodeCommandPlanWithLargeWindowWriteBody__anon_385591",
+        "constant_stack_subtraction_bytes": 1194600
+      },
+      {
+        "function": "br.encodeCommandPlanWithAdaptiveSplitWrite",
+        "constant_stack_subtraction_bytes": 1119000
+      },
+      {
+        "function": "br.processMinimalCompressedMetaBlockImpl",
+        "constant_stack_subtraction_bytes": 957560
+      },
+      {
+        "function": "br.processLargeCompressedMetaBlock",
+        "constant_stack_subtraction_bytes": 952216
+      },
+      {
+        "function": "br.encodeHqWholeStreamSelectedAlloc",
+        "constant_stack_subtraction_bytes": 870592
+      },
+      {
+        "function": "br.processMinimalCompressedMetaBlockLargeWindow",
+        "constant_stack_subtraction_bytes": 811080
+      },
+      {
+        "function": "br.processLargeCompressedMetaBlockLargeWindow",
+        "constant_stack_subtraction_bytes": 810520
+      },
+      {
+        "function": "br.processPairedWideLiteralMetaBlock",
+        "constant_stack_subtraction_bytes": 542528
+      },
+      {
+        "function": "br.processWideExternalLiteralLookupMetaBlock__anon_31297",
+        "constant_stack_subtraction_bytes": 537976
+      },
+      {
+        "function": "br.encodeCommandPlanWithLargeWindowWriteBody__anon_385592",
+        "constant_stack_subtraction_bytes": 530104
+      },
+      {
+        "function": "br.encodeCommandPlanWithStandardWrite",
+        "constant_stack_subtraction_bytes": 461032
+      },
+      {
+        "function": "br.prepareCommandPlanWithOptionsRecorded__anon_450007",
+        "constant_stack_subtraction_bytes": 443080
+      },
+      {
+        "function": "br.processWideExternalLiteralLookup9MetaBlock__anon_31276",
+        "constant_stack_subtraction_bytes": 350016
+      },
+      {
+        "function": "br.encodeCommandPlanWithWideDistanceWrite",
+        "constant_stack_subtraction_bytes": 339000
+      },
+      {
+        "function": "br.writeHqPlannedStreamMetaBlock",
+        "constant_stack_subtraction_bytes": 338232
+      },
+      {
+        "function": "br.considerPlannedMetaBlockPolicy",
+        "constant_stack_subtraction_bytes": 301760
+      },
+      {
+        "function": "lz77.lazyGreedyPlanAlloc",
+        "constant_stack_subtraction_bytes": 295416
+      },
+      {
+        "function": "lz77.lazyGreedyPlanWithDictionaryReuse",
+        "constant_stack_subtraction_bytes": 295224
+      },
+      {
+        "function": "lz77.lazyGreedyPlanTinyReuse",
+        "constant_stack_subtraction_bytes": 295016
+      },
+      {
+        "function": "br.BrotliHqEncoderCodec.planAlloc",
+        "constant_stack_subtraction_bytes": 282520
+      }
+    ],
+    "frame_scope": "Static disassembly stack-pointer decrements only, not a runtime stack peak or complete call-chain bound."
+  },
+  "after": {
+    "sections": {
+      "NULL": 0,
+      ".interp": 28,
+      ".note.ABI-tag": 32,
+      ".dynsym": 2160,
+      ".gnu.version": 180,
+      ".gnu.version_r": 240,
+      ".gnu.hash": 28,
+      ".hash": 728,
+      ".dynstr": 972,
+      ".rela.dyn": 48,
+      ".rela.plt": 2088,
+      ".rodata": 1240580,
+      ".eh_frame_hdr": 8308,
+      ".eh_frame": 48444,
+      ".text": 1948953,
+      ".init": 27,
+      ".fini": 13,
+      ".vort_br_wide_lookup10_aux": 7936,
+      ".vort_br_paired_literal": 15227,
+      ".vort_br_wide_lookup9": 27716,
+      ".vort_br_large_window": 38799,
+      ".vort_br_dictionary_index": 5276,
+      ".vort_br_command_state": 14644,
+      ".vort_br_adaptive_split": 86518,
+      ".vort_br_distance_params": 15070,
+      ".vort_br_counted_context": 15621,
+      ".plt": 1408,
+      ".data.rel.ro": 182288,
+      ".dynamic": 368,
+      ".got": 16,
+      ".got.plt": 720,
+      ".relro_padding": 624,
+      ".data": 19408,
+      ".bss": 262816,
+      ".debug_loc": 4609328,
+      ".debug_abbrev": 4616,
+      ".debug_info": 2089420,
+      ".debug_ranges": 759008,
+      ".debug_str": 459475,
+      ".debug_pubnames": 137864,
+      ".debug_pubtypes": 200965,
+      ".debug_line": 1378587,
+      ".comment": 19,
+      ".symtab": 151776,
+      ".shstrtab": 579,
+      ".strtab": 117278
+    },
+    "text_bytes": 1948953,
+    "gnu_stack_program_header": [
+      "GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x1000000 RW  0"
+    ],
+    "has_stack_sizes_section": false,
+    "largest_visible_constant_stack_subtractions": [
+      {
+        "function": "br.encodeCommandPlanWithLargeWindowWriteBody__anon_385591",
+        "constant_stack_subtraction_bytes": 1194600
+      },
+      {
+        "function": "br.encodeCommandPlanWithAdaptiveSplitWrite",
+        "constant_stack_subtraction_bytes": 1119000
+      },
+      {
+        "function": "br.processMinimalCompressedMetaBlockImpl",
+        "constant_stack_subtraction_bytes": 957560
+      },
+      {
+        "function": "br.processLargeCompressedMetaBlock",
+        "constant_stack_subtraction_bytes": 952216
+      },
+      {
+        "function": "br.encodeHqWholeStreamSelectedAlloc",
+        "constant_stack_subtraction_bytes": 870592
+      },
+      {
+        "function": "br.processMinimalCompressedMetaBlockLargeWindow",
+        "constant_stack_subtraction_bytes": 811080
+      },
+      {
+        "function": "br.processLargeCompressedMetaBlockLargeWindow",
+        "constant_stack_subtraction_bytes": 810520
+      },
+      {
+        "function": "br.processPairedWideLiteralMetaBlock",
+        "constant_stack_subtraction_bytes": 542528
+      },
+      {
+        "function": "br.processWideExternalLiteralLookupMetaBlock__anon_31297",
+        "constant_stack_subtraction_bytes": 537976
+      },
+      {
+        "function": "br.encodeCommandPlanWithLargeWindowWriteBody__anon_385592",
+        "constant_stack_subtraction_bytes": 530104
+      },
+      {
+        "function": "br.encodeCommandPlanWithStandardWrite",
+        "constant_stack_subtraction_bytes": 461032
+      },
+      {
+        "function": "br.prepareCommandPlanWithOptionsRecorded__anon_450007",
+        "constant_stack_subtraction_bytes": 443080
+      },
+      {
+        "function": "br.processWideExternalLiteralLookup9MetaBlock__anon_31276",
+        "constant_stack_subtraction_bytes": 350016
+      },
+      {
+        "function": "br.encodeCommandPlanWithWideDistanceWrite",
+        "constant_stack_subtraction_bytes": 339000
+      },
+      {
+        "function": "br.writeHqPlannedStreamMetaBlock",
+        "constant_stack_subtraction_bytes": 338232
+      },
+      {
+        "function": "br.considerPlannedMetaBlockPolicy",
+        "constant_stack_subtraction_bytes": 301760
+      },
+      {
+        "function": "lz77.lazyGreedyPlanAlloc",
+        "constant_stack_subtraction_bytes": 295416
+      },
+      {
+        "function": "lz77.lazyGreedyPlanWithDictionaryReuse",
+        "constant_stack_subtraction_bytes": 295224
+      },
+      {
+        "function": "lz77.lazyGreedyPlanTinyReuse",
+        "constant_stack_subtraction_bytes": 295016
+      },
+      {
+        "function": "br.BrotliHqEncoderCodec.planAlloc",
+        "constant_stack_subtraction_bytes": 282520
+      }
+    ],
+    "frame_scope": "Static disassembly stack-pointer decrements only, not a runtime stack peak or complete call-chain bound."
+  },
+  "text_delta_bytes": 96,
+  "scope": "Read-only executable provenance; no extra timings. Neither build uses stack checks or changed stack policy; no general runtime stack claim.",
+  "process_stack_limits": [
+    "Max stack size            8388608              unlimited            bytes     "
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "raw": {
+    "path": "sample-014-original-wire.bin",
+    "bytes": 124,
+    "sha256": "56592cf283716f1d26255e8e3c61d11b4626c83f8d2e645ebbc5c2024445bd20"
+  },
+  "source": {
+    "path": "sample-014-source.bin",
+    "bytes": 128,
+    "sha256": "61c202816cecb9a58d81c48058f90d1b357f7df42a06c422efe5382c954de5ca"
+  },
+  "independent_puff_bytes": 218,
+  "independent_puff_sha256": "48c7257b9225ce0d225d2f540e1c3a38388c088923e961f12b05bcc4e74d1aa1",
+  "exact_bits": 991,
+  "distance_lengths": [
+    0
+  ],
+  "metadata_pcoded_bytes": 73
+}

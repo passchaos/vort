@@ -1,0 +1,74 @@
+1/73 zstd.test.Zstd parallel incremental bounded codec preserves actual prefix matches across wide positions...OK
+2/73 zstd.test_0...OK
+3/73 zstd.decode.budget.test_0...OK
+4/73 io.requested_heap_budget.test_0...OK
+5/73 zstd.incremental_parallel.tests.helpers.run(zstd).test.Zstd parallel incremental typed observations preserve wide counters and local geometry...OK
+6/73 zstd.incremental_parallel.tests.helpers.run(zstd).test.Zstd parallel incremental declared wide content size emits a bounded header without huge input...OK
+7/73 zstd.incremental_parallel.tests.helpers.run(zstd).test.Zstd parallel incremental unknown size header keeps the configured legacy window...OK
+8/73 zstd.incremental_parallel.tests.helpers.run(zstd).test.Zstd parallel incremental wide job ceilings round only local bounded geometry...OK
+9/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental header drains before input ownership or worker startup...OK
+10/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental all native selections preserve one frame under tiny owned IO...OK
+11/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental rejects trailing input after a completed frame...OK
+12/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental ten explicit strategies preserve unknown and exact size frames...OK
+13/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental legacy beam and complete HQ keep their actual settings...OK
+14/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental full job waits for a valid seal and finish adds no empty block...OK
+15/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental raw RLE fragments share one terminal job and checksum...OK
+16/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental one job credit seals from unaccepted valid lookahead...OK
+17/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental flush is idempotent and finish after flush emits one empty final...OK
+18/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental queued predecessors remain matching history after caller overwrite...OK
+19/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental raw ID zero full dictionary and catalog routes preserve seams...OK
+20/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental exact single segment window constrains dictionary matching...OK
+21/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental format block geometry is independent of a smaller matching history cap...OK
+22/73 zstd.incremental_parallel.tests.contracts.run(zstd).test.Zstd parallel incremental rsyncable chunking is invariant and serial-equivalent...OK
+23/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental scalar admission rejects before allocating or publishing profiles...OK
+24/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental exact shared requested heap quota and one below retain safety...OK
+25/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental complete header unit limit rejects before ownership and recovers...OK
+26/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental serial allocation failure graph cleans move reset and deinit...OK
+27/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental all worker allocations serialize an unsafe backing and remain charged...OK
+28/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental partial byte credit is not silently shrunk and explicit flush recovers...OK
+29/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental a partial job below full byte credit can finish directly...OK
+30/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental whole publication unit limit survives tiny suffix without reencoding...OK
+31/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental last byte releases full job credit and caller emitted counts...OK
+32/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental scalar pledge refusal cannot seal a full tentative job...OK
+33/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental late HQ resource failures report committed header and accepted bytes...OK
+34/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental cumulative input output and skippable limits recover across frames...OK
+35/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental cumulative output cap includes the next data frame header...OK
+36/73 zstd.incremental_parallel.tests.resources.run(zstd).test.Zstd parallel incremental job limit includes accepted partial and mandatory empty final...OK
+37/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental public value moves with owned jobs and actual active workers...OK
+38/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental active reset joins workers and keeps bounded reusable storage...OK
+39/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental warmed reset allocates nothing and restores captured codec policy...OK
+40/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental undersized finish is sticky until allocation free reset...OK
+41/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental next frame preset and settings reject low retained heap atomically...OK
+42/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental metadata only dictionary route validates IDs and preserves raw content...OK
+43/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental next frame and skippable routes require a drained data frame...OK
+44/73 zstd.incremental_parallel.tests.movement.run(zstd).test.Zstd parallel incremental caller profiles stay private between public touchpoints...OK
+45/73 zstd.incremental_parallel.queue.test.Zstd parallel incremental queue owns input prefixes and holds credit through the last actual output byte...OK
+46/73 zstd.incremental_parallel.queue.test.Zstd parallel incremental queue partial credit requires explicit flush and an empty final Job...OK
+47/73 zstd.incremental_parallel.queue.test.Zstd parallel incremental queue preserves wide frame positions and Job ordinals...OK
+48/73 zstd.incremental_parallel.queue.test.Zstd parallel incremental queue rejected reconfiguration preserves retained state...OK
+49/73 zstd.incremental_parallel.queue.test.Zstd parallel incremental queue partial spawn failure joins actual threads without a global hook...OK
+50/73 zstd.incremental_parallel.queue.test.Zstd parallel incremental queue failing Io preserves configured workers while executing synchronously...OK
+51/73 tests.zstd_stream_counter_contracts.test_0...OK
+52/73 tests.zstd_large_history_contracts.test_0...OK
+53/73 zstd.incremental.encoder.frame.test_0...OK
+54/73 tests.zstd_hq_search_contracts.test_0...OK
+55/73 zstd.match.hq_tree.test_0...OK
+56/73 zstd.match.hq_parser.test_0...OK
+57/73 zstd.match.lazy2.test_0...OK
+58/73 zstd.encode.total_budget.test_0...OK
+59/73 zstd.encode.controls.test_0...OK
+60/73 zstd.parallel.job_view.test.Zstd parallel incremental bounded job view keeps wide positions and physical slices separate...OK
+61/73 zstd.match.controlled_source.test_0...OK
+62/73 lz77.test_0...OK
+63/73 lz77.test_1...OK
+64/73 zstd.encode.repeated_pattern.test_0...OK
+65/73 zstd.literals.cut_histogram.test_0...OK
+66/73 zstd.match.controlled_fast.test_0...OK
+67/73 zstd.match.hq_parser.frontier_parser.test_0...OK
+68/73 zstd.match.adaptive_tree.test_0...OK
+69/73 zstd.match.hq_parser.row_tags.test_0...OK
+70/73 zstd.match.hq_parser.search_edges.test_0...OK
+71/73 zstd.match.hq_parser.prepared_price.test_0...OK
+72/73 zstd.match.hq_parser.tests.test_0...OK
+73/73 checksum.xxh64_stream.test_0...OK
+All 73 tests passed.

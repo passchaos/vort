@@ -1,13 +1,17 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const byte_sink = @import("../io/sink.zig");
+const wire = @import("seek_table_wire.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
+pub const Sink = byte_sink.Sink;
 
-pub const table_skippable_magic: u32 = 0x184d2a5e;
-pub const footer_magic: u32 = 0x8f92eab1;
-pub const max_frames: usize = 0x0800_0000;
+pub const table_skippable_magic: u32 = wire.table_skippable_magic;
+pub const footer_magic: u32 = wire.footer_magic;
+pub const max_frames: usize = wire.max_frames;
 pub const max_frame_decompressed_size: usize = 0x4000_0000;
-const footer_len: usize = 9;
+const footer_len = wire.footer_len;
+const header_len = wire.header_len;
 
 /// Parsed metadata for the standardized terminal Zstandard seek table. The
 /// retained stream slice is borrowed from the caller and must remain alive and
@@ -45,14 +49,7 @@ pub const Table = struct {
     }
 };
 
-pub const Entry = struct {
-    frame_index: u32,
-    compressed_offset: u64,
-    decompressed_offset: u64,
-    compressed_size: u32,
-    decompressed_size: u32,
-    checksum: ?u32,
-};
+pub const Entry = wire.Entry;
 
 pub const FrameSize = struct {
     compressed_size: u32,
@@ -74,20 +71,7 @@ pub const Index = struct {
     }
 
     pub fn frameIndexForDecompressedOffset(self: Index, offset: u64) Error!u32 {
-        if (offset >= self.table.decompressed_size) return error.RangeOutOfBounds;
-        var low: usize = 0;
-        var high = self.entries.len;
-        while (low < high) {
-            const mid = low + (high - low) / 2;
-            const current = self.entries[mid];
-            const end = std.math.add(u64, current.decompressed_offset, current.decompressed_size) catch return error.IntegerOverflow;
-            if (end <= offset)
-                low = mid + 1
-            else
-                high = mid;
-        }
-        if (low >= self.entries.len) return error.RangeOutOfBounds;
-        return @intCast(low);
+        return wire.frameIndexForDecompressedOffset(self.entries, self.table.decompressed_size, offset);
     }
 };
 
@@ -99,27 +83,15 @@ pub const Iterator = struct {
 
     pub fn next(self: *Iterator) Error!?Entry {
         if (self.index >= self.table.entry_count) return null;
-        if (self.table.entry_size != 8 and self.table.entry_size != 12) return error.CorruptFrame;
+        if (self.table.entry_size != wire.entrySize(self.table.has_checksums)) return error.CorruptFrame;
         if (self.table.stream.len < footer_len) return error.TruncatedFrame;
         const relative = std.math.mul(usize, @as(usize, self.index), self.table.entry_size) catch return error.IntegerOverflow;
-        const entries_offset = std.math.add(usize, self.table.frame_offset, 8) catch return error.IntegerOverflow;
+        const entries_offset = std.math.add(usize, self.table.frame_offset, header_len) catch return error.IntegerOverflow;
         const offset = std.math.add(usize, entries_offset, relative) catch return error.IntegerOverflow;
         const entries_end = self.table.stream.len - footer_len;
         if (offset > entries_end or entries_end - offset < self.table.entry_size) return error.TruncatedFrame;
 
-        const compressed_size = std.mem.readInt(u32, self.table.stream[offset..][0..4], .little);
-        const decompressed_size = std.mem.readInt(u32, self.table.stream[offset + 4 ..][0..4], .little);
-        const checksum = if (self.table.has_checksums) std.mem.readInt(u32, self.table.stream[offset + 8 ..][0..4], .little) else null;
-        const entry_value = Entry{
-            .frame_index = self.index,
-            .compressed_offset = self.compressed_offset,
-            .decompressed_offset = self.decompressed_offset,
-            .compressed_size = compressed_size,
-            .decompressed_size = decompressed_size,
-            .checksum = checksum,
-        };
-        self.compressed_offset = std.math.add(u64, self.compressed_offset, compressed_size) catch return error.IntegerOverflow;
-        self.decompressed_offset = std.math.add(u64, self.decompressed_offset, decompressed_size) catch return error.IntegerOverflow;
+        const entry_value = try wire.readEntryAndAdvance(self.table.stream[offset..][0..self.table.entry_size], self.table.has_checksums, self.index, &self.compressed_offset, &self.decompressed_offset);
         self.index += 1;
         return entry_value;
     }
@@ -131,31 +103,19 @@ pub const Iterator = struct {
 /// skippable header. This rejects a valid-looking footer detached from the
 /// frames it claims to index.
 pub fn inspect(stream: []const u8) Error!Table {
-    if (stream.len < 8 + footer_len) return error.TruncatedFrame;
-    const footer = stream[stream.len - footer_len ..];
-    if (std.mem.readInt(u32, footer[5..9], .little) != footer_magic) return error.InvalidMagic;
-
-    const descriptor = footer[4];
-    if (descriptor & 0x7c != 0) return error.CorruptFrame;
-    const has_checksums = descriptor & 0x80 != 0;
-    const entry_size: u8 = if (has_checksums) 12 else 8;
-    const entry_count = std.mem.readInt(u32, footer[0..4], .little);
-    if (entry_count > max_frames) return error.CorruptFrame;
-    const entries_len = std.math.mul(usize, @as(usize, entry_count), entry_size) catch return error.IntegerOverflow;
-    const frame_len = std.math.add(usize, 8 + footer_len, entries_len) catch return error.IntegerOverflow;
-    if (frame_len > stream.len) return error.TruncatedFrame;
-    const frame_offset = stream.len - frame_len;
-    if (std.mem.readInt(u32, stream[frame_offset..][0..4], .little) != table_skippable_magic) return error.InvalidMagic;
-    const declared_payload_len: usize = @intCast(std.mem.readInt(u32, stream[frame_offset + 4 ..][0..4], .little));
-    if (declared_payload_len != frame_len - 8) return error.CorruptFrame;
+    if (stream.len < header_len + footer_len) return error.TruncatedFrame;
+    const layout = try wire.parseFooter(stream[stream.len - footer_len ..][0..footer_len]);
+    const frame_size = std.math.cast(usize, layout.frameSize()) orelse return error.IntegerOverflow;
+    const frame_offset: usize = @intCast(try layout.frameOffset(stream.len));
+    try wire.validateHeader(stream[frame_offset..][0..header_len], layout);
 
     var table = Table{
         .stream = stream,
         .frame_offset = frame_offset,
-        .frame_size = frame_len,
-        .entry_count = entry_count,
-        .has_checksums = has_checksums,
-        .entry_size = entry_size,
+        .frame_size = frame_size,
+        .entry_count = layout.entry_count,
+        .has_checksums = layout.has_checksums,
+        .entry_size = layout.entry_size,
         .compressed_size = 0,
         .decompressed_size = 0,
     };
@@ -187,30 +147,24 @@ pub fn buildIndex(table: Table, storage: []Entry) Error!Index {
 
 pub fn encodedTableBound(entry_count: usize, with_checksums: bool) Error!usize {
     if (entry_count > max_frames) return error.InvalidBlockPlan;
-    const entry_size: usize = if (with_checksums) 12 else 8;
+    const entry_size: usize = wire.entrySize(with_checksums);
     const entries_len = std.math.mul(usize, entry_count, entry_size) catch return error.IntegerOverflow;
     const payload_len = std.math.add(usize, entries_len, footer_len) catch return error.IntegerOverflow;
     _ = std.math.cast(u32, payload_len) orelse return error.IntegerOverflow;
-    return std.math.add(usize, 8, payload_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, header_len, payload_len) catch return error.IntegerOverflow;
 }
 
 pub fn encodeTableAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), entries: []const FrameSize, with_checksums: bool) Error!void {
     const total_len = try encodedTableBound(entries.len, with_checksums);
     const entry_count = std.math.cast(u32, entries.len) orelse return error.IntegerOverflow;
-    if (with_checksums) for (entries) |entry_value|
-        if (entry_value.checksum == null) return error.InvalidBlockPlan;
-    const payload_len = total_len - 8;
+    try validateChecksums(entries, with_checksums);
 
-    try appendU32(out, allocator, table_skippable_magic);
-    try appendU32(out, allocator, @intCast(payload_len));
-    for (entries) |entry_value| {
-        try appendU32(out, allocator, entry_value.compressed_size);
-        try appendU32(out, allocator, entry_value.decompressed_size);
-        if (with_checksums) try appendU32(out, allocator, entry_value.checksum.?);
-    }
-    try appendU32(out, allocator, entry_count);
-    try out.append(allocator, if (with_checksums) 0x80 else 0);
-    try appendU32(out, allocator, footer_magic);
+    // Write individual fields so growth and partial output on allocation failure
+    // are unchanged from the original append path.
+    const writer: TableWriter(true) = .{ .out = out, .allocator = allocator };
+    try writer.header(@intCast(total_len - header_len));
+    try writer.entries(entries, with_checksums);
+    try writer.footer(entry_count, with_checksums);
 }
 
 pub fn encodeTableAlloc(allocator: std.mem.Allocator, entries: []const FrameSize, with_checksums: bool) Error![]u8 {
@@ -222,34 +176,107 @@ pub fn encodeTableAlloc(allocator: std.mem.Allocator, entries: []const FrameSize
 
 pub fn encodeTableInto(entries: []const FrameSize, with_checksums: bool, output: []u8) Error!usize {
     const needed = try encodedTableBound(entries.len, with_checksums);
-    if (with_checksums) for (entries) |entry_value|
-        if (entry_value.checksum == null) return error.InvalidBlockPlan;
+    try validateChecksums(entries, with_checksums);
     if (output.len < needed) return error.OutputTooSmall;
-    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
-    // The exact bound above guarantees all bounded appends.
-    appendU32Bounded(&out, table_skippable_magic);
-    appendU32Bounded(&out, @intCast(needed - 8));
-    for (entries) |entry_value| {
-        appendU32Bounded(&out, entry_value.compressed_size);
-        appendU32Bounded(&out, entry_value.decompressed_size);
-        if (with_checksums) appendU32Bounded(&out, entry_value.checksum.?);
-    }
-    appendU32Bounded(&out, @intCast(entries.len));
-    out.appendAssumeCapacity(if (with_checksums) 0x80 else 0);
-    appendU32Bounded(&out, footer_magic);
+    var out = std.ArrayList(u8).initBuffer(output);
+    const writer: TableWriter(false) = .{ .out = &out, .allocator = {} };
+    writer.header(@intCast(needed - header_len)) catch unreachable;
+    writer.entries(entries, with_checksums) catch unreachable;
+    writer.footer(@intCast(entries.len), with_checksums) catch unreachable;
     return out.items.len;
+}
+
+const table_batch_entries = 128;
+
+/// Write the table at `offset` without committing the sink length. Returns the
+/// absolute offset immediately after the table. Validation precedes all writes;
+/// a sink failure can leave a partial table. Entries must remain unchanged
+/// during the call, including from within sink callbacks.
+pub fn encodeTableTo(sink: Sink, offset: u64, entries: []const FrameSize, with_checksums: bool) (Error || byte_sink.Error)!u64 {
+    const total_len = try encodedTableBound(entries.len, with_checksums);
+    const entry_count: u32 = @intCast(entries.len);
+    try validateChecksums(entries, with_checksums);
+    const end = std.math.add(u64, offset, total_len) catch return error.IntegerOverflow;
+
+    var buffer: [table_batch_entries * wire.checked_entry_len]u8 = undefined;
+    var batch = std.ArrayList(u8).initBuffer(&buffer);
+    const writer: TableWriter(false) = .{ .out = &batch, .allocator = {} };
+    writer.header(@intCast(total_len - header_len)) catch unreachable;
+    try sink.writeExact(offset, batch.items);
+    var position = offset + batch.items.len;
+
+    var remaining = entries;
+    while (remaining.len != 0) {
+        const count = @min(table_batch_entries, remaining.len);
+        batch.clearRetainingCapacity();
+        writer.entries(remaining[0..count], with_checksums) catch unreachable;
+        try sink.writeExact(position, batch.items);
+        position += batch.items.len;
+        remaining = remaining[count..];
+    }
+
+    batch.clearRetainingCapacity();
+    writer.footer(entry_count, with_checksums) catch unreachable;
+    try sink.writeExact(position, batch.items);
+    return end;
+}
+
+inline fn validateChecksums(entries: []const FrameSize, with_checksums: bool) Error!void {
+    if (with_checksums) {
+        for (entries) |entry_value| {
+            if (entry_value.checksum == null) return error.InvalidBlockPlan;
+        }
+    }
+}
+
+fn TableWriter(comptime growing: bool) type {
+    return struct {
+        const Self = @This();
+        const WriteError = if (growing) std.mem.Allocator.Error else error{};
+
+        out: *std.ArrayList(u8),
+        allocator: if (growing) std.mem.Allocator else void,
+
+        inline fn header(self: Self, payload_len: u32) WriteError!void {
+            try self.putU32(table_skippable_magic);
+            try self.putU32(payload_len);
+        }
+
+        inline fn entries(self: Self, sizes: []const FrameSize, with_checksums: bool) WriteError!void {
+            for (sizes) |size| {
+                try self.putU32(size.compressed_size);
+                try self.putU32(size.decompressed_size);
+                if (with_checksums) try self.putU32(size.checksum.?);
+            }
+        }
+
+        inline fn footer(self: Self, entry_count: u32, with_checksums: bool) WriteError!void {
+            try self.putU32(entry_count);
+            const descriptor: u8 = if (with_checksums) 0x80 else 0;
+            if (growing) {
+                try self.out.append(self.allocator, descriptor);
+            } else {
+                self.out.appendAssumeCapacity(descriptor);
+            }
+            try self.putU32(footer_magic);
+        }
+
+        inline fn putU32(self: Self, value: u32) WriteError!void {
+            var bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &bytes, value, .little);
+            if (growing) {
+                try self.out.appendSlice(self.allocator, &bytes);
+            } else {
+                self.out.appendSliceAssumeCapacity(&bytes);
+            }
+        }
+    };
 }
 
 fn appendU32(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u32) !void {
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, value, .little);
     try out.appendSlice(allocator, &bytes);
-}
-
-fn appendU32Bounded(out: *std.ArrayList(u8), value: u32) void {
-    var bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &bytes, value, .little);
-    out.appendSliceAssumeCapacity(&bytes);
 }
 
 test "seek table parser covers checksum and plain entries" {
@@ -367,6 +394,90 @@ test "seek table writers round trip and preserve append errors" {
     try prefixed.appendSlice(std.testing.allocator, "prefix");
     try std.testing.expectError(error.InvalidBlockPlan, encodeTableAppend(std.testing.allocator, &prefixed, &missing_checksum, true));
     try std.testing.expectEqualSlices(u8, "prefix", prefixed.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeTableInto(&missing_checksum, true, &.{}));
+
+    var backing: [4]u8 = undefined;
+    var fixed = std.heap.FixedBufferAllocator.init(&backing);
+    const allocator = fixed.allocator();
+    try std.testing.expectError(error.OutOfMemory, encodeTableAlloc(allocator, &missing_checksum, true));
+    var field: std.ArrayList(u8) = try .initCapacity(allocator, backing.len);
+    defer field.deinit(allocator);
+    try std.testing.expectError(error.OutOfMemory, encodeTableAppend(allocator, &field, &entries, false));
+    try std.testing.expectEqualSlices(u8, &.{ 0x5e, 0x2a, 0x4d, 0x18 }, field.items);
+}
+
+test "Zstd source seek table sink writes bounded batches at absolute offsets without finishing" {
+    const count = 2 * table_batch_entries + 1;
+    const bound = header_len + count * wire.checked_entry_len + footer_len;
+    const Context = struct {
+        base: u64,
+        bytes: [bound]u8 = undefined,
+        written: usize = 0,
+        largest_request: usize = 0,
+
+        fn writeAt(raw: *anyopaque, offset: u64, input: []const u8) error{SinkWriteFailed}!usize {
+            const self: *@This() = @ptrCast(@alignCast(raw));
+            if (offset != self.base + self.written) return error.SinkWriteFailed;
+            const amount = @min(input.len, 37);
+            if (amount > self.bytes.len - self.written) return error.SinkWriteFailed;
+            @memcpy(self.bytes[self.written..][0..amount], input[0..amount]);
+            self.written += amount;
+            self.largest_request = @max(self.largest_request, input.len);
+            return amount;
+        }
+
+        fn setLen(_: *anyopaque, _: u64) error{SinkWriteFailed}!void {
+            return error.SinkWriteFailed;
+        }
+    };
+
+    var entries: [count]FrameSize = undefined;
+    for (&entries, 0..) |*entry_value, i| entry_value.* = .{
+        .compressed_size = @intCast(i + 3),
+        .decompressed_size = @intCast(7 * i),
+        .checksum = @as(u32, @intCast(i)) ^ 0x9abc_def0,
+    };
+    for ([_][]const FrameSize{ &entries, &.{} }) |sizes| {
+        for ([_]bool{ false, true }) |with_checksums| {
+            var expected: [bound]u8 = undefined;
+            const len = try encodeTableInto(sizes, with_checksums, &expected);
+            const base = std.math.maxInt(u64) - @as(u64, len);
+            var context: Context = .{ .base = base };
+            const sink: Sink = .{ .context = &context, .write_at = Context.writeAt, .set_len = Context.setLen };
+            try std.testing.expectEqual(std.math.maxInt(u64), try encodeTableTo(sink, base, sizes, with_checksums));
+            try std.testing.expectEqual(len, context.written);
+            try std.testing.expectEqualSlices(u8, expected[0..len], context.bytes[0..context.written]);
+            const largest_request: usize = if (sizes.len == 0) footer_len else table_batch_entries * @as(usize, wire.entrySize(with_checksums));
+            try std.testing.expectEqual(largest_request, context.largest_request);
+        }
+    }
+}
+
+test "Zstd source seek table sink rejects invalid tables and overflowing offsets before writes" {
+    const Context = struct {
+        calls: usize = 0,
+
+        fn writeAt(raw: *anyopaque, _: u64, _: []const u8) error{SinkWriteFailed}!usize {
+            const self: *@This() = @ptrCast(@alignCast(raw));
+            self.calls += 1;
+            return error.SinkWriteFailed;
+        }
+
+        fn setLen(raw: *anyopaque, _: u64) error{SinkWriteFailed}!void {
+            const self: *@This() = @ptrCast(@alignCast(raw));
+            self.calls += 1;
+            return error.SinkWriteFailed;
+        }
+    };
+    var context: Context = .{};
+    const sink: Sink = .{ .context = &context, .write_at = Context.writeAt, .set_len = Context.setLen };
+    const missing_checksum: FrameSize = .{ .compressed_size = 2, .decompressed_size = 3 };
+    try std.testing.expectError(error.InvalidBlockPlan, encodeTableTo(sink, 0, &.{missing_checksum}, true));
+    const offset = std.math.maxInt(u64) - (header_len + footer_len) + 1;
+    try std.testing.expectError(error.IntegerOverflow, encodeTableTo(sink, offset, &.{}, true));
+    try std.testing.expectEqual(@as(usize, 0), context.calls);
+    try std.testing.expectError(error.SinkWriteFailed, encodeTableTo(sink, 0, &.{missing_checksum}, false));
+    try std.testing.expectEqual(@as(usize, 1), context.calls);
 }
 
 test "empty seek table is valid and has no addressable output" {

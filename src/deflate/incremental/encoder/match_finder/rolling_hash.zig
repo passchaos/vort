@@ -29,6 +29,9 @@ pub const Matcher = struct {
     initialized: bool = false,
     anchor_len: u3 = 0,
     lazy_mode: bool = false,
+    // Distance of the last emitted match. Periodic input reuses it as a
+    // nearest-candidate hint even when sparse insertion skipped that position.
+    recent_distance: usize = 0,
 
     pub const Snapshot = struct {
         initialized: bool,
@@ -64,6 +67,7 @@ pub const Matcher = struct {
 
     pub fn reset(self: *Matcher) void {
         self.absolute_position = 0;
+        self.recent_distance = 0;
         self.dynamic_stats.reset();
         self.invalidateIndex();
     }
@@ -206,14 +210,16 @@ pub const Matcher = struct {
             } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
+            self.recent_distance = best.distance;
             self.dynamic_stats.recordMatch(.{ .length = @intCast(best.length), .distance = @intCast(best.distance) });
             const end = @min(block.len, pos + best.length);
             if (lazy) {
                 if (!current_inserted) self.insertBlockPosition(history, block, pos, anchor_len);
-                // Long matches are already represented by the current anchor.
-                // Seed their tail like the fast parser instead of writing every
-                // skipped position; lazy quality comes from the one-byte probe,
-                // while dense insertion mostly adds memory traffic on runs.
+                // Dense insertion keeps the nearest same-anchor candidate
+                // available after long matches. Sparse tails drift distances
+                // to multiples of the match length on periodic input, which
+                // inflates the distance-code bits. RLE-like matches already
+                // carry the cheapest distances, so keep their sparse tail.
                 const tail_start = if (end > pos + 4) end - 4 else pos + 1;
                 var insert_pos = @max(pos + 1, tail_start);
                 while (insert_pos < end) : (insert_pos += 1)
@@ -280,14 +286,27 @@ pub const Matcher = struct {
         const current = count.addLocal(self.absolute_position, pos) catch unreachable;
         const history_start = self.absolute_position - count.fromLocal(history.len);
         const h = hash.block(block, pos, anchor_len);
-        if (self.head_epoch.items[h] != self.epoch) return .{};
+        var best: Candidate = .{};
+        const maximum = @min(maximum_match, block.len - pos);
+        if (self.recent_distance != 0 and self.recent_distance <= options.window_len and
+            current > count.fromLocal(self.recent_distance))
+        {
+            const hint_candidate = current - count.fromLocal(self.recent_distance);
+            if (hint_candidate >= history_start) {
+                const hint_length = matchLength(history, block, self.absolute_position, hint_candidate, pos, maximum);
+                if (hint_length >= minimum and hint_length > best.length)
+                    best = .{ .length = hint_length, .distance = self.recent_distance };
+            }
+        }
+        // A hint that already reaches the maximum cannot be improved; skip the
+        // chain walk instead of scanning every candidate at equal length.
+        if (best.length == maximum) return best;
+        if (self.head_epoch.items[h] != self.epoch) return best;
 
         var candidate = self.head.items[h];
         const history_chain = candidate < self.absolute_position;
         var checked: usize = 0;
-        var best: Candidate = .{};
         var walked: usize = 0;
-        const maximum = @min(maximum_match, block.len - pos);
         while (candidate != invalid_position and checked < options.max_chain and walked < max_walks) : (walked += 1) {
             if (candidate >= current) break;
             if (candidate < history_start) break;

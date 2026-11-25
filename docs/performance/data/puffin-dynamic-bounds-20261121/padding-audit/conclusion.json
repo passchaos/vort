@@ -1,0 +1,12 @@
+{
+  "accepted_input_reversibility_failure": true,
+  "scope": "Public Puff/Huff representation conversion, not an inflate completeness rule",
+  "observed": "Four-9-bit-literal 88-bit and five-9-bit-literal 96-bit legal raw streams; all independent zlib controls accepted. Padding values that set bits 5 or 6 overwrite metadata TYPE.",
+  "metadata_layout": "FINAL bit7, TYPE bits5..6, SKIP bits0..4",
+  "recommended_supported_boundary": "Stored boundary padding values 0..31 are representable, including when the raw alignment field has 6 or 7 bits. Values >=32 must be refused as InvalidPuffinStream before publishing metadata if retaining this one-byte metadata format.",
+  "aosp_source_behavior": "Pinned 56246e65146cbf7b736343c95a3e8ed970b9d106 source uses the same unmasked OR in puffer.cc and TYPE/SKIP extraction in huffer.cc. No executable AOSP comparison was performed.",
+  "offset_note": "A stored header is 3 bits: start residue6 gives 7 padding bits; start residue7 gives 6 padding bits. Start residue5 would align immediately.",
+  "no_source_changes": true,
+  "no_builds": true,
+  "huff_failure_artifacts": "The public Huff API frees output on error, so failed cases preserve stderr and returncode rather than a fabricated output file. Padding32 additionally has a 56-bit misinterpreted Huff output."
+}

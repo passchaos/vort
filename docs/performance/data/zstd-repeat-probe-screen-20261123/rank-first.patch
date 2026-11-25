@@ -1,0 +1,42 @@
+--- a/src/zstd/match/double_fast.zig
++++ b/src/zstd/match/double_fast.zig
+@@ -105,12 +105,14 @@
+             position += 1;
+             continue;
+         }
+-        if (reps[0] <= position) {
++        // A rep0 match can replace this candidate only at a better repcode
++        // rank. Check that policy before evaluating its full match length.
++        if (reps[0] <= position and
++            repeatRank(reps[0], reps, position - anchor) <
++                repeatRank(best.distance, reps, position - anchor))
++        {
+             const current_rep = matchAtDistance(input, position, reps[0], options);
+-            if (current_rep.length + 1 >= best.length and
+-                repeatRank(current_rep.distance, reps, position - anchor) <
+-                    repeatRank(best.distance, reps, position - anchor))
+-            {
++            if (current_rep.length + 1 >= best.length) {
+                 best = current_rep;
+             }
+         }
+--- a/src/zstd/match/double_fast/sequence_parser.zig
++++ b/src/zstd/match/double_fast/sequence_parser.zig
+@@ -123,12 +123,12 @@
+             position += 1;
+             continue;
+         }
+-        if (reps[0] <= position) {
++        if (reps[0] <= position and
++            repeatRank(reps[0], reps, position - anchor) <
++                repeatRank(best.distance, reps, position - anchor))
++        {
+             const current_rep = matchAtDistance(input, position, reps[0], options);
+-            if (current_rep.length + 1 >= best.length and
+-                repeatRank(current_rep.distance, reps, position - anchor) <
+-                    repeatRank(best.distance, reps, position - anchor))
+-            {
++            if (current_rep.length + 1 >= best.length) {
+                 best = current_rep;
+             }
+         }

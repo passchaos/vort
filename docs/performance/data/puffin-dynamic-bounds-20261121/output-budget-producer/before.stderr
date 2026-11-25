@@ -1,0 +1,4 @@
+stored=true FBA1024 error=OutOfMemory allocated=874 freed=874
+stored=true heap error=OutputLimitExceeded allocated=320654 freed=320654 allocations=17
+stored=false FBA1024 error=OutOfMemory allocated=874 freed=874
+stored=false heap error=OutputLimitExceeded allocated=320654 freed=320654 allocations=17

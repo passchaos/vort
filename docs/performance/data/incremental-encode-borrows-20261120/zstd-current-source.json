@@ -1,0 +1,11 @@
+{
+  "counts": {
+    "cases": 171,
+    "passed": 171,
+    "failed": 0
+  },
+  "sources_preserved": true,
+  "source_sha256": "637805b59b978df3be7995e386a92a0a7abccee9ba41ba4ae9dcccce042a5cdd",
+  "all_reported_source_files_match_current": true,
+  "checked_file_count": 403
+}

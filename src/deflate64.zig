@@ -8,6 +8,8 @@ const incremental_tests = @import("deflate64/incremental_tests.zig");
 
 pub const Error = decoder.Error || encoder.Error || stream_encoder.Error;
 pub const DecodeResult = decoder.DecodeResult;
+pub const BlockBoundaryPosition = @import("deflate/incremental/block_boundary_position.zig").Position;
+pub const BlockRestartPoint = @import("deflate/incremental/block_restart.zig").Point;
 pub const decodeInto = decoder.decodeInto;
 pub const decodeAlloc = decoder.decodeAlloc;
 pub const decodeAllocLimited = decoder.decodeAllocLimited;

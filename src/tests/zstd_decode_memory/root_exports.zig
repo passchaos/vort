@@ -18,6 +18,16 @@ pub fn contracts(comptime V: type) !void {
     try std.testing.expectError(error.WorkingMemoryLimitExceeded, V.zstdDecodeFrameAllocWithOptions(allocator, wire, .{ .max_total_working_memory = peak - 1 }));
     try std.testing.expectEqual(plain.len, try V.zstdDecodedFrameSizeWithOptions(wire, .{ .max_total_working_memory = 0 }));
 
+    const chunks = [_][]const u8{ wire[0..2], wire[2..] };
+    var compressed_scratch: [128]u8 = @splat(0xa5);
+    const capped: V.ZstdFrameDecodeOptions = .{ .max_window_size = 0 };
+    try std.testing.expectError(error.OutputLimitExceeded, V.zstdDecodedFrameChunksSizeWithOptions(&chunks, &compressed_scratch, capped));
+    try std.testing.expect(std.mem.allEqual(u8, &compressed_scratch, 0xa5));
+    var chunk_output: [plain.len]u8 = undefined;
+    const written = try V.zstdDecodeFrameChunksIntoWithOptions(allocator, &chunks, &compressed_scratch, &chunk_output, .{});
+    try std.testing.expectEqual(plain.len, written);
+    try std.testing.expectEqualStrings(plain, &chunk_output);
+
     profile.reset();
     var decoder = V.ZstdNativeFrameDecoder.initWithOptions(allocator, .{ .memory_profile = &profile });
     defer decoder.deinit();
