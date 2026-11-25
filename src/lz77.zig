@@ -1559,6 +1559,127 @@ pub fn optimalPlanAllocWithCostModel(
     return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
 }
 
+/// Same four-anchor modeled search with an exact cost lower bound. A prefix
+/// mismatch at the already-priced length frontier can avoid match extension
+/// only when this candidate's actual distance price proves non-improvement.
+/// The unbounded modeled API remains an independent token/selection oracle.
+pub fn optimalPlanAllocWithCostModelBounded(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    model: OptimalCostModel,
+) !GreedyPlan {
+    if (input.len > 65536 or minMatch(options) != 4)
+        return optimalPlanAllocWithCostModel(allocator, input, options, model);
+    try model.validate(options.window_len, input.len);
+    try validateOptimalInputLength(input.len);
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    var index = try modeled_index.Index.init(ModeledFourHash, allocator, input);
+    defer index.deinit(allocator);
+    index.releaseHead(allocator);
+    try scratch.costs.resize(allocator, input.len + 1);
+    try scratch.steps.resize(allocator, input.len);
+    const stats = try optimalPlanReuseWithIndex(
+        &scratch,
+        allocator,
+        input,
+        0,
+        options,
+        index.previous.items,
+        modeled_index.empty,
+        true,
+        false,
+        true,
+        false,
+        false,
+        undefined,
+        undefined,
+        model,
+    );
+    return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
+const ModeledPairRoot = @This();
+const modeled_pair = @import("lz77/modeled_pair.zig");
+const modeled_index = @import("lz77/modeled_index.zig");
+const ModeledFourHash = struct {
+    pub fn at(input: []const u8, position: usize, head_len: usize) ?usize {
+        return hashAtInput(input, position, head_len, .four);
+    }
+};
+
+const ModeledPairApi = struct {
+    pub const Token = ModeledPairRoot.Token;
+    pub const Plan = ModeledPairRoot.GreedyPlan;
+    pub const Options = ModeledPairRoot.GreedyOptions;
+    pub const Model = ModeledPairRoot.OptimalCostModel;
+    pub const Index = modeled_index.Index;
+    pub const index_empty = modeled_index.empty;
+
+    pub fn validateModel(model: Model, window: usize, input_len: usize) !void {
+        return model.validate(window, input_len);
+    }
+    pub fn buildIndex(allocator: std.mem.Allocator, input: []const u8) !Index {
+        return Index.init(ModeledFourHash, allocator, input);
+    }
+    pub fn releaseHead(index: *Index, allocator: std.mem.Allocator) void {
+        index.releaseHead(allocator);
+    }
+    pub fn prev(index: *Index) []const u32 {
+        return index.previous.items;
+    }
+    pub fn deinitIndex(index: *Index, allocator: std.mem.Allocator) void {
+        index.deinit(allocator);
+    }
+    pub fn minimum(options: Options) usize {
+        return minMatch(options);
+    }
+    pub fn maximum(options: Options) usize {
+        return maxMatch(options);
+    }
+    pub fn candidateLimit(options: Options) usize {
+        return normalizedMaxCandidates(options);
+    }
+    pub fn matchLength(input: []const u8, candidate: usize, position: usize, maximum_len: usize) usize {
+        return ModeledPairRoot.matchLength(input, candidate, position, maximum_len);
+    }
+    pub fn literalCost(model: Model, position: usize, input: []const u8) usize {
+        return model.literalCost(position, input);
+    }
+    pub fn appendToken(list: *std.ArrayList(ModeledPairRoot.Token), allocator: std.mem.Allocator, token: ModeledPairRoot.Token) !void {
+        return ModeledPairRoot.appendToken(list, allocator, token);
+    }
+};
+
+/// A bounded shared candidate scan with two independently priced backward DPs.
+/// Input and optional dictionary-provider results must remain immutable for
+/// this operation; dictionary callbacks run at most once at each position.
+/// Returned plans own independent token arrays. Unsupported geometry retains
+/// the existing independent modeled parsers and their full-width cost storage.
+pub fn optimalPlanPairWithCostModelsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    models: [2]OptimalCostModel,
+) ![2]GreedyPlan {
+    for (models) |model| try model.validate(options.window_len, input.len);
+    if (modeled_pair.supported(ModeledPairApi, input, options, models))
+        return modeled_pair.planAlloc(ModeledPairApi, allocator, input, options, models);
+    const first = try optimalPlanAllocWithCostModel(allocator, input, options, models[0]);
+    errdefer first.deinit(allocator);
+    const second = try optimalPlanAllocWithCostModel(allocator, input, options, models[1]);
+    return .{ first, second };
+}
+
+pub fn supportsOptimalModeledPair(input: []const u8, options: GreedyOptions, models: [2]OptimalCostModel) bool {
+    return modeled_pair.supported(ModeledPairApi, input, options, models);
+}
+
+test "modeled pair actual four-anchor parser matches independent scalar tokens stats and OOM" {
+    try @import("lz77/modeled_pair_root_tests.zig").run(ModeledPairRoot);
+}
+
 const rep_beam_width = 2;
 const rep_beam_match_candidates = 1;
 const rep_beam_input_max = std.math.maxInt(u16);

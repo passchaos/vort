@@ -146,6 +146,11 @@ const Analysis = struct {
     total: [256]u32,
     literal_count: usize,
 };
+test {
+    _ = @import("literal_context_split/workspace_reuse_tests.zig");
+}
+/// One operation retains one immutable complete analysis and proposal set.
+pub const ProposalWorkspace = @import("literal_context_split/workspace.zig").Workspace(Analysis, Proposals);
 
 /// Evaluate all four RFC 7932 literal context modes. Each mode gets its best
 /// contiguous two-tree partition plus bounded clustering through all 64 literal
@@ -170,38 +175,61 @@ pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, co
 }
 
 pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
-    return chooseProposalsCore(false, true, allocator, input, commands, {});
+    return chooseProposalsCore(false, true, allocator, input, commands, {}, null);
+}
+
+pub noinline fn chooseProposalsWithWorkspace(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, workspace: *ProposalWorkspace) !Proposals {
+    return chooseProposalsCore(false, true, allocator, input, commands, {}, workspace);
 }
 
 /// The original exhaustive policy: every suffix cutoff and converged cluster
 /// map gets an exact tree score, with no lower-bound rejection. It remains the
 /// differential oracle for the pruned production search.
 pub noinline fn chooseProposalsReference(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
-    return chooseProposalsCore(false, false, allocator, input, commands, {});
+    return chooseProposalsCore(false, false, allocator, input, commands, {}, null);
 }
 
 /// Profile and return this search's actual proposals, with one Analysis.
 pub noinline fn chooseProposalsProfiled(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: std.Io, profile: *Profile) !Proposals {
+    return chooseProposalsProfiledWithWorkspace(allocator, input, commands, io, profile, null);
+}
+
+pub noinline fn chooseProposalsProfiledWithWorkspace(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: std.Io, profile: *Profile, workspace: ?*ProposalWorkspace) !Proposals {
     profile.* = .{ .input_bytes = input.len, .iterations = 1 };
     var profiler = ProfileTimer{ .io = io, .profile = profile };
     const total_start = profiler.now();
-    const proposals = try chooseProposalsCore(true, true, allocator, input, commands, &profiler);
+    const proposals = try chooseProposalsCore(true, true, allocator, input, commands, &profiler, workspace);
     profile.total_ns = profiler.elapsedNs(total_start);
     setProfileShape(profile, proposals);
     return proposals;
 }
 
-fn chooseProposalsCore(comptime profiled: bool, comptime prune: bool, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, profiler: if (profiled) *ProfileTimer else void) !Proposals {
+fn chooseProposalsCore(comptime profiled: bool, comptime prune: bool, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, profiler: if (profiled) *ProfileTimer else void, workspace: ?*ProposalWorkspace) !Proposals {
     const analysis_start = if (profiled) profiler.now() else {};
     const analysis = try collectAnalysis(allocator, input, commands) orelse {
         if (profiled) profiler.profile.analysis_ns = profiler.elapsedNs(analysis_start);
         return .{};
     };
-    defer allocator.destroy(analysis);
+    var analysis_owned = true;
+    defer if (analysis_owned) allocator.destroy(analysis);
     if (profiled) {
         profiler.profile.analysis_ns = profiler.elapsedNs(analysis_start);
         profiler.profile.literal_count = analysis.literal_count;
     }
+    if (prune) if (workspace) |owner| {
+        const lookup_start = if (profiled) profiler.now() else {};
+        const cached = owner.lookup(analysis);
+        if (profiled) profiler.profile.proposal_lookup_ns = profiler.elapsedNs(lookup_start);
+        if (cached) |proposals| {
+            if (profiled) {
+                profiler.profile.proposal_reuses = 1;
+                for (analysis.total) |count| if (count != 0) {
+                    profiler.profile.active_symbols += 1;
+                };
+            }
+            return proposals;
+        }
+    };
     const baseline_start = if (profiled) profiler.now() else {};
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&analysis.total, &active_symbols);
@@ -247,6 +275,10 @@ fn chooseProposalsCore(comptime profiled: bool, comptime prune: bool, allocator:
         retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
         retainBetter(&proposals.full, mode_proposals.full);
     }
+    if (prune) if (workspace) |owner| {
+        owner.publish(allocator, analysis, proposals);
+        analysis_owned = false;
+    };
     return proposals;
 }
 

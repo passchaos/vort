@@ -1,0 +1,51 @@
+{
+  "all_controls_pass": true,
+  "rows": [
+    {
+      "candidate_over_baseline_time": 0.9900647269947258,
+      "control": "q4",
+      "pairs": 6,
+      "passes_control_floor": true,
+      "throughput_95pct_ci": [
+        0.9952980398812177,
+        1.0319226405421669
+      ],
+      "throughput_ratio": 1.010034973203653,
+      "time_95pct_ci": [
+        0.9690648898589966,
+        1.004724172991784
+      ]
+    },
+    {
+      "candidate_over_baseline_time": 0.9700403672417279,
+      "control": "q11",
+      "pairs": 6,
+      "passes_control_floor": true,
+      "throughput_95pct_ci": [
+        1.0161501113125984,
+        1.0441226059751811
+      ],
+      "throughput_ratio": 1.03088493403987,
+      "time_95pct_ci": [
+        0.9577419301883883,
+        0.9841065693613548
+      ]
+    },
+    {
+      "candidate_over_baseline_time": 0.9879318382458652,
+      "control": "ratio",
+      "pairs": 6,
+      "passes_control_floor": true,
+      "throughput_95pct_ci": [
+        0.9996004979255063,
+        1.0302289300317884
+      ],
+      "throughput_ratio": 1.0122155813659803,
+      "time_95pct_ci": [
+        0.9706580458472898,
+        1.000399661740188
+      ]
+    }
+  ],
+  "scope": "Three predeclared public entry controls; clustered route identity is not inferred from options"
+}

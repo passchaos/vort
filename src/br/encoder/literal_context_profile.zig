@@ -21,6 +21,9 @@ pub const Profile = struct {
     iterations: usize = 0,
     input_bytes: usize = 0,
     literal_count: usize = 0,
+    /// Complete proposals reused after collecting and comparing all counts.
+    proposal_reuses: usize = 0,
+    proposal_lookup_ns: u64 = 0,
     active_symbols: usize = 0,
 
     suffix_tree_count: u7 = 0,
@@ -129,7 +132,7 @@ pub const Profile = struct {
     }
 
     pub fn stageNs(self: Profile) u64 {
-        return self.analysis_ns + self.baseline_ns + self.suffix_ns +
+        return self.analysis_ns + self.proposal_lookup_ns + self.baseline_ns + self.suffix_ns +
             self.sparse_ns + self.cluster_ns;
     }
 
@@ -157,6 +160,8 @@ pub const Profile = struct {
 
     pub fn addSample(self: *Profile, sample: Profile) void {
         inline for (.{
+            "proposal_reuses",
+            "proposal_lookup_ns",
             "suffix_payload_scores",
             "suffix_payload_reuses",
             "suffix_lb_pruned",

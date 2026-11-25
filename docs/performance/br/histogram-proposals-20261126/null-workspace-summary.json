@@ -1,0 +1,72 @@
+{
+  "scope": "Matched allocating lifecycle; null workspace plumbing includes option and call-path changes, not isolated pointer-layout causality",
+  "pairs": 72,
+  "rows": [
+    {
+      "case": "dickens",
+      "pairs": 6,
+      "elapsed_null_over_paired": 1.0184867292592092
+    },
+    {
+      "case": "mozilla",
+      "pairs": 6,
+      "elapsed_null_over_paired": 1.0182958893936302
+    },
+    {
+      "case": "mr",
+      "pairs": 6,
+      "elapsed_null_over_paired": 1.001585675818092
+    },
+    {
+      "case": "nci",
+      "pairs": 6,
+      "elapsed_null_over_paired": 0.9878644075866252
+    },
+    {
+      "case": "ooffice",
+      "pairs": 6,
+      "elapsed_null_over_paired": 0.9986467899611149
+    },
+    {
+      "case": "osdb",
+      "pairs": 6,
+      "elapsed_null_over_paired": 0.9816998662917567
+    },
+    {
+      "case": "reymont",
+      "pairs": 6,
+      "elapsed_null_over_paired": 0.9994337353790593
+    },
+    {
+      "case": "samba",
+      "pairs": 6,
+      "elapsed_null_over_paired": 1.0323579983881042
+    },
+    {
+      "case": "sao",
+      "pairs": 6,
+      "elapsed_null_over_paired": 1.0085673681325147
+    },
+    {
+      "case": "webster",
+      "pairs": 6,
+      "elapsed_null_over_paired": 0.9998999083574887
+    },
+    {
+      "case": "x-ray",
+      "pairs": 6,
+      "elapsed_null_over_paired": 1.0081081426659204
+    },
+    {
+      "case": "xml",
+      "pairs": 6,
+      "elapsed_null_over_paired": 0.9971312736835186
+    }
+  ],
+  "geomean_elapsed_null_over_paired": 1.0042516569355229,
+  "paired_round_block_95pct_ci": [
+    0.9989347623685179,
+    1.0095968510160713
+  ],
+  "attribution": "Combined null-workspace plumbing and compile-time route; no sole pointer-layout attribution"
+}

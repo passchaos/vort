@@ -5510,7 +5510,16 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         input.len,
         @min((@as(usize, 1) << window_bits) - 16, lz77.max_window_len),
     );
-    const wire_options = qualityWireOptions(schedule, options, window_bits);
+    var context_proposals: literal_context_split.ProposalWorkspace = .init();
+    defer context_proposals.deinit(allocator);
+    var wire_options = qualityWireOptions(schedule, options, window_bits);
+    if (@import("br/encoder/literal_context_split/workspace_policy.zig").enabled and
+        schedule.quality == .q8 and options.mode == .generic and
+        !options.large_window and input.len >= 8 * 1024)
+    {
+        const disabled = if (comptime builtin.is_test) test_disable_context_proposal_workspace else false;
+        if (!disabled) wire_options.shared_context_proposals = &context_proposals;
+    }
     const lz_plan = blk: {
         var timer = trace.withOrigin(.lazy).begin(.lazy_parse, input.len, 0);
         defer timer.finish();
@@ -6019,6 +6028,31 @@ const PrecomputedDictionaryProbe = struct {
 const quality_dictionary_cost_bits: u16 = 22;
 const quality_dictionary_cost_q8: u16 = quality_dictionary_cost_bits * 256;
 
+fn FeedbackRoundsApi(comptime pair_enabled: bool) type {
+    return struct {
+        pub const Error = @import("core.zig").Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+        pub const Recorder = quality_profile.Recorder;
+        pub const Options = lz77.GreedyOptions;
+        pub const Plan = lz77.GreedyPlan;
+        pub const Model = entropy_feedback.Model;
+        pub const CostModel = lz77.OptimalCostModel;
+        pub const Command = command_plan.Command;
+        pub const Stats = encoder_stats.PlannedEncodeStats;
+        pub const WireOptions = LazyWireOptions;
+        pub const buildModel = entropy_feedback.build;
+        pub const buildBonus = entropy_feedback.buildWithRepcodeBonus;
+        pub const planSingle = lz77.optimalPlanAllocWithCostModel;
+        pub const planPair = lz77.optimalPlanPairWithCostModelsAlloc;
+        pub const buildCommands = command_plan.buildAlloc;
+        pub const encodeCandidate = encodeLazyCommandPlanAllocRecorded;
+        pub const retain = retainSmallerOwnedWireRecorded;
+        pub fn pairAllowed(input: []const u8, options: Options, model: *const Model, wire: WireOptions) bool {
+            return pair_enabled and wire.shared_common == null and
+                lz77.supportsOptimalModeledPair(input, options, .{ model.lz77Model(), model.lz77Model() });
+        }
+    };
+}
+
 fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, allow_binary_command_state: bool, command_state_ceiling: usize, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
     var profile_scope = trace.begin(.other, input.len, 0);
     defer profile_scope.finish();
@@ -6087,7 +6121,7 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     const modeled = blk: {
         var timer = trace.begin(.optimal_parse, input.len, 0);
         defer timer.finish();
-        break :blk try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+        break :blk try lz77.optimalPlanAllocWithCostModelBounded(allocator, input, .{
             .window_len = search_window,
             .max_chain = budget.max_chain,
             .nice_len = budget.nice_len,
@@ -6119,16 +6153,13 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     try considerStaticDictionaryCandidate(trace_enabled, trace, allocator, input, modeled_commands.commands, dictionary, wire_options, &best);
     if (input.len >= 64 * 1024) {
-        var model2 = blk: {
-            var timer = trace.begin(.other, input.len, modeled_commands.commands.len);
-            defer timer.finish();
-            break :blk try entropy_feedback.build(allocator, input, modeled_commands.commands, search_window);
-        };
-        defer model2.deinit(allocator);
-        const modeled2 = blk: {
-            var timer = trace.begin(.optimal_parse, input.len, 0);
-            defer timer.finish();
-            break :blk try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+        try @import("br/encoder/feedback_rounds.zig").runExtra(
+            FeedbackRoundsApi(true),
+            trace_enabled,
+            trace,
+            allocator,
+            input,
+            .{
                 .window_len = search_window,
                 .max_chain = budget.max_chain,
                 .nice_len = budget.nice_len,
@@ -6137,73 +6168,11 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
                 .max_match = lz77.max_match_len,
                 .dictionary = dictionary_provider,
                 .dictionary_cost = quality_dictionary_cost_q8,
-            }, model2.lz77Model());
-        };
-        defer modeled2.deinit(allocator);
-        if (modeled2.stats.matches != 0) {
-            const commands2 = blk: {
-                var timer = trace.begin(.optimal_commands, input.len, modeled2.tokens.len);
-                defer timer.finish();
-                break :blk try command_plan.buildAlloc(allocator, input, modeled2.tokens);
-            };
-            defer commands2.deinit(allocator);
-            var stats2: encoder_stats.PlannedEncodeStats = .{};
-            const candidate2 = try encodeLazyCommandPlanAllocRecorded(
-                trace_enabled,
-                trace,
-                allocator,
-                input,
-                commands2.commands,
-                &stats2,
-                wire_options,
-            );
-            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate2);
-        }
-        var bonus_model2 = blk: {
-            var timer = trace.begin(.other, input.len, modeled_commands.commands.len);
-            defer timer.finish();
-            break :blk try entropy_feedback.buildWithRepcodeBonus(
-                allocator,
-                input,
-                modeled_commands.commands,
-                search_window,
-            );
-        };
-        defer bonus_model2.deinit(allocator);
-        const bonus_modeled2 = blk: {
-            var timer = trace.begin(.optimal_parse, input.len, 0);
-            defer timer.finish();
-            break :blk try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
-                .window_len = search_window,
-                .max_chain = budget.max_chain,
-                .nice_len = budget.nice_len,
-                .max_candidates = budget.max_candidates,
-                .min_match = 4,
-                .max_match = lz77.max_match_len,
-                .dictionary = dictionary_provider,
-                .dictionary_cost = quality_dictionary_cost_q8,
-            }, bonus_model2.lz77Model());
-        };
-        defer bonus_modeled2.deinit(allocator);
-        if (bonus_modeled2.stats.matches != 0) {
-            const bonus_commands2 = blk: {
-                var timer = trace.begin(.optimal_commands, input.len, bonus_modeled2.tokens.len);
-                defer timer.finish();
-                break :blk try command_plan.buildAlloc(allocator, input, bonus_modeled2.tokens);
-            };
-            defer bonus_commands2.deinit(allocator);
-            var bonus_stats2: encoder_stats.PlannedEncodeStats = .{};
-            const bonus_candidate2 = try encodeLazyCommandPlanAllocRecorded(
-                trace_enabled,
-                trace,
-                allocator,
-                input,
-                bonus_commands2.commands,
-                &bonus_stats2,
-                wire_options,
-            );
-            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, bonus_candidate2);
-        }
+            },
+            modeled_commands.commands,
+            wire_options,
+            &best,
+        );
     }
 
     // The caller resolves the ceiling: the default sentinel extends to 64 KiB
@@ -10688,6 +10657,8 @@ const planned_command_symbol_cache_capacity: usize = 128;
 const command_state_full_wire_slack_bytes: usize = 128;
 const LazyWireOptions = struct {
     disable_literal_context_modeling: bool = false,
+    /// Borrowed within one complete quality operation; owns charged counts.
+    shared_context_proposals: ?*literal_context_split.ProposalWorkspace = null,
     /// Borrowed only within command_candidate_group for immutable commands.
     shared_common: ?*prepared_command_distance.Prepared = null,
     large_window: bool = false,
@@ -10872,6 +10843,7 @@ fn encodeLazyCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quali
 }
 
 var test_disable_shared_command_candidate_group = false;
+var test_disable_context_proposal_workspace = false;
 var test_shared_command_candidate_groups: usize = 0;
 var test_shared_adaptive_literal_models: usize = 0;
 var test_shared_adaptive_distance_models: usize = 0;
@@ -11916,11 +11888,14 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         errdefer |err| timer.failure(err);
         if (comptime trace_enabled) {
             var detail: literal_context_split.Profile = .{};
-            const proposed = try literal_context_split.chooseProposalsProfiled(allocator, input, commands, trace.io, &detail);
+            const proposed = try literal_context_split.chooseProposalsProfiledWithWorkspace(allocator, input, commands, trace.io, &detail, options.shared_context_proposals);
             trace.contextDetail(detail, commands.len);
             break :blk proposed;
         }
-        break :blk try literal_context_split.chooseProposals(allocator, input, commands);
+        break :blk if (options.shared_context_proposals) |workspace|
+            try literal_context_split.chooseProposalsWithWorkspace(allocator, input, commands, workspace)
+        else
+            try literal_context_split.chooseProposals(allocator, input, commands);
     } else literal_context_split.Proposals{};
     const adaptive_contexts = if (try_literal_contexts)
         [3]?literal_context_split.Candidate{
@@ -12047,16 +12022,22 @@ const PreparedContextGroupStrategy = struct {
     pub const free = freeQualityRecorded;
     pub const ratioAtMost = byteRatioAtMost;
     pub fn proposals(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) @This().Error!literal_context_split.Proposals {
+        return proposalsWithOptions(traced, trace, allocator, input, commands, .{});
+    }
+    pub fn proposalsWithOptions(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, options: UserOptions) @This().Error!literal_context_split.Proposals {
         var timer = trace.begin(.context_proposals, input.len, commands.len);
         defer timer.finish();
         errdefer |err| timer.failure(err);
         if (comptime traced) {
             var detail: literal_context_split.Profile = .{};
-            const result = try literal_context_split.chooseProposalsProfiled(allocator, input, commands, trace.io, &detail);
+            const result = try literal_context_split.chooseProposalsProfiledWithWorkspace(allocator, input, commands, trace.io, &detail, options.shared_context_proposals);
             trace.contextDetail(detail, commands.len);
             return result;
         }
-        return try literal_context_split.chooseProposals(allocator, input, commands);
+        return if (options.shared_context_proposals) |workspace|
+            try literal_context_split.chooseProposalsWithWorkspace(allocator, input, commands, workspace)
+        else
+            try literal_context_split.chooseProposals(allocator, input, commands);
     }
     pub fn plain(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *Stats, options: UserOptions) @This().Error![]u8 {
         return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options), .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances, .distance_parameters = options.distance_parameters, .optimize_same_last_distance = options.optimize_same_last_distance });

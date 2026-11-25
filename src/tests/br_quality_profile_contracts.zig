@@ -19,6 +19,17 @@ fn contextCounts(stats: anytype) !void {
     try std.testing.expect(stats.active_symbols <= 256);
     try std.testing.expect(stats.suffix_tree_count == 0 or stats.suffix_tree_count == 2);
     try std.testing.expect(stats.up_to_16_tree_count <= 16 and stats.full_tree_count <= 64);
+    try std.testing.expect(stats.proposal_reuses <= 1);
+    if (stats.proposal_reuses != 0) {
+        try std.testing.expect(stats.literal_count >= 128 and stats.active_symbols > 0);
+        try std.testing.expectEqual(@as(usize, 0), stats.tree_score_calls);
+        try std.testing.expectEqual(@as(usize, 0), stats.suffix_payload_scores);
+        try std.testing.expectEqual(@as(usize, 0), stats.cluster_trials);
+        try std.testing.expectEqual(@as(u64, 0), stats.baseline_ns);
+        try std.testing.expectEqual(@as(u64, 0), stats.suffix_ns);
+        try std.testing.expectEqual(@as(u64, 0), stats.sparse_ns);
+        try std.testing.expectEqual(@as(u64, 0), stats.cluster_ns);
+    }
     var hits: usize = 0;
     var misses: usize = 0;
     var direct: usize = 0;
@@ -46,7 +57,7 @@ fn contextCounts(stats: anytype) !void {
     try std.testing.expectEqual(misses, stats.tree_score_cache_misses);
     try std.testing.expectEqual(direct, stats.tree_score_uncached_calls);
     try std.testing.expectEqual(misses + direct, stats.tree_score_calls);
-    try std.testing.expectEqual(@as(usize, @intFromBool(stats.literal_count >= 128)), stats.tree_score_uncached_scope_calls[0]);
+    try std.testing.expectEqual(@as(usize, @intFromBool(stats.literal_count >= 128 and stats.proposal_reuses == 0)), stats.tree_score_uncached_scope_calls[0]);
     try std.testing.expectEqual(stats.suffix_payload_scores * 2, stats.tree_score_uncached_scope_calls[1]);
     try std.testing.expectEqual(@as(usize, 0), stats.tree_score_uncached_scope_calls[2]);
     for (0..3) |scope| {

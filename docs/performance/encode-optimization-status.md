@@ -1,5 +1,41 @@
 # Encoder optimization status
 
+## 2026-11-26 paired search and exact histogram proposals: accepted increment
+
+The [complete V7 gate](br/histogram-proposals-20261126/README.md) combines the
+frozen compact paired-model search with one operation-owned complete-histogram
+proposal workspace. Every call still collects and validates its own Analysis;
+exact full fields permit complete proposal reuse across changed commands.
+Successful misses transfer the actual allocated counts, and scope cleanup
+uses the original codec allocator. Reference/mode/prefix choosers remain
+independent. Actual public profile prefixes observe all 29 reused slots across
+103 context calls, each with zero scorer work.
+
+The reserved development-host A/B retains 90 pairs/180 timed calls and all
+complete current wires. Candidate/baseline elapsed is **0.847995x**, round-block
+95% CI **0.846121–0.849327x**, or throughput **1.179252x**. NCI is
+**1.217277x** over twelve pairs (**1.214241x** primary-six); the weakest primary
+row is x-ray **1.078964x**. The unchanged 1.03x/1.20x/0.98x gates pass.
+Separate public q4/q11/legacy-ratio controls pass **1.010035x/1.030885x/1.012216x**
+on the declared Mozilla 64 KiB input, retaining 18 pairs and 1224 timed calls.
+Independent raw/CI recomputation confirms all gates without removing samples.
+
+Fourteen inputs pass all 42 requested-heap cap operations plus six
+backing/ownership/handoff tests. Silesia peak/allocated/acquisition attempts
+are **0.794524x/0.839044x/0.932828x** baseline. **Opaque peak grows 4.33%**;
+the accepted scope retains this negative control, below the architecture's
+5% bound. These force-moving requested-heap figures are not RSS or isolated
+cache contributions. Final native Brotli passes 1721 tests with one platform
+skip; x86/actual WASI real-chooser gates and narrow Deflate/Zstd controls pass.
+
+The 72-pair null-workspace plumbing control gives elapsed **1.004252x** relative
+to frozen paired-only, CI **0.998935–1.009597x**. It neither isolates pointer
+layout nor proves a layout regression. Earlier v4/v5/v6 remain rejected as
+standalone candidates; their different timing epochs do not identify V7's
+component contributions. This accepted internal increment does not establish
+historical-regression repair, reference parity or industry leadership. Continue
+removing repeated search/emission and unnecessary retained phase lifetimes.
+
 ## 2026-11-26 complete context histograms: larger sharing boundary observed
 
 The [isolated untimed diagnostic](br/context-histograms-20261126/README.md)

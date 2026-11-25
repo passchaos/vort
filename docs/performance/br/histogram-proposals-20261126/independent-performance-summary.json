@@ -1,0 +1,311 @@
+{
+  "acceptance_scope": "Declared operation-specific throughput/CI/control gates only; no industry ranking, codec memory or RSS inference.",
+  "all_gates_passed": true,
+  "bootstrap_draws": 20000,
+  "control_executable_sha256": {
+    "baseline": "577ef8468aa04bfdbac90e1a26851a2568a8035ae4212fc61b04082beba155c2",
+    "current": "6b040453bda4ee232ddc7d1ac4c859df9a7b141eee8e8d3426f5147c6322cc85"
+  },
+  "control_pairs": 18,
+  "control_processes": 36,
+  "control_timed_calls": 1224,
+  "controls": [
+    {
+      "control": "q11",
+      "elapsed_ci95": [
+        0.9577419301883883,
+        0.9841065693613548
+      ],
+      "elapsed_ratio": 0.9700403672417279,
+      "iterations_per_child": 1,
+      "pair_count": 6,
+      "passes_floor": true,
+      "throughput_ci95": [
+        1.0161501113125984,
+        1.0441226059751811
+      ],
+      "throughput_ratio": 1.03088493403987,
+      "wire_bytes": 13906,
+      "wire_sha256": "29b934881ef4fa6cb7ff8215d470c79c909168113eee66dd043de9edba48bcc9"
+    },
+    {
+      "control": "q4",
+      "elapsed_ci95": [
+        0.9690648898589966,
+        1.004724172991784
+      ],
+      "elapsed_ratio": 0.9900647269947258,
+      "iterations_per_child": 100,
+      "pair_count": 6,
+      "passes_floor": true,
+      "throughput_ci95": [
+        0.9952980398812177,
+        1.0319226405421669
+      ],
+      "throughput_ratio": 1.010034973203653,
+      "wire_bytes": 14057,
+      "wire_sha256": "bfb94673841483cf1b3c51039287fd08d029b2baea4478a2dec00c8cf224810c"
+    },
+    {
+      "control": "ratio",
+      "elapsed_ci95": [
+        0.9706580458472899,
+        1.000399661740188
+      ],
+      "elapsed_ratio": 0.9879318382458652,
+      "iterations_per_child": 1,
+      "pair_count": 6,
+      "passes_floor": true,
+      "throughput_ci95": [
+        0.9996004979255063,
+        1.0302289300317884
+      ],
+      "throughput_ratio": 1.0122155813659803,
+      "wire_bytes": 14306,
+      "wire_sha256": "9241079bcfb7555090ca7ca750527d0c2530f2691474bcdcdd39e37b23a3a472"
+    }
+  ],
+  "data_valid": true,
+  "failed_gates": [],
+  "main_executable_sha256": {
+    "current": "437dc07dbc242dbdfc8d4d1399ef83e0790a6471a1ea5724fcc4aecc859a49ec",
+    "old_exact": "f634b02f8e63bf497c5eb3dcd17acbc791b2db46b5a6d534d73ef0ca3a047df5"
+  },
+  "main_initial_complete_wires": 24,
+  "main_pairs": 90,
+  "main_timed_calls": 180,
+  "matrix": {
+    "elapsed_ci95": [
+      0.8461212601381061,
+      0.8493266539613407
+    ],
+    "elapsed_ratio": 0.8479950727768976,
+    "primary_rounds": 6,
+    "row_count": 12,
+    "throughput_ratio": 1.1792521349508998
+  },
+  "nci_gate_rounds": 12,
+  "rows": [
+    {
+      "all_round_elapsed_ci95": [
+        0.9068284509379364,
+        0.9147927395093446
+      ],
+      "all_round_elapsed_ratio": 0.9105600510598053,
+      "all_round_throughput_ratio": 1.098225206383802,
+      "case": "dickens",
+      "current_median_ns": 104290655.0,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "old_median_ns": 114560894.0,
+      "pair_count": 12,
+      "primary_elapsed_ratio": 0.911563317251438,
+      "primary_throughput_ratio": 1.0970165001979433,
+      "wire_bytes": 22367,
+      "wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.821277228920259,
+        0.8363406341914836
+      ],
+      "all_round_elapsed_ratio": 0.828661998953191,
+      "all_round_throughput_ratio": 1.2067646413896764,
+      "case": "mozilla",
+      "current_median_ns": 136227090.5,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "old_median_ns": 164702964.5,
+      "pair_count": 12,
+      "primary_elapsed_ratio": 0.8351337922362843,
+      "primary_throughput_ratio": 1.1974129286784627,
+      "wire_bytes": 13924,
+      "wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.820930247659692,
+        0.8409896387346253
+      ],
+      "all_round_elapsed_ratio": 0.8324890673675901,
+      "all_round_throughput_ratio": 1.2012169759323033,
+      "case": "mr",
+      "current_median_ns": 152870116.5,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "old_median_ns": 182669035.0,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.8324890673675901,
+      "primary_throughput_ratio": 1.2012169759323033,
+      "wire_bytes": 15438,
+      "wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.8117721970873326,
+        0.8336035367007435
+      ],
+      "all_round_elapsed_ratio": 0.8215054020458301,
+      "all_round_throughput_ratio": 1.2172774488270646,
+      "case": "nci",
+      "current_median_ns": 76968699.5,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "old_median_ns": 94223005.0,
+      "pair_count": 12,
+      "primary_elapsed_ratio": 0.8235597507023652,
+      "primary_throughput_ratio": 1.2142409814796793,
+      "wire_bytes": 4206,
+      "wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.8714167748572001,
+        0.8737251916729294
+      ],
+      "all_round_elapsed_ratio": 0.872570219890132,
+      "all_round_throughput_ratio": 1.1460395704610606,
+      "case": "ooffice",
+      "current_median_ns": 140363074.0,
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "old_median_ns": 160854898.0,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.872570219890132,
+      "primary_throughput_ratio": 1.1460395704610606,
+      "wire_bytes": 30682,
+      "wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.8141477185161903,
+        0.8253005784537613
+      ],
+      "all_round_elapsed_ratio": 0.819705180560805,
+      "all_round_throughput_ratio": 1.2199508112366029,
+      "case": "osdb",
+      "current_median_ns": 122716661.0,
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "old_median_ns": 149401878.0,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.819705180560805,
+      "primary_throughput_ratio": 1.2199508112366029,
+      "wire_bytes": 25418,
+      "wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.8385368563117069,
+        0.8609843965316742
+      ],
+      "all_round_elapsed_ratio": 0.8490517236195947,
+      "all_round_throughput_ratio": 1.1777845473735067,
+      "case": "reymont",
+      "current_median_ns": 89555695.0,
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "old_median_ns": 105867402.0,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.8490517236195947,
+      "primary_throughput_ratio": 1.1777845473735067,
+      "wire_bytes": 17128,
+      "wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.8808771913069671,
+        0.8895508659436162
+      ],
+      "all_round_elapsed_ratio": 0.8852095178325599,
+      "all_round_throughput_ratio": 1.1296760595711908,
+      "case": "samba",
+      "current_median_ns": 99053299.0,
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "old_median_ns": 111813010.5,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.8852095178325599,
+      "primary_throughput_ratio": 1.1296760595711908,
+      "wire_bytes": 18744,
+      "wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.7661235130889648,
+        0.7775134272005395
+      ],
+      "all_round_elapsed_ratio": 0.7724307405055193,
+      "all_round_throughput_ratio": 1.2946144522233118,
+      "case": "sao",
+      "current_median_ns": 144021464.5,
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "old_median_ns": 186795359.5,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.7724307405055193,
+      "primary_throughput_ratio": 1.2946144522233118,
+      "wire_bytes": 46709,
+      "wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.8725116845813171,
+        0.8813452229636842
+      ],
+      "all_round_elapsed_ratio": 0.876917330873179,
+      "all_round_throughput_ratio": 1.1403583494059388,
+      "case": "webster",
+      "current_median_ns": 95551959.0,
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "old_median_ns": 108650994.0,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.876917330873179,
+      "primary_throughput_ratio": 1.1403583494059388,
+      "wire_bytes": 19555,
+      "wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.9158950133412669,
+        0.9347746388177416
+      ],
+      "all_round_elapsed_ratio": 0.9268150483262205,
+      "all_round_throughput_ratio": 1.0789639225279604,
+      "case": "x-ray",
+      "current_median_ns": 144255751.5,
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "old_median_ns": 156782224.5,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.9268150483262205,
+      "primary_throughput_ratio": 1.0789639225279604,
+      "wire_bytes": 41180,
+      "wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288"
+    },
+    {
+      "all_round_elapsed_ci95": [
+        0.7773622340784289,
+        0.7976331597161139
+      ],
+      "all_round_elapsed_ratio": 0.7849713893699569,
+      "all_round_throughput_ratio": 1.2739317808801056,
+      "case": "xml",
+      "current_median_ns": 75695292.5,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "old_median_ns": 96654102.5,
+      "pair_count": 6,
+      "primary_elapsed_ratio": 0.7849713893699569,
+      "primary_throughput_ratio": 1.2739317808801056,
+      "wire_bytes": 4407,
+      "wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658"
+    }
+  ],
+  "schema": "vort.q8-histogram-proposals-performance-verification.v1",
+  "script_sha256": {
+    "analyze.py": "f85a2f896cbd6f092699d52b315b4bcf907878e12d339694f7a88f8e23ce10f4",
+    "control_sampling.py": "90ee79ee15604b984a2af84293699393c8146a2cd7bdf12c00b0c0bb4f0fe395",
+    "run.py": "3dfad02f7b4fe5465fefcda708ba3a150db3a547d4d803bafef888dc535f076d"
+  },
+  "source_identity": {
+    "files": 2201,
+    "manifest_sha256": "ea65fc310e86e5f96bfa81a55969294eb80cdb49c6af724bf07d1a92882a9363"
+  },
+  "source_revisions": {
+    "current": "b199db72+paired-search-histogram-proposals-v7",
+    "old_exact": "c2c8f250302ca2f223740076482dd95b1788eeb1"
+  },
+  "source_scope": "Complete source hashes rechecked if a complete source tree is present. Frozen main c2 baseline has a success/revision/ELF stamp without an original per-stage build exit receipt; all saved actual process/build commands must exit0.",
+  "statistics_scope": "Primary matrix and every primary-row floor use rounds0..5. NCI gate retains the existing all12-round row statistic. Matrix CI resamples shared even/odd round blocks; row/control CIs stratify by AB/BA. Fixed seeds and 20000 percentile draws match analyze.py/control_sampling.py with independently factored log means.",
+  "wire_scope": "Initial complete bytes, hashes, windows and pinned decode receipts verified offline; timed output identity is length/mix only. No decoder is executed."
+}

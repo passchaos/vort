@@ -12,7 +12,7 @@ pub noinline fn encode(comptime S: type, comptime traced: bool, trace: profile.R
 }
 
 pub noinline fn encodePreparedPrimary(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options) linksection(code_sections.counted_context) S.Error!S.Result {
-    const proposals = try S.proposals(traced, trace, allocator, input, commands);
+    const proposals = try proposalsWithOptions(S, traced, trace, allocator, input, commands, options);
     const count_primary = blk: {
         for ([3]?contexts.Candidate{ proposals.suffix, proposals.up_to_16, proposals.full }) |optional| {
             const candidate = optional orelse continue;
@@ -44,7 +44,7 @@ noinline fn encodeCore(comptime S: type, comptime prepare_primary: bool, comptim
     var alternate_count: usize = 0;
     var alternate_plain = false;
     var cutoff: ?u6 = if (selected_context) |candidate| candidate.suffixCutoff() else null;
-    const proposals = if (precomputed) |value| value.* else try S.proposals(traced, trace, allocator, input, commands);
+    const proposals = if (precomputed) |value| value.* else try proposalsWithOptions(S, traced, trace, allocator, input, commands, options);
     for ([3]?contexts.Candidate{ proposals.suffix, proposals.up_to_16, proposals.full }, 0..) |proposal, index| {
         if (proposal) |candidate| {
             var duplicate = if (selected_context) |current| contexts.Candidate.eql(candidate, current) else false;
@@ -103,4 +103,10 @@ noinline fn encodeCore(comptime S: type, comptime prepare_primary: bool, comptim
     selected_wire = null;
     stats.* = baseline_stats;
     return .{ .encoded = baseline.?, .use_recent_distances = false };
+}
+
+fn proposalsWithOptions(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, options: S.UserOptions) S.Error!contexts.Proposals {
+    if (@hasDecl(S, "proposalsWithOptions"))
+        return S.proposalsWithOptions(traced, trace, allocator, input, commands, options);
+    return S.proposals(traced, trace, allocator, input, commands);
 }
