@@ -2543,6 +2543,9 @@ pub const ZstdSourceSeekableEncodeError = zstd.SourceSeekableEncodeError;
 pub const zstdSourceSeekableEncodeRequirements = zstd.sourceSeekableEncodeRequirements;
 pub const zstdEncodeSourceSeekableTo = zstd.encodeSourceSeekableTo;
 pub const zstdEncodeSourceSeekableToWithDictionary = zstd.encodeSourceSeekableToWithDictionary;
+pub const ZstdSeekableReaderEncodeError = zstd.SeekableReaderEncodeError;
+pub const zstdEncodeSeekableReaderToWriter = zstd.encodeSeekableReaderToWriter;
+pub const zstdEncodeSeekableReaderToWriterWithDictionary = zstd.encodeSeekableReaderToWriterWithDictionary;
 
 test "root Zstd source seekable consumer contracts" {
     try @import("tests/zstd_source_decode/seekable.zig").contracts(@This());

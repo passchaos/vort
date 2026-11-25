@@ -5604,8 +5604,25 @@ pub fn encodeSourceSeekableToWithDictionary(allocator: std.mem.Allocator, source
     return source_seek_encode.encode(SourceSeekableEncodeCodec, allocator, source, sink, workspace, options, dictionary);
 }
 
+pub const SeekableReaderEncodeError = source_seek_encode.ReaderError(SourceSeekableEncodeCodec);
+
+/// Write an archive from an unknown-length reader. The number of caller index
+/// entries bounds the number of frames. This function does not flush `writer`.
+pub fn encodeSeekableReaderToWriter(allocator: std.mem.Allocator, reader: *std.Io.Reader, writer: *std.Io.Writer, workspace: SourceSeekableEncodeWorkspace, options: NativeSeekableOptions) SeekableReaderEncodeError!SourceSeekableEncodeResult {
+    return source_seek_encode.encodeReader(SourceSeekableEncodeCodec, allocator, reader, writer, workspace, options, null);
+}
+
+/// With prefix dictionary usage, the dictionary applies to the first frame only.
+pub fn encodeSeekableReaderToWriterWithDictionary(allocator: std.mem.Allocator, reader: *std.Io.Reader, writer: *std.Io.Writer, workspace: SourceSeekableEncodeWorkspace, options: NativeSeekableOptions, dictionary: NativeDictionary) SeekableReaderEncodeError!SourceSeekableEncodeResult {
+    return source_seek_encode.encodeReader(SourceSeekableEncodeCodec, allocator, reader, writer, workspace, options, dictionary);
+}
+
 test "Zstd source seekable encode contracts" {
     try @import("tests/zstd_source_seekable_encode.zig").contracts(@This());
+}
+
+test "Zstd source seekable unknown-length reader encode contracts" {
+    try @import("tests/zstd_seekable_reader_encode.zig").contracts(@This());
 }
 
 pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;

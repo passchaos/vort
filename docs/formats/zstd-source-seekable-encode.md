@@ -50,6 +50,31 @@ The tests compare its complete wire to the contiguous encoder and cover short
 callbacks, empty input, exact multiples, dictionary use, wide sizing and I/O
 failures during frames, table writing and length commit.
 
+## Unknown-length readers and pipes
+
+`zstdEncodeSeekableReaderToWriter` takes a `*std.Io.Reader` and a
+`*std.Io.Writer`, neither of which needs to seek or know the input length.
+It writes each full frame as it becomes available and writes the terminal
+seek table at EOF. The frame boundaries, empty-input convention, checksums,
+and dictionary rules are identical to the known-length writer. Use
+`zstdEncodeSeekableReaderToWriterWithDictionary` to supply a dictionary.
+
+Provide a full `frame_size` bytes of input scratch and a nonempty entry slice.
+The slice length, bounded by the format's 134,217,728-entry limit, is the
+maximum number of frames. The writer does not allocate an expandable index.
+If the last slot is used by a full frame, the encoder checks for EOF before
+writing the table. Extra input returns `OutputLimitExceeded`, can consume one
+extra logical byte, and leaves a prefix with no seek table. A reader may also
+prefetch data into its own buffer. Insufficient or aliased workspace fails
+before any I/O.
+
+The reader and writer interfaces and their exposed buffers must be disjoint
+from each other and from the workspace, dictionary and mutable profiles. As
+with callback-backed I/O, the caller is responsible for other backing storage.
+The result counts bytes accepted by the writer for this archive. The encoder
+never flushes or closes the writer; the caller must flush it to finish external
+publication. A `ReadFailed` or `WriteFailed` can leave a partial prefix.
+
 ## Independent verification
 
 `zig build check-zstd-source-reverse` executes the writer and reader contracts
@@ -59,8 +84,16 @@ on native, x86 and WASI. To produce an archive directly from an existing file:
 zig build run-zstd-source-seekable-encode-probe -- plain.bin new-archive.zst 131072 1
 ```
 
-The probe requires a new output path. The last argument enables (`1`) or
-omits (`0`) seek-table checksums. Build the standalone
+The probe requires a new named output path. The fourth argument enables (`1`)
+or omits (`0`) seek-table checksums. When using stdin or stdout (`-`), pass an
+explicit maximum frame count as the fifth argument; binary output goes only
+to stdout and the summary to stderr:
+
+```sh
+cat plain.bin | zig build run-zstd-source-seekable-encode-probe -- - - 131072 1 1000 > new-archive.zst
+```
+
+Build the standalone
 [upstream checker](../../tools/zstd/source_seekable_encode_verify.c) as shown
 in its header, then run:
 
@@ -73,4 +106,7 @@ linked. It checks random ranges, full plaintext, frame extents, and the complete
 seek table against one independently regenerated from the observed frames.
 With libzstd 1.6.0 (`01b7154f`), empty, exact-multiple, short-tail and multi-batch
 Vort archives passed this comparison (1, 3, 4 and 258 frames), with both seek
-checksum modes exercised.
+checksum modes exercised. Sequential pipe runs also matched the file-backed
+wire for empty, exact-multiple and short-tail inputs. One run observed 4096
+compressed bytes before closing stdin; a frame-cap refusal left no valid
+terminal seek table.
