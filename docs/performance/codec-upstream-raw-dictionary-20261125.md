@@ -39,3 +39,34 @@ dictionary and wire digests for reproduction.
 The ordinary no-dictionary smoke remains usable with the older system
 libbrotli. Selecting Brotli for dictionary mode with that library explicitly
 fails instead of counting a skipped reference check as a pass.
+
+## Missing, wrong, and rotating dictionaries
+
+A follow-up on codec source `7f362586` ran the same commands and reference
+versions. There were 16 missing/wrong cases across the built-in and full XML
+inputs. The reference, Vort ordinary decode, and Vort exact-size decode agreed
+on the outcomes: missing dictionaries were rejected; wrong zlib and checksummed
+Zstd dictionaries were rejected; wrong raw Deflate and Brotli dictionaries
+completed with different bytes. An accepted RAW stream therefore does not
+prove the dictionary matches.
+
+For zlib, both the bytewise and whole-input schedules paused after six
+compressed bytes, published no plaintext, and retained the same DICTID after
+`DictionaryMismatch`. Providing the correct dictionary and replaying only the
+unconsumed suffix produced 196,941 bytes for the built-in input and 5,345,280
+bytes for XML.
+
+The Zstd smoke also trained two distinct full dictionaries using libzstd
+1.6.0 and generated two checksummed frames, each with two blocks. Their
+compressed lengths were 155,875 and 156,576 bytes. The first frame's
+164,033 verified bytes were published before a missing second dictionary
+returned `NeedDictionary` or a same-ID dictionary with changed history
+returned `ChecksumMismatch`. Neither failure published second-frame bytes.
+Retry with the reversed, complete catalog started at compressed offset
+155,875, did not reread the first frame, and published exactly 164,734 bytes.
+Upstream also rejected the changed-history dictionaries for both frames.
+
+The new `upstream_real_dictionary_fault_json`,
+`upstream_zlib_dictionary_admission_json`, and
+`upstream_zstd_dictionary_rotation_json` receipts report the observed faults
+and offsets; the existing complete and truncation receipts remain separate.

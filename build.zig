@@ -2743,7 +2743,7 @@ pub fn build(b: *std.Build) void {
     codec_real_stream_smoke_step.dependOn(&run_codec_real_stream_smoke.step);
     const run_codec_real_dictionary_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
     run_codec_real_dictionary_smoke.addArg("--real-dictionary-smoke");
-    b.step("run-codec-real-dictionary-smoke", "Verify upstream RAW dictionary streams and flush checkpoints (requires RAW-capable libbrotli)")
+    b.step("run-codec-real-dictionary-smoke", "Verify upstream dictionary streams, faults and Zstd rotation (requires RAW-capable libbrotli)")
         .dependOn(&run_codec_real_dictionary_smoke.step);
     const run_codec_brotli_wide_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
     run_codec_brotli_wide_smoke.addArg("--real-brotli-wide");

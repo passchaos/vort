@@ -193,13 +193,21 @@ records the additional mid-stream truncation runs.
 flush interval. The reference encoders attach it as a Deflate/zlib preset,
 Zstd RAW prefix, or Brotli RAW shared dictionary; gzip is excluded because
 its wrapper has no preset dictionary. The full wire must decode to the same
-plaintext on both sides, but neither decoder may reproduce it without the
-dictionary. An acceptance with different bytes is allowed without a RAW
-prefix, since not all formats authenticate the dictionary. The test checks
-both complete-input schedules, the final-byte cut, and the selected flush cuts.
+plaintext on both sides. With a missing or wrong dictionary, zlib and the
+checksummed Zstd frame must reject; raw Deflate and Brotli may instead decode
+bytes that differ from the original because they cannot authenticate a RAW
+prefix. The test checks both complete-input schedules, the final-byte cut,
+and the selected flush cuts. Fault outcomes are reported separately in
+`upstream_real_dictionary_fault_json`. The zlib stream also pauses after its
+six-byte FDICT header, rejects the wrong dictionary without losing the request,
+and resumes with only the unconsumed suffix.
 `upstream_real_dictionary_json` records dictionary size and SHA-256 alongside
 the wire digest. `--real-dictionary-smoke` is a standalone mode using a
-built-in multi-block fixture with a guaranteed external history match.
+built-in multi-block fixture with an external history match. The smoke also
+exercises two checksummed Zstd frames produced with different full dictionaries:
+missing or same-ID-wrong contents for the second frame leave only the verified
+first frame in the destination. After a missing-dictionary refusal, the decoder
+resumes at the second frame without rereading the first.
 
 ```sh
 LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \

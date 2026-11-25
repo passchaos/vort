@@ -37,6 +37,8 @@ const reporting = @import("codec_differential/reporting.zig");
 const incremental_valid = @import("codec_differential/incremental_valid.zig");
 const upstream_real = @import("codec_differential/upstream_real.zig");
 const wide_brotli = @import("codec_differential/wide_brotli.zig");
+const zlib_admission = @import("codec_differential/zlib_dictionary_admission.zig");
+const zstd_rotation = @import("codec_differential/zstd_dictionary_rotation.zig");
 const BrotliRuntime = @import("br/libbrotli_runtime.zig").Runtime;
 
 const c = @cImport({
@@ -1984,6 +1986,16 @@ pub fn main(init: std.process.Init) !void {
                 .record_flushes = true,
                 .raw_dictionary = fixture.dictionary,
             });
+            if (only == null or only == .zstd) {
+                if (zstd_rotation.verify(allocator)) |receipt| {
+                    try stdout.writeAll("upstream_zstd_dictionary_rotation_json: ");
+                    try std.json.Stringify.value(receipt, .{}, stdout);
+                    try stdout.writeByte('\n');
+                } else |err| {
+                    if (err == error.OutOfMemory) return err;
+                    try harness.fail(.zstd, .real_file, "builtin-zstd-dictionary-rotation-v1", 0, 0, "dictionary-rotation", "{s}", .{@errorName(err)});
+                }
+            }
         } else if (real_files.items.len == 0) {
             const input = try wide_brotli.smokeInput(allocator);
             defer allocator.free(input);
@@ -2099,7 +2111,7 @@ fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, inp
         };
         try harness.checkWire(codec, .real_file, full, wire.level);
         if (mode.raw_dictionary) |dictionary| {
-            if (!try checkRealDictionaryDependency(harness, codec, full)) continue;
+            if (!try checkRealDictionaryFaults(harness, stdout, codec, full, dictionary)) continue;
             const dictionary_hash = upstream_real.digest(dictionary);
             try stdout.writeAll("upstream_real_dictionary_json: ");
             try std.json.Stringify.value(.{
@@ -2145,25 +2157,65 @@ fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, inp
     }
 }
 
-fn checkRealDictionaryDependency(harness: *Harness, codec: Codec, full: WireCase) !bool {
-    var bare = full;
-    bare.dictionary = null;
-    bare.brotli_shared_dictionary = false;
-    // RAW prefixes need not carry an identity check: success with different
-    // plaintext still demonstrates dependency, just as a rejection does.
-    const reference_match = matchesAndFree(harness.allocator, harness.referenceDecode(codec, bare, full.source.len), full.source);
-    const vort_match = matchesAndFree(harness.allocator, harness.vortDecode(codec, bare), full.source);
-    if (reference_match or vort_match) {
-        try harness.fail(codec, .real_file, full.label, full.source.len, full.wire.len, "dictionary-dependency", "plaintext matched without dictionary (reference={any}, vort={any})", .{ reference_match, vort_match });
-        return false;
+const DictionaryFault = enum { missing, wrong };
+const FaultOutput = enum { rejected, different, original };
+
+fn checkRealDictionaryFaults(harness: *Harness, stdout: *std.Io.Writer, codec: Codec, full: WireCase, dictionary: []const u8) !bool {
+    const a = harness.allocator;
+    const wrong = try a.dupe(u8, dictionary);
+    defer a.free(wrong);
+    if (codec == .zlib) {
+        // A one-bit change in one byte necessarily changes the Adler-32 ID.
+        wrong[wrong.len - 1] ^= 1;
+    } else {
+        for (wrong) |*byte| byte.* ^= 0xff;
     }
-    return true;
+    var ok = true;
+    for ([_]DictionaryFault{ .missing, .wrong }) |fault| {
+        var input = full;
+        input.dictionary = if (fault == .wrong) wrong else null;
+        input.brotli_shared_dictionary = full.brotli_shared_dictionary and fault == .wrong;
+        const reference = classifyFaultOutput(a, harness.referenceDecode(codec, input, full.source.len), full.source);
+        const vort_output = classifyFaultOutput(a, harness.vortDecode(codec, input), full.source);
+        const exact = classifyFaultOutput(a, harness.vortDecodeExact(codec, input, full.source.len), full.source);
+        const must_reject = codec == .zlib or codec == .zstd;
+        if (reference == .original or vort_output == .original or exact == .original or
+            (must_reject and (reference != .rejected or vort_output != .rejected or exact != .rejected)))
+        {
+            try harness.fail(codec, .real_file, full.label, full.source.len, full.wire.len, "dictionary-fault", "{s} dictionary: reference={s} vort={s} exact={s}", .{
+                @tagName(fault), @tagName(reference), @tagName(vort_output), @tagName(exact),
+            });
+            ok = false;
+            continue;
+        }
+        try stdout.writeAll("upstream_real_dictionary_fault_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.upstream-dictionary-fault.v1",
+            .path = full.label,
+            .codec = codec.label(),
+            .fault = fault,
+            .reference = reference,
+            .vort = vort_output,
+            .exact = exact,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
+    if (ok and codec == .zlib) {
+        const receipt = zlib_admission.verify(full.wire, full.source, dictionary, wrong) catch |err| {
+            try harness.fail(codec, .real_file, full.label, full.source.len, full.wire.len, "dictionary-admission", "{s}", .{@errorName(err)});
+            return false;
+        };
+        try stdout.writeAll("upstream_zlib_dictionary_admission_json: ");
+        try std.json.Stringify.value(.{ .path = full.label, .verification = receipt }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
+    return ok;
 }
 
-fn matchesAndFree(a: std.mem.Allocator, result: ?[]u8, expected: []const u8) bool {
-    const decoded = result orelse return false;
+fn classifyFaultOutput(a: std.mem.Allocator, result: ?[]u8, expected: []const u8) FaultOutput {
+    const decoded = result orelse return .rejected;
     defer a.free(decoded);
-    return std.mem.eql(u8, decoded, expected);
+    return if (std.mem.eql(u8, decoded, expected)) .original else .different;
 }
 
 fn runPatternCase(harness: *Harness, pattern: Pattern, size: usize, seed: u64, input: []u8) !void {
