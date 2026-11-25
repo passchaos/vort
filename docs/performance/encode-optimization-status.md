@@ -1,5 +1,24 @@
 # Encoder optimization status
 
+## 2026-11-25 q8 feedback cost and repeated search work
+
+The [single-flag control](br/q8-feedback-control-20261125/README.md) changes
+only q8 entropy feedback in an isolated source overlay. Across the fixed
+twelve 64 KiB rows, feedback-on requires **2.08130x** time (descriptive paired
+CI **2.07622–2.08690x**) for size **0.984679x**. Mozilla, ooffice, sao and x-ray
+return identical complete wires in both controls. This does not authorize
+dropping the other eight rows' real compression gains from the default.
+
+The same bundle rejects the initial exact-result cache idea: all twelve rows
+have distinct modeled prices and distinct command sequences. It also records
+four-pass search profiles with current wire identity. Every row's three
+modeled passes repeat the same chain/match/choice work counts; NCI makes
+9,754,161 match-length calls across those passes. Its modeled index cost is
+only 1.10%, so merely retaining the index is insufficient. The next candidate
+shares one bounded match scan between two independently priced DPs and avoids
+materializing the worst-case 16 MiB frontier. It remains an unmerged experiment
+until complete wire, resource and whole-operation performance gates pass.
+
 ## 2026-11-25 controlled q8 source regression
 
 The [same-probe source A/B](br/q8-source-regression-20261125/README.md)

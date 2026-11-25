@@ -1,0 +1,1713 @@
+{
+  "control": {
+    "host_scope": "non-quiet development-host control; original CPU15 full-file collector and concurrent main-agent validation activity remain possible",
+    "matrix": [
+      {
+        "geomean_encoded_bytes_on_over_off": 0.9846791528039722,
+        "lane": "explicit16",
+        "paired_geomean_ns_on_over_off": 2.0813000719599186,
+        "paired_round_block_bootstrap_95pct_ci": [
+          2.0762165164587816,
+          2.086899883218649
+        ],
+        "primary_rounds": 6,
+        "rows": 12
+      }
+    ],
+    "ratio_direction": "feedback-on elapsed / feedback-off elapsed; values above one isolate extra on-path cost",
+    "rows": [
+      {
+        "case": "dickens",
+        "encoded_bytes_on_over_off": 0.9824738645348327,
+        "input_bytes": 65536,
+        "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 22766,
+        "off_first_pairs": 6,
+        "off_per_call_median_ns": 66261475.0,
+        "off_wire_sha256": "4af7185f622d02fe9279731324e0bbcfe5ac13b2755b2d8a0a7959f645c8888f",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 22367,
+        "on_first_pairs": 6,
+        "on_per_call_median_ns": 118611072.0,
+        "on_wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0",
+        "paired_geomean_ns_on_over_off": 1.835537106487536,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.7896051485919249,
+          1.916037950467656
+        ],
+        "pairs": 12,
+        "primary_six_round_paired_geomean": 1.8069430774821067,
+        "ratio_of_median_ns_on_over_off": 1.7900457543391541,
+        "raw_pairs": [
+          {
+            "off_ns": 65340584,
+            "on_ns": 117871690,
+            "on_over_off_ns_ratio": 1.8039583178503578,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 65207530,
+            "on_ns": 118110837,
+            "on_over_off_ns_ratio": 1.8113067156507845,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 65358172,
+            "on_ns": 117567587,
+            "on_over_off_ns_ratio": 1.7988200006573012,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 67138852,
+            "on_ns": 119498182,
+            "on_over_off_ns_ratio": 1.7798663283667704,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 66284942,
+            "on_ns": 123296737,
+            "on_over_off_ns_ratio": 1.8601017558407156,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 66711454,
+            "on_ns": 119326511,
+            "on_over_off_ns_ratio": 1.7886960011394746,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          },
+          {
+            "off_ns": 66172697,
+            "on_ns": 117866200,
+            "on_over_off_ns_ratio": 1.7811908134861119,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 6
+          },
+          {
+            "off_ns": 66042442,
+            "on_ns": 118237559,
+            "on_over_off_ns_ratio": 1.7903268779794665,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 7
+          },
+          {
+            "off_ns": 66671292,
+            "on_ns": 120180055,
+            "on_over_off_ns_ratio": 1.802575762293612,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 8
+          },
+          {
+            "off_ns": 66238008,
+            "on_ns": 118776358,
+            "on_over_off_ns_ratio": 1.793175271816749,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 9
+          },
+          {
+            "off_ns": 66817585,
+            "on_ns": 118445786,
+            "on_over_off_ns_ratio": 1.7726738552433465,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 10
+          },
+          {
+            "off_ns": 67040130,
+            "on_ns": 154183590,
+            "on_over_off_ns_ratio": 2.2998700927340088,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 11
+          }
+        ]
+      },
+      {
+        "case": "mozilla",
+        "encoded_bytes_on_over_off": 1.0,
+        "input_bytes": 65536,
+        "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 13924,
+        "off_first_pairs": 6,
+        "off_per_call_median_ns": 93340068.0,
+        "off_wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 13924,
+        "on_first_pairs": 6,
+        "on_per_call_median_ns": 171262308.5,
+        "on_wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb",
+        "paired_geomean_ns_on_over_off": 1.839795997913262,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.818827181318134,
+          1.8577675674744494
+        ],
+        "pairs": 12,
+        "primary_six_round_paired_geomean": 1.835520825007167,
+        "ratio_of_median_ns_on_over_off": 1.8348209099226283,
+        "raw_pairs": [
+          {
+            "off_ns": 93386197,
+            "on_ns": 173613350,
+            "on_over_off_ns_ratio": 1.8590900537474504,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 92599477,
+            "on_ns": 175187408,
+            "on_over_off_ns_ratio": 1.8918833418465204,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 97237424,
+            "on_ns": 169911710,
+            "on_over_off_ns_ratio": 1.7473900789473815,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 93571172,
+            "on_ns": 174008158,
+            "on_over_off_ns_ratio": 1.8596342685544218,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 92554008,
+            "on_ns": 170448592,
+            "on_over_off_ns_ratio": 1.8416122184573573,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 93958552,
+            "on_ns": 170718992,
+            "on_over_off_ns_ratio": 1.816960653033478,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          },
+          {
+            "off_ns": 92544279,
+            "on_ns": 171067845,
+            "on_over_off_ns_ratio": 1.8484972474635628,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 6
+          },
+          {
+            "off_ns": 93934183,
+            "on_ns": 176515429,
+            "on_over_off_ns_ratio": 1.879139450225484,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 7
+          },
+          {
+            "off_ns": 93293939,
+            "on_ns": 172432085,
+            "on_over_off_ns_ratio": 1.8482667453884651,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 8
+          },
+          {
+            "off_ns": 92899015,
+            "on_ns": 170700042,
+            "on_over_off_ns_ratio": 1.837479568540097,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 9
+          },
+          {
+            "off_ns": 93002572,
+            "on_ns": 171238189,
+            "on_over_off_ns_ratio": 1.841219928842398,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 10
+          },
+          {
+            "off_ns": 94604864,
+            "on_ns": 171286428,
+            "on_over_off_ns_ratio": 1.8105456818795278,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 11
+          }
+        ]
+      },
+      {
+        "case": "mr",
+        "encoded_bytes_on_over_off": 0.9963856976894282,
+        "input_bytes": 65536,
+        "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 15494,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 88741984.0,
+        "off_wire_sha256": "a00d77666a576f51864f8aba3a4c436605d33efa04517f053ce5a1480666e764",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 15438,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 189811653.5,
+        "on_wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513",
+        "paired_geomean_ns_on_over_off": 2.137713896666081,
+        "paired_ratio_bootstrap_95pct_ci": [
+          2.131141847610915,
+          2.144913063564074
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 2.137713896666081,
+        "ratio_of_median_ns_on_over_off": 2.138916045645317,
+        "raw_pairs": [
+          {
+            "off_ns": 89264417,
+            "on_ns": 189699759,
+            "on_over_off_ns_ratio": 2.1251442105984966,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 90057371,
+            "on_ns": 192436632,
+            "on_over_off_ns_ratio": 2.1368226705174416,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 88468591,
+            "on_ns": 190571631,
+            "on_over_off_ns_ratio": 2.15411626709416,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 89015377,
+            "on_ns": 189923548,
+            "on_over_off_ns_ratio": 2.133603815439663,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 88232558,
+            "on_ns": 188620535,
+            "on_over_off_ns_ratio": 2.1377656873554542,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 88329841,
+            "on_ns": 188931782,
+            "on_over_off_ns_ratio": 2.1389349268725617,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "nci",
+        "encoded_bytes_on_over_off": 0.9585232452142206,
+        "input_bytes": 65536,
+        "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 4388,
+        "off_first_pairs": 6,
+        "off_per_call_median_ns": 30906447.5,
+        "off_wire_sha256": "dc1ed3475b8cfa080fa5768cdf4b0373363e53b40cb591c0391d053b9c7d1e35",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 4206,
+        "on_first_pairs": 6,
+        "on_per_call_median_ns": 97447149.0,
+        "on_wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615",
+        "paired_geomean_ns_on_over_off": 3.168306861790956,
+        "paired_ratio_bootstrap_95pct_ci": [
+          3.152640599825665,
+          3.189959886916314
+        ],
+        "pairs": 12,
+        "primary_six_round_paired_geomean": 3.1563436058203096,
+        "ratio_of_median_ns_on_over_off": 3.1529715280282535,
+        "raw_pairs": [
+          {
+            "off_ns": 30775690,
+            "on_ns": 97749159,
+            "on_over_off_ns_ratio": 3.176180907722946,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 30938456,
+            "on_ns": 98099333,
+            "on_over_off_ns_ratio": 3.1707895507131965,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 30951748,
+            "on_ns": 97078330,
+            "on_over_off_ns_ratio": 3.136440953189461,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 30569609,
+            "on_ns": 96774993,
+            "on_over_off_ns_ratio": 3.165725574049704,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 30895155,
+            "on_ns": 96732902,
+            "on_over_off_ns_ratio": 3.1310055573438618,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 30804080,
+            "on_ns": 97285256,
+            "on_over_off_ns_ratio": 3.1581938496458912,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          },
+          {
+            "off_ns": 30917740,
+            "on_ns": 97514163,
+            "on_over_off_ns_ratio": 3.1539874195203144,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 6
+          },
+          {
+            "off_ns": 31012536,
+            "on_ns": 98426765,
+            "on_over_off_ns_ratio": 3.1737735024314038,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 7
+          },
+          {
+            "off_ns": 31296910,
+            "on_ns": 102385867,
+            "on_over_off_ns_ratio": 3.271436924603739,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 8
+          },
+          {
+            "off_ns": 31130252,
+            "on_ns": 97976297,
+            "on_over_off_ns_ratio": 3.1473017629282283,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 9
+          },
+          {
+            "off_ns": 30841709,
+            "on_ns": 97380135,
+            "on_over_off_ns_ratio": 3.157416957665997,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 10
+          },
+          {
+            "off_ns": 30302336,
+            "on_ns": 96350185,
+            "on_over_off_ns_ratio": 3.179628956658655,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 11
+          }
+        ]
+      },
+      {
+        "case": "ooffice",
+        "encoded_bytes_on_over_off": 1.0,
+        "input_bytes": 65536,
+        "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 30682,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 81961272.5,
+        "off_wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 30682,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 168059962.5,
+        "on_wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8",
+        "paired_geomean_ns_on_over_off": 2.05505746919066,
+        "paired_ratio_bootstrap_95pct_ci": [
+          2.033465033869125,
+          2.0758377075098102
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 2.05505746919066,
+        "ratio_of_median_ns_on_over_off": 2.0504801520742615,
+        "raw_pairs": [
+          {
+            "off_ns": 82172692,
+            "on_ns": 167357893,
+            "on_over_off_ns_ratio": 2.036660707184815,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 81161920,
+            "on_ns": 167654816,
+            "on_over_off_ns_ratio": 2.0656832169569177,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 82631303,
+            "on_ns": 168465109,
+            "on_over_off_ns_ratio": 2.038756535159563,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 82834656,
+            "on_ns": 166894676,
+            "on_over_off_ns_ratio": 2.0147928905505443,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 81096485,
+            "on_ns": 168655428,
+            "on_over_off_ns_ratio": 2.0796885093108535,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 81749853,
+            "on_ns": 171338253,
+            "on_over_off_ns_ratio": 2.095884539388713,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "osdb",
+        "encoded_bytes_on_over_off": 0.9928130614795719,
+        "input_bytes": 65536,
+        "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 25602,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 85056563.5,
+        "off_wire_sha256": "6f1faeb2096d251e9c644bdc571552e9f2061965b8c030d1b8b613c05c4f4d32",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 25418,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 154188688.5,
+        "on_wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5",
+        "paired_geomean_ns_on_over_off": 1.80238895078348,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.791424834569468,
+          1.8128042081625009
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 1.80238895078348,
+        "ratio_of_median_ns_on_over_off": 1.8127782519687619,
+        "raw_pairs": [
+          {
+            "off_ns": 87097141,
+            "on_ns": 156267336,
+            "on_over_off_ns_ratio": 1.7941729683182137,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 85091094,
+            "on_ns": 154651700,
+            "on_over_off_ns_ratio": 1.817483977817937,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 86647283,
+            "on_ns": 153447075,
+            "on_over_off_ns_ratio": 1.77093925726442,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 85009020,
+            "on_ns": 154048873,
+            "on_over_off_ns_ratio": 1.8121473815366886,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 85022033,
+            "on_ns": 154328504,
+            "on_over_off_ns_ratio": 1.8151589482693269,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 84806952,
+            "on_ns": 153064970,
+            "on_over_off_ns_ratio": 1.804863473928411,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "reymont",
+        "encoded_bytes_on_over_off": 0.9800308977513303,
+        "input_bytes": 65536,
+        "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 17477,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 44479088.5,
+        "off_wire_sha256": "127c8f72daeefac3a7fa6632906eb0a0b87c717cd3ba5d295735d1d889c8244f",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 17128,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 108628841.5,
+        "on_wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7",
+        "paired_geomean_ns_on_over_off": 2.4998113437634197,
+        "paired_ratio_bootstrap_95pct_ci": [
+          2.4421393248445153,
+          2.611750758291565
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 2.4998113437634197,
+        "ratio_of_median_ns_on_over_off": 2.442245224966784,
+        "raw_pairs": [
+          {
+            "off_ns": 44424628,
+            "on_ns": 108780315,
+            "on_over_off_ns_ratio": 2.448648866570138,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 44370744,
+            "on_ns": 108393691,
+            "on_over_off_ns_ratio": 2.4429090258211583,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 44533549,
+            "on_ns": 108477368,
+            "on_over_off_ns_ratio": 2.4358572455116927,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 45055295,
+            "on_ns": 125950309,
+            "on_over_off_ns_ratio": 2.7954607555005464,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 44977270,
+            "on_ns": 109792686,
+            "on_over_off_ns_ratio": 2.4410704784883563,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 44012137,
+            "on_ns": 108018093,
+            "on_over_off_ns_ratio": 2.4542796683560266,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "samba",
+        "encoded_bytes_on_over_off": 0.987930216623623,
+        "input_bytes": 65536,
+        "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 18973,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 61997474.0,
+        "off_wire_sha256": "f3d8457e6a74a885c5411aa4f1043433223ab23dd0f62fa513921d05fe0ceb64",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 18744,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 115394999.0,
+        "on_wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907",
+        "paired_geomean_ns_on_over_off": 1.862204934232591,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.8561534975432128,
+          1.8667976440252139
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 1.862204934232591,
+        "ratio_of_median_ns_on_over_off": 1.8612854936638226,
+        "raw_pairs": [
+          {
+            "off_ns": 62177397,
+            "on_ns": 115577069,
+            "on_over_off_ns_ratio": 1.8588277183748942,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 61900864,
+            "on_ns": 115942724,
+            "on_over_off_ns_ratio": 1.8730388642071296,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 61884998,
+            "on_ns": 115334586,
+            "on_over_off_ns_ratio": 1.863692166557071,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 61768584,
+            "on_ns": 115316840,
+            "on_over_off_ns_ratio": 1.8669173313087442,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 62094084,
+            "on_ns": 115446296,
+            "on_over_off_ns_ratio": 1.8592157024169969,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 62293685,
+            "on_ns": 115343702,
+            "on_over_off_ns_ratio": 1.8516114755452338,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "sao",
+        "encoded_bytes_on_over_off": 1.0,
+        "input_bytes": 65536,
+        "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 46709,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 115854267.0,
+        "off_wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 46709,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 187636151.0,
+        "on_wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095",
+        "paired_geomean_ns_on_over_off": 1.6248252716909533,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.5985469388530211,
+          1.654277555099488
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 1.6248252716909533,
+        "ratio_of_median_ns_on_over_off": 1.619587744662007,
+        "raw_pairs": [
+          {
+            "off_ns": 115938848,
+            "on_ns": 187089647,
+            "on_over_off_ns_ratio": 1.613692478641844,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 119083287,
+            "on_ns": 186351826,
+            "on_over_off_ns_ratio": 1.5648864815093657,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 115769686,
+            "on_ns": 192644244,
+            "on_over_off_ns_ratio": 1.6640301157938702,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 116779397,
+            "on_ns": 187643379,
+            "on_over_off_ns_ratio": 1.606819214865444,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 115218355,
+            "on_ns": 187628923,
+            "on_over_off_ns_ratio": 1.628463824188429,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 115597925,
+            "on_ns": 193455064,
+            "on_over_off_ns_ratio": 1.6735167521389334,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "webster",
+        "encoded_bytes_on_over_off": 0.9847416658273743,
+        "input_bytes": 65536,
+        "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 19858,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 59537554.0,
+        "off_wire_sha256": "1174cbe011f3cd3e3bb0aea3aa7ca2192d22ab3c37d2f31fdcbf6eeb5b81d65c",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 19555,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 112915772.0,
+        "on_wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c",
+        "paired_geomean_ns_on_over_off": 1.9025941867623928,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.895877326286248,
+          1.9088119628224869
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 1.9025941867623928,
+        "ratio_of_median_ns_on_over_off": 1.8965470432325788,
+        "raw_pairs": [
+          {
+            "off_ns": 59541071,
+            "on_ns": 113759307,
+            "on_over_off_ns_ratio": 1.9106022966902962,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 59312860,
+            "on_ns": 112437606,
+            "on_over_off_ns_ratio": 1.8956699440896965,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 59534037,
+            "on_ns": 113936729,
+            "on_over_off_ns_ratio": 1.9138082136106442,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 59577800,
+            "on_ns": 112876021,
+            "on_over_off_ns_ratio": 1.8945986760169056,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 59717781,
+            "on_ns": 112955523,
+            "on_over_off_ns_ratio": 1.8914889520091176,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 58767405,
+            "on_ns": 112217615,
+            "on_over_off_ns_ratio": 1.90952135797046,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "x-ray",
+        "encoded_bytes_on_over_off": 1.0,
+        "input_bytes": 65536,
+        "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 41180,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 92076072.0,
+        "off_wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 41180,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 162293842.5,
+        "on_wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288",
+        "paired_geomean_ns_on_over_off": 1.7591198229750045,
+        "paired_ratio_bootstrap_95pct_ci": [
+          1.7439828098870684,
+          1.7743882187600206
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 1.7591198229750045,
+        "ratio_of_median_ns_on_over_off": 1.7626060601281948,
+        "raw_pairs": [
+          {
+            "off_ns": 91934257,
+            "on_ns": 164912184,
+            "on_over_off_ns_ratio": 1.7938055887045457,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 91408330,
+            "on_ns": 161861553,
+            "on_over_off_ns_ratio": 1.7707527639986422,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 93167681,
+            "on_ns": 162991450,
+            "on_over_off_ns_ratio": 1.7494419550917018,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 92217887,
+            "on_ns": 162726132,
+            "on_over_off_ns_ratio": 1.7645831767973603,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 91887559,
+            "on_ns": 161079343,
+            "on_over_off_ns_ratio": 1.7530049198499222,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 93468141,
+            "on_ns": 161130603,
+            "on_over_off_ns_ratio": 1.7239093585909664,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      },
+      {
+        "case": "xml",
+        "encoded_bytes_on_over_off": 0.9354701761834006,
+        "input_bytes": 65536,
+        "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+        "lane": "explicit16",
+        "off_actual_window_bits": 16,
+        "off_encoded_bytes": 4711,
+        "off_first_pairs": 3,
+        "off_per_call_median_ns": 31597062.0,
+        "off_wire_sha256": "6aebf8ba120462afc52082eb0f297d0d59486b03b7d22d4d764e56fd3ee823a9",
+        "on_actual_window_bits": 16,
+        "on_encoded_bytes": 4407,
+        "on_first_pairs": 3,
+        "on_per_call_median_ns": 99294037.5,
+        "on_wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658",
+        "paired_geomean_ns_on_over_off": 3.1486421062863568,
+        "paired_ratio_bootstrap_95pct_ci": [
+          3.1374771008320237,
+          3.164343270128437
+        ],
+        "pairs": 6,
+        "primary_six_round_paired_geomean": 3.1486421062863568,
+        "ratio_of_median_ns_on_over_off": 3.14250855032028,
+        "raw_pairs": [
+          {
+            "off_ns": 31881383,
+            "on_ns": 98657847,
+            "on_over_off_ns_ratio": 3.0945284588187407,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 0
+          },
+          {
+            "off_ns": 31217605,
+            "on_ns": 99314945,
+            "on_over_off_ns_ratio": 3.1813761818051063,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 1
+          },
+          {
+            "off_ns": 31891440,
+            "on_ns": 100299011,
+            "on_over_off_ns_ratio": 3.1450135522259264,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 2
+          },
+          {
+            "off_ns": 31312741,
+            "on_ns": 100034849,
+            "on_over_off_ns_ratio": 3.1947011282084823,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 3
+          },
+          {
+            "off_ns": 31925206,
+            "on_ns": 98948535,
+            "on_over_off_ns_ratio": 3.099385952278585,
+            "order": [
+              "feedback_off",
+              "feedback_on"
+            ],
+            "round": 4
+          },
+          {
+            "off_ns": 31234161,
+            "on_ns": 99273130,
+            "on_over_off_ns_ratio": 3.178351100898788,
+            "order": [
+              "feedback_on",
+              "feedback_off"
+            ],
+            "round": 5
+          }
+        ]
+      }
+    ],
+    "schema": "vort.q8-feedback-control.summary.v1",
+    "source_revisions": {
+      "feedback_off": "e41aa51cc9e6df8f039187435a65c93371d717d6",
+      "feedback_on": "c2c8f250302ca2f223740076482dd95b1788eeb1"
+    },
+    "statistics_scope": "Descriptive paired bootstrap, 20000 draws, 95 percent percentile interval, stratified by AB/BA. Matrix resamples shared primary-round blocks. Small sample on a non-quiet host; not an acceptance gate or an industry ranking.",
+    "timer_scope": "Continuous allocating public encode + length mix + owned free; one symmetric warmup per process; initial_wire_only SHA/decode outside timer",
+    "total_pairs": 90,
+    "total_timed_calls": 180,
+    "wire_identity_scope": "All initial complete wires pinned-decoder verified before sampling; each sample process's initial wire SHA matches preflight. Timed output identity is checked by length/mix only, with no SHA inside the continuous encode/free timer."
+  },
+  "host": {
+    "all_samples_retained": true,
+    "collector_seen_pairs": 90,
+    "full_file_brotli_seen_pairs": 27,
+    "full_file_deflate_seen_pairs": 27,
+    "load1m_max": 2.55,
+    "load1m_min": 1.65,
+    "per_pair_snapshots": 90,
+    "schema": "vort.q8-feedback-control.host-observations.v1",
+    "scope": "Observed activity/load before each pair, not continuous CPU telemetry or proof of an individual outlier cause.",
+    "zig_compile_seen_pairs": 90
+  },
+  "negative": {
+    "all_rows_four_pass_index_ns": 14883327,
+    "all_rows_four_pass_index_share": 0.029925715401909955,
+    "all_rows_four_pass_total_ns": 497342396,
+    "auxiliary_context_scope": {
+      "context_detail_capacity": 8,
+      "context_details_truncated_independent_of_events_truncated": true,
+      "scope": "Auxiliary context-detail prefixes cannot be treated as complete context-search statistics. Search/equality logs here are separate diagnostics; no full context details are inferred from raw search counts.",
+      "this_negative_search_profile_has_context_detail_report": false,
+      "wire_attempt_coverage_independent": true
+    },
+    "equality_source_sha256": "746d6906aedf6a0b0fdebef12db4b4e5cf971b4920a515c239cf8334d210cb33",
+    "exact_command_checks": 60,
+    "exact_command_hits": 0,
+    "exact_price_checks": 36,
+    "exact_price_hits": 0,
+    "fingerprint_routing_checks": 12,
+    "fingerprint_routing_matches": 0,
+    "helper_tests": {
+      "named_behaviors": 7,
+      "passed": 12,
+      "scope": "tool-observed test summary; original stdout not retained as file"
+    },
+    "interpretation": "No exact price/command reuse opportunity in these rows. Different fingerprints reject a candidate; a matching fingerprint is not equality. Identical aggregate modeled work counters do not prove equal models, commands or every candidate coordinate. Profile timers are diagnostic, not ordinary encoder measurements; global IO remains tmp-only.",
+    "modeled_match_calls_all_rows": 45783081,
+    "nci_modeled_three_passes": {
+      "modeled_index_ns_sum": 690933,
+      "modeled_index_share": 0.010995014669742578,
+      "modeled_match_calls_sum": 9754161,
+      "modeled_total_ns_sum": 62840571
+    },
+    "rows": [
+      {
+        "all_four_index_ns_sum": 1443254,
+        "all_four_index_share": 0.04880833260173174,
+        "all_four_total_ns_sum": 29569828,
+        "case": "dickens",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+        "modeled_index_ns_sum": 841633,
+        "modeled_index_share": 0.0380271582604685,
+        "modeled_match_calls_sum": 2263029,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 4341,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 182890,
+          "match_calls": 754343,
+          "nodes": 817542,
+          "positions": 65536,
+          "prefix_rejections": 45625,
+          "valid_matches": 754343
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 22132419,
+        "search_passes": 4,
+        "wire_bytes": 22367,
+        "wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0"
+      },
+      {
+        "all_four_index_ns_sum": 946746,
+        "all_four_index_share": 0.02494746122837207,
+        "all_four_total_ns_sum": 37949593,
+        "case": "mozilla",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+        "modeled_index_ns_sum": 712694,
+        "modeled_index_share": 0.02517018536600802,
+        "modeled_match_calls_sum": 3085773,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 11909,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 4555950,
+          "match_calls": 1028591,
+          "nodes": 1052914,
+          "positions": 65536,
+          "prefix_rejections": 16270,
+          "valid_matches": 1028591
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 28315008,
+        "search_passes": 4,
+        "wire_bytes": 13924,
+        "wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb"
+      },
+      {
+        "all_four_index_ns_sum": 947198,
+        "all_four_index_share": 0.013243410683198967,
+        "all_four_total_ns_sum": 71522210,
+        "case": "mr",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+        "modeled_index_ns_sum": 555038,
+        "modeled_index_share": 0.01006021177344098,
+        "modeled_match_calls_sum": 8396592,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 34055,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 2573909,
+          "match_calls": 2798864,
+          "nodes": 2809413,
+          "positions": 65536,
+          "prefix_rejections": 4262,
+          "valid_matches": 2798864
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 55171602,
+        "search_passes": 4,
+        "wire_bytes": 15438,
+        "wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513"
+      },
+      {
+        "all_four_index_ns_sum": 904651,
+        "all_four_index_share": 0.010410219621847018,
+        "all_four_total_ns_sum": 86900280,
+        "case": "nci",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+        "modeled_index_ns_sum": 690933,
+        "modeled_index_share": 0.010995014669742578,
+        "modeled_match_calls_sum": 9754161,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 45870,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 2497959,
+          "match_calls": 3251387,
+          "nodes": 3262408,
+          "positions": 65536,
+          "prefix_rejections": 6247,
+          "valid_matches": 3251387
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 62840571,
+        "search_passes": 4,
+        "wire_bytes": 4206,
+        "wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615"
+      },
+      {
+        "all_four_index_ns_sum": 1664228,
+        "all_four_index_share": 0.07539295117212956,
+        "all_four_total_ns_sum": 22074053,
+        "case": "ooffice",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+        "modeled_index_ns_sum": 869615,
+        "modeled_index_share": 0.05337150369285647,
+        "modeled_match_calls_sum": 1512528,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 4188,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 977150,
+          "match_calls": 504176,
+          "nodes": 552233,
+          "positions": 65536,
+          "prefix_rejections": 39111,
+          "valid_matches": 504176
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 16293620,
+        "search_passes": 4,
+        "wire_bytes": 30682,
+        "wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8"
+      },
+      {
+        "all_four_index_ns_sum": 1093192,
+        "all_four_index_share": 0.04913530754558803,
+        "all_four_total_ns_sum": 22248604,
+        "case": "osdb",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+        "modeled_index_ns_sum": 807178,
+        "modeled_index_share": 0.05233306677666073,
+        "modeled_match_calls_sum": 910365,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 515,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 394292,
+          "match_calls": 303455,
+          "nodes": 369796,
+          "positions": 65536,
+          "prefix_rejections": 45916,
+          "valid_matches": 303455
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 15423862,
+        "search_passes": 4,
+        "wire_bytes": 25418,
+        "wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5"
+      },
+      {
+        "all_four_index_ns_sum": 1253584,
+        "all_four_index_share": 0.024894831597401745,
+        "all_four_total_ns_sum": 50355191,
+        "case": "reymont",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+        "modeled_index_ns_sum": 699402,
+        "modeled_index_share": 0.01828430640038825,
+        "modeled_match_calls_sum": 5039982,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 15588,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 402810,
+          "match_calls": 1679994,
+          "nodes": 1732763,
+          "positions": 65536,
+          "prefix_rejections": 39554,
+          "valid_matches": 1679994
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 38251492,
+        "search_passes": 4,
+        "wire_bytes": 17128,
+        "wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7"
+      },
+      {
+        "all_four_index_ns_sum": 1487348,
+        "all_four_index_share": 0.04010386493007679,
+        "all_four_total_ns_sum": 37087398,
+        "case": "samba",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+        "modeled_index_ns_sum": 870439,
+        "modeled_index_share": 0.030871933077017445,
+        "modeled_match_calls_sum": 2906619,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 8804,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 857407,
+          "match_calls": 968873,
+          "nodes": 1015514,
+          "positions": 65536,
+          "prefix_rejections": 33630,
+          "valid_matches": 968873
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 28195157,
+        "search_passes": 4,
+        "wire_bytes": 18744,
+        "wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907"
+      },
+      {
+        "all_four_index_ns_sum": 1357045,
+        "all_four_index_share": 0.07940389255751575,
+        "all_four_total_ns_sum": 17090409,
+        "case": "sao",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+        "modeled_index_ns_sum": 944911,
+        "modeled_index_share": 0.07986016646792712,
+        "modeled_match_calls_sum": 914787,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 2785,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 38829,
+          "match_calls": 304929,
+          "nodes": 363045,
+          "positions": 65536,
+          "prefix_rejections": 44872,
+          "valid_matches": 304929
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 11832069,
+        "search_passes": 4,
+        "wire_bytes": 46709,
+        "wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095"
+      },
+      {
+        "all_four_index_ns_sum": 1411073,
+        "all_four_index_share": 0.042194725071032835,
+        "all_four_total_ns_sum": 33441929,
+        "case": "webster",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+        "modeled_index_ns_sum": 797346,
+        "modeled_index_share": 0.03225359009318132,
+        "modeled_match_calls_sum": 2765007,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 7002,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 363552,
+          "match_calls": 921669,
+          "nodes": 1001059,
+          "positions": 65536,
+          "prefix_rejections": 66328,
+          "valid_matches": 921669
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 24721155,
+        "search_passes": 4,
+        "wire_bytes": 19555,
+        "wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c"
+      },
+      {
+        "all_four_index_ns_sum": 1602260,
+        "all_four_index_share": 0.18471542301037744,
+        "all_four_total_ns_sum": 8674208,
+        "case": "x-ray",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+        "modeled_index_ns_sum": 800775,
+        "modeled_index_share": 0.13012361479347595,
+        "modeled_match_calls_sum": 43047,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 54,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 13197,
+          "match_calls": 14349,
+          "nodes": 82473,
+          "positions": 65536,
+          "prefix_rejections": 54796,
+          "valid_matches": 14349
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 6153956,
+        "search_passes": 4,
+        "wire_bytes": 41180,
+        "wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288"
+      },
+      {
+        "all_four_index_ns_sum": 772748,
+        "all_four_index_share": 0.009607864695749811,
+        "all_four_total_ns_sum": 80428693,
+        "case": "xml",
+        "equality_records": 5,
+        "exact_command_checks": 5,
+        "exact_command_hits": 0,
+        "exact_price_checks": 3,
+        "exact_price_hits": 0,
+        "fingerprint_routing_checks": 1,
+        "fingerprint_routing_matches": 0,
+        "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+        "modeled_index_ns_sum": 544985,
+        "modeled_index_share": 0.009101789482774824,
+        "modeled_match_calls_sum": 8191191,
+        "modeled_raw_vector": {
+          "bound_rejections": 0,
+          "budget_stops": 23589,
+          "index_bytes": 790528,
+          "input": 65536,
+          "length_choices": 2263029,
+          "match_calls": 2730397,
+          "nodes": 2759699,
+          "positions": 65536,
+          "prefix_rejections": 14285,
+          "valid_matches": 2730397
+        },
+        "modeled_raw_vectors_equal": true,
+        "modeled_total_ns_sum": 59876687,
+        "search_passes": 4,
+        "wire_bytes": 4407,
+        "wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658"
+      }
+    ],
+    "schema": "vort.q8-feedback-negative.summary.v1",
+    "search_source_sha256": "2bdbdcf244354e3f376ba65a11600a94e8236a291e42d0fb40b150f6a0572c32",
+    "source_snapshot_scope": "Saved diagnostic source snapshots; search snapshot saved after diagnostics and before br reset. No claim of a fresh or byte-reproducible compiler-input reconstruction."
+  },
+  "schema": "vort.q8-feedback-control.publication-summary.v1"
+}

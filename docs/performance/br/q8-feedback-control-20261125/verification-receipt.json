@@ -1,0 +1,39 @@
+{
+  "baseline_and_initial_wire_bindings_verified": 24,
+  "c2_e41_equal_codec_blob_entries": 2217,
+  "control_original_members": 885,
+  "control_recomputed_matrix": [
+    {
+      "geomean_encoded_bytes_on_over_off": 0.9846791528039722,
+      "lane": "explicit16",
+      "paired_geomean_ns_on_over_off": 2.0813000719599186,
+      "paired_round_block_bootstrap_95pct_ci": [
+        2.0762165164587816,
+        2.086899883218649
+      ],
+      "primary_rounds": 6,
+      "rows": 12
+    }
+  ],
+  "control_verified_pairs": 90,
+  "control_verified_timed_calls": 180,
+  "diagnostic_original_members": 116,
+  "helper_test_receipt_passed": 12,
+  "host_load1m_range": [
+    1.65,
+    2.55
+  ],
+  "inventory_verified": true,
+  "nci_three_modeled_passes": {
+    "modeled_index_ns_sum": 690933,
+    "modeled_index_share": 0.010995014669742578,
+    "modeled_match_calls_sum": 9754161,
+    "modeled_total_ns_sum": 62840571
+  },
+  "negative_exact_command_hits": 0,
+  "negative_exact_price_hits": 0,
+  "negative_rows_verified": 12,
+  "schema": "vort.q8-feedback-control.publication-verification.v1",
+  "scope": "Offline original-byte/identity/scope audit and paired statistics replay. Original helper/decode/source-build runs are retained receipts. No codec, original ELF, build, test or Git execution; diagnostics have zero ordinary timed samples and temporary global IO only.",
+  "sole_q8_flag_overlay_and_q9_true_verified": true
+}
