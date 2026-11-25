@@ -1,0 +1,33 @@
+{
+  "aggregate_matches_package_and_root": true,
+  "allow_partial": false,
+  "argv": [
+    "taskset",
+    "-c",
+    "0",
+    "python3",
+    "/tmp/vort-encode-offline-replay.8vwykmom/epoch/verify.py",
+    "/tmp/vort-encode-offline-replay.8vwykmom/matrix",
+    "--output",
+    "/tmp/vort-encode-offline-replay.8vwykmom/aggregate-full.json"
+  ],
+  "build_codec_elf_test_execution": false,
+  "collector_or_codec_rerun": false,
+  "deflate_warmup_rounds": 432,
+  "exit_code": 0,
+  "groups": 18,
+  "migrated_matrix": "/tmp/vort-encode-offline-replay.8vwykmom/matrix",
+  "migrated_package": "/tmp/vort-encode-offline-replay.8vwykmom/epoch",
+  "output": "/tmp/vort-encode-offline-replay.8vwykmom/aggregate-full.json",
+  "primary_measured_pairs": 1224,
+  "pythonpath_cleared": true,
+  "rows_per_group": 12,
+  "schema": "vort.encode-full.offline-replay-receipt.v1",
+  "scope": "Copied package and raw archive replay with no repository/tools path or user-site/PYTHONPATH dependency; executable gzip identities were only hashed, never executed",
+  "stderr": "/tmp/vort-encode-offline-replay.8vwykmom/replay.stderr",
+  "stdout": "/tmp/vort-encode-offline-replay.8vwykmom/replay.stdout",
+  "user_site_disabled": true,
+  "validation_dependency_directory": "/tmp/vort-encode-offline-replay.8vwykmom/epoch/validation_deps",
+  "verified_conditions": 216,
+  "workspace": "/tmp/vort-encode-offline-replay.8vwykmom"
+}

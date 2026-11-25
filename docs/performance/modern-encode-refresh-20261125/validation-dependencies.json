@@ -1,0 +1,19 @@
+{
+  "modules": {
+    "sample_gate": {
+      "git_blob_sha1": "ea29e6893c9be54eb8b3d200647015e6c14906fd",
+      "path": "validation_deps/sample_gate.py",
+      "sha256": "d6392e944d53cdfa9f1b444b9e605e43259515919a43991f0f1452cebafa5498",
+      "source_path": "tools/codec_bench/sample_gate.py"
+    },
+    "zstd_common_parameters": {
+      "git_blob_sha1": "9834df5efd3766e292c8caaa32989934141e9bfc",
+      "path": "validation_deps/zstd_common_parameters.py",
+      "sha256": "2270b316a5ade49adbea697df077e13dd81780ff98fcab63cdfac1152bc636ac",
+      "source_path": "tools/codec_bench/zstd_common_parameters.py"
+    }
+  },
+  "revision": "4a9796b01aa0617aace28d2d4ca2c83cb81b409a",
+  "schema": "vort.encode-replay.dependencies.v1",
+  "scope": "Exact measured4a source blobs; only standard-library dependencies outside these two files"
+}

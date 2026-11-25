@@ -1,0 +1,7 @@
+{
+  "later_functional_fix": "7c37c2913dee33fc47ffc9351bf6521690a3a07c",
+  "later_revision_at_archive": "e083531a6fb5572f77349bdb190972f67ebda732",
+  "measured_revision": "4a9796b01aa0617aace28d2d4ca2c83cb81b409a",
+  "schema": "vort.encode-epoch.source-lineage.v1",
+  "scope": "Measured4a remains independent of subsequent fixed-complex block-length functional repair and e083 validation/docs; no new source benchmark inferred"
+}

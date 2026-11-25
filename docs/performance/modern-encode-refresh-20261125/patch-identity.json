@@ -1,0 +1,8 @@
+{
+  "original_filename": "after-epoch-fixed-length.patch",
+  "original_sha256": "801d293f96f791a93f266bcf17f0dcaf9ae4e1d5b229a5882e58adbbbbea5f45",
+  "original_bytes": 91641,
+  "stored_file": "after-epoch-fixed-length.patch.gz",
+  "stored_sha256": "3931d66574441fc208c3b669456154816b52a16d638159d9e0dada32c9b72393",
+  "scope": "Exact original Git patch bytes compressed; context-line spaces are preserved, not normalized"
+}

@@ -1,0 +1,34 @@
+{
+  "all_activity_records_retained": 57,
+  "all_three_probe_gzip_contents_match_original_manifest": true,
+  "build_or_test_execution": false,
+  "codec_or_elf_execution": false,
+  "collector_session": 92621,
+  "collector_terminal_exit": {
+    "exit_code": 0,
+    "observer": "Root parent actual observation; not rerun"
+  },
+  "conditions": 216,
+  "deflate_warmup_rounds": 432,
+  "groups": 18,
+  "independent_root_aggregate_contents_equal": true,
+  "independent_root_aggregate_path": "/tmp/vort-encode-refresh.0LjGA1/aggregate-full-root.json",
+  "independent_root_aggregate_sha256": "dfb48f00fb938a92d591faf3ffd7ccce79a09366e8ddb220d05b4cd198df823a",
+  "local_complete_replay": {
+    "allow_partial": false,
+    "cpu_affinity": "0",
+    "exec_session": 62828,
+    "exit_code": 0,
+    "stdout": "Verified 216 complete allocating encoder conditions"
+  },
+  "nonquiet_observational": true,
+  "primary_measured_pairs": 1224,
+  "raw_archive_verified_files": 868,
+  "recorded_utc": "2026-11-25T17:27:14.303230+00:00",
+  "rows_per_group": 12,
+  "schema": "vort.encode-full.replay-receipt.v1",
+  "scope": "Archive/metadata/statistical replay only; original checkpoints retained; no loader/RSS/prepared/industry claim",
+  "source_archive_verified_files": 2970,
+  "source_revision": "4a9796b01aa0617aace28d2d4ca2c83cb81b409a",
+  "summary_matches_original_collector_bytes": true
+}

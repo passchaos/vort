@@ -1,0 +1,13 @@
+{
+  "collector_session": 92621,
+  "completed_conditions": 216,
+  "exit_code": 0,
+  "manifest_complete": true,
+  "manifest_sha256": "7c983e7461d95c91f86c6d08430a4e9dc6ace2556921885bb87b81ea08028ff1",
+  "matrix_log_final_line": "All 216 allocating-preset conditions completed and validated",
+  "observation_provenance": "Root explicitly reported actual terminal exit0 before assigning archive task; this agent did not resume or rerun collector",
+  "observed_by": "Root parent agent",
+  "planned_conditions": 216,
+  "recorded_utc": "2026-11-25T17:19:03.910233+00:00",
+  "schema": "vort.encode-final-collector.exit.v1"
+}

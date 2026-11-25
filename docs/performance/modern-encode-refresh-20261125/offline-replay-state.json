@@ -1,0 +1,24 @@
+{
+  "allow_partial": false,
+  "argv": [
+    "taskset",
+    "-c",
+    "0",
+    "python3",
+    "/tmp/vort-encode-offline-replay.8vwykmom/epoch/verify.py",
+    "/tmp/vort-encode-offline-replay.8vwykmom/matrix",
+    "--output",
+    "/tmp/vort-encode-offline-replay.8vwykmom/aggregate-full.json"
+  ],
+  "build_codec_elf_test_execution": false,
+  "exit_code": 0,
+  "migrated_matrix": "/tmp/vort-encode-offline-replay.8vwykmom/matrix",
+  "migrated_package": "/tmp/vort-encode-offline-replay.8vwykmom/epoch",
+  "output": "/tmp/vort-encode-offline-replay.8vwykmom/aggregate-full.json",
+  "pythonpath_cleared": true,
+  "schema": "vort.encode-full.offline-replay-state.v1",
+  "stderr": "/tmp/vort-encode-offline-replay.8vwykmom/replay.stderr",
+  "stdout": "/tmp/vort-encode-offline-replay.8vwykmom/replay.stdout",
+  "user_site_disabled": true,
+  "workspace": "/tmp/vort-encode-offline-replay.8vwykmom"
+}

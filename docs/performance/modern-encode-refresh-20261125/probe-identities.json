@@ -1,0 +1,26 @@
+{
+  "brotli": {
+    "compressed_file": "brotli-probe.gz",
+    "compressed_sha256": "d5371450bdf49a51fda096225930865722be55a04e4dce9c719ed771d168ae7b",
+    "executed": false,
+    "manifest_sha256": "d3f3caaffe30b40c581dab79490ef1b74eb84d715e8f9af6731cbcd536199974",
+    "uncompressed_bytes": 13953688,
+    "uncompressed_sha256": "d3f3caaffe30b40c581dab79490ef1b74eb84d715e8f9af6731cbcd536199974"
+  },
+  "deflate": {
+    "compressed_file": "deflate-probe.gz",
+    "compressed_sha256": "89a40dba153972d461f8494e433e1073788e615ea522ec3a59921f0e6ecaf614",
+    "executed": false,
+    "manifest_sha256": "885b6fe09b802c4aa3af5a70ee6b3d245bfccafea94903b7088e0942e79f87ee",
+    "uncompressed_bytes": 7563800,
+    "uncompressed_sha256": "885b6fe09b802c4aa3af5a70ee6b3d245bfccafea94903b7088e0942e79f87ee"
+  },
+  "zstd": {
+    "compressed_file": "zstd-probe.gz",
+    "compressed_sha256": "793273b5491b2338f5bee164e55d04fd8dea7cb469de4f5710a4623281cc1b4d",
+    "executed": false,
+    "manifest_sha256": "534d3b4f1538c93f66ea5f855234c2c7de319206a2f08a01e7ffb2025a499f76",
+    "uncompressed_bytes": 10995848,
+    "uncompressed_sha256": "534d3b4f1538c93f66ea5f855234c2c7de319206a2f08a01e7ffb2025a499f76"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "all_records_retained": true,
+  "original_path": "/tmp/vort-encode-refresh.0LjGA1/validation-activity.jsonl",
+  "quiet_claim": false,
+  "record_count": 57,
+  "schema": "vort.encode-epoch.parallel-activity.v1",
+  "scope": "Complete recorded parallel activity snapshot retained without filtering; epoch is observational/nonquiet. Row file mtimes and activity records cannot locate overlap within individual timed batches; no outliers removed.",
+  "snapshot_utc": "2026-11-25T17:20:56.844571+00:00",
+  "uncompressed_bytes": 14714,
+  "uncompressed_sha256": "92bcac85a81e8b348ba8d658e815a5959d98a704addba0d83743ea105d0b6156",
+  "utc_max": "2026-11-25T16:51:11.580278+00:00",
+  "utc_min": "2026-11-25T12:10:29.778211+00:00"
+}

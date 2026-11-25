@@ -1,0 +1,164 @@
+{
+  "brotli/1048576/L11": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.3049097906975099,
+    "ci95": [
+      0.3042005320748822,
+      0.3056471010126971
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "brotli/1048576/L8": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.0609853000683562,
+    "ci95": [
+      0.06052205889223455,
+      0.061470854748794705
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "brotli/65536/L11": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.27482845090325103,
+    "ci95": [
+      0.2738398959843804,
+      0.27584701753784163
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "brotli/65536/L8": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.01363412508441169,
+    "ci95": [
+      0.013538165407715096,
+      0.01373076718227422
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "brotli/full/L11": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.9187237225942875,
+    "ci95": [
+      0.916728648276523,
+      0.9206165384708399
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "brotli/full/L8": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.06435434749324213,
+    "ci95": [
+      0.06418743469680918,
+      0.06450670452552046
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "deflate/1048576/L6": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.38189276370395003,
+    "ci95": [
+      0.3799580932915636,
+      0.3838564646243721
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "deflate/1048576/L9": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.15747717908258257,
+    "ci95": [
+      0.15662320258924795,
+      0.15837520746668937
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "deflate/65536/L6": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.3983739993406803,
+    "ci95": [
+      0.39607737442783547,
+      0.40077681478101224
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "deflate/65536/L9": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.5263810065573298,
+    "ci95": [
+      0.5241029489716746,
+      0.5286746077944966
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "deflate/full/L6": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.3682144318539251,
+    "ci95": [
+      0.3669220130270579,
+      0.369448204265014
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "deflate/full/L9": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.14751444131718436,
+    "ci95": [
+      0.1471587247090491,
+      0.1478354199379873
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "zstd/1048576/L19": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.47870828779417557,
+    "ci95": [
+      0.4751409255525097,
+      0.4824315711975149
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "zstd/1048576/L3": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.08173470458686367,
+    "ci95": [
+      0.08130621915900299,
+      0.08216192637014617
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "zstd/65536/L19": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.6649997028424306,
+    "ci95": [
+      0.6615572879467122,
+      0.668248411413354
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "zstd/65536/L3": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.09813611220441536,
+    "ci95": [
+      0.09762053900331163,
+      0.09865976739223996
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "zstd/full/L19": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.37842330879327596,
+    "ci95": [
+      0.37723712195194914,
+      0.3796303966487616
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  },
+  "zstd/full/L3": {
+    "rows": 12,
+    "paired_throughput_ratio": 0.07767050257149513,
+    "ci95": [
+      0.07725465016752597,
+      0.07807224398698263
+    ],
+    "method": "fixed-row, relative-order-stratified raw-round bootstrap; development host only"
+  }
+}

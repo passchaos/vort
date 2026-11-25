@@ -2,6 +2,7 @@
 import argparse
 import csv
 import hashlib
+import importlib.util
 import json
 import math
 from pathlib import Path
@@ -10,6 +11,27 @@ import statistics
 import sys
 
 from collect import summary, require
+
+
+def frozen_sample_gate(manifest):
+    """Load exact epoch dependencies without consulting the current checkout."""
+    package = Path(__file__).resolve().parent
+    pins = json.loads((package / "validation-dependencies.json").read_text())
+    require(manifest["source"]["revision"] == pins["revision"], "Wrong measured source revision")
+    loaded = {}
+    for name in ("zstd_common_parameters", "sample_gate"):
+        pin = pins["modules"][name]
+        path = package / pin["path"]
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        require(digest == pin["sha256"] == manifest["source"]["sha256"][pin["source_path"]], "Frozen validation dependency changed")
+        module_name = name if name == "zstd_common_parameters" else "_vort_encode_sample_gate_4a"
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        require(spec is not None and spec.loader is not None, "Cannot load frozen dependency")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        loaded[name] = module
+    return loaded["sample_gate"]
 
 
 def median(values):
@@ -26,10 +48,11 @@ def verify(root, allow_partial=False):
     dimensions = {(t["codec"], t["size"], t["level"]) for t in tasks}
     expected = {(c, s, level) for c, levels in (("deflate", (6, 9)), ("zstd", (3, 19)), ("brotli", (8, 11))) for s in ("65536", "1048576", "full") for level in levels}
     require(dimensions == expected, "Missing preset or size")
+    group_counts = {dimension: sum((t["codec"], t["size"], t["level"]) == dimension for t in tasks) for dimension in expected}
+    require(all(count == 12 for count in group_counts.values()), "Wrong twelve-row group coverage")
     require(m["completed"] == [t["id"] for t in tasks[:len(m["completed"])]], "Non-prefix completion or discarded row")
     require(allow_partial or m["complete"] and len(m["completed"]) == 216, "Incomplete epoch")
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools/codec_bench"))
-    import sample_gate
+    sample_gate = frozen_sample_gate(m)
     observed = []
     for task in tasks[:len(m["completed"])]:
         stem = task["id"]
@@ -43,6 +66,7 @@ def verify(root, allow_partial=False):
         p = report["provenance"]
         require(p["executable_sha256"] == m["probes"][task["codec"]]["sha256"], "Wrong executable")
         require(p["optimize"] == "ReleaseFast" and p["zig_version"] == "0.16.0" and p["target_cpu"] == "skylake+pku+sgx", "Wrong build mode")
+        require((p["target_arch"], p["target_os"], p["target_abi"]) == ("x86_64", "linux", "gnu"), "Wrong compile target")
         require(p["cpu_affinity"] == "15" and p["affinity_cpu_count"] == 1 and p["benchmark_threads"] == 1, "Wrong affinity")
         with (root / (stem + ".csv")).open(newline="") as handle:
             table = list(csv.DictReader(handle))
@@ -55,6 +79,7 @@ def verify(root, allow_partial=False):
             require(report["csv_aggregation"] == "median" and report["lifecycle"]["state"] == "cold_per_call", "Wrong Deflate lifecycle")
             require(row["settings"]["vort_level"] == task["level"] and row["settings"]["libdeflate_level"] == task["reference_level"], "Wrong Deflate levels")
             require(report["references"][1]["version"] == m["references"]["deflate"]["version"], "Wrong libdeflate header version")
+            require(report["references"][0]["version"] == "1.2.11" and row["settings"]["zlib_level"] == task["level"], "Wrong retained zlib participant")
             require(len(row["warmup_rounds"]) == 6, "Missing Deflate warmups")
         else:
             sample_gate.validate_settings(codec, row["settings"], row["input_bytes"])
@@ -81,6 +106,9 @@ def verify(root, allow_partial=False):
             require(int(table[0][side + "_ns"]) == (median(durations) if codec == "deflate" else min(durations)), "CSV statistic drift")
         observed.append((task, row))
     require(summary(root, m) == json.loads((root / "summary.json").read_text()), "Original summary does not reproduce")
+    if not allow_partial:
+        require(sum(len(row["rounds"]) for _, row in observed) == 1224, "Missing primary measured pairs")
+        require(sum(len(row["warmup_rounds"]) for task, row in observed if task["codec"] == "deflate") == 432, "Missing Deflate warmup rounds")
     return observed
 
 
