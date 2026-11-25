@@ -1,0 +1,33 @@
+37ddb127efa5b484414ff59745a188e19d836c48706a7167c2665212d934a105  /tmp/vort-main-decode-profile.Se0BeG/install/bin/vort-decode-compare
+.text                                    952457   17208576
+.vort_br_wide_lookup10_aux                 7963   18166976
+0000000017790624 0000000000000962 t br.readMinimalDistance__anon_38426
+0000000017764000 0000000000002110 t br.distancePrefixForDecode
+0000000017780224 0000000000002567 t br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38317
+0000000017782848 0000000000004123 t br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38316
+    <ac44b>   DW_AT_name        : (indirect string, offset: 0x19ba9): br.MinimalCompressedHeader
+    <ac44f>   DW_AT_byte_size   : 0xc3708
+92f5d54b3032a43028773f6ee250f2eebcd01de337eb5446db1dd0e4b861c0da  /tmp/vort-br-routed-distance.mGVRZZ/candidate-bin/bin/vort-decode-compare
+.text                                    952969   17212672
+.vort_br_wide_dist                         3517   18171584
+.vort_br_wide_lookup10_aux                 7963   18175104
+0000000018174905 0000000000000196 t br.expandPackedDistanceWithSpare
+0000000017768096 0000000000000202 t br.distancePrefixForDecode
+0000000018174291 0000000000000614 t br.readMinimalDistanceWithSpare__anon_38463
+0000000017787280 0000000000000654 t br.readMinimalDistance__anon_38445
+0000000017784704 0000000000002567 t br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38336
+0000000018171584 0000000000002707 t br.processWideDistanceReusePayload__anon_38335
+0000000017793216 0000000000004123 t br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38316
+    <ac45a>   DW_AT_name        : (indirect string, offset: 0x19c0f): br.MinimalCompressedHeader
+    <ac45e>   DW_AT_byte_size   : 0xc3708
+a7fa3f6549dd40de9a0f7e6ed37d833cfb97d5cd9b70e1e07a3729818db33f74  /tmp/vort-br-routed-distance.mGVRZZ/layout-bin/bin/vort-decode-compare
+.text                                    952713   17208576
+.vort_br_wide_dist                         2567   18167232
+.vort_br_wide_lookup10_aux                 7963   18169856
+0000000017783056 0000000000001018 t br.readMinimalDistance__anon_38445
+0000000017764000 0000000000002110 t br.distancePrefixForDecode
+0000000018167232 0000000000002567 t br.processWideDistanceReusePayload__anon_38335
+0000000017780480 0000000000002567 t br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38336
+0000000017788864 0000000000004123 t br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38316
+    <ac45a>   DW_AT_name        : (indirect string, offset: 0x19bf6): br.MinimalCompressedHeader
+    <ac45e>   DW_AT_byte_size   : 0xc3708

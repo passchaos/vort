@@ -1,0 +1,98 @@
+{
+  "result": {
+    "candidate_over_baseline": 0.9866327978932087,
+    "ci95": [
+      0.9806400639222579,
+      0.9930181821336334
+    ]
+  },
+  "rows": {
+    "brotli/mozilla/full/11": {
+      "candidate_over_baseline": 0.9956316348319563,
+      "ci95": [
+        0.9875562147994358,
+        1.0089104372903452
+      ]
+    },
+    "brotli/mozilla/full/6": {
+      "candidate_over_baseline": 0.9846093476017734,
+      "ci95": [
+        0.970784335505542,
+        0.9966775069956707
+      ]
+    },
+    "brotli/mozilla/1048576/11": {
+      "candidate_over_baseline": 1.014178306385156,
+      "ci95": [
+        0.9940564094947415,
+        1.036254453941016
+      ]
+    },
+    "brotli/mozilla/65536/11": {
+      "candidate_over_baseline": 0.991362449973987,
+      "ci95": [
+        0.9695420695194306,
+        1.0090169231679638
+      ]
+    },
+    "brotli/nci/full/11": {
+      "candidate_over_baseline": 0.9985680797004537,
+      "ci95": [
+        0.9707488326073288,
+        1.029313633649517
+      ]
+    },
+    "brotli/samba/full/6": {
+      "candidate_over_baseline": 0.9838531099144893,
+      "ci95": [
+        0.964361609013226,
+        1.0018252519173583
+      ]
+    },
+    "brotli/samba/full/11": {
+      "candidate_over_baseline": 0.9530054973929682,
+      "ci95": [
+        0.9420645763306956,
+        0.9638024184353751
+      ]
+    },
+    "brotli/ooffice/full/11": {
+      "candidate_over_baseline": 0.9821513198683187,
+      "ci95": [
+        0.9393781402275169,
+        1.0247771650232176
+      ]
+    },
+    "brotli/mr/full/6": {
+      "candidate_over_baseline": 0.9384016384185822,
+      "ci95": [
+        0.9100683567449115,
+        0.9676170239962616
+      ]
+    },
+    "brotli/xml/65536/6": {
+      "candidate_over_baseline": 1.001734397436364,
+      "ci95": [
+        0.9937166959826307,
+        1.0090184835682743
+      ]
+    },
+    "brotli/x-ray/65536/11": {
+      "candidate_over_baseline": 0.9886429509543446,
+      "ci95": [
+        0.9711503913853231,
+        1.0064505900856977
+      ]
+    },
+    "brotli/reymont/1048576/6": {
+      "candidate_over_baseline": 1.010170275783594,
+      "ci95": [
+        1.0035382174804683,
+        1.0198197908828601
+      ]
+    }
+  },
+  "weakest_control": "brotli/mr/full/6",
+  "outer_pairs": 72,
+  "children": 144
+}

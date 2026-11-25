@@ -4,6 +4,19 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-25 route-scoped Brotli distance reuse and placement control
+
+The [routed FIFO and no-cache control](br/routed-distance-reuse-20261125/README.md)
+keep the standard header size unchanged and only offer a spare slot to
+wide10 generic blocks with two distinct packed contexts in one block type.
+The cache reaches **1.17805×** on full Mozilla q11 and **0.99788×** over twelve
+rows, below the target and aggregate gates. All five controls below 0.98×
+bypass the candidate executor. The no-cache placement control still loses
+on full Samba q11 (**0.95301×**) and `mr` q6 (**0.93840×**). Correctness and
+288 timed children validate, but neither variant is adopted. Require stronger
+non-routed codegen isolation before expanding this Brotli line; the Deflate
+semantic-loop refill/handoff remains a separate measured target.
+
 ## 2026-11-25 bounded Brotli packed distance reuse screen
 
 The [production-path trace and two-slot screen](br/packed-distance-reuse-20261125/README.md)
