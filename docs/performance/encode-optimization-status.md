@@ -1,5 +1,32 @@
 # Encoder optimization status
 
+## 2026-11-26 complete context histograms: larger sharing boundary observed
+
+The [isolated untimed diagnostic](br/context-histograms-20261126/README.md)
+captures all 103 context analyses across the twelve original 64 KiB rows.
+Twenty-nine full histograms repeat; all complete proposal fields also match.
+Twelve repeats have different full-command field digests, one in every row.
+The other seventeen have the same digest, which does not prove exact command
+equality. No snapshot or context event is truncated. These observations show
+why one immutable command-slice owner misses real sharing opportunities; the
+earlier zero full-model/command-result hits did not establish zero histograms.
+
+The repeated records execute 20,379 tree scorer calls. All original analysis,
+scoring and allocation/cleanup still execute. Sixteen preallocated diagnostic
+slots request 4,218,496 bytes outside codec heap. Direct observer time is
+outside the original context stage timers, but outer wall times and cache
+effects remain instrumented. This is neither a throughput sample nor a
+measured codec heap/RSS improvement. Twelve focused runner tests and all
+twelve public wire/round-trip checks pass; initial wire hashes match c2.
+
+Preserve the complete canonical bytes, command digests, fixed chooser policy,
+source closure, events, proposals and independent reduction. Prototype a
+charged owner that shares complete proposals after actual collection and
+threshold handling with full histogram equality. Keep current wire bytes and
+the original whole-operation, NCI and public-control gates. There is no accepted
+optimization or preset change in this evidence publication; v4/v5/v6 remain
+rejected. The controlled historical q8 regression below remains unresolved.
+
 ## 2026-11-26 parameter-family context reuse gate: not accepted
 
 The isolated v6 parameter-family owner shares complete literal/context
