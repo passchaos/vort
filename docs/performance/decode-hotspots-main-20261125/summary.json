@@ -1,0 +1,686 @@
+{
+  "deflate-mr64-l9": {
+    "vort_over_reference_wall_throughput": 0.6074999421680434,
+    "vort_wall_median_ns": 6306372.5,
+    "reference_wall_median_ns": 3829259,
+    "vort_cycles_per_output_byte": 4.591662673950196,
+    "vort_instructions_per_output_byte": 12.0389013671875,
+    "vort_branches_per_output_byte": 1.8955558776855468,
+    "vort_branch_misses_per_output_kib": 58.246640625,
+    "profile_samples": 2016,
+    "profile_total_period": 9797492274,
+    "whole_child_dso_percent": {
+      "vort-decode-compare": 62.75270961239443,
+      "libdeflate.so.0": 36.86994465498264,
+      "libc.so.6": 0.3007035798148362,
+      "ld-linux-x86-64.so.2": 0.0766421528080911
+    },
+    "top_self_symbols": [
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.linear_entry.aligned",
+        "period": 5326044654,
+        "whole_child_percent": 54.361304965087236
+      },
+      {
+        "dso": "libdeflate.so.0",
+        "symbol": "deflate_decompress_bmi2",
+        "period": 3504354076,
+        "whole_child_percent": 35.76786771549334
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.decodeRawAutoWithDictionaryFromReader__anon_57963",
+        "period": 291755104,
+        "whole_child_percent": 2.9778549024656265
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.SemanticDynamicDecoder.buildLiteralTable",
+        "period": 170082872,
+        "whole_child_percent": 1.7359837317897742
+      },
+      {
+        "dso": "libdeflate.so.0",
+        "symbol": "build_decode_table.constprop.0",
+        "period": 107975903,
+        "whole_child_percent": 1.1020769394893017
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round",
+        "period": 104034529,
+        "whole_child_percent": 1.0618485433877873
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memset",
+        "period": 96845260,
+        "whole_child_percent": 0.9884698787362372
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memcpy.memcpyFast",
+        "period": 52649381,
+        "whole_child_percent": 0.5373760910199213
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.SemanticDynamicDecoder.buildDistanceTable",
+        "period": 29091843,
+        "whole_child_percent": 0.2969315227448783
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "bitstream.BufferedBitReader.advanceBitsStagedAssumeAvailable",
+        "period": 24377141,
+        "whole_child_percent": 0.24881000482838453
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "huffman.HuffmanTable(30).init",
+        "period": 19138184,
+        "whole_child_percent": 0.1953375768490042
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "huffman.HuffmanTable(30).decodeValue__anon_58685",
+        "period": 15115547,
+        "whole_child_percent": 0.15427975421948265
+      },
+      {
+        "dso": "libc.so.6",
+        "symbol": "__memmove_avx_unaligned_erms",
+        "period": 14599815,
+        "whole_child_percent": 0.1490158358046795
+      },
+      {
+        "dso": "libc.so.6",
+        "symbol": "__memset_avx2_unaligned_erms",
+        "period": 9838741,
+        "whole_child_percent": 0.10042101310056108
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.decodeTailSymbol__anon_58671",
+        "period": 9810353,
+        "whole_child_percent": 0.10013126548753837
+      }
+    ]
+  },
+  "deflate-mr64-l6": {
+    "vort_over_reference_wall_throughput": 0.6375426178149614,
+    "vort_wall_median_ns": 6551316.5,
+    "reference_wall_median_ns": 4173777,
+    "vort_cycles_per_output_byte": 4.790742721557617,
+    "vort_instructions_per_output_byte": 12.151389236450195,
+    "vort_branches_per_output_byte": 1.9733452606201172,
+    "vort_branch_misses_per_output_kib": 59.868203125,
+    "profile_samples": 2125,
+    "profile_total_period": 10344196926,
+    "whole_child_dso_percent": {
+      "vort-decode-compare": 61.572888795176056,
+      "libdeflate.so.0": 37.97789332611938,
+      "libc.so.6": 0.32577024819877254,
+      "ld-linux-x86-64.so.2": 0.07619470178675135,
+      "[unknown]": 0.0472529287190409
+    },
+    "top_self_symbols": [
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.linear_entry.aligned",
+        "period": 5634756527,
+        "whole_child_percent": 54.472633954184644
+      },
+      {
+        "dso": "libdeflate.so.0",
+        "symbol": "deflate_decompress_bmi2",
+        "period": 3837783904,
+        "whole_child_percent": 37.10083954757069
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.decodeRawAutoWithDictionaryFromReader__anon_57963",
+        "period": 309318945,
+        "whole_child_percent": 2.99026543300361
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.SemanticDynamicDecoder.buildLiteralTable",
+        "period": 151063166,
+        "whole_child_percent": 1.4603663008416319
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round",
+        "period": 97459420,
+        "whole_child_percent": 0.9421651646541749
+      },
+      {
+        "dso": "libdeflate.so.0",
+        "symbol": "build_decode_table.constprop.0",
+        "period": 90724170,
+        "whole_child_percent": 0.8770537785486857
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memset",
+        "period": 59014913,
+        "whole_child_percent": 0.5705122729408487
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.copyMatchAt",
+        "period": 34146979,
+        "whole_child_percent": 0.3301075882862596
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.SemanticDynamicDecoder.buildDistanceTable",
+        "period": 24841645,
+        "whole_child_percent": 0.24015054216109188
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memcpy.memcpyFast",
+        "period": 24552913,
+        "whole_child_percent": 0.2373592959960631
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "bitstream.BufferedBitReader.advanceBitsStagedAssumeAvailable",
+        "period": 19546934,
+        "whole_child_percent": 0.1889652153747097
+      },
+      {
+        "dso": "libc.so.6",
+        "symbol": "__memset_avx2_unaligned_erms",
+        "period": 19381786,
+        "whole_child_percent": 0.1873686873775976
+      },
+      {
+        "dso": "ld-linux-x86-64.so.2",
+        "symbol": "_dl_lookup_symbol_x",
+        "period": 7655307,
+        "whole_child_percent": 0.074005812677043
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.decodeTailSymbol__anon_58671",
+        "period": 4903680,
+        "whole_child_percent": 0.04740512999781226
+      },
+      {
+        "dso": "libc.so.6",
+        "symbol": "_int_malloc",
+        "period": 4893510,
+        "whole_child_percent": 0.04730681400409372
+      }
+    ]
+  },
+  "deflate-mr1m-l9": {
+    "vort_over_reference_wall_throughput": 0.6512649313928351,
+    "vort_wall_median_ns": 23297982.5,
+    "reference_wall_median_ns": 15183555.5,
+    "vort_cycles_per_output_byte": 5.202811574935913,
+    "vort_instructions_per_output_byte": 13.947999954223633,
+    "vort_branches_per_output_byte": 2.1725039958953856,
+    "vort_branch_misses_per_output_kib": 60.0712158203125,
+    "profile_samples": 2992,
+    "profile_total_period": 14570366067,
+    "whole_child_dso_percent": {
+      "vort-decode-compare": 60.94817000591973,
+      "libdeflate.so.0": 38.84719962403399,
+      "libc.so.6": 0.1655141942838326,
+      "ld-linux-x86-64.so.2": 0.03911617576244936
+    },
+    "top_self_symbols": [
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.linear_entry.aligned",
+        "period": 8140634077,
+        "whole_child_percent": 55.87117056336344
+      },
+      {
+        "dso": "libdeflate.so.0",
+        "symbol": "deflate_decompress_bmi2",
+        "period": 5538220045,
+        "whole_child_percent": 38.010164051700485
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.decodeRawAutoWithDictionaryFromReader__anon_57963",
+        "period": 268515459,
+        "whole_child_percent": 1.8428875277756602
+      },
+      {
+        "dso": "libdeflate.so.0",
+        "symbol": "build_decode_table.constprop.0",
+        "period": 121959147,
+        "whole_child_percent": 0.8370355723335032
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round",
+        "period": 121052114,
+        "whole_child_percent": 0.830810382136983
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.SemanticDynamicDecoder.buildLiteralTable",
+        "period": 111586285,
+        "whole_child_percent": 0.7658440734219337
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memset",
+        "period": 86938573,
+        "whole_child_percent": 0.5966807738407112
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.copyMatchAt",
+        "period": 43644777,
+        "whole_child_percent": 0.2995448213126902
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memcpy.memcpyFast",
+        "period": 39106616,
+        "whole_child_percent": 0.2683983080464357
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "deflate.semantic.decoder.SemanticDynamicDecoder.buildDistanceTable",
+        "period": 24711918,
+        "whole_child_percent": 0.16960396112469203
+      },
+      {
+        "dso": "libc.so.6",
+        "symbol": "__memmove_avx_unaligned_erms",
+        "period": 24116024,
+        "whole_child_percent": 0.1655141942838326
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "huffman.HuffmanTable(30).init",
+        "period": 19592709,
+        "whole_child_percent": 0.13446957276094085
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "bitstream.BufferedBitReader.advanceBitsStagedAssumeAvailable",
+        "period": 19512075,
+        "whole_child_percent": 0.1339161618196562
+      },
+      {
+        "dso": "ld-linux-x86-64.so.2",
+        "symbol": "dl_main",
+        "period": 5528707,
+        "whole_child_percent": 0.03794487368798378
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "mem.eqlBytes",
+        "period": 5076878,
+        "whole_child_percent": 0.03484386031658102
+      }
+    ]
+  },
+  "brotli-mozilla-full-q11": {
+    "vort_over_reference_wall_throughput": 0.4860613972735784,
+    "vort_wall_median_ns": 266542117.5,
+    "reference_wall_median_ns": 130248097.5,
+    "vort_cycles_per_output_byte": 25.30577106071634,
+    "vort_instructions_per_output_byte": 62.42722859098548,
+    "vort_branches_per_output_byte": 9.328964088192848,
+    "vort_branch_misses_per_output_kib": 201.54323270691722,
+    "profile_samples": 3565,
+    "profile_total_period": 17084814510,
+    "whole_child_dso_percent": {
+      "vort-decode-compare": 69.98380501000827,
+      "libbrotlidec.so.1.2.0": 29.19962223809944,
+      "libc.so.6": 0.5663375914521416,
+      "[unknown]": 0.1463555251674781,
+      "libbrotlicommon.so.1.2.0": 0.05697155795459672,
+      "ld-linux-x86-64.so.2": 0.046908077318072096
+    },
+    "top_self_symbols": [
+      {
+        "dso": "libbrotlidec.so.1.2.0",
+        "symbol": "ProcessCommands",
+        "period": 4819976827,
+        "whole_child_percent": 28.212052429242323
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38317",
+        "period": 3650944458,
+        "whole_child_percent": 21.369529390342795
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.distancePrefixForDecode",
+        "period": 1613757014,
+        "whole_child_percent": 9.44556356204771
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readMinimalDistance__anon_38426",
+        "period": 1256419197,
+        "whole_child_percent": 7.35401134302394
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round",
+        "period": 908199297,
+        "whole_child_percent": 5.315827669468797
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readCommandSymbolAny__anon_38350",
+        "period": 845297949,
+        "whole_child_percent": 4.947656578332966
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.commandPrefixForDecode",
+        "period": 636714352,
+        "whole_child_percent": 3.7267852783963296
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memset",
+        "period": 543988059,
+        "whole_child_percent": 3.1840442790970633
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memcpy.memcpyFast",
+        "period": 469824508,
+        "whole_child_percent": 2.74995381263873
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processExternalLiteralLookupCompressedPayload__anon_35300",
+        "period": 461088460,
+        "whole_child_percent": 2.6988204041086776
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.fast_bit_reader.Reader.readBits__anon_38480",
+        "period": 262350480,
+        "whole_child_percent": 1.535576987660254
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.PackedPrefixCode(256).expand",
+        "period": 219880574,
+        "whole_child_percent": 1.2869942127337735
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "mem.eqlBytes",
+        "period": 194817779,
+        "whole_child_percent": 1.1402978878463692
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.fast_bit_reader.Reader.peekBitsPadded__anon_38412",
+        "period": 151283266,
+        "whole_child_percent": 0.8854838073392697
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readPrefixCodeRuntimeInto__anon_53645",
+        "period": 131502153,
+        "whole_child_percent": 0.7697019649995603
+      }
+    ],
+    "brotli_payload_counts": {
+      "command_count": 3770834,
+      "distance_prepared_hit_count": 2053460,
+      "distance_long_fallback_count": 96671,
+      "distance_prepared_build_count": 48829,
+      "max_distance_postfix_bits": 3
+    },
+    "brotli_commands_per_kib": 75.38652538984407
+  },
+  "brotli-mozilla-1m-q11": {
+    "vort_over_reference_wall_throughput": 1.040976324751368,
+    "vort_wall_median_ns": 71798322,
+    "reference_wall_median_ns": 74617945,
+    "vort_cycles_per_output_byte": 16.59214265346527,
+    "vort_instructions_per_output_byte": 39.406629991531375,
+    "vort_branches_per_output_byte": 5.861648607254028,
+    "vort_branch_misses_per_output_kib": 54.7788818359375,
+    "profile_samples": 1879,
+    "profile_total_period": 9187542951,
+    "whole_child_dso_percent": {
+      "vort-decode-compare": 50.067267108659635,
+      "libbrotlidec.so.1.2.0": 48.99426727044642,
+      "libc.so.6": 0.6504649972112005,
+      "libbrotlicommon.so.1.2.0": 0.10804933433175958,
+      "ld-linux-x86-64.so.2": 0.10788293510966575,
+      "[unknown]": 0.07206835424131885
+    },
+    "top_self_symbols": [
+      {
+        "dso": "libbrotlidec.so.1.2.0",
+        "symbol": "ProcessCommands",
+        "period": 4406761929,
+        "whole_child_percent": 47.96453145854795
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processExternalLiteralLookupCompressedPayload__anon_35300",
+        "period": 4197534360,
+        "whole_child_percent": 45.687235231299
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round",
+        "period": 123720064,
+        "whole_child_percent": 1.346606646192973
+      },
+      {
+        "dso": "libc.so.6",
+        "symbol": "__memmove_avx_unaligned_erms",
+        "period": 54708514,
+        "whole_child_percent": 0.595464035289711
+      },
+      {
+        "dso": "libbrotlidec.so.1.2.0",
+        "symbol": "BrotliBuildHuffmanTable",
+        "period": 39973498,
+        "whole_child_percent": 0.43508365852754094
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readPrefixCodeRuntimeInto__anon_53595",
+        "period": 39527059,
+        "whole_child_percent": 0.4302244812438973
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memset",
+        "period": 38307024,
+        "whole_child_percent": 0.41694525080647976
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readPrefixCodeRuntimeInto__anon_53645",
+        "period": 34030550,
+        "whole_child_percent": 0.3703988126259155
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.decoder.distance_history.resolveShortInto",
+        "period": 29759884,
+        "whole_child_percent": 0.3239155904763509
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memcpy.memcpyFast",
+        "period": 29060841,
+        "whole_child_percent": 0.316306994753553
+      },
+      {
+        "dso": "libbrotlidec.so.1.2.0",
+        "symbol": "ReadHuffmanCode",
+        "period": 25145063,
+        "whole_child_percent": 0.273686481076675
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.switchBlockAny__anon_38439",
+        "period": 19729519,
+        "whole_child_percent": 0.214742060039595
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.minimalStaticDictionaryWordAtAddress",
+        "period": 19601052,
+        "whole_child_percent": 0.2133437863043303
+      },
+      {
+        "dso": "libbrotlidec.so.1.2.0",
+        "symbol": "DecodeContextMap",
+        "period": 15076477,
+        "whole_child_percent": 0.16409694170038172
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.prepareAuxiliaryTailLookups",
+        "period": 14807239,
+        "whole_child_percent": 0.16116647376748683
+      }
+    ],
+    "brotli_payload_counts": {
+      "command_count": 20296,
+      "distance_prepared_hit_count": 13959,
+      "distance_long_fallback_count": 1141,
+      "distance_prepared_build_count": 22,
+      "max_distance_postfix_bits": 2
+    },
+    "brotli_commands_per_kib": 19.8203125
+  },
+  "brotli-mozilla-full-q6": {
+    "vort_over_reference_wall_throughput": 0.6033305938120472,
+    "vort_wall_median_ns": 178736001,
+    "reference_wall_median_ns": 108482935,
+    "vort_cycles_per_output_byte": 16.973555665624374,
+    "vort_instructions_per_output_byte": 40.00641610543283,
+    "vort_branches_per_output_byte": 6.94315029847436,
+    "vort_branch_misses_per_output_kib": 171.70818672530987,
+    "profile_samples": 2684,
+    "profile_total_period": 12864705981,
+    "whole_child_dso_percent": {
+      "vort-decode-compare": 66.47202421594154,
+      "libbrotlidec.so.1.2.0": 32.60081819354562,
+      "libc.so.6": 0.5932529364660029,
+      "[unknown]": 0.27063850546931517,
+      "ld-linux-x86-64.so.2": 0.06326614857751563
+    },
+    "top_self_symbols": [
+      {
+        "dso": "libbrotlidec.so.1.2.0",
+        "symbol": "ProcessCommands",
+        "period": 4029397527,
+        "whole_child_percent": 31.321333988907742
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processWideExternalLiteralLookupCompressedPayloadNative__anon_38317",
+        "period": 2976953577,
+        "whole_child_percent": 23.140471157263054
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "crypto.sha2.Sha2x32(.{ 1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225 },256).round",
+        "period": 935973761,
+        "whole_child_percent": 7.275516147686143
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readMinimalDistance__anon_38426",
+        "period": 825081863,
+        "whole_child_percent": 6.413530664583947
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readCommandSymbolAny__anon_38350",
+        "period": 626812989,
+        "whole_child_percent": 4.872346013393122
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "compiler_rt.memset",
+        "period": 447238624,
+        "whole_child_percent": 3.4764776176037815
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.fast_bit_reader.Reader.readBits__anon_38480",
+        "period": 347833229,
+        "whole_child_percent": 2.70377907986174
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.commandPrefixForDecode",
+        "period": 265711429,
+        "whole_child_percent": 2.065429473416894
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processExternalLiteralLookupCompressedPayload__anon_35299",
+        "period": 254321090,
+        "whole_child_percent": 1.9768900305658683
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processWideExternalLiteralLookup9CompressedPayloadNative__anon_53114",
+        "period": 210535260,
+        "whole_child_percent": 1.6365337871766477
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.processWideExternalLiteralLookup9CompressedPayloadNative__anon_53120",
+        "period": 199874178,
+        "whole_child_percent": 1.553663008662584
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "mem.eqlBytes",
+        "period": 197560938,
+        "whole_child_percent": 1.5356817193628796
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "huffman.HuffmanTable(256).decodeValue__anon_38554",
+        "period": 171318593,
+        "whole_child_percent": 1.331694585581839
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.readPrefixCodeRuntimeInto__anon_53645",
+        "period": 167638644,
+        "whole_child_percent": 1.303089586715678
+      },
+      {
+        "dso": "vort-decode-compare",
+        "symbol": "br.distancePrefixForDecode",
+        "period": 151322481,
+        "whole_child_percent": 1.1762607029145442
+      }
+    ],
+    "brotli_payload_counts": {
+      "command_count": 3455508,
+      "distance_prepared_hit_count": 2374718,
+      "distance_long_fallback_count": 20184,
+      "distance_prepared_build_count": 1642,
+      "max_distance_postfix_bits": 0
+    },
+    "brotli_commands_per_kib": 69.08252698920433
+  }
+}

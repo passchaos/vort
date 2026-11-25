@@ -4,6 +4,23 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-25 mainline Deflate and Brotli hotspot diagnostic
+
+The [six-row diagnostic](decode-hotspots-main-20261125/README.md) profiles
+merged main `83bb442c` on the same frozen Silesia wires against libdeflate 1.26
+and libbrotli 1.2.0. Cold `mr` 64 KiB L9 is **60.75%** of reference
+throughput; full `mozilla` q11 is **48.61%**. Those are targeted observations,
+not a new 360-row matrix or an attributed change from the previous epoch.
+
+Period-weighted whole-child samples place **54.36%** in Deflate’s semantic
+linear entry on the first row. Start with refill and literal-to-match handoff,
+not another table setup screen. On full q11, Brotli’s distance prefix selector
+and distance reader contribute **9.45%** and **7.35%**, respectively. Count
+packed expansions by block type/context/tree ID, then screen bounded reuse
+that preserves valid lifetimes for all four distance contexts. Full q6 and
+1 MiB q11 are controls. Raw recordings, Vort-only PMU groups and separate
+logical Brotli counts are archived; no codec optimization is adopted.
+
 ## 2026-11-25 current-source decode baseline
 
 The [current refresh](modern-decode-refresh-20261125/README.md) binds
