@@ -1,5 +1,6 @@
 """Check physical emission counts independently of candidate selection history."""
 import hashlib
+import copy
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,7 +40,9 @@ class WireCounts(unittest.TestCase):
                                          "preferred_context", "split_planning", "wire", "evaluate",
                                          "distance_parameters", "selection", "other")}
         for event in events[1:]:
+            exclusive.setdefault(event["stage"], 0)
             exclusive[event["stage"]] += event["exclusive_ns"]
+        events[0]["exclusive_ns"] = 100 - sum(exclusive.values())
         profile = dict(error_name="", returned_wire_bytes=7, returned_wire_event_id=events[-1]["id"],
                        events=events, event_count=len(events), events_total=len(events), events_truncated=False,
                        timing_complete=True, wire_attempts=sum(e["stage"] == "wire" for e in events),
@@ -90,13 +93,51 @@ class WireCounts(unittest.TestCase):
         self.assertEqual(1, result["lost_wire_materializations"])
 
     def test_context_detail_truncation_keeps_complete_wire_count(self):
+        report = self.context_report()
+        with self.assertRaises(ValueError):
+            self.counts(report)
+        self.assertEqual(0, self.counts(report, wire_only=True)["lost_wire_materializations"])
+        result = validate(report, allow_truncated_context_details=True)
+        self.assertFalse(result["rows"][0]["context_detail_coverage_complete"])
+
+    def context_report(self, count=9):
+        contexts = [self.event(index, "context_proposals", variant=False, command_count=4,
+                               inclusive_ns=1, exclusive_ns=1) for index in range(1, count + 1)]
+        report = self.report(contexts + [self.event(count + 1, size=7)])
+        details = [dict(event_id=event["id"], origin=event["origin"],
+                        variant=False, command_count=4, profile={}) for event in contexts[:8]]
+        self.profile(report).update(context_details=details, context_details_truncated=count > 8)
+        return report
+
+    def test_complete_context_details_keep_the_default_gate(self):
+        report = self.context_report(8)
+        result = validate(report)
+        self.assertTrue(result["rows"][0]["context_detail_coverage_complete"])
+
+    def test_wire_only_rejects_invalid_truncated_prefixes(self):
+        mutations = [
+            lambda p: p["context_details"].pop(),
+            lambda p: p["context_details"].reverse(),
+            lambda p: p["context_details"][0].update(event_id=9),
+            lambda p: p["context_details"][0].update(event_id=2),
+            lambda p: p["context_details"][0].update(event_id=True),
+            lambda p: p["context_details"][0].update(command_count=5),
+            lambda p: p.update(context_details_truncated=False),
+        ]
+        original = self.context_report()
+        for index, mutation in enumerate(mutations):
+            report = copy.deepcopy(original)
+            mutation(self.profile(report))
+            with self.subTest(mutation=index), self.assertRaises(ValueError):
+                self.counts(report, wire_only=True)
+        report = self.context_report(8)
+        self.profile(report)["context_details_truncated"] = True
+        with self.assertRaises(ValueError):
+            self.counts(report, wire_only=True)
         report = self.report()
         self.profile(report).update(context_details=[], context_details_truncated=True)
         with self.assertRaises(ValueError):
-            self.counts(report)
-        self.assertEqual(2, self.counts(report, wire_only=True)["lost_wire_materializations"])
-        result = validate(report, allow_truncated_context_details=True)
-        self.assertFalse(result["rows"][0]["context_detail_coverage_complete"])
+            self.counts(report, wire_only=True)
 
     def test_incomplete_wire_coverage_has_no_exact_count(self):
         report = self.report()

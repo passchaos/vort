@@ -1,0 +1,265 @@
+{
+  "validated_runs": 6,
+  "rows": [
+    {
+      "path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "round": 0,
+      "outer_ns": 100850752,
+      "wire_attempts": 16,
+      "evaluation_attempts": 25,
+      "exclusive_ns": {
+        "lazy_parse": 814069,
+        "lazy_commands": 56886,
+        "optimal_parse": 74820509,
+        "optimal_commands": 224760,
+        "preferred_context": 26074,
+        "recent_distance_scan": 135373,
+        "context_proposals": 15443072,
+        "split_planning": 1025853,
+        "wire": 3057823,
+        "evaluate": 2346698,
+        "distance_parameters": 170506,
+        "selection": 169,
+        "other": 2727975
+      },
+      "unaccounted_ns": 985,
+      "classified_fraction": 0.97294060831594,
+      "wire_coverage_complete": true,
+      "context_detail_coverage_complete": true,
+      "physical_wires": {
+        "successful_wire_materializations": 16,
+        "failed_wire_attempts": 0,
+        "unclassified_wire_attempts": 0,
+        "completed_wire_bytes_total": 71205,
+        "returned_wire_event_id": 123,
+        "exact_lost_wire_count_available": true,
+        "lost_wire_materializations": 15,
+        "successful_wires_by_origin": {
+          "lazy": 6,
+          "optimal": 10
+        },
+        "lost_wires_by_origin": {
+          "lazy": 6,
+          "optimal": 9
+        }
+      }
+    },
+    {
+      "path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "round": 1,
+      "outer_ns": 100193945,
+      "wire_attempts": 16,
+      "evaluation_attempts": 25,
+      "exclusive_ns": {
+        "lazy_parse": 817943,
+        "lazy_commands": 54766,
+        "optimal_parse": 74444265,
+        "optimal_commands": 212883,
+        "preferred_context": 23700,
+        "recent_distance_scan": 133472,
+        "context_proposals": 15200821,
+        "split_planning": 1035302,
+        "wire": 3102297,
+        "evaluate": 2305711,
+        "distance_parameters": 170154,
+        "selection": 146,
+        "other": 2691128
+      },
+      "unaccounted_ns": 1357,
+      "classified_fraction": 0.9731272683194578,
+      "wire_coverage_complete": true,
+      "context_detail_coverage_complete": true,
+      "physical_wires": {
+        "successful_wire_materializations": 16,
+        "failed_wire_attempts": 0,
+        "unclassified_wire_attempts": 0,
+        "completed_wire_bytes_total": 71205,
+        "returned_wire_event_id": 123,
+        "exact_lost_wire_count_available": true,
+        "lost_wire_materializations": 15,
+        "successful_wires_by_origin": {
+          "lazy": 6,
+          "optimal": 10
+        },
+        "lost_wires_by_origin": {
+          "lazy": 6,
+          "optimal": 9
+        }
+      }
+    },
+    {
+      "path": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+      "round": 2,
+      "outer_ns": 98841335,
+      "wire_attempts": 16,
+      "evaluation_attempts": 25,
+      "exclusive_ns": {
+        "lazy_parse": 795076,
+        "lazy_commands": 55878,
+        "optimal_parse": 73406329,
+        "optimal_commands": 214673,
+        "preferred_context": 22002,
+        "recent_distance_scan": 133646,
+        "context_proposals": 15091211,
+        "split_planning": 1028226,
+        "wire": 2976470,
+        "evaluate": 2291363,
+        "distance_parameters": 170447,
+        "selection": 142,
+        "other": 2654580
+      },
+      "unaccounted_ns": 1292,
+      "classified_fraction": 0.9731299460898621,
+      "wire_coverage_complete": true,
+      "context_detail_coverage_complete": true,
+      "physical_wires": {
+        "successful_wire_materializations": 16,
+        "failed_wire_attempts": 0,
+        "unclassified_wire_attempts": 0,
+        "completed_wire_bytes_total": 71205,
+        "returned_wire_event_id": 123,
+        "exact_lost_wire_count_available": true,
+        "lost_wire_materializations": 15,
+        "successful_wires_by_origin": {
+          "lazy": 6,
+          "optimal": 10
+        },
+        "lost_wires_by_origin": {
+          "lazy": 6,
+          "optimal": 9
+        }
+      }
+    },
+    {
+      "path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+      "round": 0,
+      "outer_ns": 192731467,
+      "wire_attempts": 33,
+      "evaluation_attempts": 57,
+      "exclusive_ns": {
+        "lazy_parse": 1195165,
+        "lazy_commands": 119326,
+        "optimal_parse": 35036877,
+        "optimal_commands": 499797,
+        "preferred_context": 80955,
+        "recent_distance_scan": 444552,
+        "context_proposals": 107281236,
+        "split_planning": 7628629,
+        "wire": 15565212,
+        "evaluate": 12424462,
+        "distance_parameters": 1339159,
+        "selection": 154,
+        "other": 11114655
+      },
+      "unaccounted_ns": 1288,
+      "classified_fraction": 0.9423241924475156,
+      "wire_coverage_complete": true,
+      "context_detail_coverage_complete": false,
+      "physical_wires": {
+        "successful_wire_materializations": 33,
+        "failed_wire_attempts": 0,
+        "unclassified_wire_attempts": 0,
+        "completed_wire_bytes_total": 504604,
+        "returned_wire_event_id": 85,
+        "exact_lost_wire_count_available": true,
+        "lost_wire_materializations": 32,
+        "successful_wires_by_origin": {
+          "lazy": 15,
+          "optimal": 18
+        },
+        "lost_wires_by_origin": {
+          "lazy": 14,
+          "optimal": 18
+        }
+      }
+    },
+    {
+      "path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+      "round": 1,
+      "outer_ns": 188338628,
+      "wire_attempts": 33,
+      "evaluation_attempts": 57,
+      "exclusive_ns": {
+        "lazy_parse": 1214141,
+        "lazy_commands": 139456,
+        "optimal_parse": 33068606,
+        "optimal_commands": 460224,
+        "preferred_context": 68548,
+        "recent_distance_scan": 439779,
+        "context_proposals": 106068782,
+        "split_planning": 7429673,
+        "wire": 15486668,
+        "evaluate": 12203042,
+        "distance_parameters": 1367798,
+        "selection": 145,
+        "other": 10390738
+      },
+      "unaccounted_ns": 1028,
+      "classified_fraction": 0.9448240325930377,
+      "wire_coverage_complete": true,
+      "context_detail_coverage_complete": false,
+      "physical_wires": {
+        "successful_wire_materializations": 33,
+        "failed_wire_attempts": 0,
+        "unclassified_wire_attempts": 0,
+        "completed_wire_bytes_total": 504604,
+        "returned_wire_event_id": 85,
+        "exact_lost_wire_count_available": true,
+        "lost_wire_materializations": 32,
+        "successful_wires_by_origin": {
+          "lazy": 15,
+          "optimal": 18
+        },
+        "lost_wires_by_origin": {
+          "lazy": 14,
+          "optimal": 18
+        }
+      }
+    },
+    {
+      "path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+      "round": 2,
+      "outer_ns": 185587996,
+      "wire_attempts": 33,
+      "evaluation_attempts": 57,
+      "exclusive_ns": {
+        "lazy_parse": 1200672,
+        "lazy_commands": 141264,
+        "optimal_parse": 33038216,
+        "optimal_commands": 451207,
+        "preferred_context": 64268,
+        "recent_distance_scan": 433708,
+        "context_proposals": 104377386,
+        "split_planning": 7321877,
+        "wire": 15214315,
+        "evaluate": 11973951,
+        "distance_parameters": 1337206,
+        "selection": 154,
+        "other": 10032003
+      },
+      "unaccounted_ns": 1769,
+      "classified_fraction": 0.945935231716172,
+      "wire_coverage_complete": true,
+      "context_detail_coverage_complete": false,
+      "physical_wires": {
+        "successful_wire_materializations": 33,
+        "failed_wire_attempts": 0,
+        "unclassified_wire_attempts": 0,
+        "completed_wire_bytes_total": 504604,
+        "returned_wire_event_id": 85,
+        "exact_lost_wire_count_available": true,
+        "lost_wire_materializations": 32,
+        "successful_wires_by_origin": {
+          "lazy": 15,
+          "optimal": 18
+        },
+        "lost_wires_by_origin": {
+          "lazy": 14,
+          "optimal": 18
+        }
+      }
+    }
+  ],
+  "scope": "Exact wire equality/roundtrip asserted by producer; local input and optional executable identity, event topology and non-overlapping timing independently checked. No competitor throughput claim.",
+  "context_detail_policy": "recorded prefix may be truncated; coverage reported per run"
+}

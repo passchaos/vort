@@ -4184,21 +4184,7 @@ pub fn build(b: *std.Build) void {
     br_reference_parameter_step.dependOn(&b.addSystemCommand(&.{ "python3", "tools/br/planned_encode_path_gate_test.py" }).step);
     br_reference_parameter_step.dependOn(&b.addSystemCommand(&.{ "python3", "tools/codec_bench/sample_gate_smoke.py" }).step);
 
-    const br_quality_stage_profile_exe = b.addExecutable(.{
-        .name = "vort-br-quality-stage-profile",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/br/quality_stage_profile.zig"),
-            .target = target,
-            .optimize = .ReleaseFast,
-            .imports = &.{
-                .{ .name = "vort_br", .module = br_encode_bench_mod },
-                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
-            },
-        }),
-    });
-    const run_br_quality_stage_profile = b.addRunArtifact(br_quality_stage_profile_exe);
-    if (b.args) |args| run_br_quality_stage_profile.addArgs(args);
-    b.step("run-br-quality-stage-profile", "Record actual native q8 candidate stages and wires").dependOn(&run_br_quality_stage_profile.step);
+    const br_quality_stage_profile_exe = @import("build/br_quality_profile.zig").register(b, target, br_encode_bench_mod, benchmark_provenance_mod);
     const br_quality_stage_probe_exe = b.addExecutable(.{
         .name = "vort-br-quality-stage-probe",
         .root_module = b.createModule(.{

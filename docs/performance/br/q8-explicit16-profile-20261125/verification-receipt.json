@@ -1,0 +1,38 @@
+{
+  "archived_original_bytes_verified": true,
+  "context_detail_coverage": {
+    "mozilla": {
+      "proposal_events": 10,
+      "retained": 8,
+      "truncated": true
+    },
+    "nci": {
+      "proposal_events": 8,
+      "retained": 8,
+      "truncated": false
+    }
+  },
+  "exact_physical_counts": {
+    "lost_wire_bytes_total": 1673037,
+    "lost_wires_total": 141,
+    "materialized_wire_bytes_total": 1727427,
+    "physical_wires_total": 147
+  },
+  "executable_sha256": "ab8516edccb600a679310b263f3cbe14de4975a086811bd2e385c1f4998c30d5",
+  "frozen_wire_matches": [
+    {
+      "case": "nci",
+      "wire_bytes": 4206,
+      "wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615"
+    },
+    {
+      "case": "mozilla",
+      "wire_bytes": 13924,
+      "wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb"
+    }
+  ],
+  "inventory_verified": true,
+  "schema": "vort.q8-explicit16-profile.offline-verification.v1",
+  "scope": "Offline hashes, frozen-wire comparisons, event/timing topology and physical counts. Recorded producer asserts normal/traced byte equality and roundtrip; no codec/build/ELF or timing campaign executed by this verifier.",
+  "validated_runs": 6
+}

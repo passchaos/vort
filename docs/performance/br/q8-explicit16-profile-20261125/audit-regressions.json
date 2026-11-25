@@ -1,0 +1,25 @@
+{
+  "note": "Outputs captured by the archive worker after copying repaired audit scripts; original diagnostic-build.log.gz separately records 19 + 9 Python tests and two Zig binding tests.",
+  "phase": "Post-run Python gate repair; encoder binary unchanged",
+  "schema": "vort.q8-explicit16-profile.audit-regressions.v1",
+  "tests": [
+    {
+      "command": [
+        "python3",
+        "audit/quality_profile_gate_smoke.py"
+      ],
+      "exit_code": 0,
+      "observed_output": "...................\n----------------------------------------------------------------------\nRan 19 tests in 0.008s\n\nOK\n",
+      "tests_passed": 19
+    },
+    {
+      "command": [
+        "python3",
+        "audit/quality_profile_wire_counts_tests.py"
+      ],
+      "exit_code": 0,
+      "observed_output": "...........\n----------------------------------------------------------------------\nRan 11 tests in 0.008s\n\nOK\n",
+      "tests_passed": 11
+    }
+  ]
+}

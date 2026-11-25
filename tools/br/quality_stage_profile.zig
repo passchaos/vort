@@ -6,6 +6,14 @@ const br = @import("vort_br");
 const provenance = @import("benchmark_provenance");
 const output_identity = @import("encode_samples.zig");
 
+// Match the explicit standard-window policy in the q8 comparison matrix.
+// A null window permits automatic far candidates and is a different policy.
+const encode_options: br.PlannedEncodeOptions = .{
+    .quality = 8,
+    .mode = .generic,
+    .window_bits = 16,
+};
+
 const Options = struct {
     rounds: usize = 5,
     output: ?[]const u8 = null,
@@ -41,7 +49,9 @@ pub fn main(init: std.process.Init) !void {
     defer json.deinit();
     try json.writer.writeAll("{\"schema\":\"vort.brotli.q8-candidate-profile.v2\",\"provenance\":");
     try std.json.Stringify.value(info, .{}, &json.writer);
-    try json.writer.print(",\"quality\":8,\"mode\":\"generic\",\"window_bits\":16,\"profile_state_bytes\":{d},\"rows\":[", .{@sizeOf(br.QualityQ8Profile)});
+    try json.writer.writeByte(',');
+    try writeConfiguration(&json.writer);
+    try json.writer.writeAll(",\"rows\":[");
     const profile = try init.gpa.create(br.QualityQ8Profile);
     defer init.gpa.destroy(profile);
     for (options.paths.items, 0..) |path, case_index| {
@@ -55,7 +65,7 @@ pub fn main(init: std.process.Init) !void {
         var read_buffer: [4096]u8 = undefined;
         var reader = file.reader(init.io, &read_buffer);
         if (try reader.interface.readSliceShort(input) != input.len) return error.InputTooSmall;
-        const expected = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, input, .{ .quality = 8, .mode = .generic });
+        const expected = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, input, encode_options);
         defer init.gpa.free(expected);
         const decoded = try br.decodeStreamAlloc(init.gpa, expected);
         defer init.gpa.free(decoded);
@@ -77,24 +87,7 @@ pub fn main(init: std.process.Init) !void {
             else
                 try normalPass(init.io, init.gpa, input, expected);
             try json.writer.print("{{\"index\":{d},\"normal_first\":{s},\"normal_ns\":{d},\"profile_call_ns\":{d},\"wire_equal\":true,\"profile\":", .{ round, if (round % 2 == 0) "true" else "false", if (round % 2 == 0) first else second, if (round % 2 == 0) second else first });
-            try std.json.Stringify.value(.{
-                .event_count = profile.event_count,
-                .events_total = profile.events_total,
-                .events_truncated = profile.events_truncated,
-                .wire_attempts = profile.wire_attempts,
-                .evaluation_attempts = profile.evaluation_attempts,
-                .wire_attempt_coverage_complete = profile.wire_attempt_coverage_complete,
-                .timing_complete = profile.timing_complete,
-                .outer_elapsed_ns = profile.outer_elapsed_ns,
-                .exclusive_ns = profile.exclusive_ns,
-                .unaccounted_ns = profile.unaccounted_ns,
-                .error_name = profile.error_name,
-                .returned_wire_bytes = profile.returned_wire_bytes,
-                .returned_wire_event_id = profile.returned_wire_event_id,
-                .context_details = profile.recordedContextDetails(),
-                .context_details_truncated = profile.context_details_truncated,
-                .events = profile.recordedEvents(),
-            }, .{}, &json.writer);
+            try writeProfile(&json.writer, profile);
             try json.writer.writeByte('}');
         }
         try json.writer.writeAll("]}");
@@ -110,9 +103,22 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
+fn writeConfiguration(writer: *std.Io.Writer) !void {
+    try writer.print("\"quality\":{d},\"mode\":\"{s}\",\"window_bits\":{d},\"profile_state_bytes\":{d}", .{
+        encode_options.quality.?,
+        @tagName(encode_options.mode),
+        encode_options.window_bits.?,
+        @sizeOf(br.QualityQ8Profile),
+    });
+}
+
+fn writeProfile(writer: *std.Io.Writer, profile: *const br.QualityQ8Profile) !void {
+    try std.json.Stringify.value(profile, .{}, writer);
+}
+
 fn normalPass(io: std.Io, allocator: std.mem.Allocator, input: []const u8, expected: []const u8) !u64 {
     const start = std.Io.Clock.awake.now(io);
-    const wire = try br.encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .quality = 8, .mode = .generic });
+    const wire = try br.encodePlannedStreamWithOptionsAlloc(allocator, input, encode_options);
     const elapsed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
     defer allocator.free(wire);
     if (!std.mem.eql(u8, wire, expected)) return error.WireMismatch;
@@ -121,9 +127,18 @@ fn normalPass(io: std.Io, allocator: std.mem.Allocator, input: []const u8, expec
 
 fn profilePass(io: std.Io, allocator: std.mem.Allocator, input: []const u8, expected: []const u8, profile: *br.QualityQ8Profile) !u64 {
     const start = std.Io.Clock.awake.now(io);
-    const wire = try br.benchmarkQualityQ8ProfileAlloc(allocator, input, io, profile);
+    const wire = try br.benchmarkQualityProfileAlloc(allocator, input, io, encode_options, profile);
     const elapsed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
     defer allocator.free(wire);
     if (!std.mem.eql(u8, wire, expected)) return error.WireMismatch;
     return @intCast(elapsed);
+}
+
+test "q8 diagnostic binds explicit window16 and complete profile JSON" {
+    try @import("quality_stage_profile_tests.zig").configuration(encode_options, writeConfiguration);
+    try @import("quality_stage_profile_tests.zig").profileJson(writeProfile);
+}
+
+test "q8 diagnostic normal and trace preserve an explicit16 64KiB wire" {
+    try @import("quality_stage_profile_tests.zig").wireBinding(encode_options, normalPass, profilePass);
 }

@@ -1,0 +1,14 @@
+[
+  "taskset",
+  "-c",
+  "2",
+  "../install/bin/vort-br-quality-stage-profile",
+  "--rounds",
+  "3",
+  "--path",
+  "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+  "--path",
+  "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+  "--json",
+  "../q8-explicit16-profile.json"
+]

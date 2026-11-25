@@ -29,6 +29,26 @@ compressor reuse outside the timer. It also aligns Brotli's HQ preflight and
 timing options, declares the effective window/HQ mode, and warms both sides
 before a numeric-quality round. These are measurement fixes, not codec wins.
 
+## 2026-11-25 explicit-window q8 diagnosis
+
+The [six-run q8 diagnostic](br/q8-explicit16-profile-20261125/README.md)
+uses the actual generic/window16 policy and preserves both frozen NCI/Mozilla
+wire hashes. It records 16/33 successful physical outputs per run, of which
+15/32 are ultimately lost. Wire events are complete in all runs; Mozilla's
+auxiliary context details retain only the first eight of ten calls. The
+wire-only evidence gate validates that exact prefix and labels its coverage
+incomplete. Thirty Python regression tests and two Zig binding tests cover
+the measurement contract; the bundle can be verified offline.
+
+The traced cost distribution changes the next priority: NCI spends 74.25% in
+four optimal parses, while Mozilla spends 56.07% in context proposals. Fixed
+literal/command/distance split wire and evaluation events are all zero in
+these two rows. Mozilla instead has 24 adaptive-distance evaluations and ten
+physical outputs, all eventually lost. Shared split-planning time has no
+per-family subdivision, so zero candidate events do not prove zero planner
+cost. These instrumented shares route investigation; they do not predict a
+normal-encoder speedup or establish competitor parity.
+
 ## Next measured structural boundary
 
 The [fixed block-length repair](br/fixed-length-complex-20261125/README.md)
@@ -45,20 +65,21 @@ precomputed, and command-model lifetime reuse is already present. Do not
 repeat those completed changes or apply old two-pass/wire-count descriptions
 to the current source.
 
-The strongest isolated remaining boundary is the fixed command/distance split
-family: several literal/context variants still reconstruct entropy plans and
-physical wires. `encodeEntropySplitCandidateAllocRecorded` enumerates the
+The fixed command/distance split family remains a bounded reuse design from
+the source audit: several literal/context variants still reconstruct entropy
+plans and physical wires. `encodeEntropySplitCandidateAllocRecorded` enumerates the
 variants; `encodeEntropySplitWireCandidateInternalAllocRecorded` then reaches
 the complete command writer. A shared symbol/entropy plan with exact counting
 could retain the existing candidate order and strict-smaller rule while
 emitting only that family's winner. `prepared_command_distance.supported`
 currently excludes split shapes, so its common plan cannot simply be reused.
 
-First record the complete `QualityQ8Profile` events with the exact explicit
-window16 settings and compare the resulting wire hash to this matrix. Count
-successful physical wire events that do not become the final returned wire;
-`accepted=false` alone is not a losing-wire count. Dropped/truncated event
-logs cannot establish complete counts. Four optimal parsers also rebuild
-indices and walk matches; existing search profiles can quantify that separate
-model-independent evidence opportunity. No new encoder prototype is adopted
-from this checkpoint alone.
+Prioritize per-pass search profiles for NCI's four optimal parses and complete
+context-preparation/scoring details for Mozilla's ten context calls. Establish
+which model-independent index/frontier work can be reused without changing
+any parser decisions, then test that structural change with ordinary public
+encoding and exact wire gates. Keep the fixed-split family as a later target
+until a declared corpus row actually exercises it. Physical wire counts must
+exclude pure evaluations and include replaced intermediate winners; truncated
+event logs cannot establish exact counts. No encoder performance prototype is
+adopted from these diagnostics alone.

@@ -161,8 +161,13 @@ def validate(report: dict, executable: Path | None = None, *, allow_truncated_co
                 details = profile["context_details"]
                 require(len(details) <= 8, "context detail capacity")
                 proposal_events = [e for e in events if e["stage"] == "context_proposals" and e["error_name"] == ""]
-                require(len(details) == len(proposal_events), "context calls/details mismatch")
-                require({d["event_id"] for d in details} == {e["id"] for e in proposal_events}, "context detail event coverage")
+                detail_ids = [integer(d["event_id"], "context event id") for d in details]
+                if profile.get("context_details_truncated", False):
+                    require(len(details) == 8 and len(proposal_events) > 8, "invalid truncated context prefix")
+                    require(detail_ids == [e["id"] for e in proposal_events[:8]], "context detail prefix coverage")
+                else:
+                    require(len(details) == len(proposal_events), "context calls/details mismatch")
+                    require(set(detail_ids) == {e["id"] for e in proposal_events}, "context detail event coverage")
                 for detail in details:
                     identifier = detail["event_id"]
                     event = by_id.get(identifier)

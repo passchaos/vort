@@ -1,0 +1,1407 @@
+{
+  "cases": [
+    {
+      "case": "nci",
+      "events_deterministic_except_timing": true,
+      "input_bytes": 65536,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "lost_wire_bytes_total": 200997,
+      "lost_wires_total": 45,
+      "materialized_wire_bytes_total": 213615,
+      "origins_pooled": {
+        "lazy": {
+          "exclusive_ns": 26599162,
+          "lost_wire_bytes": 83109,
+          "lost_wire_exclusive_ns": 3481387,
+          "lost_wires": 18,
+          "materialized_wire_bytes": 83109,
+          "physical_wires": 18,
+          "share_of_pooled_outer": 0.08869756894845973,
+          "wire_exclusive_ns": 3481387
+        },
+        "optimal": {
+          "exclusive_ns": 272414152,
+          "lost_wire_bytes": 117888,
+          "lost_wire_exclusive_ns": 5195829,
+          "lost_wires": 27,
+          "materialized_wire_bytes": 130506,
+          "physical_wires": 30,
+          "share_of_pooled_outer": 0.908392265499048,
+          "wire_exclusive_ns": 5655203
+        },
+        "other": {
+          "exclusive_ns": 869084,
+          "lost_wire_bytes": 0,
+          "lost_wire_exclusive_ns": 0,
+          "lost_wires": 0,
+          "materialized_wire_bytes": 0,
+          "physical_wires": 0,
+          "share_of_pooled_outer": 0.002898047615635529,
+          "wire_exclusive_ns": 0
+        }
+      },
+      "physical_wires_total": 48,
+      "pooled_outer_ns": 299886032,
+      "rounds": 3,
+      "runs": [
+        {
+          "context_details_retained": 8,
+          "context_details_truncated": false,
+          "context_proposal_events": 8,
+          "evaluations": 25,
+          "event_shape_sha256": "8add954449b8b0a867ccbfc1a055b4f50855d892238ab7384c9261e7f41ee65a",
+          "events": 130,
+          "exclusive_ns": {
+            "context_proposals": 15443072,
+            "distance_parameters": 170506,
+            "evaluate": 2346698,
+            "lazy_commands": 56886,
+            "lazy_parse": 814069,
+            "optimal_commands": 224760,
+            "optimal_parse": 74820509,
+            "other": 2727975,
+            "preferred_context": 26074,
+            "recent_distance_scan": 135373,
+            "selection": 169,
+            "split_planning": 1025853,
+            "wire": 3057823
+          },
+          "index": 0,
+          "lost_wire_bytes": 66999,
+          "lost_wires": 15,
+          "materialized_wire_bytes": 71205,
+          "normal_ns": 99059408,
+          "origins": {
+            "lazy": {
+              "exclusive_ns": 8941836,
+              "lost_wire_bytes": 27703,
+              "lost_wire_exclusive_ns": 1179608,
+              "lost_wires": 6,
+              "materialized_wire_bytes": 27703,
+              "physical_wires": 6,
+              "stage_counts": {
+                "context_proposals": 3,
+                "distance_parameters": 1,
+                "evaluate": 7,
+                "lazy_commands": 1,
+                "lazy_parse": 1,
+                "other": 3,
+                "preferred_context": 3,
+                "recent_distance_scan": 2,
+                "selection": 7,
+                "split_planning": 3,
+                "wire": 6
+              },
+              "wire_exclusive_ns": 1179608
+            },
+            "optimal": {
+              "exclusive_ns": 91616788,
+              "lost_wire_bytes": 39296,
+              "lost_wire_exclusive_ns": 1749972,
+              "lost_wires": 9,
+              "materialized_wire_bytes": 43502,
+              "physical_wires": 10,
+              "stage_counts": {
+                "context_proposals": 5,
+                "evaluate": 18,
+                "optimal_commands": 4,
+                "optimal_parse": 4,
+                "other": 9,
+                "preferred_context": 5,
+                "recent_distance_scan": 5,
+                "selection": 22,
+                "split_planning": 5,
+                "wire": 10
+              },
+              "wire_exclusive_ns": 1878215
+            },
+            "other": {
+              "exclusive_ns": 291143,
+              "lost_wire_bytes": 0,
+              "lost_wire_exclusive_ns": 0,
+              "lost_wires": 0,
+              "materialized_wire_bytes": 0,
+              "physical_wires": 0,
+              "stage_counts": {
+                "other": 1,
+                "selection": 4
+              },
+              "wire_exclusive_ns": 0
+            }
+          },
+          "outer_ns": 100850752,
+          "parameter_counts": {
+            "parameter_counted_candidates": 1,
+            "parameter_pairs": 1,
+            "parameter_physical_emits": 0,
+            "parameter_skipped_pair_emits": 1
+          },
+          "physical_wires": 16,
+          "profile_call_ns": 100852237,
+          "returned_config": {
+            "adaptive_command_split": false,
+            "adaptive_distance_split": false,
+            "adaptive_literal_split": false,
+            "command_split": false,
+            "command_type_count": 0,
+            "context_cutoff": null,
+            "context_map": "\u0002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0002\u0001\u0001\u0002\u0000\u0000\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0000\u0001\u0001\u0000\u0000\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+            "context_mode": 1,
+            "context_trees": 3,
+            "distance_split": false,
+            "distance_type_count": 0,
+            "joint_literal_contexts": false,
+            "joint_literal_tree_count": 0,
+            "large_window": false,
+            "literal_split": false,
+            "literal_type_count": 0,
+            "ndirect_high": 15,
+            "npostfix": 0,
+            "optimize_same_last_distance": true,
+            "use_recent_distances": true,
+            "window_bits": 16
+          },
+          "returned_event_id": 123,
+          "returned_origin": "optimal",
+          "split_families": {
+            "adaptive_command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_literal_split": {
+              "evaluate_exclusive_ns": 147506,
+              "evaluation_events": 4,
+              "events_by_origin_and_stage": {
+                "optimal/evaluate": 4
+              },
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "joint_literal_contexts": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "literal_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            }
+          },
+          "unaccounted_ns": 985,
+          "wire_events_complete": true
+        },
+        {
+          "context_details_retained": 8,
+          "context_details_truncated": false,
+          "context_proposal_events": 8,
+          "evaluations": 25,
+          "event_shape_sha256": "8add954449b8b0a867ccbfc1a055b4f50855d892238ab7384c9261e7f41ee65a",
+          "events": 130,
+          "exclusive_ns": {
+            "context_proposals": 15200821,
+            "distance_parameters": 170154,
+            "evaluate": 2305711,
+            "lazy_commands": 54766,
+            "lazy_parse": 817943,
+            "optimal_commands": 212883,
+            "optimal_parse": 74444265,
+            "other": 2691128,
+            "preferred_context": 23700,
+            "recent_distance_scan": 133472,
+            "selection": 146,
+            "split_planning": 1035302,
+            "wire": 3102297
+          },
+          "index": 1,
+          "lost_wire_bytes": 66999,
+          "lost_wires": 15,
+          "materialized_wire_bytes": 71205,
+          "normal_ns": 96335846,
+          "origins": {
+            "lazy": {
+              "exclusive_ns": 8875700,
+              "lost_wire_bytes": 27703,
+              "lost_wire_exclusive_ns": 1162113,
+              "lost_wires": 6,
+              "materialized_wire_bytes": 27703,
+              "physical_wires": 6,
+              "stage_counts": {
+                "context_proposals": 3,
+                "distance_parameters": 1,
+                "evaluate": 7,
+                "lazy_commands": 1,
+                "lazy_parse": 1,
+                "other": 3,
+                "preferred_context": 3,
+                "recent_distance_scan": 2,
+                "selection": 7,
+                "split_planning": 3,
+                "wire": 6
+              },
+              "wire_exclusive_ns": 1162113
+            },
+            "optimal": {
+              "exclusive_ns": 91033995,
+              "lost_wire_bytes": 39296,
+              "lost_wire_exclusive_ns": 1735180,
+              "lost_wires": 9,
+              "materialized_wire_bytes": 43502,
+              "physical_wires": 10,
+              "stage_counts": {
+                "context_proposals": 5,
+                "evaluate": 18,
+                "optimal_commands": 4,
+                "optimal_parse": 4,
+                "other": 9,
+                "preferred_context": 5,
+                "recent_distance_scan": 5,
+                "selection": 22,
+                "split_planning": 5,
+                "wire": 10
+              },
+              "wire_exclusive_ns": 1940184
+            },
+            "other": {
+              "exclusive_ns": 282893,
+              "lost_wire_bytes": 0,
+              "lost_wire_exclusive_ns": 0,
+              "lost_wires": 0,
+              "materialized_wire_bytes": 0,
+              "physical_wires": 0,
+              "stage_counts": {
+                "other": 1,
+                "selection": 4
+              },
+              "wire_exclusive_ns": 0
+            }
+          },
+          "outer_ns": 100193945,
+          "parameter_counts": {
+            "parameter_counted_candidates": 1,
+            "parameter_pairs": 1,
+            "parameter_physical_emits": 0,
+            "parameter_skipped_pair_emits": 1
+          },
+          "physical_wires": 16,
+          "profile_call_ns": 100195176,
+          "returned_config": {
+            "adaptive_command_split": false,
+            "adaptive_distance_split": false,
+            "adaptive_literal_split": false,
+            "command_split": false,
+            "command_type_count": 0,
+            "context_cutoff": null,
+            "context_map": "\u0002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0002\u0001\u0001\u0002\u0000\u0000\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0000\u0001\u0001\u0000\u0000\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+            "context_mode": 1,
+            "context_trees": 3,
+            "distance_split": false,
+            "distance_type_count": 0,
+            "joint_literal_contexts": false,
+            "joint_literal_tree_count": 0,
+            "large_window": false,
+            "literal_split": false,
+            "literal_type_count": 0,
+            "ndirect_high": 15,
+            "npostfix": 0,
+            "optimize_same_last_distance": true,
+            "use_recent_distances": true,
+            "window_bits": 16
+          },
+          "returned_event_id": 123,
+          "returned_origin": "optimal",
+          "split_families": {
+            "adaptive_command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_literal_split": {
+              "evaluate_exclusive_ns": 150278,
+              "evaluation_events": 4,
+              "events_by_origin_and_stage": {
+                "optimal/evaluate": 4
+              },
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "joint_literal_contexts": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "literal_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            }
+          },
+          "unaccounted_ns": 1357,
+          "wire_events_complete": true
+        },
+        {
+          "context_details_retained": 8,
+          "context_details_truncated": false,
+          "context_proposal_events": 8,
+          "evaluations": 25,
+          "event_shape_sha256": "8add954449b8b0a867ccbfc1a055b4f50855d892238ab7384c9261e7f41ee65a",
+          "events": 130,
+          "exclusive_ns": {
+            "context_proposals": 15091211,
+            "distance_parameters": 170447,
+            "evaluate": 2291363,
+            "lazy_commands": 55878,
+            "lazy_parse": 795076,
+            "optimal_commands": 214673,
+            "optimal_parse": 73406329,
+            "other": 2654580,
+            "preferred_context": 22002,
+            "recent_distance_scan": 133646,
+            "selection": 142,
+            "split_planning": 1028226,
+            "wire": 2976470
+          },
+          "index": 2,
+          "lost_wire_bytes": 66999,
+          "lost_wires": 15,
+          "materialized_wire_bytes": 71205,
+          "normal_ns": 97913944,
+          "origins": {
+            "lazy": {
+              "exclusive_ns": 8781626,
+              "lost_wire_bytes": 27703,
+              "lost_wire_exclusive_ns": 1139666,
+              "lost_wires": 6,
+              "materialized_wire_bytes": 27703,
+              "physical_wires": 6,
+              "stage_counts": {
+                "context_proposals": 3,
+                "distance_parameters": 1,
+                "evaluate": 7,
+                "lazy_commands": 1,
+                "lazy_parse": 1,
+                "other": 3,
+                "preferred_context": 3,
+                "recent_distance_scan": 2,
+                "selection": 7,
+                "split_planning": 3,
+                "wire": 6
+              },
+              "wire_exclusive_ns": 1139666
+            },
+            "optimal": {
+              "exclusive_ns": 89763369,
+              "lost_wire_bytes": 39296,
+              "lost_wire_exclusive_ns": 1710677,
+              "lost_wires": 9,
+              "materialized_wire_bytes": 43502,
+              "physical_wires": 10,
+              "stage_counts": {
+                "context_proposals": 5,
+                "evaluate": 18,
+                "optimal_commands": 4,
+                "optimal_parse": 4,
+                "other": 9,
+                "preferred_context": 5,
+                "recent_distance_scan": 5,
+                "selection": 22,
+                "split_planning": 5,
+                "wire": 10
+              },
+              "wire_exclusive_ns": 1836804
+            },
+            "other": {
+              "exclusive_ns": 295048,
+              "lost_wire_bytes": 0,
+              "lost_wire_exclusive_ns": 0,
+              "lost_wires": 0,
+              "materialized_wire_bytes": 0,
+              "physical_wires": 0,
+              "stage_counts": {
+                "other": 1,
+                "selection": 4
+              },
+              "wire_exclusive_ns": 0
+            }
+          },
+          "outer_ns": 98841335,
+          "parameter_counts": {
+            "parameter_counted_candidates": 1,
+            "parameter_pairs": 1,
+            "parameter_physical_emits": 0,
+            "parameter_skipped_pair_emits": 1
+          },
+          "physical_wires": 16,
+          "profile_call_ns": 98842844,
+          "returned_config": {
+            "adaptive_command_split": false,
+            "adaptive_distance_split": false,
+            "adaptive_literal_split": false,
+            "command_split": false,
+            "command_type_count": 0,
+            "context_cutoff": null,
+            "context_map": "\u0002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0002\u0001\u0001\u0002\u0000\u0000\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0000\u0001\u0001\u0000\u0000\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+            "context_mode": 1,
+            "context_trees": 3,
+            "distance_split": false,
+            "distance_type_count": 0,
+            "joint_literal_contexts": false,
+            "joint_literal_tree_count": 0,
+            "large_window": false,
+            "literal_split": false,
+            "literal_type_count": 0,
+            "ndirect_high": 15,
+            "npostfix": 0,
+            "optimize_same_last_distance": true,
+            "use_recent_distances": true,
+            "window_bits": 16
+          },
+          "returned_event_id": 123,
+          "returned_origin": "optimal",
+          "split_families": {
+            "adaptive_command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_literal_split": {
+              "evaluate_exclusive_ns": 146631,
+              "evaluation_events": 4,
+              "events_by_origin_and_stage": {
+                "optimal/evaluate": 4
+              },
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "joint_literal_contexts": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "literal_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            }
+          },
+          "unaccounted_ns": 1292,
+          "wire_events_complete": true
+        }
+      ],
+      "stages_pooled": {
+        "context_proposals": {
+          "exclusive_ns_mean": 15245034.666666666,
+          "exclusive_ns_sum": 45735104,
+          "share_max": 0.1531279806421275,
+          "share_min": 0.15171396834409503,
+          "share_of_pooled_outer": 0.15250828354686424
+        },
+        "distance_parameters": {
+          "exclusive_ns_mean": 170369.0,
+          "exclusive_ns_sum": 511107,
+          "share_max": 0.001724450605609485,
+          "share_min": 0.001690676535560191,
+          "share_of_pooled_outer": 0.0017043374664412513
+        },
+        "evaluate": {
+          "exclusive_ns_mean": 2314590.6666666665,
+          "exclusive_ns_sum": 6943772,
+          "share_max": 0.023269018360914155,
+          "share_min": 0.023012478448672723,
+          "share_of_pooled_outer": 0.02315470298396559
+        },
+        "lazy_commands": {
+          "exclusive_ns_mean": 55843.333333333336,
+          "exclusive_ns_sum": 167530,
+          "share_max": 0.0005653302841366924,
+          "share_min": 0.0005465998968300929,
+          "share_of_pooled_outer": 0.0005586455590569153
+        },
+        "lazy_parse": {
+          "exclusive_ns_mean": 809029.3333333334,
+          "exclusive_ns_sum": 2427088,
+          "share_max": 0.008163597111581943,
+          "share_min": 0.008043962579016158,
+          "share_of_pooled_outer": 0.0080933679498617
+        },
+        "optimal_commands": {
+          "exclusive_ns_mean": 217438.66666666666,
+          "exclusive_ns_sum": 652316,
+          "share_max": 0.0022286398023090596,
+          "share_min": 0.0021247092326786812,
+          "share_of_pooled_outer": 0.0021752130155898693
+        },
+        "optimal_parse": {
+          "exclusive_ns_mean": 74223701.0,
+          "exclusive_ns_sum": 222671103,
+          "share_max": 0.7430016354780721,
+          "share_min": 0.7418934169177043,
+          "share_of_pooled_outer": 0.7425190880514235
+        },
+        "other": {
+          "exclusive_ns_mean": 2691227.6666666665,
+          "exclusive_ns_sum": 8073683,
+          "share_max": 0.02704962477622378,
+          "share_min": 0.026856982455771162,
+          "share_of_pooled_outer": 0.026922504346584573
+        },
+        "preferred_context": {
+          "exclusive_ns_mean": 23925.333333333332,
+          "exclusive_ns_sum": 71776,
+          "share_max": 0.00025854046185000185,
+          "share_min": 0.00022259917877475046,
+          "share_of_pooled_outer": 0.00023934425862155527
+        },
+        "recent_distance_scan": {
+          "exclusive_ns_mean": 134163.66666666666,
+          "exclusive_ns_sum": 402491,
+          "share_max": 0.0013521266178770249,
+          "share_min": 0.0013321363880821342,
+          "share_of_pooled_outer": 0.0013421465391892612
+        },
+        "selection": {
+          "exclusive_ns_mean": 152.33333333333334,
+          "exclusive_ns_sum": 457,
+          "share_max": 1.675743577995333e-06,
+          "share_min": 1.4366459133721737e-06,
+          "share_of_pooled_outer": 1.5239122574405198e-06
+        },
+        "split_planning": {
+          "exclusive_ns_mean": 1029793.6666666666,
+          "exclusive_ns_sum": 3089381,
+          "share_max": 0.010402793527626878,
+          "share_min": 0.01017199157820856,
+          "share_of_pooled_outer": 0.010301850270905582
+        },
+        "wire": {
+          "exclusive_ns_mean": 3045530.0,
+          "exclusive_ns_sum": 9136590,
+          "share_max": 0.030962918966809822,
+          "share_min": 0.03011361592799207,
+          "share_of_pooled_outer": 0.030466874162381793
+        }
+      },
+      "wire_bytes": 4206,
+      "wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615"
+    },
+    {
+      "case": "mozilla",
+      "events_deterministic_except_timing": true,
+      "input_bytes": 65536,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "lost_wire_bytes_total": 1472040,
+      "lost_wires_total": 96,
+      "materialized_wire_bytes_total": 1513812,
+      "origins_pooled": {
+        "lazy": {
+          "exclusive_ns": 176165860,
+          "lost_wire_bytes": 600618,
+          "lost_wire_exclusive_ns": 19893834,
+          "lost_wires": 42,
+          "materialized_wire_bytes": 642390,
+          "physical_wires": 45,
+          "share_of_pooled_outer": 0.31088563420865367,
+          "wire_exclusive_ns": 22475469
+        },
+        "optimal": {
+          "exclusive_ns": 385362363,
+          "lost_wire_bytes": 871422,
+          "lost_wire_exclusive_ns": 23790726,
+          "lost_wires": 54,
+          "materialized_wire_bytes": 871422,
+          "physical_wires": 54,
+          "share_of_pooled_outer": 0.6800615205545525,
+          "wire_exclusive_ns": 23790726
+        },
+        "other": {
+          "exclusive_ns": 5125783,
+          "lost_wire_bytes": 0,
+          "lost_wire_exclusive_ns": 0,
+          "lost_wires": 0,
+          "materialized_wire_bytes": 0,
+          "physical_wires": 0,
+          "share_of_pooled_outer": 0.009045636304167763,
+          "wire_exclusive_ns": 0
+        }
+      },
+      "physical_wires_total": 99,
+      "pooled_outer_ns": 566658091,
+      "rounds": 3,
+      "runs": [
+        {
+          "context_details_retained": 8,
+          "context_details_truncated": true,
+          "context_proposal_events": 10,
+          "evaluations": 57,
+          "event_shape_sha256": "f8bcd0984e0672c00deeb9d2e52b2ff975241bc13cd2bb777581ff48ad76fdfa",
+          "events": 234,
+          "exclusive_ns": {
+            "context_proposals": 107281236,
+            "distance_parameters": 1339159,
+            "evaluate": 12424462,
+            "lazy_commands": 119326,
+            "lazy_parse": 1195165,
+            "optimal_commands": 499797,
+            "optimal_parse": 35036877,
+            "other": 11114655,
+            "preferred_context": 80955,
+            "recent_distance_scan": 444552,
+            "selection": 154,
+            "split_planning": 7628629,
+            "wire": 15565212
+          },
+          "index": 0,
+          "lost_wire_bytes": 490680,
+          "lost_wires": 32,
+          "materialized_wire_bytes": 504604,
+          "normal_ns": 170576882,
+          "origins": {
+            "lazy": {
+              "exclusive_ns": 58982335,
+              "lost_wire_bytes": 200206,
+              "lost_wire_exclusive_ns": 6637456,
+              "lost_wires": 14,
+              "materialized_wire_bytes": 214130,
+              "physical_wires": 15,
+              "stage_counts": {
+                "context_proposals": 4,
+                "distance_parameters": 1,
+                "evaluate": 27,
+                "lazy_commands": 1,
+                "lazy_parse": 1,
+                "other": 8,
+                "preferred_context": 4,
+                "recent_distance_scan": 2,
+                "selection": 30,
+                "split_planning": 4,
+                "wire": 15
+              },
+              "wire_exclusive_ns": 7495790
+            },
+            "optimal": {
+              "exclusive_ns": 132038531,
+              "lost_wire_bytes": 290474,
+              "lost_wire_exclusive_ns": 8069422,
+              "lost_wires": 18,
+              "materialized_wire_bytes": 290474,
+              "physical_wires": 18,
+              "stage_counts": {
+                "context_proposals": 6,
+                "evaluate": 30,
+                "optimal_commands": 4,
+                "optimal_parse": 4,
+                "other": 16,
+                "preferred_context": 6,
+                "recent_distance_scan": 6,
+                "selection": 35,
+                "split_planning": 6,
+                "wire": 18
+              },
+              "wire_exclusive_ns": 8069422
+            },
+            "other": {
+              "exclusive_ns": 1709313,
+              "lost_wire_bytes": 0,
+              "lost_wire_exclusive_ns": 0,
+              "lost_wires": 0,
+              "materialized_wire_bytes": 0,
+              "physical_wires": 0,
+              "stage_counts": {
+                "other": 1,
+                "selection": 4
+              },
+              "wire_exclusive_ns": 0
+            }
+          },
+          "outer_ns": 192731467,
+          "parameter_counts": {
+            "parameter_counted_candidates": 2,
+            "parameter_pairs": 1,
+            "parameter_physical_emits": 1,
+            "parameter_skipped_pair_emits": 0
+          },
+          "physical_wires": 33,
+          "profile_call_ns": 192732988,
+          "returned_config": {
+            "adaptive_command_split": false,
+            "adaptive_distance_split": false,
+            "adaptive_literal_split": false,
+            "command_split": false,
+            "command_type_count": 0,
+            "context_cutoff": null,
+            "context_map": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u0001\u0001\u0000\u0001\u0000\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0001\u0001\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0001\u0000\u0001\u0000\u0001\u0000\u0001\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001",
+            "context_mode": 2,
+            "context_trees": 2,
+            "distance_split": false,
+            "distance_type_count": 0,
+            "joint_literal_contexts": false,
+            "joint_literal_tree_count": 0,
+            "large_window": false,
+            "literal_split": false,
+            "literal_type_count": 0,
+            "ndirect_high": 2,
+            "npostfix": 2,
+            "optimize_same_last_distance": false,
+            "use_recent_distances": true,
+            "window_bits": 16
+          },
+          "returned_event_id": 85,
+          "returned_origin": "lazy",
+          "split_families": {
+            "adaptive_command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_distance_split": {
+              "evaluate_exclusive_ns": 3502261,
+              "evaluation_events": 24,
+              "events_by_origin_and_stage": {
+                "lazy/evaluate": 12,
+                "lazy/wire": 4,
+                "optimal/evaluate": 12,
+                "optimal/wire": 6
+              },
+              "lost_wire_events": 10,
+              "physical_wire_events": 10,
+              "wire_exclusive_ns": 2226385
+            },
+            "adaptive_literal_split": {
+              "evaluate_exclusive_ns": 1681384,
+              "evaluation_events": 10,
+              "events_by_origin_and_stage": {
+                "lazy/evaluate": 4,
+                "optimal/evaluate": 6
+              },
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "joint_literal_contexts": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "literal_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            }
+          },
+          "unaccounted_ns": 1288,
+          "wire_events_complete": true
+        },
+        {
+          "context_details_retained": 8,
+          "context_details_truncated": true,
+          "context_proposal_events": 10,
+          "evaluations": 57,
+          "event_shape_sha256": "f8bcd0984e0672c00deeb9d2e52b2ff975241bc13cd2bb777581ff48ad76fdfa",
+          "events": 234,
+          "exclusive_ns": {
+            "context_proposals": 106068782,
+            "distance_parameters": 1367798,
+            "evaluate": 12203042,
+            "lazy_commands": 139456,
+            "lazy_parse": 1214141,
+            "optimal_commands": 460224,
+            "optimal_parse": 33068606,
+            "other": 10390738,
+            "preferred_context": 68548,
+            "recent_distance_scan": 439779,
+            "selection": 145,
+            "split_planning": 7429673,
+            "wire": 15486668
+          },
+          "index": 1,
+          "lost_wire_bytes": 490680,
+          "lost_wires": 32,
+          "materialized_wire_bytes": 504604,
+          "normal_ns": 170400652,
+          "origins": {
+            "lazy": {
+              "exclusive_ns": 59212845,
+              "lost_wire_bytes": 200206,
+              "lost_wire_exclusive_ns": 6718624,
+              "lost_wires": 14,
+              "materialized_wire_bytes": 214130,
+              "physical_wires": 15,
+              "stage_counts": {
+                "context_proposals": 4,
+                "distance_parameters": 1,
+                "evaluate": 27,
+                "lazy_commands": 1,
+                "lazy_parse": 1,
+                "other": 8,
+                "preferred_context": 4,
+                "recent_distance_scan": 2,
+                "selection": 30,
+                "split_planning": 4,
+                "wire": 15
+              },
+              "wire_exclusive_ns": 7589269
+            },
+            "optimal": {
+              "exclusive_ns": 127352490,
+              "lost_wire_bytes": 290474,
+              "lost_wire_exclusive_ns": 7897399,
+              "lost_wires": 18,
+              "materialized_wire_bytes": 290474,
+              "physical_wires": 18,
+              "stage_counts": {
+                "context_proposals": 6,
+                "evaluate": 30,
+                "optimal_commands": 4,
+                "optimal_parse": 4,
+                "other": 16,
+                "preferred_context": 6,
+                "recent_distance_scan": 6,
+                "selection": 35,
+                "split_planning": 6,
+                "wire": 18
+              },
+              "wire_exclusive_ns": 7897399
+            },
+            "other": {
+              "exclusive_ns": 1772265,
+              "lost_wire_bytes": 0,
+              "lost_wire_exclusive_ns": 0,
+              "lost_wires": 0,
+              "materialized_wire_bytes": 0,
+              "physical_wires": 0,
+              "stage_counts": {
+                "other": 1,
+                "selection": 4
+              },
+              "wire_exclusive_ns": 0
+            }
+          },
+          "outer_ns": 188338628,
+          "parameter_counts": {
+            "parameter_counted_candidates": 2,
+            "parameter_pairs": 1,
+            "parameter_physical_emits": 1,
+            "parameter_skipped_pair_emits": 0
+          },
+          "physical_wires": 33,
+          "profile_call_ns": 188339775,
+          "returned_config": {
+            "adaptive_command_split": false,
+            "adaptive_distance_split": false,
+            "adaptive_literal_split": false,
+            "command_split": false,
+            "command_type_count": 0,
+            "context_cutoff": null,
+            "context_map": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u0001\u0001\u0000\u0001\u0000\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0001\u0001\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0001\u0000\u0001\u0000\u0001\u0000\u0001\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001",
+            "context_mode": 2,
+            "context_trees": 2,
+            "distance_split": false,
+            "distance_type_count": 0,
+            "joint_literal_contexts": false,
+            "joint_literal_tree_count": 0,
+            "large_window": false,
+            "literal_split": false,
+            "literal_type_count": 0,
+            "ndirect_high": 2,
+            "npostfix": 2,
+            "optimize_same_last_distance": false,
+            "use_recent_distances": true,
+            "window_bits": 16
+          },
+          "returned_event_id": 85,
+          "returned_origin": "lazy",
+          "split_families": {
+            "adaptive_command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_distance_split": {
+              "evaluate_exclusive_ns": 3453143,
+              "evaluation_events": 24,
+              "events_by_origin_and_stage": {
+                "lazy/evaluate": 12,
+                "lazy/wire": 4,
+                "optimal/evaluate": 12,
+                "optimal/wire": 6
+              },
+              "lost_wire_events": 10,
+              "physical_wire_events": 10,
+              "wire_exclusive_ns": 2211211
+            },
+            "adaptive_literal_split": {
+              "evaluate_exclusive_ns": 1675586,
+              "evaluation_events": 10,
+              "events_by_origin_and_stage": {
+                "lazy/evaluate": 4,
+                "optimal/evaluate": 6
+              },
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "joint_literal_contexts": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "literal_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            }
+          },
+          "unaccounted_ns": 1028,
+          "wire_events_complete": true
+        },
+        {
+          "context_details_retained": 8,
+          "context_details_truncated": true,
+          "context_proposal_events": 10,
+          "evaluations": 57,
+          "event_shape_sha256": "f8bcd0984e0672c00deeb9d2e52b2ff975241bc13cd2bb777581ff48ad76fdfa",
+          "events": 234,
+          "exclusive_ns": {
+            "context_proposals": 104377386,
+            "distance_parameters": 1337206,
+            "evaluate": 11973951,
+            "lazy_commands": 141264,
+            "lazy_parse": 1200672,
+            "optimal_commands": 451207,
+            "optimal_parse": 33038216,
+            "other": 10032003,
+            "preferred_context": 64268,
+            "recent_distance_scan": 433708,
+            "selection": 154,
+            "split_planning": 7321877,
+            "wire": 15214315
+          },
+          "index": 2,
+          "lost_wire_bytes": 490680,
+          "lost_wires": 32,
+          "materialized_wire_bytes": 504604,
+          "normal_ns": 170607630,
+          "origins": {
+            "lazy": {
+              "exclusive_ns": 57970680,
+              "lost_wire_bytes": 200206,
+              "lost_wire_exclusive_ns": 6537754,
+              "lost_wires": 14,
+              "materialized_wire_bytes": 214130,
+              "physical_wires": 15,
+              "stage_counts": {
+                "context_proposals": 4,
+                "distance_parameters": 1,
+                "evaluate": 27,
+                "lazy_commands": 1,
+                "lazy_parse": 1,
+                "other": 8,
+                "preferred_context": 4,
+                "recent_distance_scan": 2,
+                "selection": 30,
+                "split_planning": 4,
+                "wire": 15
+              },
+              "wire_exclusive_ns": 7390410
+            },
+            "optimal": {
+              "exclusive_ns": 125971342,
+              "lost_wire_bytes": 290474,
+              "lost_wire_exclusive_ns": 7823905,
+              "lost_wires": 18,
+              "materialized_wire_bytes": 290474,
+              "physical_wires": 18,
+              "stage_counts": {
+                "context_proposals": 6,
+                "evaluate": 30,
+                "optimal_commands": 4,
+                "optimal_parse": 4,
+                "other": 16,
+                "preferred_context": 6,
+                "recent_distance_scan": 6,
+                "selection": 35,
+                "split_planning": 6,
+                "wire": 18
+              },
+              "wire_exclusive_ns": 7823905
+            },
+            "other": {
+              "exclusive_ns": 1644205,
+              "lost_wire_bytes": 0,
+              "lost_wire_exclusive_ns": 0,
+              "lost_wires": 0,
+              "materialized_wire_bytes": 0,
+              "physical_wires": 0,
+              "stage_counts": {
+                "other": 1,
+                "selection": 4
+              },
+              "wire_exclusive_ns": 0
+            }
+          },
+          "outer_ns": 185587996,
+          "parameter_counts": {
+            "parameter_counted_candidates": 2,
+            "parameter_pairs": 1,
+            "parameter_physical_emits": 1,
+            "parameter_skipped_pair_emits": 0
+          },
+          "physical_wires": 33,
+          "profile_call_ns": 185589458,
+          "returned_config": {
+            "adaptive_command_split": false,
+            "adaptive_distance_split": false,
+            "adaptive_literal_split": false,
+            "command_split": false,
+            "command_type_count": 0,
+            "context_cutoff": null,
+            "context_map": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u0001\u0001\u0000\u0001\u0000\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0001\u0001\u0000\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0001\u0000\u0001\u0000\u0001\u0000\u0001\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001",
+            "context_mode": 2,
+            "context_trees": 2,
+            "distance_split": false,
+            "distance_type_count": 0,
+            "joint_literal_contexts": false,
+            "joint_literal_tree_count": 0,
+            "large_window": false,
+            "literal_split": false,
+            "literal_type_count": 0,
+            "ndirect_high": 2,
+            "npostfix": 2,
+            "optimize_same_last_distance": false,
+            "use_recent_distances": true,
+            "window_bits": 16
+          },
+          "returned_event_id": 85,
+          "returned_origin": "lazy",
+          "split_families": {
+            "adaptive_command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "adaptive_distance_split": {
+              "evaluate_exclusive_ns": 3394796,
+              "evaluation_events": 24,
+              "events_by_origin_and_stage": {
+                "lazy/evaluate": 12,
+                "lazy/wire": 4,
+                "optimal/evaluate": 12,
+                "optimal/wire": 6
+              },
+              "lost_wire_events": 10,
+              "physical_wire_events": 10,
+              "wire_exclusive_ns": 2173173
+            },
+            "adaptive_literal_split": {
+              "evaluate_exclusive_ns": 1649248,
+              "evaluation_events": 10,
+              "events_by_origin_and_stage": {
+                "lazy/evaluate": 4,
+                "optimal/evaluate": 6
+              },
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "command_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "distance_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "joint_literal_contexts": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            },
+            "literal_split": {
+              "evaluate_exclusive_ns": 0,
+              "evaluation_events": 0,
+              "events_by_origin_and_stage": {},
+              "lost_wire_events": 0,
+              "physical_wire_events": 0,
+              "wire_exclusive_ns": 0
+            }
+          },
+          "unaccounted_ns": 1769,
+          "wire_events_complete": true
+        }
+      ],
+      "stages_pooled": {
+        "context_proposals": {
+          "exclusive_ns_mean": 105909134.66666667,
+          "exclusive_ns_sum": 317727404,
+          "share_max": 0.563181239697679,
+          "share_min": 0.5566358087234401,
+          "share_of_pooled_outer": 0.5607039042525557
+        },
+        "distance_parameters": {
+          "exclusive_ns_mean": 1348054.3333333333,
+          "exclusive_ns_sum": 4044163,
+          "share_max": 0.00726244007681738,
+          "share_min": 0.006948315295083599,
+          "share_of_pooled_outer": 0.007136866241269288
+        },
+        "evaluate": {
+          "exclusive_ns_mean": 12200485.0,
+          "exclusive_ns_sum": 36601455,
+          "share_max": 0.06479309172837343,
+          "share_min": 0.06446514517528162,
+          "share_of_pooled_outer": 0.06459178044278556
+        },
+        "lazy_commands": {
+          "exclusive_ns_mean": 133348.66666666666,
+          "exclusive_ns_sum": 400046,
+          "share_max": 0.0007611699196320865,
+          "share_min": 0.0006191308656411566,
+          "share_of_pooled_outer": 0.0007059742132932855
+        },
+        "lazy_parse": {
+          "exclusive_ns_mean": 1203326.0,
+          "exclusive_ns_sum": 3609978,
+          "share_max": 0.006469556360746522,
+          "share_min": 0.006201192875266185,
+          "share_of_pooled_outer": 0.006370645822120627
+        },
+        "optimal_commands": {
+          "exclusive_ns_mean": 470409.3333333333,
+          "exclusive_ns_sum": 1411228,
+          "share_max": 0.002593229884977734,
+          "share_min": 0.0024312294422318133,
+          "share_of_pooled_outer": 0.0024904400420888016
+        },
+        "optimal_parse": {
+          "exclusive_ns_mean": 33714566.333333336,
+          "exclusive_ns_sum": 101143699,
+          "share_max": 0.18179116023643405,
+          "share_min": 0.17558058243898855,
+          "share_of_pooled_outer": 0.17849158179583816
+        },
+        "other": {
+          "exclusive_ns_mean": 10512465.333333334,
+          "exclusive_ns_sum": 31537396,
+          "share_max": 0.05766912467905409,
+          "share_min": 0.054055236417338115,
+          "share_of_pooled_outer": 0.055655070492940335
+        },
+        "preferred_context": {
+          "exclusive_ns_mean": 71257.0,
+          "exclusive_ns_sum": 213771,
+          "share_max": 0.00042004038707389697,
+          "share_min": 0.00034629394888234044,
+          "share_of_pooled_outer": 0.00037724865028001517
+        },
+        "recent_distance_scan": {
+          "exclusive_ns_mean": 439346.3333333333,
+          "exclusive_ns_sum": 1318039,
+          "share_max": 0.002336939938723192,
+          "share_min": 0.00230658753819375,
+          "share_of_pooled_outer": 0.0023259863768538337
+        },
+        "selection": {
+          "exclusive_ns_mean": 151.0,
+          "exclusive_ns_sum": 453,
+          "share_max": 8.297950477357382e-07,
+          "share_min": 7.698898602999275e-07,
+          "share_of_pooled_outer": 7.994238628104227e-07
+        },
+        "split_planning": {
+          "exclusive_ns_mean": 7460059.666666667,
+          "exclusive_ns_sum": 22380179,
+          "share_max": 0.03958164755732389,
+          "share_min": 0.039448482124442366,
+          "share_of_pooled_outer": 0.039495031228628484
+        },
+        "wire": {
+          "exclusive_ns_mean": 15422065.0,
+          "exclusive_ns_sum": 46266195,
+          "share_max": 0.08222778388297487,
+          "share_min": 0.08076113486958515,
+          "share_of_pooled_outer": 0.0816474620848571
+        }
+      },
+      "wire_bytes": 13924,
+      "wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb"
+    }
+  ],
+  "context_scope": "Context proposal stage timing is in the complete event log. Per-context details may be an independently truncated prefix.",
+  "schema": "vort.q8-explicit16-profile.analysis.v1",
+  "split_scope": "Config flags classify wire/evaluate events. Shared split_planning exclusive time has no per-family subdivision; zero fixed-family candidates does not prove zero planner cost.",
+  "timing_scope": "Three instrumented rounds per row. Stage shares divide summed exclusive nanoseconds by summed traced outer nanoseconds; no throughput or optimization-gain claim.",
+  "totals": {
+    "lost_wire_bytes_total": 1673037,
+    "lost_wires_total": 141,
+    "materialized_wire_bytes_total": 1727427,
+    "physical_wires_total": 147
+  },
+  "wire_byte_scope": "Sum of successful complete encoded output lengths, not heap peak or memory traffic. Lost means every successful wire except the final returned event, including earlier selection winners."
+}

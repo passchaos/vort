@@ -1,0 +1,293 @@
+{
+  "artifacts": {
+    "audit-regressions.json": {
+      "bytes": 949,
+      "kind": "derived-file",
+      "original": "archive worker reduction or captured audit result from retained originals",
+      "sha256": "a568fcdbc03dc337a295442d54b66b82fa958887865ab699d2d9984cf5df9532"
+    },
+    "audit/quality_profile_gate.py": {
+      "bytes": 17986,
+      "kind": "file",
+      "original": "/tmp/vort-q8-profile-window.towGZq/source/tools/br/quality_profile_gate.py",
+      "sha256": "777e5cdb9d113918d89e52f352c0e82168998d0c36ca129eb4cd424bb25175c2"
+    },
+    "audit/quality_profile_gate_smoke.py": {
+      "bytes": 11414,
+      "kind": "file",
+      "original": "/tmp/vort-q8-profile-window.towGZq/source/tools/br/quality_profile_gate_smoke.py",
+      "sha256": "e1dda6ef9e54f326a12ab30b753f4ec70b088c6ea57532c11706363b3cb14f9d"
+    },
+    "audit/quality_profile_wire_counts_tests.py": {
+      "bytes": 9976,
+      "kind": "file",
+      "original": "/tmp/vort-q8-profile-window.towGZq/source/tools/br/quality_profile_wire_counts_tests.py",
+      "sha256": "785a9a01b97c1cab47ae82c9e43bba13a917f6e50522fcc30c2d16c62704596e"
+    },
+    "diagnostic-build.log.gz": {
+      "bytes": 343,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 1243,
+          "name": "diagnostic-build.log",
+          "original": "/tmp/vort-q8-profile-window.towGZq/diagnostic-build.log",
+          "sha256": "e7c5c39cdb4953819b0e576ba4a0d81449d98c1b1c00612d03d93535186483f5"
+        }
+      ],
+      "original": "/tmp/vort-q8-profile-window.towGZq/diagnostic-build.log",
+      "sha256": "32b86c2188bbb9c3d18d5bd819b627a326ad2b9b3adec9199b06b8bb54e834ee"
+    },
+    "diagnostic-command.json": {
+      "bytes": 319,
+      "kind": "file",
+      "original": "/tmp/vort-q8-profile-window.towGZq/diagnostic-command.json",
+      "sha256": "797c8bbffebe2bb7bb992afc48e0818da7015c11f2318599924d7108e29e85f2"
+    },
+    "diagnostic-dirty.patch.gz": {
+      "bytes": 3950,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 15599,
+          "name": "diagnostic-dirty.patch",
+          "original": "git diff HEAD plus two untracked build/test files",
+          "sha256": "e91dfe364291fdbf16797ae47017f3a9729143185f8454d2dbe0e563cc74888a"
+        }
+      ],
+      "original": "archive-time tracked and untracked q8 diagnostic changes",
+      "sha256": "673c5e4512da8809967c1d8f8f0a1a29018fd2595c6bbb54dba6af9ff1719e31"
+    },
+    "diagnostic-executable.gz": {
+      "bytes": 3802679,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 14080472,
+          "name": "diagnostic-executable",
+          "original": "/tmp/vort-q8-profile-window.towGZq/install/bin/vort-br-quality-stage-profile",
+          "sha256": "ab8516edccb600a679310b263f3cbe14de4975a086811bd2e385c1f4998c30d5"
+        }
+      ],
+      "original": "/tmp/vort-q8-profile-window.towGZq/install/bin/vort-br-quality-stage-profile",
+      "sha256": "7b2a095ccd6b3a4d33afb746d1aa435e7d1350f9048d650994d3540cbacc8934"
+    },
+    "diagnostic-run.log.gz": {
+      "bytes": 20,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 0,
+          "name": "diagnostic-run.log",
+          "original": "/tmp/vort-q8-profile-window.towGZq/diagnostic-run.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "original": "/tmp/vort-q8-profile-window.towGZq/diagnostic-run.log",
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "fixtures.tar.gz": {
+      "bytes": 22674,
+      "kind": "tar.gz",
+      "members": [
+        {
+          "bytes": 65536,
+          "name": "mozilla.65536.plain",
+          "original": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.65536.plain",
+          "sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996"
+        },
+        {
+          "bytes": 65536,
+          "name": "nci.65536.plain",
+          "original": "/tmp/vort-current-decode-matrix-20261111/fixtures/nci.65536.plain",
+          "sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe"
+        }
+      ],
+      "original": "multiple retained origins",
+      "sha256": "a12f56332052caf8e37cbbe1d1d30c66234ab33c63edd3a0ca780f081abbffd5"
+    },
+    "frozen-matrix.tar.gz": {
+      "bytes": 2414,
+      "kind": "tar.gz",
+      "members": [
+        {
+          "bytes": 7074,
+          "name": "brotli-mozilla-65536-L8.json",
+          "original": "/tmp/vort-encode-refresh.0LjGA1/matrix/brotli-mozilla-65536-L8.json",
+          "sha256": "33a120f456bf17e8949e7bf1123f4c3fd9cc325885ab8af879a236f649b28332"
+        },
+        {
+          "bytes": 7056,
+          "name": "brotli-nci-65536-L8.json",
+          "original": "/tmp/vort-encode-refresh.0LjGA1/matrix/brotli-nci-65536-L8.json",
+          "sha256": "da4394a8743e7793904a71d9634846b8ee26b7c7a35a10867d4397f3d2a2095c"
+        }
+      ],
+      "original": "multiple retained origins",
+      "sha256": "9bead12b18ee1d877320d4bf5e95d74601b1c44fd4e7b8d6f819ad88f62d4619"
+    },
+    "gate-summary.json": {
+      "bytes": 8451,
+      "kind": "file",
+      "original": "fresh rerun of repaired gate on original input/report/executable paths",
+      "sha256": "2413bb1a6d4c85abd1cda523ff40252f841e38e15398bafefed22191d00d5a0c"
+    },
+    "original-gate.json.gz": {
+      "bytes": 1396,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 8451,
+          "name": "original-gate.json",
+          "original": "/tmp/vort-q8-profile-window.towGZq/q8-explicit16-gate.json",
+          "sha256": "2413bb1a6d4c85abd1cda523ff40252f841e38e15398bafefed22191d00d5a0c"
+        }
+      ],
+      "original": "/tmp/vort-q8-profile-window.towGZq/q8-explicit16-gate.json",
+      "sha256": "2c2beda3191e62c659d2e2b8fe71140cdb6bff05494bd6189f51218c2fa55717"
+    },
+    "physical-wires.csv": {
+      "bytes": 1032,
+      "kind": "derived-file",
+      "original": "archive worker reduction or captured audit result from retained originals",
+      "sha256": "8c457ecc805afc9a01fa3515d558832234bfd8636e70b0e463ec6f87ae5c2ccf"
+    },
+    "post-run-gate-fix.patch.gz": {
+      "bytes": 1643,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 5803,
+          "name": "post-run-gate-fix.patch",
+          "original": "git diff HEAD -- tools/br/quality_profile_gate.py tools/br/quality_profile_wire_counts_tests.py",
+          "sha256": "4c246010d51c0028ae9f925d79931ab021fd0a6396e89a6742e174fce6878aa0"
+        }
+      ],
+      "original": "post-run Python gate repair against HEAD 0dd219d929d1883affab68a98c73a910487a07ce",
+      "sha256": "de515a01e041abfc2ed6a6b38fe9f094f4ffcd105cac15b5d669824541caadac"
+    },
+    "profile.json.gz": {
+      "bytes": 55595,
+      "kind": "gzip",
+      "members": [
+        {
+          "bytes": 1569407,
+          "name": "profile.json",
+          "original": "/tmp/vort-q8-profile-window.towGZq/q8-explicit16-profile.json",
+          "sha256": "44a58d648dfbd9e82911d21d6e0ac9474b9474ccd1a62acedfc218e46eb6bc20"
+        }
+      ],
+      "original": "/tmp/vort-q8-profile-window.towGZq/q8-explicit16-profile.json",
+      "sha256": "93255a7cd610e8d18246adf65aae35de9274c4617a154ce188785c9ceea55b65"
+    },
+    "source-snapshot.tar.gz": {
+      "bytes": 386101,
+      "kind": "tar.gz",
+      "members": [
+        {
+          "bytes": 491027,
+          "name": "build.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/build.zig",
+          "sha256": "4d93a66a5c675e798513b265781760501938ff0351ae6713de6e020804275ee0"
+        },
+        {
+          "bytes": 1734,
+          "name": "build/br_quality_profile.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/build/br_quality_profile.zig",
+          "sha256": "1de80490bec18ecbbbbb91f221b9d50b611df3663967cfc89f90478b477186aa"
+        },
+        {
+          "bytes": 2754637,
+          "name": "src/br.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/src/br.zig",
+          "sha256": "df5535733b410f0221471fa05cab14efb79aa108ceaf61edb84479d7d2dcaff6"
+        },
+        {
+          "bytes": 20067,
+          "name": "src/br/encoder/quality_profile.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/src/br/encoder/quality_profile.zig",
+          "sha256": "c9fe7f43f6fa7fe10e65fe0d73f6c257161f5166f3842e945b5a155d5bfd7667"
+        },
+        {
+          "bytes": 21017,
+          "name": "src/br/encoder/quality_schedule.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/src/br/encoder/quality_schedule.zig",
+          "sha256": "8949bbecd5cbcaed2d75854decf4856b384e543919144de323a3aaa0e46b36e1"
+        },
+        {
+          "bytes": 7222,
+          "name": "tools/br/quality_stage_profile.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/tools/br/quality_stage_profile.zig",
+          "sha256": "fb1e85343975c27cd66e054df5388bb1b4f7d0b0bddaf7a31090b53f2ed56535"
+        },
+        {
+          "bytes": 5776,
+          "name": "tools/br/quality_stage_profile_tests.zig",
+          "original": "/tmp/vort-q8-profile-window.towGZq/source/tools/br/quality_stage_profile_tests.zig",
+          "sha256": "b9c6dd517356fa5c53fa6793d12e2aed7dadfa67956196aab0dfb2339b5e7173"
+        }
+      ],
+      "original": "multiple retained origins",
+      "sha256": "55e77847677e681f090e2e6073705465f3ba74a83b4e9f30cb99f719f7598dad"
+    },
+    "stage-shares.csv": {
+      "bytes": 2854,
+      "kind": "derived-file",
+      "original": "archive worker reduction or captured audit result from retained originals",
+      "sha256": "e224093d7ca5e6a3f3ec3bdf0835bbe14bb24ccd18e14e889eecb62e08b1bff6"
+    },
+    "summary.json": {
+      "bytes": 52573,
+      "kind": "derived-file",
+      "original": "archive worker reduction or captured audit result from retained originals",
+      "sha256": "990711f3a3de66def42b1d14594f28e7eee7bb1dc2f6fef4162ad36ba94336da"
+    },
+    "verification-receipt.json": {
+      "bytes": 1227,
+      "kind": "derived-file",
+      "original": "completed offline verifier output before final inventory refresh",
+      "sha256": "693b709edca8d4a622b71926c8d937fc39234c04f89789d8396c8ee8b4bd3947"
+    }
+  },
+  "codec_revision_comparison": {
+    "command": [
+      "git",
+      "diff",
+      "--name-only",
+      "4a9796b0",
+      "0dd219d929d1883affab68a98c73a910487a07ce",
+      "--",
+      "src/br.zig",
+      "src/br"
+    ],
+    "exit_code": 0,
+    "meaning": "No Brotli production source differences between the frozen matrix reference revision and diagnostic HEAD.",
+    "output": ""
+  },
+  "schema": "vort.q8-explicit16-profile.archive-bindings.v1",
+  "source_codec_reference_revision": "4a9796b0",
+  "source_delta_scopes": {
+    "diagnostic-dirty.patch.gz": "Archive-time snapshot of q8 fixed-window diagnostic, build registration and binding tests, excluding later Python gate edits. It is retained source evidence, not a claim of byte-reproducible compiler inputs.",
+    "post-run-gate-fix.patch.gz": "Python-only audit correction made after the diagnostic binary and raw profile had been produced; not part of encoder compilation."
+  },
+  "source_revision": "0dd219d929d1883affab68a98c73a910487a07ce",
+  "source_snapshot_note": "Archive-time q8 diagnostic build/source snapshot; executable identity binds to the original report. Committed codec source is preserved separately from dirty diagnostic options/build/tests. Later Python audit changes do not rebuild the measured executable.",
+  "validation_phases": {
+    "diagnostic_build": {
+      "evidence": "diagnostic-build.log.gz",
+      "python_event_tests": 19,
+      "python_physical_wire_tests": 9,
+      "python_total": 28,
+      "zig_binding_tests": 2
+    },
+    "post_run_gate_repair": {
+      "binary_rebuilt": false,
+      "evidence": "audit-regressions.json",
+      "python_event_tests": 19,
+      "python_physical_wire_tests": 11,
+      "python_total": 30,
+      "reason": "Accept exactly the first eight context-detail records when more complete proposal events exist; reject reordered/incomplete prefixes.",
+      "source_delta": "post-run-gate-fix.patch.gz"
+    }
+  }
+}
