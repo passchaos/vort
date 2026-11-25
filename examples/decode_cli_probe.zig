@@ -16,6 +16,8 @@ pub fn main(init: std.process.Init) !void {
         try brotli.decodeFile(init, &args, &writer.interface);
     } else if (std.mem.eql(u8, command, "encode-br-stream-file")) {
         try brotli.encodeFile(init, &args, &writer.interface, true);
+    } else if (std.mem.eql(u8, command, "encode-br-file")) {
+        try brotli.encodeFile(init, &args, &writer.interface, false);
     } else if (std.mem.eql(u8, command, "encode-gzip-best-file")) {
         try deflate.encodeGzipBestFile(init, &args, &writer.interface);
     } else if (deflate.isGzipDecodeFileCommand(command)) {

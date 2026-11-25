@@ -3,6 +3,7 @@ const vort = @import("vort");
 const controls = @import("brotli_controls.zig");
 const stream_files = @import("stream_files.zig");
 const decode_stdio = @import("decode_stdio.zig");
+const raw_dictionary = @import("brotli_dictionary.zig");
 
 pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer, streaming: bool) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
@@ -13,14 +14,21 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     const caller_profile = if (parsed.profile) &profile else null;
     const caller_memory_profile = if (parsed.memory_profile) &memory_profile else null;
     // Public bounds validate scalar settings before reading or touching files.
-    const one_shot = try parsed.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, caller_profile, caller_memory_profile);
-    const stream = try parsed.resolveWithMemoryProfile(vort.br.PlannedStreamChunksOptions, caller_profile, caller_memory_profile);
+    var one_shot = try parsed.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, caller_profile, caller_memory_profile);
+    var stream = try parsed.resolveWithMemoryProfile(vort.br.PlannedStreamChunksOptions, caller_profile, caller_memory_profile);
     if (streaming) {
         _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream);
+    } else {
+        if (parsed.hasStreamLimits()) return error.UnsupportedBrotliStreamLimit;
+        _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one_shot);
+    }
+    const dictionary = try parsed.dictionary.load(init.io, init.gpa);
+    defer dictionary.deinit(init.gpa);
+    if (streaming) {
+        stream.shared_dictionary = dictionary.shared();
         return encodeStreamingFile(init, input_path, output_path, parsed, stream, &profile, &memory_profile, stdout);
     }
-    if (parsed.hasStreamLimits()) return error.UnsupportedBrotliStreamLimit;
-    _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one_shot);
+    one_shot.shared_dictionary = dictionary.shared();
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(input);
     const encoded = try vort.br.encodePlannedStreamWithOptionsAlloc(init.gpa, input, one_shot);
@@ -38,8 +46,11 @@ pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdou
     if (parsed.hasStreamLimits()) return error.UnsupportedBrotliStreamLimit;
     var profile: vort.BrotliHqProfile = .{};
     var memory_profile: vort.BrotliEncodeMemoryProfile = .{};
-    const options = try parsed.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
+    var options = try parsed.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, options);
+    const dictionary = try parsed.dictionary.load(init.io, init.gpa);
+    defer dictionary.deinit(init.gpa);
+    options.shared_dictionary = dictionary.shared();
     const encoded = try vort.br.encodePlannedStreamWithOptionsAlloc(init.gpa, input, options);
     defer init.gpa.free(encoded);
     for (encoded) |byte| try stdout.print("{x:0>2}", .{byte});
@@ -156,11 +167,13 @@ pub fn encodeStoredHex(init: std.process.Init, args: *std.process.Args.Iterator,
 pub const DecodeArguments = struct {
     max_output_len: ?vort.StreamCount = null,
     options: vort.BrotliDecodeOptions = .{},
+    dictionary: raw_dictionary.Arguments = .{},
 };
 
 pub fn parseDecodeArguments(args: *std.process.Args.Iterator) !DecodeArguments {
     var parsed: DecodeArguments = .{};
     while (args.next()) |arg| {
+        if (try parsed.dictionary.consume(arg, args)) continue;
         if (std.mem.eql(u8, arg, "--large-window")) {
             if (parsed.options.allow_large_window) return error.DuplicateBrotliOption;
             parsed.options.allow_large_window = true;
@@ -177,7 +190,10 @@ pub fn parseDecodeArguments(args: *std.process.Args.Iterator) !DecodeArguments {
 pub fn decodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
-    const arguments = try parseDecodeArguments(args);
+    var arguments = try parseDecodeArguments(args);
+    const dictionary = try arguments.dictionary.load(init.io, init.gpa);
+    defer dictionary.deinit(init.gpa);
+    arguments.options.shared_dictionary = dictionary.shared();
     if (decode_stdio.isStdio(input_path) or decode_stdio.isStdio(output_path)) {
         const Decoder = vort.BrotliIncrementalStreamDecoder;
         var options: Decoder.Options = .{

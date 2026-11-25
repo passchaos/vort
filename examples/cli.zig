@@ -493,7 +493,10 @@ pub fn main(init: std.process.Init) !void {
         try brotli_cli.encodeStoredHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-hex")) {
         const hex = args.next() orelse return error.MissingCorpusPath;
-        const arguments = try brotli_cli.parseDecodeArguments(&args);
+        var arguments = try brotli_cli.parseDecodeArguments(&args);
+        const dictionary = try arguments.dictionary.load(init.io, init.gpa);
+        defer dictionary.deinit(init.gpa);
+        arguments.options.shared_dictionary = dictionary.shared();
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
         const decoded = try brotli_cli.decodeAlloc(init.gpa, compressed, arguments);
@@ -1059,7 +1062,10 @@ pub fn main(init: std.process.Init) !void {
         try zip_stream_cli.extractArchive(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-br-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
-        const arguments = try brotli_cli.parseDecodeArguments(&args);
+        var arguments = try brotli_cli.parseDecodeArguments(&args);
+        const dictionary = try arguments.dictionary.load(init.io, init.gpa);
+        defer dictionary.deinit(init.gpa);
+        arguments.options.shared_dictionary = dictionary.shared();
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const summary = try vort.brSummarizeStreamAllocLimitedWithOptions(
@@ -2623,6 +2629,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Complete lengths can require more work; finite beam search is not globally optimal
         \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
         \\    --max-total-memory=bytes --memory-profile (all planned qualities)
+        \\    br_dictionary_options: --dictionary=PATH --max-dictionary-bytes=BYTES
+        \\                              RAW history file; defaults to a 32 MiB file cap
         \\    --metadata=TEXT emits caller metadata for planned or stored streams
         \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap
         \\                              Zero beam/iterations selects the public quality defaults
@@ -2631,14 +2639,14 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Stream totals and file pledges use wide counters; one-shot inputs remain limited to 128 MiB
         \\  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
         \\                              Encode text as dependency-free Brotli stored-stream hex
-        \\  decode-br-hex <hex> [max_output] [--large-window]
+        \\  decode-br-hex <hex> [max_output] [--large-window] [br_dictionary_options]
         \\                              Decode dependency-free Brotli stored-stream hex
         \\  encode-br-stored-file <in> <out> [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\    stored_memory_options: --max-total-memory=BYTES --memory-profile
         \\                              Total budget covers encoder-owned requested heap; 0 rejects allocated wire
         \\                              Memory profile reports released encoder heap after output handoff
-        \\  decode-br-file-to <in|-> <out|-> [max_output] [--large-window]
+        \\  decode-br-file-to <in|-> <out|-> [max_output] [--large-window] [br_dictionary_options]
         \\                              Decode Brotli; '-' selects streaming stdin or binary stdout
         \\  encode-bzip2-file <in> <out> [block_size_100k]
         \\                              Encode a deterministic Bzip2 stream
@@ -2811,7 +2819,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Incrementally extract one Stored/Deflate ZIP entry
         \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
         \\                              Sequentially parse and extract a supported ZIP entry
-        \\  size-br-file <path> [max_output] [--large-window]
+        \\  size-br-file <path> [max_output] [--large-window] [br_dictionary_options]
         \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode text as dependency-free native-subset Zstandard hex

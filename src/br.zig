@@ -166,6 +166,7 @@ pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedMode = quality_schedule.Mode;
 pub const SharedDictionary = shared_dictionary.Dictionary;
+pub const shared_dictionary_max_raw_size = shared_dictionary.max_raw_size;
 pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
 pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
 pub const SerializedSharedDictionaryMatcher = serialized_dictionary_matcher.Matcher;

@@ -52,3 +52,30 @@ Existing named stream-file and one-shot commands keep their behavior.
 
 `zig build test-br-encode-stdio-cli` checks native and WASI encoding, input and
 output limits, and preservation of the target on failure.
+
+## RAW dictionaries
+
+```sh
+vort encode-br-stream-file - - --dictionary=prefix.dict < data.bin > data.br
+vort decode-br-file-to data.br - --dictionary=prefix.dict > data.bin
+```
+
+`--dictionary=PATH` (or `--dictionary PATH`) loads one regular file as RAW
+Brotli history, compatible with upstream Brotli's `--dictionary` option.
+It applies to planned file, streaming and hex encoding, file and hex decoding,
+and `size-br-file`. The stored encoders reject it because they never emit
+matches. An empty file is equivalent to no dictionary.
+
+The default dictionary-file cap is 32 MiB. `--max-dictionary-bytes=BYTES`
+requires a dictionary and sets an inclusive cap, subject to the codec's RAW
+size limit on the current target. Dictionary bytes are separate from
+encoder-owned working memory and input or output byte limits. The file is
+loaded before any payload output, so dictionary admission errors
+leave existing destinations unchanged.
+
+Brotli stores no dictionary ID or checksum for RAW history. Use the identical
+bytes when decoding a stream that references a dictionary. A missing or
+incorrect dictionary can cause either a decode error or incorrect plaintext.
+`zig build test-br-dictionary-cli` covers native and WASI file and pipe routes.
+A separate native cross-check with upstream Brotli 1.2.0 verified both
+encoding directions on streams that actually reference RAW history.

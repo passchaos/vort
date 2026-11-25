@@ -27,6 +27,7 @@ pub fn register(
     registerGate(b, native_cli, probe, runner, "test-zstd-seekable-dictionary-cli", "Run seekable Zstd dictionary routing and admission contracts on native and WASI", &.{ "python3", "tools/zstd/seekable_dictionary_cli_gate.py" });
     registerGate(b, native_cli, probe, runner, "test-br-stdio-cli", "Run Brotli binary streaming and atomic output contracts on native and WASI", &.{ "python3", "tools/br/stdio_cli_gate.py" });
     registerGate(b, native_cli, probe, runner, "test-br-encode-stdio-cli", "Run Brotli pipe encoding and atomic output contracts on native and WASI", &.{ "python3", "tools/br/encode_stdio_cli_gate.py" });
+    registerGate(b, native_cli, probe, runner, "test-br-dictionary-cli", "Run Brotli RAW dictionary file and pipe contracts on native and WASI", &.{ "python3", "tools/br/dictionary_cli_gate.py" });
     registerGate(b, native_cli, probe, runner, "test-gzip-stdio-cli", "Run gzip member streaming and atomic output contracts on native and WASI", &.{ "python3", "tools/deflate/stdio_cli_gate.py" });
     registerGate(b, native_cli, probe, runner, "test-gzip-encode-stdio-cli", "Run gzip pipe encoding and rsyncable contracts on native and WASI", &.{ "python3", "tools/deflate/encode_stdio_cli_gate.py" });
     return &probe.step;
