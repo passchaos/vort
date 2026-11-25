@@ -1,0 +1,70 @@
+{
+  "arbitrary_directory_copy_verified": true,
+  "checks": [
+    {
+      "argv": [
+        "/usr/bin/python3",
+        "/tmp/vort-single-modeled-offline-ddlnpw5f/copied-publication/verify.py"
+      ],
+      "case": "relocated-default-root-empty-PATH",
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "{\"acceptance\": \"rejected\", \"control_calls\": 1224, \"control_pairs\": 18, \"merge_allowed\": false, \"primary_pairs\": 90, \"process_wall_intervals\": 216, \"rejection_reasons\": [{\"gate\": \"nci_throughput\", \"observed\": 1.1647193022502793, \"required_minimum\": 1.2}, {\"gate\": \"public_control_ratio\", \"observed\": 0.9766410419669848, \"required_minimum\": 0.98}], \"resource_cap_operations\": 42, \"verification\": \"passed\"}\n",
+      "working_directory": "/tmp/vort-single-modeled-offline-ddlnpw5f/unrelated-cwd"
+    },
+    {
+      "archive_and_member_hashes_rebound_before_check": true,
+      "case": "primary-statistics",
+      "exit_code": 1,
+      "expected_diagnostic": "Recomputed screen medians/ratios/CI differ",
+      "stderr": "Traceback (most recent call last):\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/primary-statistics/verify.py\", line 133, in <module>\n    main()\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/primary-statistics/verify.py\", line 113, in main\n    result, derived = replay(root)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/primary-statistics/verify.py\", line 34, in replay\n    primary_result = primary_replay.verify(primary)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/primary-statistics/primary_replay.py\", line 45, in verify\n    result = screening.verify_stage(aliases, \"v5\", {\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/primary-statistics/screening.py\", line 97, in verify_stage\n    require(actual == summary, \"Recomputed screen medians/ratios/CI differ\")\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/primary-statistics/screening.py\", line 19, in require\n    raise ValueError(message)\nValueError: Recomputed screen medians/ratios/CI differ\n",
+      "stdout": "",
+      "verification_rejected_changed_evidence": true
+    },
+    {
+      "archive_and_member_hashes_rebound_before_check": true,
+      "case": "control-raw-mean",
+      "exit_code": 1,
+      "expected_diagnostic": "Control recorded process mean differs",
+      "stderr": "Traceback (most recent call last):\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/control-raw-mean/verify.py\", line 133, in <module>\n    main()\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/control-raw-mean/verify.py\", line 113, in main\n    result, derived = replay(root)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/control-raw-mean/verify.py\", line 35, in replay\n    controls_result, raw_calls = controls_replay.verify(primary, controls)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/control-raw-mean/controls_replay.py\", line 136, in verify\n    require(means[variant] == record[\"per_call_mean_ns\"], \"Control recorded process mean differs\")\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/control-raw-mean/archive_io.py\", line 12, in require\n    raise ValueError(message)\nValueError: Control recorded process mean differs\n",
+      "stdout": "",
+      "verification_rejected_changed_evidence": true
+    },
+    {
+      "archive_and_member_hashes_rebound_before_check": true,
+      "case": "resource-error-class",
+      "exit_code": 1,
+      "expected_diagnostic": "Finite cap refusal/error class differs",
+      "stderr": "Traceback (most recent call last):\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/resource-error-class/verify.py\", line 133, in <module>\n    main()\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/resource-error-class/verify.py\", line 113, in main\n    result, derived = replay(root)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/resource-error-class/verify.py\", line 36, in replay\n    resources_result = resources_replay.verify(primary, packages[\"resources.tar.gz\"], registry, declared)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/resource-error-class/resources_replay.py\", line 113, in verify\n    phases(report, wire)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/resource-error-class/resources_replay.py\", line 35, in phases\n    require(measured[\"error_name\"] == \"WorkingMemoryLimitExceeded\" and measured[\"wire_bytes\"] is None and\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/resource-error-class/archive_io.py\", line 12, in require\n    raise ValueError(message)\nValueError: Finite cap refusal/error class differs\n",
+      "stdout": "",
+      "verification_rejected_changed_evidence": true
+    },
+    {
+      "archive_and_member_hashes_rebound_before_check": true,
+      "case": "reservation-interval",
+      "exit_code": 1,
+      "expected_diagnostic": "Primary process escapes stage",
+      "stderr": "Traceback (most recent call last):\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/reservation-interval/verify.py\", line 133, in <module>\n    main()\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/reservation-interval/verify.py\", line 113, in main\n    result, derived = replay(root)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/reservation-interval/verify.py\", line 37, in replay\n    reserved, intervals = provenance_replay.reservation(primary, controls)\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/reservation-interval/provenance_replay.py\", line 27, in reservation\n    require(stage_primary[\"started_unix\"] <= begin < finish <= stage_primary[\"ended_unix\"], \"Primary process escapes stage\")\n  File \"/tmp/vort-single-modeled-offline-ddlnpw5f/reservation-interval/archive_io.py\", line 12, in require\n    raise ValueError(message)\nValueError: Primary process escapes stage\n",
+      "stdout": "",
+      "verification_rejected_changed_evidence": true
+    }
+  ],
+  "codec_test_build_wasm_git_executed": false,
+  "external_command_PATH": "/nonexistent",
+  "implementation_scope": "Recorded checks identify the copied implementation at test time; final publication inventory additionally covers later identity-link and explanatory-document updates.",
+  "original_absolute_artifact_paths_opened": false,
+  "schema": "vort.single-modeled.migration-verification.v1",
+  "scope": "Executed only copied pure Python offline verifiers. Four bounded negative checks rebind archive/member hashes so statistics, cap and interval gates must detect altered records before publication inventory.",
+  "temporary_copies_removed_after_verification": true,
+  "tested_implementation_sha256": {
+    "archive_io.py": "d4b32e30f966555558e67566a75efa2a27f67c52dfed88ff82e62a51eebcdf49",
+    "controls_replay.py": "ec721126ae566e002f22714d0f2392173125291d74464be46bd3e9d008522a7a",
+    "primary_replay.py": "1071bc7d6a797589a050ae3da18d035769dbe1706eada81cf3328591a54adf27",
+    "provenance_replay.py": "2da2dbcc533de374e543e8d8a0657e0cb010857b702281482869e69cea880ec0",
+    "resources_replay.py": "a71edee78d6c7d2a3b97e0ad60ff05907c468a55277c2452c130a0e1bafa9c86",
+    "screening.py": "11c9bc381d9840219fdb2961d4da130b6aea216d01829438e5b22fb03783d98b",
+    "verify.py": "b2225fa83dd26f83421c5e7efb8b5147dd85cd81da46f7504c1ce4e7a63d2014"
+  },
+  "tested_publication_inventory_sha256": "0c8518d116c42d40cfd47070025e80851fe67d8e96a2697013447680da058aa2",
+  "utc": "2026-11-25T17:30:59.303504+00:00"
+}

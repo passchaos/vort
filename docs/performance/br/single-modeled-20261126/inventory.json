@@ -1,0 +1,90 @@
+{
+  "files": {
+    ".gitattributes": {
+      "bytes": 28,
+      "sha256": "c373ed429f0d412af0dd262d9c8f00587162a07699ebf564c1503b5ff0825eea"
+    },
+    "README.md": {
+      "bytes": 15358,
+      "sha256": "43aac6d55494151860e9ce599e6c38d2cc8c5351e7004536e21ac0d55eecee95"
+    },
+    "archive-bindings.json": {
+      "bytes": 972824,
+      "sha256": "ea4be6665456908a912682d428061b7985f27ca33473fab579b647cc7150acbc"
+    },
+    "archive_io.py": {
+      "bytes": 2638,
+      "sha256": "d4b32e30f966555558e67566a75efa2a27f67c52dfed88ff82e62a51eebcdf49"
+    },
+    "code-tests.tar.gz": {
+      "bytes": 538273,
+      "sha256": "34c67d4d5086a471a2bb51dff2de2b15646a294dfebdea002fb0fab95484144f"
+    },
+    "control-calls.csv": {
+      "bytes": 58978,
+      "sha256": "64f140f50937af48b0b53cf1aa3bf4578ce4f9f56c6f1e85dc708c676bd0fcea"
+    },
+    "controls.tar.gz": {
+      "bytes": 7381843,
+      "sha256": "d87d98195459de544f047122b252557eec469dba39a1874e3207d218264b2350"
+    },
+    "controls_replay.py": {
+      "bytes": 11224,
+      "sha256": "ec721126ae566e002f22714d0f2392173125291d74464be46bd3e9d008522a7a"
+    },
+    "migration-verification.json": {
+      "bytes": 7402,
+      "sha256": "32350e6f14d7cb54d3cc2ce4f2d43a4359fa6abdeaf1af4b25665220f8aa2a85"
+    },
+    "offline-receipt.json": {
+      "bytes": 1432,
+      "sha256": "6fdb49901354466d2a606f510dde5e9b41b67d8115625f26b69dc7e9a0f62027"
+    },
+    "primary-pairs.csv": {
+      "bytes": 6874,
+      "sha256": "0bd7b4e1ec23f5ba0fef569191704173e32af1140e744ed90c8485dd8aee0f6c"
+    },
+    "primary.tar.gz": {
+      "bytes": 16002223,
+      "sha256": "97daef2956447fcad81bdf930b1ef076644f9c440802d80af742966229cb96c9"
+    },
+    "primary_replay.py": {
+      "bytes": 6788,
+      "sha256": "1071bc7d6a797589a050ae3da18d035769dbe1706eada81cf3328591a54adf27"
+    },
+    "process-intervals.csv": {
+      "bytes": 18060,
+      "sha256": "b59c8395c4281b430c9ce1754afc985b1b8673e57f04be54fff3078e5d59a682"
+    },
+    "provenance_replay.py": {
+      "bytes": 7778,
+      "sha256": "2da2dbcc533de374e543e8d8a0657e0cb010857b702281482869e69cea880ec0"
+    },
+    "resource-rows.csv": {
+      "bytes": 5639,
+      "sha256": "45972a03a455766b6a4413d34f992be749308145ab3c8645be6f75a9e35090d9"
+    },
+    "resources.tar.gz": {
+      "bytes": 14216962,
+      "sha256": "dd32efd70e730e8076caecd35f8f8c123974659e78f5e69fcbf6107957e152f8"
+    },
+    "resources_replay.py": {
+      "bytes": 11441,
+      "sha256": "ca7b59878c5b001001ec84d97488dc5a87c5a363e72f651639b230484f8de6d2"
+    },
+    "screening.py": {
+      "bytes": 7994,
+      "sha256": "11c9bc381d9840219fdb2961d4da130b6aea216d01829438e5b22fb03783d98b"
+    },
+    "summary.json": {
+      "bytes": 82797,
+      "sha256": "a5325debca48f493eb646212e6c9e89b7d3677048acfdfecbd8bb5b6bd6de864"
+    },
+    "verify.py": {
+      "bytes": 8159,
+      "sha256": "b2225fa83dd26f83421c5e7efb8b5147dd85cd81da46f7504c1ce4e7a63d2014"
+    }
+  },
+  "schema": "vort.single-modeled.publication-inventory.v1",
+  "scope": "All publication files except inventory.json and SHA256SUMS; SHA256SUMS binds inventory.json and every other file"
+}

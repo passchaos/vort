@@ -1,0 +1,38 @@
+{
+  "acceptance": "rejected",
+  "archives": {
+    "code-tests.tar.gz": {
+      "bytes": 538273,
+      "sha256": "34c67d4d5086a471a2bb51dff2de2b15646a294dfebdea002fb0fab95484144f"
+    },
+    "controls.tar.gz": {
+      "bytes": 7381843,
+      "sha256": "d87d98195459de544f047122b252557eec469dba39a1874e3207d218264b2350"
+    },
+    "primary.tar.gz": {
+      "bytes": 16002223,
+      "sha256": "97daef2956447fcad81bdf930b1ef076644f9c440802d80af742966229cb96c9"
+    },
+    "resources.tar.gz": {
+      "bytes": 14216962,
+      "sha256": "dd32efd70e730e8076caecd35f8f8c123974659e78f5e69fcbf6107957e152f8"
+    }
+  },
+  "baseline_git_blobs_reconstructed": 2189,
+  "candidate_source_files": 2196,
+  "executable_artifacts_run": false,
+  "focused_tests_recorded_per_platform": 22,
+  "merge_allowed": false,
+  "new_resource_cap_operations": 42,
+  "primary_pairs": 90,
+  "primary_timed_calls": 180,
+  "public_control_pairs": 18,
+  "public_control_processes": 36,
+  "public_control_timed_calls": 1224,
+  "reused_v4_source_files_reconstructed": 2195,
+  "schema": "vort.single-modeled.offline-receipt.v1",
+  "scope": "Archive bytes, source/blob/ELF/module hashes, recorded argv/exits/logs, per-call samples, deterministic statistics, caps and process wall intervals. No original absolute path is opened, and no codec/test/build/Git is run.",
+  "verification_passed": true,
+  "verified_member_count": 3629,
+  "verified_process_wall_intervals": 216
+}

@@ -1,0 +1,2310 @@
+{
+  "acceptance": "rejected",
+  "candidate_status": "unmerged frozen v5; archive publication only",
+  "claim_scope": "Matched reserved c2/v5 development-host result, not competitor parity or leadership. Resource-only comparisons to reused v4 are requested-heap observations. Independent v4/v5 timing ratios do not establish source causality.",
+  "code_validation": {
+    "all_recorded_terminal_exit_codes": {
+      "full_br": 0,
+      "native": 0,
+      "wasi_build": 0,
+      "wasi_run": 0,
+      "x86": 0
+    },
+    "full_br_steps_succeeded": 5,
+    "full_br_tests_passed": 1710,
+    "full_br_tests_skipped": 1,
+    "full_log_diagnostic_scope": "Original failed-command diagnostic text retained; recorded terminal 5/5 success authoritative",
+    "native_source_binding": "Source snapshot after native completion; instantaneous native source identity was not measured",
+    "native_tests_recorded": 22,
+    "old_base_identity_scope": "Raw base-identity.json is the v4 starting parent, not v5",
+    "scope": "Offline validation of actual logs, module bytes and receipts; no tests, WASM, codecs or builds executed",
+    "wasi_module_sha256": "ff5fdf30e3e7a64e6329f7e8e85c0a46f03996433ff9303335e32b0195636e28",
+    "wasi_tests_recorded": 22,
+    "x86_tests_recorded": 22,
+    "x86_wasi_full_source_binding": "Nine hashes measured before platform/full checks and unchanged after; match frozen primary v5"
+  },
+  "gate_thresholds": {
+    "bootstrap_draws": 20000,
+    "confidence_level": 0.95,
+    "control_throughput": 0.98,
+    "nci_throughput": 1.2,
+    "overall_throughput": 1.03
+  },
+  "gates": {
+    "all_primary_row_throughput_at_least_0_98": true,
+    "all_public_control_throughput_at_least_0_98": false,
+    "finite_caps_and_original_error_class_preserved": true,
+    "initial_wire_bytes_identical": true,
+    "nci_throughput_at_least_1_20": false,
+    "overall_95pct_ci_excludes_parity": true,
+    "overall_geomean_throughput_at_least_1_03": true,
+    "recorded_code_validation_passed": true
+  },
+  "merge_allowed": false,
+  "offline_scope": "Archive bytes, source/blob/ELF/module hashes, recorded argv/exits/logs, per-call samples, deterministic statistics, caps and process wall intervals. No original absolute path is opened, and no codec/test/build/Git is run.",
+  "primary": {
+    "baseline_original_source_cid": "c2c8f250302ca2f223740076482dd95b1788eeb1",
+    "candidate_source_label": "e41aa51c+single-compact-modeled-dp-v5",
+    "full_summary": {
+      "host_scope": "Fixed development host reserved at original collector task boundary; resource/control builds and validation complete before start; no other codec/test/compiler in measured slots.",
+      "matrix": [
+        {
+          "geomean_encoded_bytes_current_over_old": 1.0,
+          "lane": "explicit16",
+          "paired_geomean_ns_current_over_old": 0.9363383969322572,
+          "paired_round_block_bootstrap_95pct_ci": [
+            0.9315814120831424,
+            0.9414120633330949
+          ],
+          "primary_rounds": 6,
+          "rows": 12
+        }
+      ],
+      "ratio_direction": "current elapsed / exact-old elapsed; values above one mean current is slower",
+      "rows": [
+        {
+          "case": "dickens",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 22367,
+          "current_first_pairs": 6,
+          "current_per_call_median_ns": 108513253.0,
+          "current_wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 22367,
+          "old_first_pairs": 6,
+          "old_per_call_median_ns": 114854846.5,
+          "old_wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0",
+          "paired_geomean_ns_current_over_old": 0.9471475154516068,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9343046783460033,
+            0.9591872412193699
+          ],
+          "pairs": 12,
+          "primary_six_round_paired_geomean": 0.9503187678831259,
+          "ratio_of_median_ns_current_over_old": 0.9447860173667116,
+          "raw_pairs": [
+            {
+              "current_ns": 110643587,
+              "current_over_old_ns_ratio": 0.9229985478760443,
+              "old_ns": 119874064,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 113356965,
+              "current_over_old_ns_ratio": 0.9872409279940435,
+              "old_ns": 114821987,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 107488799,
+              "current_over_old_ns_ratio": 0.9350714989284443,
+              "old_ns": 114952492,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 108930485,
+              "current_over_old_ns_ratio": 0.9543840869896765,
+              "old_ns": 114136946,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 113752957,
+              "current_over_old_ns_ratio": 0.9513371856957732,
+              "old_ns": 119571650,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 108269346,
+              "current_over_old_ns_ratio": 0.9521145151548052,
+              "old_ns": 113714626,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            },
+            {
+              "current_ns": 111823564,
+              "current_over_old_ns_ratio": 0.9733292437747865,
+              "old_ns": 114887706,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 6
+            },
+            {
+              "current_ns": 107744581,
+              "current_over_old_ns_ratio": 0.9361237154357379,
+              "old_ns": 115096519,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 7
+            },
+            {
+              "current_ns": 108303829,
+              "current_over_old_ns_ratio": 0.953811711208319,
+              "old_ns": 113548437,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 8
+            },
+            {
+              "current_ns": 107666655,
+              "current_over_old_ns_ratio": 0.8974705598087978,
+              "old_ns": 119966782,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 9
+            },
+            {
+              "current_ns": 108722677,
+              "current_over_old_ns_ratio": 0.9544760378203047,
+              "old_ns": 113908231,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 10
+            },
+            {
+              "current_ns": 107906915,
+              "current_over_old_ns_ratio": 0.9505057397090124,
+              "old_ns": 113525790,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 11
+            }
+          ]
+        },
+        {
+          "case": "mozilla",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 13924,
+          "current_first_pairs": 6,
+          "current_per_call_median_ns": 161781974.0,
+          "current_wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 13924,
+          "old_first_pairs": 6,
+          "old_per_call_median_ns": 164116198.5,
+          "old_wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb",
+          "paired_geomean_ns_current_over_old": 0.9806339071126148,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.952775290202693,
+            1.005421234776261
+          ],
+          "pairs": 12,
+          "primary_six_round_paired_geomean": 0.9825943076874436,
+          "ratio_of_median_ns_current_over_old": 0.9857770011654273,
+          "raw_pairs": [
+            {
+              "current_ns": 161700655,
+              "current_over_old_ns_ratio": 0.9697114523418137,
+              "old_ns": 166751310,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 172197930,
+              "current_over_old_ns_ratio": 1.050118585243477,
+              "old_ns": 163979509,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 159741339,
+              "current_over_old_ns_ratio": 0.9742096590657036,
+              "old_ns": 163970186,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 161660524,
+              "current_over_old_ns_ratio": 0.9762252836106117,
+              "old_ns": 165597559,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 166414713,
+              "current_over_old_ns_ratio": 0.95402174244611,
+              "old_ns": 174434927,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 161232338,
+              "current_over_old_ns_ratio": 0.974100662355283,
+              "old_ns": 165519175,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            },
+            {
+              "current_ns": 166372720,
+              "current_over_old_ns_ratio": 1.020134039877275,
+              "old_ns": 163089078,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 6
+            },
+            {
+              "current_ns": 165163188,
+              "current_over_old_ns_ratio": 1.0128934567591368,
+              "old_ns": 163060771,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 7
+            },
+            {
+              "current_ns": 169738952,
+              "current_over_old_ns_ratio": 1.037830805032301,
+              "old_ns": 163551661,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 8
+            },
+            {
+              "current_ns": 161863293,
+              "current_over_old_ns_ratio": 0.8612778576959544,
+              "old_ns": 187933884,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 9
+            },
+            {
+              "current_ns": 160494568,
+              "current_over_old_ns_ratio": 0.9771186976024434,
+              "old_ns": 164252888,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 10
+            },
+            {
+              "current_ns": 159386394,
+              "current_over_old_ns_ratio": 0.9736418575410433,
+              "old_ns": 163701255,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 11
+            }
+          ]
+        },
+        {
+          "case": "mr",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 15438,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 168448854.0,
+          "current_wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 15438,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 184731822.0,
+          "old_wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513",
+          "paired_geomean_ns_current_over_old": 0.9179911531265582,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9053132198175032,
+            0.9383891893078864
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9179911531265582,
+          "ratio_of_median_ns_current_over_old": 0.9118561825260404,
+          "raw_pairs": [
+            {
+              "current_ns": 169124484,
+              "current_over_old_ns_ratio": 0.9170016495886596,
+              "old_ns": 184432039,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 169059860,
+              "current_over_old_ns_ratio": 0.903829161541168,
+              "old_ns": 187048468,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 180864477,
+              "current_over_old_ns_ratio": 0.9773999975973611,
+              "old_ns": 185046529,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 166550927,
+              "current_over_old_ns_ratio": 0.906429062282231,
+              "old_ns": 183744028,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 167837848,
+              "current_over_old_ns_ratio": 0.9104583391428868,
+              "old_ns": 184344347,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 165635793,
+              "current_over_old_ns_ratio": 0.8951756809329952,
+              "old_ns": 185031605,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "nci",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 4206,
+          "current_first_pairs": 6,
+          "current_per_call_median_ns": 81454101.5,
+          "current_wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 4206,
+          "old_first_pairs": 6,
+          "old_per_call_median_ns": 94298869.0,
+          "old_wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615",
+          "paired_geomean_ns_current_over_old": 0.8585759659584624,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.8497650963682636,
+            0.8649720165064607
+          ],
+          "pairs": 12,
+          "primary_six_round_paired_geomean": 0.8631829822689984,
+          "ratio_of_median_ns_current_over_old": 0.8637866218734819,
+          "raw_pairs": [
+            {
+              "current_ns": 81758600,
+              "current_over_old_ns_ratio": 0.8493847127768774,
+              "old_ns": 96256265,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 81365720,
+              "current_over_old_ns_ratio": 0.8630678426207143,
+              "old_ns": 94274999,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 80980575,
+              "current_over_old_ns_ratio": 0.8616694626212825,
+              "old_ns": 93981020,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 87351267,
+              "current_over_old_ns_ratio": 0.8695926073973353,
+              "old_ns": 100450793,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 81331685,
+              "current_over_old_ns_ratio": 0.8622701785621386,
+              "old_ns": 94322739,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 81775183,
+              "current_over_old_ns_ratio": 0.8733089974974454,
+              "old_ns": 93638315,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            },
+            {
+              "current_ns": 81542483,
+              "current_over_old_ns_ratio": 0.8655951581648116,
+              "old_ns": 94203950,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 6
+            },
+            {
+              "current_ns": 81079138,
+              "current_over_old_ns_ratio": 0.8603627363089955,
+              "old_ns": 94238319,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 7
+            },
+            {
+              "current_ns": 83733793,
+              "current_over_old_ns_ratio": 0.8529716637883276,
+              "old_ns": 98167145,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 8
+            },
+            {
+              "current_ns": 81245842,
+              "current_over_old_ns_ratio": 0.8650622222389269,
+              "old_ns": 93919073,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 9
+            },
+            {
+              "current_ns": 81219181,
+              "current_over_old_ns_ratio": 0.8101932819256755,
+              "old_ns": 100246673,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 10
+            },
+            {
+              "current_ns": 82216434,
+              "current_over_old_ns_ratio": 0.8712855458087753,
+              "old_ns": 94362215,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 11
+            }
+          ]
+        },
+        {
+          "case": "ooffice",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 30682,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 160254528.0,
+          "current_wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 30682,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 161108868.0,
+          "old_wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8",
+          "paired_geomean_ns_current_over_old": 0.9976727629011316,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9746369558521505,
+            1.021253027456276
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9976727629011316,
+          "ratio_of_median_ns_current_over_old": 0.9946971261693677,
+          "raw_pairs": [
+            {
+              "current_ns": 156329844,
+              "current_over_old_ns_ratio": 0.9662734264288303,
+              "old_ns": 161786343,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 165659811,
+              "current_over_old_ns_ratio": 1.0285713620471015,
+              "old_ns": 161058160,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 156618517,
+              "current_over_old_ns_ratio": 0.9739138056356328,
+              "old_ns": 160813530,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 163890539,
+              "current_over_old_ns_ratio": 1.0178878181134297,
+              "old_ns": 161010414,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 167614482,
+              "current_over_old_ns_ratio": 1.0400528852222843,
+              "old_ns": 161159576,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 155806268,
+              "current_over_old_ns_ratio": 0.9623174666681432,
+              "old_ns": 161907347,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "osdb",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 25418,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 147150700.5,
+          "current_wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 25418,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 148905271.0,
+          "old_wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5",
+          "paired_geomean_ns_current_over_old": 0.9836816654311786,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9643888385481347,
+            1.000993184201953
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9836816654311786,
+          "ratio_of_median_ns_current_over_old": 0.9882168677561455,
+          "raw_pairs": [
+            {
+              "current_ns": 147084625,
+              "current_over_old_ns_ratio": 0.9836456859682025,
+              "old_ns": 149530087,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 147216776,
+              "current_over_old_ns_ratio": 0.9885147275200402,
+              "old_ns": 148927246,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 150585174,
+              "current_over_old_ns_ratio": 1.0220463459762665,
+              "old_ns": 147336933,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 147986615,
+              "current_over_old_ns_ratio": 0.9952034052915232,
+              "old_ns": 148699868,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 146099074,
+              "current_over_old_ns_ratio": 0.9812992990160562,
+              "old_ns": 148883296,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 146996680,
+              "current_over_old_ns_ratio": 0.9335158434013016,
+              "old_ns": 157465651,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "reymont",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 17128,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 94288651.5,
+          "current_wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 17128,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 104847250.5,
+          "old_wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7",
+          "paired_geomean_ns_current_over_old": 0.890119776534283,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.8647579312302166,
+            0.9076516017984075
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.890119776534283,
+          "ratio_of_median_ns_current_over_old": 0.8992954135692858,
+          "raw_pairs": [
+            {
+              "current_ns": 93793859,
+              "current_over_old_ns_ratio": 0.8259161035143868,
+              "old_ns": 113563422,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 95962311,
+              "current_over_old_ns_ratio": 0.9187695180563877,
+              "old_ns": 104446555,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 94379346,
+              "current_over_old_ns_ratio": 0.9023835137003763,
+              "old_ns": 104588952,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 94197957,
+              "current_over_old_ns_ratio": 0.8942592069945574,
+              "old_ns": 105336301,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 94100749,
+              "current_over_old_ns_ratio": 0.9036851487663269,
+              "old_ns": 104130016,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 94471784,
+              "current_over_old_ns_ratio": 0.8988277488565328,
+              "old_ns": 105105549,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "samba",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 18744,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 105127578.5,
+          "current_wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 18744,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 111697050.0,
+          "old_wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907",
+          "paired_geomean_ns_current_over_old": 0.9398238037648687,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9173528027735077,
+            0.9622810354454923
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9398238037648687,
+          "ratio_of_median_ns_current_over_old": 0.9411849149104654,
+          "raw_pairs": [
+            {
+              "current_ns": 104931426,
+              "current_over_old_ns_ratio": 0.9344824494104145,
+              "old_ns": 112288279,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 105021922,
+              "current_over_old_ns_ratio": 0.8911047877372853,
+              "old_ns": 117855861,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 104822599,
+              "current_over_old_ns_ratio": 0.9443739685130174,
+              "old_ns": 110996917,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 109228248,
+              "current_over_old_ns_ratio": 0.9839751540261562,
+              "old_ns": 111007120,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 105579698,
+              "current_over_old_ns_ratio": 0.9463879889377881,
+              "old_ns": 111560691,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 105233235,
+              "current_over_old_ns_ratio": 0.9409820906022814,
+              "old_ns": 111833409,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "sao",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 46709,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 177690827.5,
+          "current_wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 46709,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 182230735.5,
+          "old_wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095",
+          "paired_geomean_ns_current_over_old": 0.9665596840372697,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9444794225147064,
+            0.9891561430939271
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9665596840372697,
+          "ratio_of_median_ns_current_over_old": 0.9750870346457006,
+          "raw_pairs": [
+            {
+              "current_ns": 177307873,
+              "current_over_old_ns_ratio": 0.9685764011097415,
+              "old_ns": 183060286,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 185402224,
+              "current_over_old_ns_ratio": 0.9164211134050801,
+              "old_ns": 202311166,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 183344456,
+              "current_over_old_ns_ratio": 1.0117571725033245,
+              "old_ns": 181213893,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 175989502,
+              "current_over_old_ns_ratio": 0.9803539935208104,
+              "old_ns": 179516280,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 177294938,
+              "current_over_old_ns_ratio": 0.9434611290845676,
+              "old_ns": 187919706,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 178073782,
+              "current_over_old_ns_ratio": 0.981657214642782,
+              "old_ns": 181401185,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "webster",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 19555,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 103965840.5,
+          "current_wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 19555,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 109095725.5,
+          "old_wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c",
+          "paired_geomean_ns_current_over_old": 0.9501763924540277,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9246770609244428,
+            0.9798013532740144
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9501763924540277,
+          "ratio_of_median_ns_current_over_old": 0.9529781302018107,
+          "raw_pairs": [
+            {
+              "current_ns": 110625967,
+              "current_over_old_ns_ratio": 1.014029740780882,
+              "old_ns": 109095387,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 103995846,
+              "current_over_old_ns_ratio": 0.9506974654609013,
+              "old_ns": 109389001,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 104120583,
+              "current_over_old_ns_ratio": 0.8960298158361816,
+              "old_ns": 116202141,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 102287966,
+              "current_over_old_ns_ratio": 0.9384052886340787,
+              "old_ns": 109001907,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 102785848,
+              "current_over_old_ns_ratio": 0.9421590865092988,
+              "old_ns": 109096064,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 103935835,
+              "current_over_old_ns_ratio": 0.9635965538240676,
+              "old_ns": 107862398,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "x-ray",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 41180,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 154831926.5,
+          "current_wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 41180,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 155745080.5,
+          "old_wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288",
+          "paired_geomean_ns_current_over_old": 0.9989426693501837,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.9854746845111302,
+            1.0138702390973358
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.9989426693501837,
+          "ratio_of_median_ns_current_over_old": 0.9941368677773421,
+          "raw_pairs": [
+            {
+              "current_ns": 154771591,
+              "current_over_old_ns_ratio": 0.987472870694746,
+              "old_ns": 156735031,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 156693870,
+              "current_over_old_ns_ratio": 1.007869050883716,
+              "old_ns": 155470465,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 153802899,
+              "current_over_old_ns_ratio": 0.9809310909152531,
+              "old_ns": 156792766,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 161658028,
+              "current_over_old_ns_ratio": 1.0431797068033009,
+              "old_ns": 154966615,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 154892262,
+              "current_over_old_ns_ratio": 0.9943513336371574,
+              "old_ns": 155772167,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 152797206,
+              "current_over_old_ns_ratio": 0.9812430925612874,
+              "old_ns": 155717994,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        },
+        {
+          "case": "xml",
+          "current_actual_window_bits": 16,
+          "current_encoded_bytes": 4407,
+          "current_first_pairs": 3,
+          "current_per_call_median_ns": 80453767.5,
+          "current_wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658",
+          "encoded_bytes_current_over_old": 1.0,
+          "input_bytes": 65536,
+          "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+          "lane": "explicit16",
+          "old_actual_window_bits": 16,
+          "old_encoded_bytes": 4407,
+          "old_first_pairs": 3,
+          "old_per_call_median_ns": 98531817.0,
+          "old_wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658",
+          "paired_geomean_ns_current_over_old": 0.8148881859437824,
+          "paired_ratio_bootstrap_95pct_ci": [
+            0.7851614974660028,
+            0.8405935614131853
+          ],
+          "pairs": 6,
+          "primary_six_round_paired_geomean": 0.8148881859437824,
+          "ratio_of_median_ns_current_over_old": 0.8165257675091895,
+          "raw_pairs": [
+            {
+              "current_ns": 80581973,
+              "current_over_old_ns_ratio": 0.8327540952868099,
+              "old_ns": 96765628,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 0
+            },
+            {
+              "current_ns": 80249516,
+              "current_over_old_ns_ratio": 0.7582505575419268,
+              "old_ns": 105835090,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 1
+            },
+            {
+              "current_ns": 80136633,
+              "current_over_old_ns_ratio": 0.8321863774546233,
+              "old_ns": 96296497,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 2
+            },
+            {
+              "current_ns": 85328647,
+              "current_over_old_ns_ratio": 0.8507511804372262,
+              "old_ns": 100298006,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 3
+            },
+            {
+              "current_ns": 80325562,
+              "current_over_old_ns_ratio": 0.7754938775319481,
+              "old_ns": 103579879,
+              "order": [
+                "old_exact",
+                "current"
+              ],
+              "round": 4
+            },
+            {
+              "current_ns": 80652590,
+              "current_over_old_ns_ratio": 0.8446116699739333,
+              "old_ns": 95490736,
+              "order": [
+                "current",
+                "old_exact"
+              ],
+              "round": 5
+            }
+          ]
+        }
+      ],
+      "schema": "vort.q8-source-history-ab.summary.v1",
+      "source_revisions": {
+        "current": "e41aa51c+single-compact-modeled-dp-v5",
+        "old_exact": "c2c8f250302ca2f223740076482dd95b1788eeb1"
+      },
+      "statistics_scope": "Descriptive paired bootstrap, 20000 draws, 95 percent percentile interval, stratified by AB/BA. Matrix resamples shared primary-round blocks. Small sample on a non-quiet host; not an acceptance gate or an industry ranking.",
+      "timer_scope": "Continuous per-call allocating public encode, length mix and free; one encode/free warmup per process; complete SHA256/cross-library decode initial_wire_only outside timing.",
+      "total_pairs": 90,
+      "total_timed_calls": 180,
+      "wire_identity_scope": "All initial complete wires pinned-decoder verified before sampling; each sample process's initial wire SHA matches preflight. Timed output identity is checked by length/mix only, with no SHA inside the continuous encode/free timer."
+    },
+    "label": "v5",
+    "matrix_throughput_95pct_ci": [
+      1.0622341044361308,
+      1.0734434876323524
+    ],
+    "matrix_throughput_ratio": 1.0679899524320677,
+    "normal_elf_sha256": {
+      "current": "919db198ed7bb5d5587246258e8ffa6bb8c79949fde819b1b7f01c43e5df93db",
+      "old_exact": "f634b02f8e63bf497c5eb3dcd17acbc791b2db46b5a6d534d73ef0ca3a047df5"
+    },
+    "row_median_throughput_mib_per_second": {
+      "dickens": {
+        "baseline": 0.5441651084353676,
+        "candidate": 0.5759665135096448
+      },
+      "mozilla": {
+        "baseline": 0.3808277340764751,
+        "candidate": 0.386322397079912
+      },
+      "mr": {
+        "baseline": 0.33832828217327926,
+        "candidate": 0.37103250343276306
+      },
+      "nci": {
+        "baseline": 0.6627863161328054,
+        "candidate": 0.7673032892026929
+      },
+      "ooffice": {
+        "baseline": 0.38793643562811203,
+        "candidate": 0.39000458071300176
+      },
+      "osdb": {
+        "baseline": 0.4197299368939062,
+        "candidate": 0.4247346413413778
+      },
+      "reymont": {
+        "baseline": 0.5961052836573907,
+        "candidate": 0.6628581383412828
+      },
+      "samba": {
+        "baseline": 0.5595492450337767,
+        "candidate": 0.594515738798264
+      },
+      "sao": {
+        "baseline": 0.3429717815082846,
+        "candidate": 0.35173453171070407
+      },
+      "webster": {
+        "baseline": 0.5728913732738319,
+        "candidate": 0.6011589931791106
+      },
+      "x-ray": {
+        "baseline": 0.40129678445926903,
+        "candidate": 0.40366351703309716
+      },
+      "xml": {
+        "baseline": 0.6343128737796442,
+        "candidate": 0.7768436698753728
+      }
+    },
+    "scope": "Reserved fixed development-host c2 versus unmerged frozen v5; 90 matched AB/BA pairs. Original reducer prose retained raw; reservation receipts determine the actual window. Initial complete wires and recorded pinned-decode receipts verified offline; timed outputs have length/mix checks only. No codec is executed by this verifier.",
+    "verified_initial_wires": 24,
+    "verified_pairs": 90,
+    "verified_timed_calls": 180,
+    "weak_rows": {
+      "dickens": {
+        "elapsed_ratio": 0.9471475154516068,
+        "elapsed_ratio_ci": [
+          0.9343046783460033,
+          0.9591872412193699
+        ],
+        "pairs": 12
+      },
+      "mozilla": {
+        "elapsed_ratio": 0.9806339071126148,
+        "elapsed_ratio_ci": [
+          0.952775290202693,
+          1.005421234776261
+        ],
+        "pairs": 12
+      },
+      "nci": {
+        "elapsed_ratio": 0.8585759659584624,
+        "elapsed_ratio_ci": [
+          0.8497650963682636,
+          0.8649720165064607
+        ],
+        "pairs": 12
+      }
+    },
+    "worst_row": {
+      "baseline_over_candidate_speed": 1.0010584497812112,
+      "candidate_over_baseline_elapsed": 0.9989426693501837,
+      "case": "x-ray"
+    }
+  },
+  "public_controls": {
+    "elf_sha256": {
+      "baseline": "577ef8468aa04bfdbac90e1a26851a2568a8035ae4212fc61b04082beba155c2",
+      "v5": "66a4861d9390f324672bb941b529c910051c20dec75f9f4841802835b867cf60"
+    },
+    "rows": [
+      {
+        "candidate_over_baseline_time": 0.9998750888346796,
+        "control": "q4",
+        "pairs": 6,
+        "passes_control_floor": true,
+        "throughput_95pct_ci": [
+          0.9900831601350528,
+          1.0107740091268969
+        ],
+        "throughput_ratio": 1.000124926770069,
+        "time_95pct_ci": [
+          0.9893408328373982,
+          1.010016168605064
+        ]
+      },
+      {
+        "candidate_over_baseline_time": 0.969486885016553,
+        "control": "q11",
+        "pairs": 6,
+        "passes_control_floor": true,
+        "throughput_95pct_ci": [
+          1.0136578666072091,
+          1.0496021896223284
+        ],
+        "throughput_ratio": 1.0314734685481857,
+        "time_95pct_ci": [
+          0.9527419148771246,
+          0.9865261573385474
+        ]
+      },
+      {
+        "candidate_over_baseline_time": 1.0239176494016364,
+        "control": "ratio",
+        "pairs": 6,
+        "passes_control_floor": false,
+        "throughput_95pct_ci": [
+          0.9224832383608629,
+          1.00871535656911
+        ],
+        "throughput_ratio": 0.9766410419669848,
+        "time_95pct_ci": [
+          0.9913599445945256,
+          1.0840305367248457
+        ]
+      }
+    ],
+    "runtime_shared_common_hit_confirmed": false,
+    "scope": "All per-call raw ns retained; arithmetic process means; six paired ratios per control; 20000 order-stratified draws. Initial wires only; no decoder run offline.",
+    "untimed_decode_receipts": 6,
+    "verified_pairs": 18,
+    "verified_processes": 36,
+    "verified_timed_calls": 1224
+  },
+  "rejection_reasons": [
+    {
+      "gate": "nci_throughput",
+      "observed": 1.1647193022502793,
+      "required_minimum": 1.2
+    },
+    {
+      "gate": "public_control_ratio",
+      "observed": 0.9766410419669848,
+      "required_minimum": 0.98
+    }
+  ],
+  "reservation": {
+    "all_intervals_inside_reservation": true,
+    "collector_original_completed_entries": 216,
+    "collector_original_reported_exit_code": 0,
+    "collector_resumed_unix": 1795626376.5983152,
+    "control_processes": 36,
+    "no_measured_process_overlap": true,
+    "primary_processes": 180,
+    "quiet_end_unix": 1795626376.5981967,
+    "quiet_end_utc": "2026-11-25T17:06:16.598197+00:00",
+    "quiet_start_unix": 1795626285.6356149,
+    "quiet_start_utc": "2026-11-25T17:04:45.635615+00:00",
+    "scope": "Recorded pidfd-targeted reservation and wall intervals, not independent host-wide scheduler tracing",
+    "startup_001_scope": "SIGSTOP acknowledgement race before quiet_start; finally CONT recorded; no timed sample",
+    "startup_001_timed_processes": 0,
+    "verified_process_wall_intervals": 216
+  },
+  "resources": {
+    "all_wire_bytes_equal": true,
+    "basic_budget_tests_recorded": 6,
+    "caller_free_live_bytes": 0,
+    "elf_sha256": {
+      "baseline": "06be59a5c53873dcd036a9fb6833978b548be1eb7e8430f32e572a90742f760e",
+      "v4": "82ae01f86ee4dabdab9f8a17e438fa6f7707dc78a56f3ffabacc9995da7c1888",
+      "v5": "3fc5e2b5e823e6c54c10fdc8eea6fe765d89a60905a61ba7b5d7c5b28c929ba5"
+    },
+    "finite_cap_error": "WorkingMemoryLimitExceeded",
+    "groups": {
+      "all14": {
+        "cases": 14,
+        "v5_over_baseline_acquisition_requests": 0.8997529485080558,
+        "v5_over_baseline_all_allocator_requests": 0.9047903347816858,
+        "v5_over_baseline_alloc_requests": 0.9121915943407541,
+        "v5_over_baseline_allocated": 0.7991086232991498,
+        "v5_over_baseline_requested_peak": 0.7589466834761748,
+        "v5_over_v4_acquisition_requests": 0.9652871903432293,
+        "v5_over_v4_all_allocator_requests": 0.9675289688705757,
+        "v5_over_v4_alloc_requests": 0.9707996648212694,
+        "v5_over_v4_allocated": 0.9448070826308826,
+        "v5_over_v4_requested_peak": 0.9774756861022083
+      },
+      "silesia12": {
+        "cases": 12,
+        "v5_over_baseline_acquisition_requests": 0.9091896738722172,
+        "v5_over_baseline_all_allocator_requests": 0.9144550389956136,
+        "v5_over_baseline_alloc_requests": 0.9221965757966155,
+        "v5_over_baseline_allocated": 0.8067865726709378,
+        "v5_over_baseline_requested_peak": 0.7371821370845164,
+        "v5_over_v4_acquisition_requests": 0.9689998114133896,
+        "v5_over_v4_all_allocator_requests": 0.971204597265087,
+        "v5_over_v4_alloc_requests": 0.9744242135221768,
+        "v5_over_v4_allocated": 0.9476742161255773,
+        "v5_over_v4_requested_peak": 0.9737712708094992
+      }
+    },
+    "rows": [
+      {
+        "case": "dickens",
+        "exit_code": 0,
+        "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/dickens.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 955,
+            "all_allocator_requests": 1617,
+            "alloc_requests": 662,
+            "allocated": 52323184,
+            "free_requests": 662,
+            "freed": 52323184,
+            "remap_requests": 293,
+            "requested_peak": 7879402,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 902,
+            "all_allocator_requests": 1533,
+            "alloc_requests": 631,
+            "allocated": 46441644,
+            "free_requests": 631,
+            "freed": 46441644,
+            "remap_requests": 271,
+            "requested_peak": 5965846,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 879,
+            "all_allocator_requests": 1497,
+            "alloc_requests": 618,
+            "allocated": 44953896,
+            "free_requests": 618,
+            "freed": 44953896,
+            "remap_requests": 261,
+            "requested_peak": 5965846,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9204188481675393,
+        "v5_over_baseline_all_allocator_requests": 0.9257884972170687,
+        "v5_over_baseline_alloc_requests": 0.9335347432024169,
+        "v5_over_baseline_allocated": 0.8591582652921121,
+        "v5_over_baseline_requested_peak": 0.757144514266438,
+        "v5_over_v4_acquisition_requests": 0.9745011086474501,
+        "v5_over_v4_all_allocator_requests": 0.9765166340508806,
+        "v5_over_v4_alloc_requests": 0.9793977812995246,
+        "v5_over_v4_allocated": 0.9679652167352215,
+        "v5_over_v4_requested_peak": 1.0,
+        "wire_bytes": 22367,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0"
+      },
+      {
+        "case": "mozilla",
+        "exit_code": 0,
+        "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/mozilla.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 972,
+            "all_allocator_requests": 1660,
+            "alloc_requests": 688,
+            "allocated": 37057332,
+            "free_requests": 688,
+            "freed": 37057332,
+            "remap_requests": 284,
+            "requested_peak": 6478879,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 919,
+            "all_allocator_requests": 1576,
+            "alloc_requests": 657,
+            "allocated": 31238816,
+            "free_requests": 657,
+            "freed": 31238816,
+            "remap_requests": 262,
+            "requested_peak": 4852734,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 894,
+            "all_allocator_requests": 1537,
+            "alloc_requests": 643,
+            "allocated": 29511056,
+            "free_requests": 643,
+            "freed": 29511056,
+            "remap_requests": 251,
+            "requested_peak": 4422614,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9197530864197531,
+        "v5_over_baseline_all_allocator_requests": 0.9259036144578313,
+        "v5_over_baseline_alloc_requests": 0.934593023255814,
+        "v5_over_baseline_allocated": 0.7963621342194845,
+        "v5_over_baseline_requested_peak": 0.6826202495832998,
+        "v5_over_v4_acquisition_requests": 0.9727965179542981,
+        "v5_over_v4_all_allocator_requests": 0.975253807106599,
+        "v5_over_v4_alloc_requests": 0.9786910197869102,
+        "v5_over_v4_allocated": 0.9446918858896572,
+        "v5_over_v4_requested_peak": 0.9113654282307664,
+        "wire_bytes": 13924,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb"
+      },
+      {
+        "case": "mr",
+        "exit_code": 0,
+        "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/mr.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 1033,
+            "all_allocator_requests": 1735,
+            "alloc_requests": 702,
+            "allocated": 40958104,
+            "free_requests": 702,
+            "freed": 40958104,
+            "remap_requests": 331,
+            "requested_peak": 6909732,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 980,
+            "all_allocator_requests": 1651,
+            "alloc_requests": 671,
+            "allocated": 35164764,
+            "free_requests": 671,
+            "freed": 35164764,
+            "remap_requests": 309,
+            "requested_peak": 5155284,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 955,
+            "all_allocator_requests": 1612,
+            "alloc_requests": 657,
+            "allocated": 33458400,
+            "free_requests": 657,
+            "freed": 33458400,
+            "remap_requests": 298,
+            "requested_peak": 4946908,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9244917715392061,
+        "v5_over_baseline_all_allocator_requests": 0.9291066282420749,
+        "v5_over_baseline_alloc_requests": 0.9358974358974359,
+        "v5_over_baseline_allocated": 0.8168932819741851,
+        "v5_over_baseline_requested_peak": 0.7159334110208616,
+        "v5_over_v4_acquisition_requests": 0.9744897959183674,
+        "v5_over_v4_all_allocator_requests": 0.9763779527559056,
+        "v5_over_v4_alloc_requests": 0.9791356184798807,
+        "v5_over_v4_allocated": 0.9514751755478865,
+        "v5_over_v4_requested_peak": 0.9595801123662634,
+        "wire_bytes": 15438,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513"
+      },
+      {
+        "case": "nci",
+        "exit_code": 0,
+        "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/nci.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 526,
+            "all_allocator_requests": 860,
+            "alloc_requests": 334,
+            "allocated": 24022300,
+            "free_requests": 334,
+            "freed": 24022300,
+            "remap_requests": 192,
+            "requested_peak": 4978760,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 473,
+            "all_allocator_requests": 776,
+            "alloc_requests": 303,
+            "allocated": 18484560,
+            "free_requests": 303,
+            "freed": 18484560,
+            "remap_requests": 170,
+            "requested_peak": 3853613,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 448,
+            "all_allocator_requests": 737,
+            "alloc_requests": 289,
+            "allocated": 16897488,
+            "free_requests": 289,
+            "freed": 16897488,
+            "remap_requests": 159,
+            "requested_peak": 3802715,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.8517110266159695,
+        "v5_over_baseline_all_allocator_requests": 0.8569767441860465,
+        "v5_over_baseline_alloc_requests": 0.8652694610778443,
+        "v5_over_baseline_allocated": 0.7034084163464781,
+        "v5_over_baseline_requested_peak": 0.7637875695956423,
+        "v5_over_v4_acquisition_requests": 0.9471458773784355,
+        "v5_over_v4_all_allocator_requests": 0.9497422680412371,
+        "v5_over_v4_alloc_requests": 0.9537953795379538,
+        "v5_over_v4_allocated": 0.9141406665887638,
+        "v5_over_v4_requested_peak": 0.9867921350690897,
+        "wire_bytes": 4206,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615"
+      },
+      {
+        "case": "ooffice",
+        "exit_code": 0,
+        "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/ooffice.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 907,
+            "all_allocator_requests": 1529,
+            "alloc_requests": 622,
+            "allocated": 48767579,
+            "free_requests": 622,
+            "freed": 48767579,
+            "remap_requests": 285,
+            "requested_peak": 8274522,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 854,
+            "all_allocator_requests": 1445,
+            "alloc_requests": 591,
+            "allocated": 42555463,
+            "free_requests": 591,
+            "freed": 42555463,
+            "remap_requests": 263,
+            "requested_peak": 6228106,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 829,
+            "all_allocator_requests": 1406,
+            "alloc_requests": 577,
+            "allocated": 40630627,
+            "free_requests": 577,
+            "freed": 40630627,
+            "remap_requests": 252,
+            "requested_peak": 6228106,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9140022050716649,
+        "v5_over_baseline_all_allocator_requests": 0.9195552648790059,
+        "v5_over_baseline_alloc_requests": 0.927652733118971,
+        "v5_over_baseline_allocated": 0.8331483299591312,
+        "v5_over_baseline_requested_peak": 0.7526846868012437,
+        "v5_over_v4_acquisition_requests": 0.9707259953161592,
+        "v5_over_v4_all_allocator_requests": 0.9730103806228374,
+        "v5_over_v4_alloc_requests": 0.9763113367174281,
+        "v5_over_v4_allocated": 0.9547687684657549,
+        "v5_over_v4_requested_peak": 1.0,
+        "wire_bytes": 30682,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8"
+      },
+      {
+        "case": "osdb",
+        "exit_code": 0,
+        "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/osdb.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 969,
+            "all_allocator_requests": 1638,
+            "alloc_requests": 669,
+            "allocated": 42086857,
+            "free_requests": 669,
+            "freed": 42086857,
+            "remap_requests": 300,
+            "requested_peak": 7281396,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 916,
+            "all_allocator_requests": 1554,
+            "alloc_requests": 638,
+            "allocated": 35961297,
+            "free_requests": 638,
+            "freed": 35961297,
+            "remap_requests": 278,
+            "requested_peak": 5456481,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 891,
+            "all_allocator_requests": 1515,
+            "alloc_requests": 624,
+            "allocated": 34078605,
+            "free_requests": 624,
+            "freed": 34078605,
+            "remap_requests": 267,
+            "requested_peak": 5133858,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9195046439628483,
+        "v5_over_baseline_all_allocator_requests": 0.924908424908425,
+        "v5_over_baseline_alloc_requests": 0.9327354260089686,
+        "v5_over_baseline_allocated": 0.8097208351766444,
+        "v5_over_baseline_requested_peak": 0.7050650726866112,
+        "v5_over_v4_acquisition_requests": 0.972707423580786,
+        "v5_over_v4_all_allocator_requests": 0.974903474903475,
+        "v5_over_v4_alloc_requests": 0.9780564263322884,
+        "v5_over_v4_allocated": 0.9476467158567724,
+        "v5_over_v4_requested_peak": 0.9408734310629873,
+        "wire_bytes": 25418,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5"
+      },
+      {
+        "case": "reymont",
+        "exit_code": 0,
+        "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/reymont.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 874,
+            "all_allocator_requests": 1479,
+            "alloc_requests": 605,
+            "allocated": 44171859,
+            "free_requests": 605,
+            "freed": 44171859,
+            "remap_requests": 269,
+            "requested_peak": 7075271,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 821,
+            "all_allocator_requests": 1395,
+            "alloc_requests": 574,
+            "allocated": 38385167,
+            "free_requests": 574,
+            "freed": 38385167,
+            "remap_requests": 247,
+            "requested_peak": 5277172,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 796,
+            "all_allocator_requests": 1356,
+            "alloc_requests": 560,
+            "allocated": 36674975,
+            "free_requests": 560,
+            "freed": 36674975,
+            "remap_requests": 236,
+            "requested_peak": 5250255,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9107551487414187,
+        "v5_over_baseline_all_allocator_requests": 0.9168356997971603,
+        "v5_over_baseline_alloc_requests": 0.9256198347107438,
+        "v5_over_baseline_allocated": 0.8302791829522049,
+        "v5_over_baseline_requested_peak": 0.7420570886966732,
+        "v5_over_v4_acquisition_requests": 0.9695493300852619,
+        "v5_over_v4_all_allocator_requests": 0.9720430107526882,
+        "v5_over_v4_alloc_requests": 0.975609756097561,
+        "v5_over_v4_allocated": 0.955446540065854,
+        "v5_over_v4_requested_peak": 0.9948993513950275,
+        "wire_bytes": 17128,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7"
+      },
+      {
+        "case": "samba",
+        "exit_code": 0,
+        "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/samba.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 926,
+            "all_allocator_requests": 1574,
+            "alloc_requests": 648,
+            "allocated": 44281248,
+            "free_requests": 648,
+            "freed": 44281248,
+            "remap_requests": 278,
+            "requested_peak": 7165309,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 873,
+            "all_allocator_requests": 1490,
+            "alloc_requests": 617,
+            "allocated": 38508368,
+            "free_requests": 617,
+            "freed": 38508368,
+            "remap_requests": 256,
+            "requested_peak": 5384646,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 848,
+            "all_allocator_requests": 1451,
+            "alloc_requests": 603,
+            "allocated": 36804092,
+            "free_requests": 603,
+            "freed": 36804092,
+            "remap_requests": 245,
+            "requested_peak": 5146079,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9157667386609071,
+        "v5_over_baseline_all_allocator_requests": 0.9218551461245235,
+        "v5_over_baseline_alloc_requests": 0.9305555555555556,
+        "v5_over_baseline_allocated": 0.8311439641448226,
+        "v5_over_baseline_requested_peak": 0.7181935908137388,
+        "v5_over_v4_acquisition_requests": 0.9713631156930126,
+        "v5_over_v4_all_allocator_requests": 0.9738255033557047,
+        "v5_over_v4_alloc_requests": 0.9773095623987034,
+        "v5_over_v4_allocated": 0.9557427102597544,
+        "v5_over_v4_requested_peak": 0.9556949519058449,
+        "wire_bytes": 18744,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907"
+      },
+      {
+        "case": "sao",
+        "exit_code": 0,
+        "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/sao.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 971,
+            "all_allocator_requests": 1624,
+            "alloc_requests": 653,
+            "allocated": 54600971,
+            "free_requests": 653,
+            "freed": 54600971,
+            "remap_requests": 318,
+            "requested_peak": 9245441,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 918,
+            "all_allocator_requests": 1540,
+            "alloc_requests": 622,
+            "allocated": 47953279,
+            "free_requests": 622,
+            "freed": 47953279,
+            "remap_requests": 296,
+            "requested_peak": 6983273,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 893,
+            "all_allocator_requests": 1501,
+            "alloc_requests": 608,
+            "allocated": 45811471,
+            "free_requests": 608,
+            "freed": 45811471,
+            "remap_requests": 285,
+            "requested_peak": 6983273,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9196704428424305,
+        "v5_over_baseline_all_allocator_requests": 0.9242610837438424,
+        "v5_over_baseline_alloc_requests": 0.9310872894333844,
+        "v5_over_baseline_allocated": 0.8390230093160798,
+        "v5_over_baseline_requested_peak": 0.7553207034688773,
+        "v5_over_v4_acquisition_requests": 0.9727668845315904,
+        "v5_over_v4_all_allocator_requests": 0.9746753246753247,
+        "v5_over_v4_alloc_requests": 0.977491961414791,
+        "v5_over_v4_allocated": 0.9553355256477873,
+        "v5_over_v4_requested_peak": 1.0,
+        "wire_bytes": 46709,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095"
+      },
+      {
+        "case": "webster",
+        "exit_code": 0,
+        "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/webster.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 926,
+            "all_allocator_requests": 1574,
+            "alloc_requests": 648,
+            "allocated": 44584713,
+            "free_requests": 648,
+            "freed": 44584713,
+            "remap_requests": 278,
+            "requested_peak": 7265413,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 873,
+            "all_allocator_requests": 1490,
+            "alloc_requests": 617,
+            "allocated": 38767241,
+            "free_requests": 617,
+            "freed": 38767241,
+            "remap_requests": 256,
+            "requested_peak": 5454824,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 848,
+            "all_allocator_requests": 1451,
+            "alloc_requests": 603,
+            "allocated": 37042061,
+            "free_requests": 603,
+            "freed": 37042061,
+            "remap_requests": 245,
+            "requested_peak": 5185348,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9157667386609071,
+        "v5_over_baseline_all_allocator_requests": 0.9218551461245235,
+        "v5_over_baseline_alloc_requests": 0.9305555555555556,
+        "v5_over_baseline_allocated": 0.8308242558385427,
+        "v5_over_baseline_requested_peak": 0.7137031301592903,
+        "v5_over_v4_acquisition_requests": 0.9713631156930126,
+        "v5_over_v4_all_allocator_requests": 0.9738255033557047,
+        "v5_over_v4_alloc_requests": 0.9773095623987034,
+        "v5_over_v4_allocated": 0.955499025581934,
+        "v5_over_v4_requested_peak": 0.950598589432033,
+        "wire_bytes": 19555,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c"
+      },
+      {
+        "case": "x-ray",
+        "exit_code": 0,
+        "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/x-ray.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 1562,
+            "all_allocator_requests": 2551,
+            "alloc_requests": 989,
+            "allocated": 64598895,
+            "free_requests": 989,
+            "freed": 64598895,
+            "remap_requests": 573,
+            "requested_peak": 10140755,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 1509,
+            "all_allocator_requests": 2467,
+            "alloc_requests": 958,
+            "allocated": 57555599,
+            "free_requests": 958,
+            "freed": 57555599,
+            "remap_requests": 551,
+            "requested_peak": 7905263,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 1484,
+            "all_allocator_requests": 2428,
+            "alloc_requests": 944,
+            "allocated": 55213727,
+            "free_requests": 944,
+            "freed": 55213727,
+            "remap_requests": 540,
+            "requested_peak": 7905263,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.9500640204865557,
+        "v5_over_baseline_all_allocator_requests": 0.9517836142689141,
+        "v5_over_baseline_alloc_requests": 0.9544994944388271,
+        "v5_over_baseline_allocated": 0.854716276493584,
+        "v5_over_baseline_requested_peak": 0.7795536920081394,
+        "v5_over_v4_acquisition_requests": 0.9834327369118622,
+        "v5_over_v4_all_allocator_requests": 0.9841913254965545,
+        "v5_over_v4_alloc_requests": 0.9853862212943633,
+        "v5_over_v4_allocated": 0.9593111349601279,
+        "v5_over_v4_requested_peak": 1.0,
+        "wire_bytes": 41180,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288"
+      },
+      {
+        "case": "xml",
+        "exit_code": 0,
+        "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/xml.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 532,
+            "all_allocator_requests": 875,
+            "alloc_requests": 343,
+            "allocated": 23573279,
+            "free_requests": 343,
+            "freed": 23573279,
+            "remap_requests": 189,
+            "requested_peak": 4952830,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 479,
+            "all_allocator_requests": 791,
+            "alloc_requests": 312,
+            "allocated": 18029911,
+            "free_requests": 312,
+            "freed": 18029911,
+            "remap_requests": 167,
+            "requested_peak": 3834198,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 454,
+            "all_allocator_requests": 752,
+            "alloc_requests": 298,
+            "allocated": 16440091,
+            "free_requests": 298,
+            "freed": 16440091,
+            "remap_requests": 156,
+            "requested_peak": 3797797,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.8533834586466166,
+        "v5_over_baseline_all_allocator_requests": 0.8594285714285714,
+        "v5_over_baseline_alloc_requests": 0.8688046647230321,
+        "v5_over_baseline_allocated": 0.6974036577601275,
+        "v5_over_baseline_requested_peak": 0.7667933282587934,
+        "v5_over_v4_acquisition_requests": 0.9478079331941545,
+        "v5_over_v4_all_allocator_requests": 0.9506953223767383,
+        "v5_over_v4_alloc_requests": 0.9551282051282052,
+        "v5_over_v4_allocated": 0.9118231920279585,
+        "v5_over_v4_requested_peak": 0.9905062284211718,
+        "wire_bytes": 4407,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658"
+      },
+      {
+        "case": "rle",
+        "exit_code": 0,
+        "input_sha256": "156c38442089c1323d3e3ba549a6ac24341c47e8b6367bec4740c9b8c865826e",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/rle.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 147,
+            "all_allocator_requests": 247,
+            "alloc_requests": 100,
+            "allocated": 15280844,
+            "free_requests": 100,
+            "freed": 15280844,
+            "remap_requests": 47,
+            "requested_peak": 4341724,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 118,
+            "all_allocator_requests": 199,
+            "alloc_requests": 81,
+            "allocated": 10107172,
+            "free_requests": 81,
+            "freed": 10107172,
+            "remap_requests": 37,
+            "requested_peak": 3545866,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 105,
+            "all_allocator_requests": 178,
+            "alloc_requests": 73,
+            "allocated": 8700112,
+            "free_requests": 73,
+            "freed": 8700112,
+            "remap_requests": 32,
+            "requested_peak": 3545866,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 0.7142857142857143,
+        "v5_over_baseline_all_allocator_requests": 0.7206477732793523,
+        "v5_over_baseline_alloc_requests": 0.73,
+        "v5_over_baseline_allocated": 0.5693476093336206,
+        "v5_over_baseline_requested_peak": 0.8166953956538924,
+        "v5_over_v4_acquisition_requests": 0.8898305084745762,
+        "v5_over_v4_all_allocator_requests": 0.8944723618090452,
+        "v5_over_v4_alloc_requests": 0.9012345679012346,
+        "v5_over_v4_allocated": 0.8607859844474794,
+        "v5_over_v4_requested_peak": 1.0,
+        "wire_bytes": 12,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "061cb5f175cdd4589fc8378a2b81a1c220870d2fce44d0d50617ad585cbacb10"
+      },
+      {
+        "case": "opaque",
+        "exit_code": 0,
+        "input_sha256": "eb4fa819aa34c126efca7a5aaef74291d9d8a87ce39ceb050ae4ecf115492d9e",
+        "new_cap_operations": 3,
+        "report": "/tmp/vort-modeled-single-resource.i2r2xi7x/runs-v5/opaque.json",
+        "resources": {
+          "baseline": {
+            "acquisition_requests": 309,
+            "all_allocator_requests": 503,
+            "alloc_requests": 194,
+            "allocated": 17250636,
+            "free_requests": 194,
+            "freed": 17250636,
+            "remap_requests": 115,
+            "requested_peak": 6076086,
+            "resize_requests": 0
+          },
+          "v4": {
+            "acquisition_requests": 309,
+            "all_allocator_requests": 503,
+            "alloc_requests": 194,
+            "allocated": 17250636,
+            "free_requests": 194,
+            "freed": 17250636,
+            "remap_requests": 115,
+            "requested_peak": 6076086,
+            "resize_requests": 0
+          },
+          "v5": {
+            "acquisition_requests": 309,
+            "all_allocator_requests": 503,
+            "alloc_requests": 194,
+            "allocated": 17250636,
+            "free_requests": 194,
+            "freed": 17250636,
+            "remap_requests": 115,
+            "requested_peak": 6076086,
+            "resize_requests": 0
+          }
+        },
+        "v5_over_baseline_acquisition_requests": 1.0,
+        "v5_over_baseline_all_allocator_requests": 1.0,
+        "v5_over_baseline_alloc_requests": 1.0,
+        "v5_over_baseline_allocated": 1.0,
+        "v5_over_baseline_requested_peak": 1.0,
+        "v5_over_v4_acquisition_requests": 1.0,
+        "v5_over_v4_all_allocator_requests": 1.0,
+        "v5_over_v4_alloc_requests": 1.0,
+        "v5_over_v4_allocated": 1.0,
+        "v5_over_v4_requested_peak": 1.0,
+        "wire_bytes": 65540,
+        "wire_equal_baseline_and_v4": true,
+        "wire_sha256": "644e655efc68888b58bd94a2a73d4af91b7cfa93dc15a12a07a7e1e595a9f2ba"
+      }
+    ],
+    "scope": "Existing force_moving_growth=true whole-operation requested heap; profile/tracker peaks and free ledgers. Excludes native RSS, stack, physical traffic, input/oracle/decode/report allocations, bookkeeping and remap internal transients. Resource throughput not measured; baseline/v4 reused without rerun.",
+    "verified_new_cap_operations": 42,
+    "verified_new_cases": 14,
+    "verified_reused_cap_operations": 84,
+    "verified_v4_source_files": 2195
+  },
+  "schema": "vort.single-modeled.offline-summary.v1",
+  "sources": {
+    "baseline_git_blobs_reconstructed": 2189,
+    "baseline_source_reconstruction": "Full v5 filesystem for equal c2 blobs plus explicit c2 delta; Git not invoked",
+    "candidate_changed_or_new_declared_files": 9,
+    "candidate_files": 2196,
+    "candidate_nine_registry_sha256": "d5fffbaae4ddb7c65a09b523c319e8f083429923f43e76192b8dba0b0abbe530",
+    "candidate_registry_sha256": "b6d927f28827f38f9b218168be00db04d29624f9347dca05584517b58de5a904"
+  }
+}

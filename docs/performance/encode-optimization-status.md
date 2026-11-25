@@ -1,5 +1,52 @@
 # Encoder optimization status
 
+## 2026-11-26 compact single-DP gate: not accepted
+
+The isolated v5 candidate compacts the first modeled parser as well as the
+paired feedback solve. Native, x86 and actual WASI focused checks pass 22/22
+each; full Brotli ReleaseSafe passes 1710 tests with one skip. All twelve
+primary initial wires and three public-control initial wires remain identical
+to the c2 baseline. Separate resource checks pass fourteen inputs with three
+caps each, plus six budget-layer backing/ownership tests.
+
+Its completed reserved-window primary A/B retains 90 pairs/180 timed calls.
+Candidate/baseline time is **0.936338x**, paired round-block 95% CI
+**0.931581–0.941412x**, or **6.80%** whole-matrix throughput improvement.
+NCI throughput is **1.164719x**, below the unchanged **1.20x** target.
+The separate public controls retain eighteen balanced process pairs and
+1224 timed calls: q4 reaches **1.000125x**, q11 with the explicit 8 KiB
+command-state cap **1.031473x**, and legacy ratio **0.976641x**.
+Ratio therefore misses the unchanged **0.98x** floor. Its broad interval
+does not justify removing observations or calling the control passed.
+
+The candidate **fails the merge gate** and stays unmerged. Compared with the
+original baseline, twelve-row requested-heap peak is **0.737182x**, cumulative
+allocated bytes **0.806787x**, and acquisition requests **0.909190x**.
+Compared with v4, those resource ratios are **0.973771x**, **0.947674x** and
+**0.969000x**. Forced-moving requested heap is not native RSS; unchanged
+Dickens/opaque peaks show why static DP savings cannot predict whole-operation
+peak. The v4/v5 timing epochs are separate and do not establish their causal
+source delta. Preserve both rejected experiments before choosing the next
+measured context/entropy-planning boundary.
+
+## 2026-11-26 original allocating-preset matrix complete
+
+The original fixed-source `4a9796b0` collector completed **216/216** conditions,
+set its manifest complete flag and exited zero on its original session. An
+independent full verifier also exited zero and checked all raw samples.
+The eighteen codec/size/preset groups each contain twelve corpus rows, with
+1224 primary-reference measured pairs and 432 Deflate warmup rounds retained.
+
+Full-file Vort/reference throughput is **0.368214x/0.147514x** for Deflate
+L6/L9 (L9 reference libdeflate L12), **0.077671x/0.378423x** for public Zstd
+L3/L19, and **0.064354x/0.918724x** for Brotli q8/q11. Compressed sizes remain
+separate tradeoffs in the complete archive. These numbers are observations
+from the original development-host epoch with recorded concurrent validation;
+they are not quiet-host acceptance or current-main performance claims.
+In particular, `4a9796b0` predates the subsequently merged complex fixed
+block-length Huffman repair. Keep the old checkpoints and their CI identities
+alongside the full results, without replacing them or restarting the collector.
+
 ## 2026-11-26 reserved-window paired-search result: not accepted
 
 The [completed reserved-window run](br/modeled-search-20261125/README.md)
