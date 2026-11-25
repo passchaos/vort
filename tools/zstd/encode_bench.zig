@@ -198,7 +198,7 @@ pub fn main(init: std.process.Init) !void {
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
         const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
         if (raw_rounds) |rounds| {
-            const resolved_primary = native_options orelse try zstd.resolveFrameOptionsForLevel(level, .{});
+            const resolved_primary = try pairing.resolvePrimaryOptions(level, native_options);
             const header = try zstd.inspectNativeFrameHeader(vort_encoded);
             const reference_header = try zstd.inspectNativeFrameHeader(reference_encoded);
             try sample_report.append(init.gpa, .{

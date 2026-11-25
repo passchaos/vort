@@ -3,6 +3,16 @@ const std = @import("std");
 const zstd = @import("vort_zstd");
 const libzstd = @import("libzstd_runtime.zig");
 
+/// Match the public entry point selected by Pair.encodeVort. Explicit native
+/// options bypass level policy; a public level uses its effective primary.
+pub fn resolvePrimaryOptions(level: c_int, native_options: ?zstd.NativeFrameOptions) !zstd.NativeFrameOptions {
+    return native_options orelse (try zstd.nativeEncodeLevelDiagnostics(level, .{})).primary_options;
+}
+
+test {
+    _ = @import("encode_bench_policy_tests.zig");
+}
+
 pub const Pair = struct {
     runtime: libzstd.Runtime,
     level: c_int,
