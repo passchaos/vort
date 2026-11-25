@@ -58,3 +58,31 @@ be withdrawn. Two named paths keep the original stream-file behavior.
 `zig build test-zstd-encode-stdio-cli` verifies native and WASI encoding,
 pre-EOF block output, size fields, limits, and failed-output preservation.
 When available, upstream `zstd` independently decodes the generated frames.
+
+## Seekable archives
+
+```sh
+vort encode-zstd-seekable-file data.bin data.seekable.zst --frame-size=131072
+vort encode-zstd-seekable-file - - --max-frames=1000 < data.bin > data.seekable.zst
+vort encode-zstd-seekable-file - data.seekable.zst --max-frames=1000 < data.bin
+```
+
+This command writes independent frames and the standard terminal seek table,
+using the [library's sequential writer](zstd-source-seekable-encode.md).
+`--frame-size=BYTES` defaults to 131,072. The command needs a positive
+`--max-frames=N` for stdin or other input without a known length. For a regular
+file, it allocates the index from the measured size, and an explicit cap may
+refuse that size before any output. The file size is used for capacity, not as
+a length pledge; keep regular input stable while encoding.
+
+Frame and seek-table checksums are enabled by default. Use
+`--frame-checksum=false` or `--seek-checksum=false` to disable them independently.
+`--max-total-memory=BYTES` limits the encoder's requested heap, independently
+of the caller allocations for one plaintext frame and the bounded index.
+
+Stdout carries only archive bytes, including complete frames produced before
+EOF. If the index limit is exceeded, the command fails without a terminal
+seek table. Bytes already written to stdout cannot be withdrawn. A named
+output is replaced only after encoding and flush succeed; stdin to a named
+output is quiet on success. Use `zig build test-zstd-seekable-cli` for native
+and WASI coverage.

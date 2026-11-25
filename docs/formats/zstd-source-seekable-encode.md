@@ -75,6 +75,8 @@ The result counts bytes accepted by the writer for this archive. The encoder
 never flushes or closes the writer; the caller must flush it to finish external
 publication. A `ReadFailed` or `WriteFailed` can leave a partial prefix.
 
+For terminal usage, see [`encode-zstd-seekable-file`](zstd-stdio-cli.md#seekable-archives).
+
 ## Independent verification
 
 `zig build check-zstd-source-reverse` executes the writer and reader contracts

@@ -56,6 +56,7 @@ const seven_zip_cli = @import("cli/seven_zip.zig");
 const snappy_framing_cli = @import("cli/snappy_framing.zig");
 const zstd_controls_cli = @import("cli/zstd_controls.zig");
 const zstd_decode_cli = @import("cli/zstd_decode.zig");
+const zstd_seekable_cli = @import("cli/zstd_seekable.zig");
 const decoded_output = @import("cli/decode_output.zig");
 const fast_cover_cli = @import("cli/fast_cover.zig");
 const brotli_cli = @import("cli/brotli.zig");
@@ -1468,6 +1469,8 @@ pub fn main(init: std.process.Init) !void {
         try zstd_controls_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-stream-file")) {
         try zstd_controls_cli.encodeStreamFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-seekable-file")) {
+        try zstd_seekable_cli.encodeFile(init, &args, stdout);
     } else if (try zstd_decode_cli.dispatch(command, init, &args, stdout)) {
         // The shared dispatcher writes results for native Zstd decode and size commands.
     } else if (std.mem.eql(u8, command, "summary-zstd-native-file")) {
@@ -2839,6 +2842,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  Stream-file only: --max-input-len=BYTES --max-output-len=BYTES (source/encoded byte caps)
         \\                  Stream totals and file pledges remain wide; one-shot files/hex use addressable buffers
         \\    Negative level -N selects fast acceleration N. New controls default to level 3.
+        \\  encode-zstd-seekable-file <in|-> <out|-> [--frame-size=BYTES] [--max-frames=N]
+        \\    [--seek-checksum=true|false] [--frame-checksum=true|false] [--max-total-memory=BYTES]
+        \\    Write a seekable Zstd archive; --max-frames is required for stdin
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
         \\    history_bytes is the selected history target; the standard dictionary header adds bytes. dict_id must be nonzero.
