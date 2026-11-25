@@ -4,6 +4,18 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-25 bounded Brotli packed distance reuse screen
+
+The [production-path trace and two-slot screen](br/packed-distance-reuse-20261125/README.md)
+show **48,367** actual packed expansions on full Mozilla q11, with only **293**
+projected misses for two-slot LRU. The isolated prototype reaches **1.25499×**
+on that row, but only **1.02823×** over twelve rows; 1 MiB Mozilla q11
+(**0.97512×**) and 64 KiB X-ray q11 (**0.97837×**) break the 0.98× floor.
+No production change is adopted. Keep the next candidate local to the packed
+wide10 executor and leave auxiliary routes and the standard header layout
+unchanged; retain a layout-only control because the regressed 1 MiB row
+never enters the measured selector.
+
 ## 2026-11-25 mainline Deflate and Brotli hotspot diagnostic
 
 The [six-row diagnostic](decode-hotspots-main-20261125/README.md) profiles

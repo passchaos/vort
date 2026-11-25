@@ -1,0 +1,43 @@
+{
+  "schema": "vort.brotli.distance-reuse-trace.v1",
+  "wire_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.brotli.11.wire",
+  "plain_path": "/tmp/vort-current-decode-matrix-20261111/fixtures/mozilla.1048576.plain",
+  "wire_bytes": 635440,
+  "plain_bytes": 1048576,
+  "reference_encoder": "/tmp/vort-decode-current-20261125.NcQHi5/references/brotli/libbrotlienc.so.1.2.0",
+  "reference_decoder": "/tmp/vort-decode-current-20261125.NcQHi5/references/brotli/libbrotlidec.so.1.2.0",
+  "reference_common": "/tmp/vort-decode-current-20261125.NcQHi5/references/brotli/libbrotlicommon.so.1.2.0",
+  "reference_version": "1.2.0",
+  "vort_decodes": 1,
+  "reference_decodes": 1,
+  "outputs_both_match_frozen_plain": true,
+  "expanded_table_bytes": 3752,
+  "meta_blocks_seen": 1,
+  "blocks": [
+    {
+      "meta_block_index": 0,
+      "output_start": 0,
+      "output_len": 1048576,
+      "route": "external_auxiliary_postfix",
+      "tree_count": 22,
+      "requests": 0,
+      "packed_requests": 0,
+      "expansions": 0,
+      "misses_1": 0,
+      "misses_rr2": 0,
+      "misses_rr4": 0,
+      "misses_lru2": 0,
+      "misses_lru4": 0
+    }
+  ],
+  "totals": {
+    "requests": 0,
+    "packed_requests": 0,
+    "expansions": 0,
+    "misses_1": 0,
+    "misses_rr2": 0,
+    "misses_rr4": 0,
+    "misses_lru2": 0,
+    "misses_lru4": 0
+  }
+}

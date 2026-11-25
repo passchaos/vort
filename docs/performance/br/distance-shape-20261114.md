@@ -54,19 +54,18 @@ not a large-frame artifact.
 
 ## Findings
 
-### 1. Quality 11 never needs packed-tier distance expansion
+### 1. Packed distance trees on full Mozilla q11 are confined to wide10 generic blocks
 
-Every q11 fixture has zero packed context slots: all referenced distance
-trees fit the 64-entry inline tier. On the mozilla full q11 cliff row the
-packed tier appears only inside wide10 generic blocks (146 of 1,924 context
-slots, 7.6%; 72 of 481 block-type rows resolve context three to a packed
-tree). Packed expansion is therefore a q6 phenomenon on this corpus
-(mozilla 66%, samba 69%, mr 59% of context slots), not a q11 hot path.
-
-Consequence: on the cliff row, `distancePrefixForDecode` always takes its
-inline branch — one bounds check, one index multiply and one pointer store.
-The expensive packed `expand()` seen in the disassembly is cold there, so
-removing per-match dispatch cannot recover expansion cost on q11.
+The auxiliary q11 routes have no packed distance context slots. That is not
+a property of the entire q11 stream: on the Mozilla full q11 cliff row, wide10
+generic blocks do select packed trees (146 of 1,924 context slots overall,
+7.6%; 72 of 481 block-type rows map context three to a packed tree). Packed
+slots are more common in the corresponding q6 headers (Mozilla 66%, Samba
+69%, `mr` 59% of context slots). These static percentages do not measure how
+frequently the decoder enters the selector or expands a packed tree; those
+counts also depend on the payload route and the order of distance symbols.
+See the [current-main instruction samples](../decode-hotspots-main-20261125/README.md#where-to-optimize-next)
+for the Mozilla q11 selector’s packed-construction samples.
 
 ### 2. Most q11 distance trees are wider than nine bits
 
@@ -82,12 +81,12 @@ Share of referenced trees whose maximum code width exceeds nine bits:
 | samba | 64.4% | samba | 45.4% |
 
 Mozilla full q11 references 534 distance trees, 361 of them (67.6%) with
-max code width 10-15. A fixed nine-bit packed lookup plane returns null and
-falls back to the canonical long-code scan for every symbol in those trees.
-This is the structural reason the 2026-11-12 nine-bit-plane candidate could
-not deliver: two thirds of the cliff row's trees cannot be covered by a
-9-bit root, and widening to 15 bits would cost 256 KiB per tree plane, which
-is infeasible for 534 trees.
+max code width 10–15. A fixed nine-bit plane cannot represent every code in
+those trees, but it can still hit on codes no wider than nine bits. The
+share of trees with a long code does not imply the share of long lookups;
+the replay measured 4.5% long fallbacks over explicit distances. Covering
+all codes by widening an entire plane to 15 bits would cost 256 KiB per
+plane, which is infeasible for 534 trees.
 
 ### 3. q11 context maps genuinely use two to four trees per row
 
@@ -125,14 +124,14 @@ contexts cheap rather than bet everything on context three.
 
 ### 5. What the hot inline dispatch actually costs
 
-With packed expansion ruled out on q11, the surviving per-match sequence in
-`readMinimalDistance` is: block-switch check, copy-length context
-computation, context-map byte load, index bounds check, inline tree pointer
-resolve, prepared-lookup decode, remaining decrement, then short/regular
-distance staging and ring bookkeeping. The tree resolve itself is ~5
-instructions. Caching the pointer (2026-11-14 screen) removed one load and
-moved nothing else, producing parity with floor breaks; the measured 18%
-combined surface lives in the surrounding state work, not the indirection.
+For an inline-tree request the per-match sequence in `readMinimalDistance`
+is: block-switch check, copy-length context computation, context-map byte
+load, index bounds check, inline tree pointer resolve, prepared-lookup decode,
+remaining decrement, then short/regular distance staging and ring bookkeeping.
+The inline tree resolve itself is about five instructions. Caching that
+pointer (2026-11-14 screen) removed one load and produced parity with floor
+breaks. This rules out that isolated inline change, not the cost of packed
+expansion or other distance state work.
 
 ## Design implications
 

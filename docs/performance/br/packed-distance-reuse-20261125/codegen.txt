@@ -1,0 +1,17 @@
+37ddb127efa5b484414ff59745a188e19d836c48706a7167c2665212d934a105  /tmp/vort-main-decode-profile.Se0BeG/install/bin/vort-decode-compare
+.text                                    952457   17208576
+0000000017764000 0000000000002110 t br.distancePrefixForDecode
+    <ac44b>   DW_AT_name        : (indirect string, offset: 0x19ba9): br.MinimalCompressedHeader
+    <ac44f>   DW_AT_byte_size   : 0xc3708
+    <accc4>   DW_AT_name        : (indirect string, offset: 0x19b86): *br.MinimalCompressedHeader
+    <accd1>   DW_AT_byte_size   : 8
+    <ad160>   DW_AT_name        : (indirect string, offset: 0x19ba2): *const br.MinimalCompressedHeader
+fd23b4ea2030dbd323c27b80179e6175e74c8202db0cc7f90328833a4a70a2d0  /tmp/vort-br-distance-reuse.MZ2a1D/two-slot-install/bin/vort-decode-compare
+.text                                    952713   17208576
+0000000017763984 0000000000000193 t br.distancePrefixForDecode
+0000000017764192 0000000000002099 t br.expandPackedDistancePrefixForDecode
+    <ac44b>   DW_AT_name        : (indirect string, offset: 0x19c50): br.MinimalCompressedHeader
+    <ac44f>   DW_AT_byte_size   : 0xc45b8
+    <accfe>   DW_AT_name        : (indirect string, offset: 0x19c2d): *br.MinimalCompressedHeader
+    <acd0b>   DW_AT_byte_size   : 8
+    <ad19a>   DW_AT_name        : (indirect string, offset: 0x19c49): *const br.MinimalCompressedHeader
