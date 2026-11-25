@@ -130,6 +130,7 @@ const WireCase = struct {
     dictionary: ?[]const u8 = null,
     upstream_real: bool = false,
     upstream_flush_interval: ?usize = null,
+    upstream_checkpoint: ?upstream_real.Checkpoint = null,
     /// Brotli Large Window extension: Vort must opt in and libbrotli only
     /// accepts the wire through a streaming decoder with the same parameter.
     brotli_large_window: bool = false,
@@ -194,11 +195,17 @@ const Harness = struct {
     real_output: ?*std.Io.Writer = null,
     incremental_runs: [codecs.len]RunCount = @splat(.{}),
     incremental_tail_runs: [codecs.len]RunCount = @splat(.{}),
+    incremental_flush_runs: [codecs.len]RunCount = @splat(.{}),
 
     const RunCount = struct { passed: usize = 0, failed: usize = 0, calls: usize = 0 };
 
     fn checkIncremental(self: *Harness, codec: Codec, pattern: Pattern, wire_case: WireCase, outcome: incremental_valid.Outcome) !void {
-        const counts = if (outcome == .complete) &self.incremental_runs[@intFromEnum(codec)] else &self.incremental_tail_runs[@intFromEnum(codec)];
+        const counts = if (outcome == .complete)
+            &self.incremental_runs[@intFromEnum(codec)]
+        else if (wire_case.upstream_checkpoint != null)
+            &self.incremental_flush_runs[@intFromEnum(codec)]
+        else
+            &self.incremental_tail_runs[@intFromEnum(codec)];
         for (incremental_valid.schedules) |schedule| {
             var progress: incremental_valid.Progress = .{};
             incremental_valid.check(self.allocator, codec, wire_case, schedule, outcome, &progress) catch |err| {
@@ -209,7 +216,16 @@ const Harness = struct {
                 });
                 continue;
             };
-            if (wire_case.upstream_real and outcome == .truncated) {
+            if (wire_case.upstream_checkpoint) |checkpoint| {
+                const expected = if (codec == .zstd and schedule == .pledged) 0 else checkpoint.decoded_bytes;
+                if (progress.read != checkpoint.wire_bytes or progress.written != expected) {
+                    counts.failed += 1;
+                    try self.fail(codec, pattern, wire_case.label, wire_case.source.len, wire_case.wire.len, "vort-flush-cut", "schedule={s} flush={d} read={d}/{d} published={d}/{d}", .{
+                        @tagName(schedule), checkpoint.flush_index, progress.read, checkpoint.wire_bytes, progress.written, expected,
+                    });
+                    continue;
+                }
+            } else if (wire_case.upstream_real and outcome == .truncated) {
                 const prevalidated = codec == .zstd and schedule == .pledged;
                 const minimum = if (prevalidated) 0 else if (wire_case.upstream_flush_interval) |interval|
                     wire_case.source.len -| interval
@@ -225,14 +241,26 @@ const Harness = struct {
             counts.passed += 1;
             counts.calls += progress.calls;
             if (self.real_output) |stdout| {
-                try stdout.writeAll("upstream_real_step_json: ");
-                try std.json.Stringify.value(.{
-                    .path = wire_case.label,
-                    .codec = codec.label(),
-                    .schedule = schedule,
-                    .outcome = outcome,
-                    .progress = progress,
-                }, .{}, stdout);
+                if (wire_case.upstream_checkpoint) |checkpoint| {
+                    try stdout.writeAll("upstream_real_flush_step_json: ");
+                    try std.json.Stringify.value(.{
+                        .schema = "vort.codec-differential.upstream-flush-cut.v1",
+                        .path = wire_case.label,
+                        .codec = codec.label(),
+                        .schedule = schedule,
+                        .checkpoint = checkpoint,
+                        .progress = progress,
+                    }, .{}, stdout);
+                } else {
+                    try stdout.writeAll("upstream_real_step_json: ");
+                    try std.json.Stringify.value(.{
+                        .path = wire_case.label,
+                        .codec = codec.label(),
+                        .schedule = schedule,
+                        .outcome = outcome,
+                        .progress = progress,
+                    }, .{}, stdout);
+                }
                 try stdout.writeByte('\n');
             }
         }
@@ -1793,6 +1821,7 @@ pub fn main(init: std.process.Init) !void {
     defer real_files.deinit(init.gpa);
     var real_limit: usize = upstream_real.default_file_limit;
     var real_brotli_wide = false;
+    var real_flush_cuts = false;
     var divergence_directory: ?[]const u8 = null;
     var replay_directory: ?[]const u8 = null;
     while (args.next()) |arg| {
@@ -1818,6 +1847,8 @@ pub fn main(init: std.process.Init) !void {
             if (real_limit == 0 or real_limit > upstream_real.maximum_file_limit) return error.InvalidRealLimit;
         } else if (std.mem.eql(u8, arg, "--real-brotli-wide")) {
             real_brotli_wide = true;
+        } else if (std.mem.eql(u8, arg, "--real-flush-cuts")) {
+            real_flush_cuts = true;
         } else if (std.mem.eql(u8, arg, "--incremental-valid-only")) {
             incremental_valid_only = true;
         } else if (std.mem.startsWith(u8, arg, "--only=")) {
@@ -1838,6 +1869,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    if (real_flush_cuts and (real_files.items.len == 0 or real_brotli_wide)) return error.InvalidRealFlushCutMode;
     if (real_brotli_wide) {
         if (only != null and only != .br) return error.ConflictingRealBrotliFilter;
         only = .br;
@@ -1890,13 +1922,13 @@ pub fn main(init: std.process.Init) !void {
         for (real_files.items) |path| {
             const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, allocator, .limited(real_limit));
             defer allocator.free(input);
-            try runRealInput(&harness, stdout, path, input, real_brotli_wide);
+            try runRealInput(&harness, stdout, path, input, real_brotli_wide, real_flush_cuts);
         }
         if (real_files.items.len == 0) {
             const input = try wide_brotli.smokeInput(allocator);
             defer allocator.free(input);
             if (input.len > real_limit) return error.StreamTooLong;
-            try runRealInput(&harness, stdout, "builtin-wide-brotli-v1", input, true);
+            try runRealInput(&harness, stdout, "builtin-wide-brotli-v1", input, true, false);
         }
     } else {
         const input = try allocator.alloc(u8, max_size);
@@ -1947,6 +1979,15 @@ pub fn main(init: std.process.Init) !void {
         }, .{}, stdout);
         try stdout.writeByte('\n');
     }
+    if (real_flush_cuts) {
+        try stdout.writeAll("upstream_real_flush_json: ");
+        try std.json.Stringify.value(.{
+            .schema = "vort.codec-differential.upstream-flush-cuts.v1",
+            .codec_order = codecs,
+            .by_codec = harness.incremental_flush_runs,
+        }, .{}, stdout);
+        try stdout.writeByte('\n');
+    }
     for (harness.failures.items) |failure| {
         try stdout.print("FAIL [{s}] pattern={s} variant={s} input={d} wire={d} stage={s}: {s}\n", .{
             failure.codec.label(),
@@ -1962,13 +2003,13 @@ pub fn main(init: std.process.Init) !void {
     if (harness.failures.items.len != 0) return error.FuzzMismatch;
 }
 
-fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, input: []const u8, brotli_wide: bool) !void {
+fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, input: []const u8, brotli_wide: bool, flush_cuts: bool) !void {
     const a = harness.allocator;
     if (input.len == 0) return error.EmptyRealFile;
     const input_hash = upstream_real.digest(input);
     for (codecs) |codec| {
         if (harness.only) |only_codec| if (codec != only_codec) continue;
-        const wire = try upstream_real.encode(c, a, input, codec, brotli_wide);
+        const wire = try upstream_real.encode(c, a, input, codec, brotli_wide, flush_cuts);
         defer a.free(wire.bytes);
         const wire_hash = upstream_real.digest(wire.bytes);
         try stdout.writeAll("upstream_real_json: ");
@@ -1984,14 +2025,30 @@ fn runRealInput(harness: *Harness, stdout: *std.Io.Writer, path: []const u8, inp
             .flush_interval = wire.flush_interval,
         }, .{}, stdout);
         try stdout.writeByte('\n');
-        try harness.checkWire(codec, .real_file, .{
+        const full: WireCase = .{
             .label = path,
             .wire = wire.bytes,
             .source = input,
             .upstream_real = true,
             .upstream_flush_interval = wire.flush_interval,
             .zstd_stream_reference = codec == .zstd,
-        }, wire.level);
+        };
+        try harness.checkWire(codec, .real_file, full, wire.level);
+        for (wire.checkpoints.slice()) |checkpoint| {
+            var cut = full;
+            cut.wire = wire.bytes[0..checkpoint.wire_bytes];
+            cut.upstream_checkpoint = checkpoint;
+            // The reference needs room only for what the producer has fed.
+            // Keep the full plaintext pledge for the Vort schedules.
+            var reference = cut;
+            reference.source = input[0..checkpoint.decoded_bytes];
+            if (harness.referenceDecode(codec, reference, reference.source.len)) |accepted| {
+                a.free(accepted);
+                try harness.fail(codec, .real_file, path, input.len, cut.wire.len, "reference-flush-cut", "reference accepted unfinished stream after flush {d}", .{checkpoint.flush_index});
+                continue;
+            }
+            try harness.checkIncremental(codec, .real_file, cut, .truncated);
+        }
         if (brotli_wide and codec == .br) {
             const receipt = wide_brotli.verify(a, wire.bytes, input) catch |err| {
                 if (err == error.OutOfMemory) return err;
@@ -2029,7 +2086,7 @@ fn printUsage(init: std.process.Init) !void {
         \\                                   [--zlib-reference-exact-input]
         \\                                   [--incremental-valid-only]
         \\                                   [--real-file=PATH ...] [--real-limit=BYTES]
-        \\                                   [--real-brotli-wide]
+        \\                                   [--real-flush-cuts | --real-brotli-wide]
         \\                                   [--divergence-dir=NEW_DIRECTORY]
         \\                                   [--replay-dir=EXISTING_DIRECTORY]
         \\

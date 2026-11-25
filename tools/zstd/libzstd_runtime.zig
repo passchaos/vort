@@ -298,7 +298,22 @@ pub const Runtime = struct {
     }
 
     pub fn encodeStreamingAlloc(self: Runtime, allocator: std.mem.Allocator, input: []const u8, options: AdvancedOptions, chunk_len: usize, flush_each_chunk: bool) ![]u8 {
+        return self.encodeStreamingImpl(allocator, input, options, chunk_len, flush_each_chunk, null);
+    }
+
+    /// Encode with a flush after each chunk and record the cumulative output
+    /// byte count after each nonfinal flush. The slice must have one entry per
+    /// nonfinal chunk (zero entries for empty input).
+    pub fn encodeStreamingWithFlushOffsetsAlloc(self: Runtime, allocator: std.mem.Allocator, input: []const u8, options: AdvancedOptions, chunk_len: usize, flush_offsets: []usize) ![]u8 {
+        return self.encodeStreamingImpl(allocator, input, options, chunk_len, true, flush_offsets);
+    }
+
+    fn encodeStreamingImpl(self: Runtime, allocator: std.mem.Allocator, input: []const u8, options: AdvancedOptions, chunk_len: usize, flush_each_chunk: bool, flush_offsets: ?[]usize) ![]u8 {
         if (chunk_len == 0) return error.ReferenceEncodeFailed;
+        if (flush_offsets) |offsets| {
+            const count = if (input.len == 0) 0 else (input.len - 1) / chunk_len;
+            if (offsets.len != count) return error.ReferenceEncodeFailed;
+        }
         const context = self.create_cctx() orelse return error.ReferenceUnavailable;
         defer _ = self.free_cctx(context);
         try self.configureAdvanced(context, options);
@@ -314,6 +329,9 @@ pub const Runtime = struct {
             if (flush_each_chunk) {
                 var empty = InBuffer{ .src = null, .size = 0, .pos = 0 };
                 while (try self.streamStep(allocator, context, &output, &empty, 1) != 0) {}
+                if (flush_offsets) |offsets| {
+                    if (end < input.len) offsets[offset / chunk_len] = output.items.len;
+                }
             }
             offset = end;
         }

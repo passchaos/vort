@@ -163,15 +163,28 @@ zig build -Doptimize=ReleaseFast run-codec-real-stream-smoke
 corpus="$HOME/Work/corpora/silesia-20261025/files"
 LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
   zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
-  --real-file="$corpus/xml" --real-file="$corpus/ooffice"
+  --real-flush-cuts --real-file="$corpus/xml" --real-file="$corpus/ooffice"
 ```
 
-The README smoke is also part of `ci-smoke`; the full Silesia sweep is opt-in
-and is functionality evidence, not a timing result. The
+Add `--real-flush-cuts` to cut at the first, middle and last distinct
+nonfinal flushes reported by each reference encoder. The reference must
+reject these unfinished streams. Both Vort schedules must consume the whole
+compressed prefix and return truncation. Progressive routes must publish
+exactly the corresponding plaintext prefix, except that prevalidated Zstd
+must publish nothing from its incomplete single frame. This mode requires
+`--real-file` and cannot be combined with `--real-brotli-wide`. Files with
+no nonfinal flush have no checkpoint cuts. `upstream_real_flush_step_json`
+records compressed and decoded offsets for each replay;
+`upstream_real_flush_json` reports their counts separately from tail cuts.
+
+The README smoke enables these checkpoints and is part of `ci-smoke`; the
+full Silesia sweep is opt-in and is functionality evidence, not a timing result. The
 [full-file receipt](performance/codec-upstream-real-20261124.md) records the
 Brotli boundary defect found and the reference versions and corpus hashes.
 The [follow-up receipt](performance/codec-upstream-real-20261125.md) records
 four more full files and a separate multi-meta-block wide Brotli sweep.
+The [flush checkpoint receipt](performance/codec-upstream-flush-cuts-20261125.md)
+records the additional mid-stream truncation runs.
 
 `--real-brotli-wide` selects only Brotli and uses libbrotli's one-shot
 quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide

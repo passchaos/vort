@@ -348,12 +348,41 @@ pub const Runtime = struct {
         chunks: []const []const u8,
         options: StreamingOptions,
     ) ![]u8 {
+        return self.encodeFlushedChunksImpl(allocator, chunks, options, null);
+    }
+
+    /// Encode the same stream while recording the cumulative output byte count
+    /// after each completed nonfinal FLUSH. Requires exactly `chunks.len -| 1`
+    /// offset slots.
+    pub fn encodeFlushedChunksWithOffsetsAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+        options: StreamingOptions,
+        flush_offsets: []usize,
+    ) ![]u8 {
+        if (flush_offsets.len != chunks.len -| 1) return error.InvalidReferenceParameters;
+        return self.encodeFlushedChunksImpl(allocator, chunks, options, flush_offsets);
+    }
+
+    fn encodeFlushedChunksImpl(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+        options: StreamingOptions,
+        flush_offsets: ?[]usize,
+    ) ![]u8 {
         const state = try self.createConfiguredEncoder(options);
         defer self.destroy_encoder(state);
 
         var output: std.ArrayList(u8) = .empty;
         errdefer output.deinit(allocator);
-        for (chunks) |chunk| try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.flush), chunk, &output);
+        for (chunks, 0..) |chunk, index| {
+            try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.flush), chunk, &output);
+            if (flush_offsets) |offsets| {
+                if (index < offsets.len) offsets[index] = output.items.len;
+            }
+        }
         try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), &.{}, &output);
         if (self.encoder_is_finished(state) == 0) return error.ReferenceEncodeFailed;
         return output.toOwnedSlice(allocator);
