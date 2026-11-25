@@ -1,0 +1,550 @@
+{
+  "completed_rows": 72,
+  "planned_rows": 216,
+  "complete": false,
+  "aggregates": {
+    "brotli/65536/L11": {
+      "rows": 12,
+      "throughput_vort_over_reference": 0.27482845090325103,
+      "encoded_size_vort_over_reference": 1.0612471524534106,
+      "weakest_row": "brotli-mozilla-65536-L11"
+    },
+    "brotli/65536/L8": {
+      "rows": 12,
+      "throughput_vort_over_reference": 0.01363412508441169,
+      "encoded_size_vort_over_reference": 0.9438865172371007,
+      "weakest_row": "brotli-nci-65536-L8"
+    },
+    "zstd/65536/L3": {
+      "rows": 12,
+      "throughput_vort_over_reference": 0.09813611220441536,
+      "encoded_size_vort_over_reference": 0.967732089988786,
+      "weakest_row": "zstd-nci-65536-L3"
+    },
+    "deflate/65536/L9": {
+      "rows": 12,
+      "throughput_vort_over_reference": 0.5263810065573298,
+      "encoded_size_vort_over_reference": 1.01236859787169,
+      "weakest_row": "deflate-sao-65536-L9"
+    },
+    "zstd/65536/L19": {
+      "rows": 12,
+      "throughput_vort_over_reference": 0.6649997028424306,
+      "encoded_size_vort_over_reference": 1.0950898603834518,
+      "weakest_row": "zstd-sao-65536-L19"
+    },
+    "deflate/65536/L6": {
+      "rows": 12,
+      "throughput_vort_over_reference": 0.3983739993406803,
+      "encoded_size_vort_over_reference": 1.0064232762268417,
+      "weakest_row": "deflate-mr-65536-L6"
+    }
+  },
+  "rows": [
+    {
+      "id": "brotli-samba-65536-L11",
+      "throughput_vort_over_reference": 0.2939628337892784,
+      "encoded_size_vort_over_reference": 1.013202748769006,
+      "vort_bytes": 18725,
+      "reference_bytes": 18481
+    },
+    {
+      "id": "brotli-sao-65536-L8",
+      "throughput_vort_over_reference": 0.015833441028571593,
+      "encoded_size_vort_over_reference": 0.9579368334700574,
+      "vort_bytes": 46709,
+      "reference_bytes": 48760
+    },
+    {
+      "id": "zstd-xml-65536-L3",
+      "throughput_vort_over_reference": 0.07978751654193968,
+      "encoded_size_vort_over_reference": 0.9517953762911953,
+      "vort_bytes": 5805,
+      "reference_bytes": 6099
+    },
+    {
+      "id": "deflate-ooffice-65536-L9",
+      "throughput_vort_over_reference": 0.3857037756497214,
+      "encoded_size_vort_over_reference": 1.0006673446040422,
+      "vort_bytes": 31489,
+      "reference_bytes": 31468
+    },
+    {
+      "id": "brotli-mozilla-65536-L11",
+      "throughput_vort_over_reference": 0.14168904617147268,
+      "encoded_size_vort_over_reference": 1.1247169200905855,
+      "vort_bytes": 13906,
+      "reference_bytes": 12364
+    },
+    {
+      "id": "zstd-sao-65536-L19",
+      "throughput_vort_over_reference": 0.3559867037621407,
+      "encoded_size_vort_over_reference": 1.0228813911885843,
+      "vort_bytes": 49174,
+      "reference_bytes": 48074
+    },
+    {
+      "id": "deflate-xml-65536-L6",
+      "throughput_vort_over_reference": 0.47035042748550104,
+      "encoded_size_vort_over_reference": 0.9924967173138248,
+      "vort_bytes": 5291,
+      "reference_bytes": 5331
+    },
+    {
+      "id": "zstd-x-ray-65536-L3",
+      "throughput_vort_over_reference": 0.08750467193525736,
+      "encoded_size_vort_over_reference": 0.8948945465792882,
+      "vort_bytes": 46292,
+      "reference_bytes": 51729
+    },
+    {
+      "id": "zstd-webster-65536-L3",
+      "throughput_vort_over_reference": 0.11060211989510682,
+      "encoded_size_vort_over_reference": 0.9881933341532407,
+      "vort_bytes": 24105,
+      "reference_bytes": 24393
+    },
+    {
+      "id": "zstd-mozilla-65536-L19",
+      "throughput_vort_over_reference": 0.9336014914131247,
+      "encoded_size_vort_over_reference": 1.2839589420843636,
+      "vort_bytes": 17137,
+      "reference_bytes": 13347
+    },
+    {
+      "id": "brotli-nci-65536-L11",
+      "throughput_vort_over_reference": 0.41703759041991867,
+      "encoded_size_vort_over_reference": 1.1181695827725437,
+      "vort_bytes": 4154,
+      "reference_bytes": 3715
+    },
+    {
+      "id": "deflate-ooffice-65536-L6",
+      "throughput_vort_over_reference": 0.41710498050790795,
+      "encoded_size_vort_over_reference": 1.003481720964934,
+      "vort_bytes": 32280,
+      "reference_bytes": 32168
+    },
+    {
+      "id": "deflate-osdb-65536-L6",
+      "throughput_vort_over_reference": 0.4633979276928265,
+      "encoded_size_vort_over_reference": 0.9995250100478644,
+      "vort_bytes": 27356,
+      "reference_bytes": 27369
+    },
+    {
+      "id": "brotli-xml-65536-L8",
+      "throughput_vort_over_reference": 0.007898655793692226,
+      "encoded_size_vort_over_reference": 0.9414654988250374,
+      "vort_bytes": 4407,
+      "reference_bytes": 4681
+    },
+    {
+      "id": "zstd-nci-65536-L3",
+      "throughput_vort_over_reference": 0.06907409385016557,
+      "encoded_size_vort_over_reference": 0.9808795411089866,
+      "vort_bytes": 5130,
+      "reference_bytes": 5230
+    },
+    {
+      "id": "zstd-nci-65536-L19",
+      "throughput_vort_over_reference": 0.889805157501241,
+      "encoded_size_vort_over_reference": 1.2173017507723995,
+      "vort_bytes": 4728,
+      "reference_bytes": 3884
+    },
+    {
+      "id": "zstd-osdb-65536-L3",
+      "throughput_vort_over_reference": 0.10718229802965626,
+      "encoded_size_vort_over_reference": 1.01095559138209,
+      "vort_bytes": 27591,
+      "reference_bytes": 27292
+    },
+    {
+      "id": "deflate-mr-65536-L6",
+      "throughput_vort_over_reference": 0.3050865011282054,
+      "encoded_size_vort_over_reference": 1.060210552237887,
+      "vort_bytes": 17221,
+      "reference_bytes": 16243
+    },
+    {
+      "id": "deflate-dickens-65536-L9",
+      "throughput_vort_over_reference": 0.5335684026825056,
+      "encoded_size_vort_over_reference": 1.0105127999357997,
+      "vort_bytes": 25184,
+      "reference_bytes": 24922
+    },
+    {
+      "id": "brotli-nci-65536-L8",
+      "throughput_vort_over_reference": 0.007879101588084941,
+      "encoded_size_vort_over_reference": 1.0088750299832094,
+      "vort_bytes": 4206,
+      "reference_bytes": 4169
+    },
+    {
+      "id": "deflate-webster-65536-L6",
+      "throughput_vort_over_reference": 0.45829716801050796,
+      "encoded_size_vort_over_reference": 1.008729218756854,
+      "vort_bytes": 22996,
+      "reference_bytes": 22797
+    },
+    {
+      "id": "brotli-sao-65536-L11",
+      "throughput_vort_over_reference": 0.2158703968191798,
+      "encoded_size_vort_over_reference": 1.0396152301031112,
+      "vort_bytes": 46581,
+      "reference_bytes": 44806
+    },
+    {
+      "id": "deflate-dickens-65536-L6",
+      "throughput_vort_over_reference": 0.4504446017843978,
+      "encoded_size_vort_over_reference": 0.9995049693461787,
+      "vort_bytes": 26248,
+      "reference_bytes": 26261
+    },
+    {
+      "id": "deflate-webster-65536-L9",
+      "throughput_vort_over_reference": 0.73415468161814,
+      "encoded_size_vort_over_reference": 1.0057756150802675,
+      "vort_bytes": 22116,
+      "reference_bytes": 21989
+    },
+    {
+      "id": "brotli-osdb-65536-L11",
+      "throughput_vort_over_reference": 0.19445445774936246,
+      "encoded_size_vort_over_reference": 1.0371745694931853,
+      "vort_bytes": 25417,
+      "reference_bytes": 24506
+    },
+    {
+      "id": "brotli-reymont-65536-L8",
+      "throughput_vort_over_reference": 0.02692271442596687,
+      "encoded_size_vort_over_reference": 0.9382120946538125,
+      "vort_bytes": 17128,
+      "reference_bytes": 18256
+    },
+    {
+      "id": "brotli-ooffice-65536-L11",
+      "throughput_vort_over_reference": 0.2597895807597378,
+      "encoded_size_vort_over_reference": 1.056703872123467,
+      "vort_bytes": 30674,
+      "reference_bytes": 29028
+    },
+    {
+      "id": "zstd-dickens-65536-L19",
+      "throughput_vort_over_reference": 0.6316389295812981,
+      "encoded_size_vort_over_reference": 1.0420046582603808,
+      "vort_bytes": 25948,
+      "reference_bytes": 24902
+    },
+    {
+      "id": "brotli-webster-65536-L8",
+      "throughput_vort_over_reference": 0.01963575020165407,
+      "encoded_size_vort_over_reference": 0.8878547105561861,
+      "vort_bytes": 19555,
+      "reference_bytes": 22025
+    },
+    {
+      "id": "zstd-reymont-65536-L3",
+      "throughput_vort_over_reference": 0.10561761366300466,
+      "encoded_size_vort_over_reference": 0.9965384427867974,
+      "vort_bytes": 20440,
+      "reference_bytes": 20511
+    },
+    {
+      "id": "zstd-mr-65536-L19",
+      "throughput_vort_over_reference": 0.5890798567542272,
+      "encoded_size_vort_over_reference": 1.0707186544342508,
+      "vort_bytes": 16806,
+      "reference_bytes": 15696
+    },
+    {
+      "id": "brotli-mr-65536-L8",
+      "throughput_vort_over_reference": 0.014338796384110971,
+      "encoded_size_vort_over_reference": 1.006257332811889,
+      "vort_bytes": 15438,
+      "reference_bytes": 15342
+    },
+    {
+      "id": "deflate-reymont-65536-L6",
+      "throughput_vort_over_reference": 0.3427122717128341,
+      "encoded_size_vort_over_reference": 1.001919897605461,
+      "vort_bytes": 18787,
+      "reference_bytes": 18751
+    },
+    {
+      "id": "zstd-mozilla-65536-L3",
+      "throughput_vort_over_reference": 0.09225069791428027,
+      "encoded_size_vort_over_reference": 0.9356196218830476,
+      "vort_bytes": 14896,
+      "reference_bytes": 15921
+    },
+    {
+      "id": "brotli-mozilla-65536-L8",
+      "throughput_vort_over_reference": 0.008080867228520833,
+      "encoded_size_vort_over_reference": 1.0208211143695014,
+      "vort_bytes": 13924,
+      "reference_bytes": 13640
+    },
+    {
+      "id": "deflate-mozilla-65536-L9",
+      "throughput_vort_over_reference": 0.6212796317479147,
+      "encoded_size_vort_over_reference": 1.003732028143163,
+      "vort_bytes": 16406,
+      "reference_bytes": 16345
+    },
+    {
+      "id": "zstd-sao-65536-L3",
+      "throughput_vort_over_reference": 0.11945827865502515,
+      "encoded_size_vort_over_reference": 0.9411886169094459,
+      "vort_bytes": 50139,
+      "reference_bytes": 53272
+    },
+    {
+      "id": "deflate-samba-65536-L6",
+      "throughput_vort_over_reference": 0.3812319334757562,
+      "encoded_size_vort_over_reference": 1.0046739472383264,
+      "vort_bytes": 22355,
+      "reference_bytes": 22251
+    },
+    {
+      "id": "deflate-x-ray-65536-L9",
+      "throughput_vort_over_reference": 0.2766395204167656,
+      "encoded_size_vort_over_reference": 1.000766535260622,
+      "vort_bytes": 45695,
+      "reference_bytes": 45660
+    },
+    {
+      "id": "deflate-x-ray-65536-L6",
+      "throughput_vort_over_reference": 0.35184747022195845,
+      "encoded_size_vort_over_reference": 0.9983489966979934,
+      "vort_bytes": 47166,
+      "reference_bytes": 47244
+    },
+    {
+      "id": "brotli-dickens-65536-L8",
+      "throughput_vort_over_reference": 0.023207187022395884,
+      "encoded_size_vort_over_reference": 0.8888138287303795,
+      "vort_bytes": 22367,
+      "reference_bytes": 25165
+    },
+    {
+      "id": "brotli-xml-65536-L11",
+      "throughput_vort_over_reference": 0.4557455312468074,
+      "encoded_size_vort_over_reference": 1.117272958534724,
+      "vort_bytes": 4392,
+      "reference_bytes": 3931
+    },
+    {
+      "id": "deflate-mozilla-65536-L6",
+      "throughput_vort_over_reference": 0.4117958888877366,
+      "encoded_size_vort_over_reference": 1.0050061841097826,
+      "vort_bytes": 17064,
+      "reference_bytes": 16979
+    },
+    {
+      "id": "brotli-samba-65536-L8",
+      "throughput_vort_over_reference": 0.01848429160863036,
+      "encoded_size_vort_over_reference": 0.8776513555274618,
+      "vort_bytes": 18744,
+      "reference_bytes": 21357
+    },
+    {
+      "id": "zstd-samba-65536-L19",
+      "throughput_vort_over_reference": 0.6153194093448877,
+      "encoded_size_vort_over_reference": 1.040792265975006,
+      "vort_bytes": 22070,
+      "reference_bytes": 21205
+    },
+    {
+      "id": "brotli-ooffice-65536-L8",
+      "throughput_vort_over_reference": 0.012616510967283123,
+      "encoded_size_vort_over_reference": 0.9815099168266155,
+      "vort_bytes": 30682,
+      "reference_bytes": 31260
+    },
+    {
+      "id": "zstd-x-ray-65536-L19",
+      "throughput_vort_over_reference": 0.3581224387957117,
+      "encoded_size_vort_over_reference": 1.1423322901074977,
+      "vort_bytes": 50370,
+      "reference_bytes": 44094
+    },
+    {
+      "id": "zstd-webster-65536-L19",
+      "throughput_vort_over_reference": 0.5825738447289829,
+      "encoded_size_vort_over_reference": 1.036703948870121,
+      "vort_bytes": 22709,
+      "reference_bytes": 21905
+    },
+    {
+      "id": "zstd-reymont-65536-L19",
+      "throughput_vort_over_reference": 1.196848062112367,
+      "encoded_size_vort_over_reference": 1.0884550773330244,
+      "vort_bytes": 18790,
+      "reference_bytes": 17263
+    },
+    {
+      "id": "zstd-mr-65536-L3",
+      "throughput_vort_over_reference": 0.09501381872695094,
+      "encoded_size_vort_over_reference": 0.966965253608718,
+      "vort_bytes": 16948,
+      "reference_bytes": 17527
+    },
+    {
+      "id": "zstd-dickens-65536-L3",
+      "throughput_vort_over_reference": 0.1087982307428089,
+      "encoded_size_vort_over_reference": 1.012864936596874,
+      "vort_bytes": 27477,
+      "reference_bytes": 27128
+    },
+    {
+      "id": "deflate-osdb-65536-L9",
+      "throughput_vort_over_reference": 0.622915380932624,
+      "encoded_size_vort_over_reference": 0.9999262101534829,
+      "vort_bytes": 27102,
+      "reference_bytes": 27104
+    },
+    {
+      "id": "zstd-osdb-65536-L19",
+      "throughput_vort_over_reference": 0.5007303063576101,
+      "encoded_size_vort_over_reference": 1.0204731574158326,
+      "vort_bytes": 26916,
+      "reference_bytes": 26376
+    },
+    {
+      "id": "brotli-osdb-65536-L8",
+      "throughput_vort_over_reference": 0.009920782296911361,
+      "encoded_size_vort_over_reference": 0.9701156444410519,
+      "vort_bytes": 25418,
+      "reference_bytes": 26201
+    },
+    {
+      "id": "deflate-sao-65536-L9",
+      "throughput_vort_over_reference": 0.2206661770950674,
+      "encoded_size_vort_over_reference": 1.0013198773529353,
+      "vort_bytes": 49312,
+      "reference_bytes": 49247
+    },
+    {
+      "id": "deflate-samba-65536-L9",
+      "throughput_vort_over_reference": 0.61371929313281,
+      "encoded_size_vort_over_reference": 1.005843305908751,
+      "vort_bytes": 21517,
+      "reference_bytes": 21392
+    },
+    {
+      "id": "deflate-nci-65536-L6",
+      "throughput_vort_over_reference": 0.4003493565740115,
+      "encoded_size_vort_over_reference": 1.0063153739885533,
+      "vort_bytes": 5099,
+      "reference_bytes": 5067
+    },
+    {
+      "id": "brotli-x-ray-65536-L8",
+      "throughput_vort_over_reference": 0.012731353487894594,
+      "encoded_size_vort_over_reference": 0.8647808647808648,
+      "vort_bytes": 41180,
+      "reference_bytes": 47619
+    },
+    {
+      "id": "brotli-webster-65536-L11",
+      "throughput_vort_over_reference": 0.2934122039174633,
+      "encoded_size_vort_over_reference": 1.014747883886379,
+      "vort_bytes": 19541,
+      "reference_bytes": 19257
+    },
+    {
+      "id": "deflate-mr-65536-L9",
+      "throughput_vort_over_reference": 0.521906717835358,
+      "encoded_size_vort_over_reference": 1.0776131304405607,
+      "vort_bytes": 16217,
+      "reference_bytes": 15049
+    },
+    {
+      "id": "zstd-ooffice-65536-L3",
+      "throughput_vort_over_reference": 0.1045852602627742,
+      "encoded_size_vort_over_reference": 0.9390122735242549,
+      "vort_bytes": 32133,
+      "reference_bytes": 34220
+    },
+    {
+      "id": "zstd-samba-65536-L3",
+      "throughput_vort_over_reference": 0.1109115907688409,
+      "encoded_size_vort_over_reference": 1.0015044057597249,
+      "vort_bytes": 23300,
+      "reference_bytes": 23265
+    },
+    {
+      "id": "zstd-xml-65536-L19",
+      "throughput_vort_over_reference": 1.9088187982575486,
+      "encoded_size_vort_over_reference": 1.1352559803264028,
+      "vort_bytes": 5078,
+      "reference_bytes": 4473
+    },
+    {
+      "id": "brotli-reymont-65536-L11",
+      "throughput_vort_over_reference": 0.30765710405886626,
+      "encoded_size_vort_over_reference": 1.0197462900909526,
+      "vort_bytes": 17042,
+      "reference_bytes": 16712
+    },
+    {
+      "id": "deflate-xml-65536-L9",
+      "throughput_vort_over_reference": 0.7774172134111081,
+      "encoded_size_vort_over_reference": 1.024088814411395,
+      "vort_bytes": 4889,
+      "reference_bytes": 4774
+    },
+    {
+      "id": "zstd-ooffice-65536-L19",
+      "throughput_vort_over_reference": 0.46284266806624114,
+      "encoded_size_vort_over_reference": 1.0729024754942682,
+      "vort_bytes": 32289,
+      "reference_bytes": 30095
+    },
+    {
+      "id": "deflate-reymont-65536-L9",
+      "throughput_vort_over_reference": 0.5723861727893428,
+      "encoded_size_vort_over_reference": 1.0157873353067501,
+      "vort_bytes": 17501,
+      "reference_bytes": 17229
+    },
+    {
+      "id": "deflate-sao-65536-L6",
+      "throughput_vort_over_reference": 0.3681838773627963,
+      "encoded_size_vort_over_reference": 0.9984833063920653,
+      "vort_bytes": 50033,
+      "reference_bytes": 50109
+    },
+    {
+      "id": "deflate-nci-65536-L9",
+      "throughput_vort_over_reference": 0.8894035169380858,
+      "encoded_size_vort_over_reference": 1.0048618784530388,
+      "vort_bytes": 4547,
+      "reference_bytes": 4525
+    },
+    {
+      "id": "brotli-dickens-65536-L11",
+      "throughput_vort_over_reference": 0.29580554306495704,
+      "encoded_size_vort_over_reference": 1.0102598870056496,
+      "vort_bytes": 22352,
+      "reference_bytes": 22125
+    },
+    {
+      "id": "brotli-x-ray-65536-L11",
+      "throughput_vort_over_reference": 0.38115007575617016,
+      "encoded_size_vort_over_reference": 1.0743415114466235,
+      "vort_bytes": 39279,
+      "reference_bytes": 36561
+    },
+    {
+      "id": "brotli-mr-65536-L11",
+      "throughput_vort_over_reference": 0.21131668708461418,
+      "encoded_size_vort_over_reference": 1.1201814058956916,
+      "vort_bytes": 15314,
+      "reference_bytes": 13671
+    }
+  ],
+  "scope": "allocating per-call presets; all raw rounds retained; no matched-quality frontier, prepared/streaming or isolated-memory claim"
+}
