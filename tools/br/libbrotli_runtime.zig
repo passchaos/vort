@@ -365,6 +365,41 @@ pub const Runtime = struct {
         return self.encodeFlushedChunksImpl(allocator, chunks, options, flush_offsets);
     }
 
+    /// Encode completed FLUSHes with one RAW shared-prefix dictionary. If
+    /// supplied, `flush_offsets` must have exactly `chunks.len -| 1` slots.
+    pub fn encodeFlushedChunksWithRawDictionaryAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+        options: StreamingOptions,
+        raw_dictionary: []const u8,
+        flush_offsets: ?[]usize,
+    ) ![]u8 {
+        if (flush_offsets) |offsets| {
+            if (offsets.len != chunks.len -| 1) return error.InvalidReferenceParameters;
+        }
+        const prepare_dictionary = self.prepare_dictionary orelse return error.ReferenceUnavailable;
+        const destroy_prepared_dictionary = self.destroy_prepared_dictionary orelse return error.ReferenceUnavailable;
+        const attach_prepared_dictionary = self.attach_prepared_dictionary orelse return error.ReferenceUnavailable;
+        const quality = std.math.cast(c_int, options.quality) orelse return error.ReferenceEncodeFailed;
+        const prepared = prepare_dictionary(
+            raw_shared_dictionary_type,
+            raw_dictionary.len,
+            raw_dictionary.ptr,
+            quality,
+            null,
+            null,
+            null,
+        ) orelse return error.ReferenceEncodeFailed;
+        defer destroy_prepared_dictionary(prepared);
+
+        const state = try self.createConfiguredEncoder(options);
+        defer self.destroy_encoder(state);
+        if (attach_prepared_dictionary(state, prepared) == 0)
+            return error.ReferenceEncodeFailed;
+        return self.encodeFlushedChunksWithEncoder(allocator, state, chunks, flush_offsets);
+    }
+
     fn encodeFlushedChunksImpl(
         self: Runtime,
         allocator: std.mem.Allocator,
@@ -374,7 +409,16 @@ pub const Runtime = struct {
     ) ![]u8 {
         const state = try self.createConfiguredEncoder(options);
         defer self.destroy_encoder(state);
+        return self.encodeFlushedChunksWithEncoder(allocator, state, chunks, flush_offsets);
+    }
 
+    fn encodeFlushedChunksWithEncoder(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        state: *EncoderState,
+        chunks: []const []const u8,
+        flush_offsets: ?[]usize,
+    ) ![]u8 {
         var output: std.ArrayList(u8) = .empty;
         errdefer output.deinit(allocator);
         for (chunks, 0..) |chunk, index| {
@@ -596,14 +640,26 @@ pub const Runtime = struct {
         if (available_in != 0 or available_out != 0) return error.SizeMismatch;
     }
 
-    /// Decode after attaching the ordered RAW shared-prefix chunks. All
-    /// attachments happen before the first decoder process call.
+    /// Decode one complete stream into an exact-size output buffer.
     pub fn decodeWithRawDictionaries(
         self: Runtime,
         encoded: []const u8,
         output: []u8,
         raw_dictionaries: []const []const u8,
     ) !void {
+        if (try self.decodeWithRawDictionariesInto(encoded, output, raw_dictionaries) != output.len)
+            return error.ReferenceDecodeFailed;
+    }
+
+    /// Attach the ordered RAW shared-prefix chunks, then decode one complete
+    /// stream with no trailing bytes. Return the bytes written; spare output
+    /// capacity is allowed.
+    pub fn decodeWithRawDictionariesInto(
+        self: Runtime,
+        encoded: []const u8,
+        output: []u8,
+        raw_dictionaries: []const []const u8,
+    ) !usize {
         const attach_dictionary = self.decoder_attach_dictionary orelse return error.ReferenceUnavailable;
         if (raw_dictionaries.len > max_raw_dictionaries) return error.ReferenceDecodeFailed;
 
@@ -630,8 +686,8 @@ pub const Runtime = struct {
             &next_out,
             null,
         );
-        if (result != 1 or available_in != 0 or available_out != 0)
-            return error.ReferenceDecodeFailed;
+        if (result != 1 or available_in != 0) return error.ReferenceDecodeFailed;
+        return output.len - available_out;
     }
 
     pub fn decodeWithSerializedDictionary(

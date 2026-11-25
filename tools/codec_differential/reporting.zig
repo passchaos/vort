@@ -162,7 +162,7 @@ pub const Manifest = struct {
 };
 
 pub fn hasReference(case: anytype) bool {
-    return !case.brotli_shared_dictionary and !case.brotli_serialized_dictionary and !case.zstd_magicless;
+    return (!case.brotli_shared_dictionary or case.upstream_real) and !case.brotli_serialized_dictionary and !case.zstd_magicless;
 }
 
 pub fn referenceCapacity(source_len: usize) usize {

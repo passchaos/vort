@@ -8,6 +8,37 @@ const wide_brotli = @import("wide_brotli.zig");
 pub const chunk_len = 64 * 1024;
 pub const default_file_limit = 8 * 1024 * 1024;
 pub const maximum_file_limit = 64 * 1024 * 1024;
+pub const maximum_dictionary_len = 32 * 1024;
+
+pub const Options = struct {
+    brotli_wide: bool = false,
+    record_flushes: bool = false,
+    raw_dictionary: ?[]const u8 = null,
+};
+
+pub const DictionaryFixture = struct {
+    storage: []u8,
+    dictionary: []const u8,
+    input: []const u8,
+};
+
+pub fn dictionarySmokeInput(a: std.mem.Allocator) !DictionaryFixture {
+    const storage = try a.alloc(u8, maximum_dictionary_len + 3 * chunk_len + 333);
+    var rng = std.Random.DefaultPrng.init(0x766f_7274_6469_6374);
+    rng.random().bytes(storage);
+    const dictionary = storage[0..maximum_dictionary_len];
+    const input = storage[maximum_dictionary_len..];
+    const repeated = 12 * 1024;
+    // High-entropy bytes from the dictionary cannot be recreated as local
+    // matches. Subsequent chunks also exercise copies across flush boundaries.
+    @memcpy(input[0..repeated], dictionary[dictionary.len - repeated ..]);
+    var offset: usize = chunk_len;
+    while (offset < input.len) : (offset += chunk_len) {
+        const n = @min(repeated, input.len - offset);
+        @memcpy(input[offset..][0..n], input[offset - repeated ..][0..n]);
+    }
+    return .{ .storage = storage, .dictionary = dictionary, .input = input };
+}
 
 pub const Checkpoint = struct {
     flush_index: usize,
@@ -48,9 +79,10 @@ pub const Wire = struct {
     checkpoints: Checkpoints = .{},
 };
 
-pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: anytype, brotli_wide: bool, record_flushes: bool) !Wire {
-    if (brotli_wide and record_flushes) return error.ConflictingRealStreamModes;
-    const offsets: ?[]usize = if (record_flushes) try a.alloc(usize, (input.len -| 1) / chunk_len) else null;
+pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: anytype, mode: Options) !Wire {
+    if (mode.brotli_wide and (mode.record_flushes or mode.raw_dictionary != null)) return error.ConflictingRealStreamModes;
+    if (codec == .gzip and mode.raw_dictionary != null) return error.UnsupportedGzipDictionary;
+    const offsets: ?[]usize = if (mode.record_flushes) try a.alloc(usize, (input.len -| 1) / chunk_len) else null;
     defer if (offsets) |positions| a.free(positions);
     var wire: Wire = switch (codec) {
         .raw, .zlib, .gzip => .{
@@ -59,7 +91,7 @@ pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: 
                 .zlib => 15,
                 .gzip => 31,
                 else => unreachable,
-            }, offsets),
+            }, offsets, mode.raw_dictionary),
             .encoder = "libz deflateInit2(level=6,windowBits=-15/15/31,memLevel=8,strategy=default); Z_SYNC_FLUSH",
             .level = 6,
         },
@@ -75,7 +107,9 @@ pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: 
                 .window_log = 17,
             };
             break :result .{
-                .bytes = if (offsets) |positions|
+                .bytes = if (mode.raw_dictionary) |dictionary|
+                    try upstream.encodeStreamingWithRawPrefixAlloc(a, input, options, chunk_len, dictionary, offsets)
+                else if (offsets) |positions|
                     try upstream.encodeStreamingWithFlushOffsetsAlloc(a, input, options, chunk_len, positions)
                 else
                     try upstream.encodeStreamingAlloc(a, input, options, chunk_len, true),
@@ -87,7 +121,7 @@ pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: 
             var upstream = try Brotli.open();
             defer upstream.deinit();
             if (upstream.encoder_version() != c.BrotliDecoderVersion()) return error.ReferenceVersionMismatch;
-            if (brotli_wide) break :result .{
+            if (mode.brotli_wide) break :result .{
                 .bytes = try upstream.encodeWithOptionsAlloc(a, input, .{ .quality = wide_brotli.quality, .lgwin = wide_brotli.window_bits }),
                 .encoder = wide_brotli.encoder,
                 .level = wide_brotli.quality,
@@ -99,11 +133,14 @@ pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: 
                 const offset = i * chunk_len;
                 chunk.* = input[offset..][0..@min(chunk_len, input.len - offset)];
             }
+            const options: Brotli.StreamingOptions = .{ .quality = 5, .lgwin = 16, .lgblock = 16 };
             break :result .{
-                .bytes = if (offsets) |positions|
-                    try upstream.encodeFlushedChunksWithOffsetsAlloc(a, chunks, .{ .quality = 5, .lgwin = 16, .lgblock = 16 }, positions)
+                .bytes = if (mode.raw_dictionary) |dictionary|
+                    try upstream.encodeFlushedChunksWithRawDictionaryAlloc(a, chunks, options, dictionary, offsets)
+                else if (offsets) |positions|
+                    try upstream.encodeFlushedChunksWithOffsetsAlloc(a, chunks, options, positions)
                 else
-                    try upstream.encodeFlushedChunksAlloc(a, chunks, 5, 16, 16),
+                    try upstream.encodeFlushedChunksWithOptionsAlloc(a, chunks, options),
                 .encoder = "libbrotli CompressStream(q=5,lgwin=16,lgblock=16,generic); BROTLI_OPERATION_FLUSH",
                 .level = 5,
             };
@@ -114,11 +151,15 @@ pub fn encode(comptime c: type, a: std.mem.Allocator, input: []const u8, codec: 
     return wire;
 }
 
-fn deflate(comptime c: type, a: std.mem.Allocator, input: []const u8, window_bits: c_int, offsets: ?[]usize) ![]u8 {
+fn deflate(comptime c: type, a: std.mem.Allocator, input: []const u8, window_bits: c_int, offsets: ?[]usize, raw_dictionary: ?[]const u8) ![]u8 {
     var stream = std.mem.zeroes(c.z_stream);
     if (c.deflateInit2(&stream, 6, c.Z_DEFLATED, window_bits, 8, c.Z_DEFAULT_STRATEGY) != c.Z_OK)
         return error.ReferenceEncodeFailed;
     defer _ = c.deflateEnd(&stream);
+    if (raw_dictionary) |dictionary| {
+        if (c.deflateSetDictionary(&stream, dictionary.ptr, @intCast(dictionary.len)) != c.Z_OK)
+            return error.ReferenceEncodeFailed;
+    }
 
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(a);

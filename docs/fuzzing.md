@@ -186,6 +186,41 @@ four more full files and a separate multi-meta-block wide Brotli sweep.
 The [flush checkpoint receipt](performance/codec-upstream-flush-cuts-20261125.md)
 records the additional mid-stream truncation runs.
 
+### Upstream dictionary streams
+
+`--real-dictionary=PATH` adds a shared raw dictionary of 1 byte to 32 KiB to each
+`--real-file` and enables the flush cuts. Each file must exceed one 64 KiB
+flush interval. The reference encoders attach it as a Deflate/zlib preset,
+Zstd RAW prefix, or Brotli RAW shared dictionary; gzip is excluded because
+its wrapper has no preset dictionary. The full wire must decode to the same
+plaintext on both sides, but neither decoder may reproduce it without the
+dictionary. An acceptance with different bytes is allowed without a RAW
+prefix, since not all formats authenticate the dictionary. The test checks
+both complete-input schedules, the final-byte cut, and the selected flush cuts.
+`upstream_real_dictionary_json` records dictionary size and SHA-256 alongside
+the wire digest. `--real-dictionary-smoke` is a standalone mode using a
+built-in multi-block fixture with a guaranteed external history match.
+
+```sh
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build run-codec-real-dictionary-smoke
+LD_LIBRARY_PATH="$HOME/Work/brotli/build-vort:$HOME/Work/zstd/lib" \
+  zig build -Doptimize=ReleaseFast run-codec-differential-fuzz -- \
+  --real-file="$corpus/xml" --real-dictionary=/tmp/xml-prefix.raw
+```
+
+Use a dictionary that matches the input's beginning (for example,
+`head -c 32768 "$corpus/xml" > /tmp/xml-prefix.raw`). Brotli requires a
+reference library exporting the RAW shared dictionary APIs; selection of
+Brotli fails explicitly if those APIs are unavailable. The dictionary smoke
+is opt-in, not part of `ci-smoke`, so installations with older libbrotli
+continue to run the ordinary smoke. `--only=raw-deflate`, `--only=zlib` or
+`--only=zstd` does not load the Brotli dictionary reference. The
+[dictionary conformance receipt](performance/codec-upstream-raw-dictionary-20261125.md)
+records the built-in and full-file runs.
+
+### Wide standard Brotli streams
+
 `--real-brotli-wide` selects only Brotli and uses libbrotli's one-shot
 quality-6, `lgwin=22` standard encoder, without forced flushes. A declared wide
 window is not enough: the Vort summary must find an actual backward copy past

@@ -2741,6 +2741,10 @@ pub fn build(b: *std.Build) void {
     run_codec_real_stream_smoke.addArgs(&.{ "--real-file=README.md", "--real-flush-cuts" });
     const codec_real_stream_smoke_step = b.step("run-codec-real-stream-smoke", "Verify upstream multi-block README streams, flush cuts and late truncation across the codecs");
     codec_real_stream_smoke_step.dependOn(&run_codec_real_stream_smoke.step);
+    const run_codec_real_dictionary_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
+    run_codec_real_dictionary_smoke.addArg("--real-dictionary-smoke");
+    b.step("run-codec-real-dictionary-smoke", "Verify upstream RAW dictionary streams and flush checkpoints (requires RAW-capable libbrotli)")
+        .dependOn(&run_codec_real_dictionary_smoke.step);
     const run_codec_brotli_wide_smoke = b.addRunArtifact(codec_differential_fuzz_exe);
     run_codec_brotli_wide_smoke.addArg("--real-brotli-wide");
     const codec_brotli_wide_smoke_step = b.step("run-codec-brotli-wide-smoke", "Verify libbrotli long-distance streams and caller-history preflight");
