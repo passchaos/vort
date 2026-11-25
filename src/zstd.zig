@@ -5570,8 +5570,15 @@ pub const SourceSeekableRangeProgress = source_seek_range.RangeProgress;
 pub const SourceSeekableRangeOutcome = source_seek_range.RangeOutcome;
 pub const openSourceSeekTable = source_seek_table.open;
 pub const sourceSeekableRangeRequirements = source_seek_decode.requirements;
+pub const sourceSeekableRangeRequirementsWide = source_seek_decode.requirementsWide;
 pub const decodeSourceSeekableRangeInto = source_seek_decode.decodeInto;
 pub const decodeSourceSeekableRangeIntoWithProgress = source_seek_decode.decodeIntoWithProgress;
+pub const SourceSeekableRangeWriteError = source_seek_decode.WriteError;
+pub const decodeSourceSeekableRangeToWriter = source_seek_decode.decodeToWriter;
+
+test "Zstd source seekable range writer contracts" {
+    try @import("tests/zstd_source_seekable_writer.zig").contracts(@This());
+}
 
 const source_seek_encode = @import("zstd/source/seek_encode.zig");
 const SourceSeekableEncodeCodec = struct {

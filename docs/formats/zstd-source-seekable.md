@@ -48,6 +48,16 @@ frame checksum and seek-table checksum are verified when present, including if
 the requested range ends well before the frame ends. There is no verification
 claim for unselected data.
 
+For ranges that need not fit a local slice, use
+`zstdSourceSeekableRangeRequirementsWide` and
+`zstdDecodeSourceSeekableRangeToWriter` with `u64` offset and length. The latter
+writes each verified intersection directly from `range_scratch`, without a
+second plaintext buffer for the full request. It does not flush or close the
+writer. Keep the writer interface and its buffer disjoint from each other and
+from the index, dictionary and workspace buffers. If verification fails, the
+failing frame contributes nothing to the writer; a `WriteFailed` can leave a
+partial write of a frame that did pass verification.
+
 All intermediate storage is caller-owned. Only the largest **selected
 intersection** is required in `range_scratch`, not the full decoded frame.
 The workspace retains the declared frame history (plus selected dictionary

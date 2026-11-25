@@ -48,9 +48,9 @@ const Selection = struct {
     start: u64,
     end: u64,
 
-    fn len(self: Selection) usize {
-        // An intersection is bounded by the caller's usize range length.
-        return @intCast(self.end - self.start);
+    fn len(self: Selection) error{IntegerOverflow}!usize {
+        // Only a single frame intersection needs to be locally addressable.
+        return std.math.cast(usize, self.end - self.start) orelse error.IntegerOverflow;
     }
 
     fn frameLayout(self: Selection, table: seek_table.Table) frame.Error!frame.DataFrameLayout {
@@ -68,7 +68,7 @@ const Selections = struct {
     position: u64,
     end: u64,
 
-    fn init(index: seek_table.Index, offset: u64, length: usize) seek_table.Error!Selections {
+    fn init(index: seek_table.Index, offset: u64, length: u64) seek_table.Error!Selections {
         if (offset > index.decompressed_size or length > index.decompressed_size - offset)
             return error.RangeOutOfBounds;
         if (length == 0) return .{ .entries = &.{}, .position = offset, .end = offset };
@@ -104,7 +104,7 @@ const Selections = struct {
         var len: usize = 0;
         while (try selected.next()) |part| {
             if (part.entry.decompressed_size > max_frame_size) return error.OutputLimitExceeded;
-            len = @max(len, part.len());
+            len = @max(len, try part.len());
         }
         return len;
     }
@@ -131,8 +131,15 @@ pub fn Facade(comptime Decode: type) type {
             max_window_size: u64 = std.math.maxInt(u64),
         };
 
+        pub const WriteError = Error || std.Io.Writer.Error;
+
         /// Read only selected data-frame headers to size a reusable decode workspace.
         pub fn requirements(index: seek_table.Index, offset: u64, length: usize, options: Options) Error!Requirements {
+            return requirementsWide(index, offset, length, options);
+        }
+
+        /// Size workspace for a range that does not need to fit one local slice.
+        pub fn requirementsWide(index: seek_table.Index, offset: u64, length: u64, options: Options) Error!Requirements {
             var selections = try Selections.init(index, offset, length);
             const scratch_len = try selections.scratchLen(options.frame_decoded_max);
             if (length == 0) return .{};
@@ -150,6 +157,35 @@ pub fn Facade(comptime Decode: type) type {
                 ));
             }
             return needed;
+        }
+
+        /// Verify each selected frame before writing its requested intersection.
+        /// Does not flush the writer. A later failure can leave an output prefix.
+        pub fn decodeToWriter(
+            index: seek_table.Index,
+            offset: u64,
+            length: u64,
+            writer: *std.Io.Writer,
+            workspace: Decode.Workspace,
+            range_scratch: []u8,
+            options: Options,
+        ) WriteError!u64 {
+            var selections = try Selections.init(index, offset, length);
+            if (length == 0) return 0;
+            const scratch_len = try selections.scratchLen(options.frame_decoded_max);
+            if (range_scratch.len < scratch_len) return error.OutputTooSmall;
+            try validateBuffers(index, writer.buffer, workspace, range_scratch, options);
+            const writer_state = std.mem.asBytes(writer);
+            try output_alias.validateRegions(writer_state, &.{ writer.buffer, std.mem.sliceAsBytes(index.entries), range_scratch });
+            try output_alias.validateWorkspace(writer_state, workspace);
+            try output_alias.validateOptions(writer_state, options);
+
+            while (try selections.next()) |part| {
+                const scratch = range_scratch[0..try part.len()];
+                try decodeSelection(index.table, part, workspace, scratch, frameOptions(part, options), null);
+                try writer.writeAll(scratch);
+            }
+            return length;
         }
 
         /// Decode exactly output.len plaintext bytes. Each intersecting frame
@@ -198,7 +234,7 @@ pub fn Facade(comptime Decode: type) type {
 
             var written: usize = 0;
             while (try selections.next()) |part| {
-                const scratch = range_scratch[0..part.len()];
+                const scratch = range_scratch[0..try part.len()];
                 var dictionary_id: ?u32 = null;
                 decodeSelection(index.table, part, workspace, scratch, frameOptions(part, options), if (observation != null) &dictionary_id else null) catch |err| {
                     if (observation) |observed| observed.failed_frame = .{
