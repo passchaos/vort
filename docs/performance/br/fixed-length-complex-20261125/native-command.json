@@ -1,0 +1,13 @@
+[
+  "taskset",
+  "-c",
+  "1",
+  "zig",
+  "build",
+  "-j1",
+  "-Doptimize=ReleaseSafe",
+  "--summary",
+  "all",
+  "test-br-fixed-length-codes",
+  "test-br-fixed-length-wires"
+]

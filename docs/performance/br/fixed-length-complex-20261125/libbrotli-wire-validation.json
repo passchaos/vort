@@ -1,0 +1,56 @@
+{
+  "reference_path": "/tmp/vort-decode-current-20261125.NcQHi5/references/brotli/libbrotlidec.so.1.2.0",
+  "reference_sha256": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+  "queried_decoder_version": 16785408,
+  "rows": [
+    {
+      "case": "command-5",
+      "wire_bytes": 25,
+      "plain_bytes": 163,
+      "wire_sha256": "e0fc5ec1f919fd6372c40ecb8bdc3f6db2708b363d29983edbefbcd2acc49829",
+      "plain_sha256": "eebf59a76255d00465005349dd5749d41ca0b5325caa659f5ca9fe4273b63e6a",
+      "result": 1
+    },
+    {
+      "case": "command-6",
+      "wire_bytes": 29,
+      "plain_bytes": 389,
+      "wire_sha256": "d531333d51eaab6a4d49c8ad1050df5f4e15a5295334add7d801fe2a50ac1626",
+      "plain_sha256": "3bb65b6d200b4f2a0281b65bea77193aa2d71426cd7ef37b50bb64840eb49c1e",
+      "result": 1
+    },
+    {
+      "case": "distance-5",
+      "wire_bytes": 44,
+      "plain_bytes": 163,
+      "wire_sha256": "d190da2dee3c4d0cae11ceeed87f5f8346d48e60996d318e8ccb13c11567e4ca",
+      "plain_sha256": "eebf59a76255d00465005349dd5749d41ca0b5325caa659f5ca9fe4273b63e6a",
+      "result": 1
+    },
+    {
+      "case": "distance-6",
+      "wire_bytes": 66,
+      "plain_bytes": 389,
+      "wire_sha256": "4059b0972ebc970f387bb3cc4751c43fd11e2c93371140c4212909d6bfcb5508",
+      "plain_sha256": "3bb65b6d200b4f2a0281b65bea77193aa2d71426cd7ef37b50bb64840eb49c1e",
+      "result": 1
+    },
+    {
+      "case": "literal-5",
+      "wire_bytes": 244,
+      "plain_bytes": 81,
+      "wire_sha256": "9b64bd6a965c6c6e353f7fe01c293fd5b8cd42d664df71f1e9c23ea37a92bfc1",
+      "plain_sha256": "fe51dce3f5f9a2492d9b6f8a9f2ef0693dcba656ac21c012fffee3d5fdec4ded",
+      "result": 1
+    },
+    {
+      "case": "literal-6",
+      "wire_bytes": 427,
+      "plain_bytes": 194,
+      "wire_sha256": "1d9d7f6a9f6fe06b3f58782ff2beb11820e03caf07191cc64137d20e0cb26767",
+      "plain_sha256": "38320d6de914b8b41cacd04bf0d2303a2792b808a28b612669f02824e1fe1b2a",
+      "result": 1
+    }
+  ],
+  "complete_output_verified": true
+}

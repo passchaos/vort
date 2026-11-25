@@ -1,0 +1,106 @@
+{
+  "schema": "vort.brotli.fixed-length-functional-validation.v1",
+  "base_revision": "0dd219d929d1883affab68a98c73a910487a07ce",
+  "source_sha256": {
+    "build.zig": "84d9f3f903b6bbfb58553b8b37c2c8a064d59260e62a3f124a93d79deac01fc8",
+    "build/br_fixed_lengths.zig": "6589f68fddbd90e8678e7ac524ae60894787a6364aff39bce6ea50921be8821a",
+    "src/br.zig": "72d01fd4ec032a0e8d6a3099dccfdf96d6e2731b6287fc54686bdd1caed2c8ab",
+    "src/br/encoder/adaptive_block_code.zig": "ce7a484e3456daed361a46975735f54622f2e7c56589412ae68a69984f4d064f",
+    "src/br/format/block_length.zig": "22bbebf4468ff1045500bf6dc761d973c80c6e8935b7698e6a3ef4d56d076325",
+    "src/fixed_split_length_gate.zig": "d9e99c2c6c806df7bb660666cf553c6fd502e23db69066ec768a18ee062f7618",
+    "src/br/encoder/fixed_split/length_code.zig": "a6634b97fcf7ce7bc849150e83b90670e431b87a0be6b8e1ffe3015deaab6a84",
+    "src/br/encoder/fixed_split/length_code_oracle.zig": "7221c4794fc671f17f49d8acc6ae6c584b4fe4a19536214af3d841b6badfdda1",
+    "src/br/encoder/fixed_split/length_code_tests.zig": "1f7de4c7694168f57c3e9daeffae6460c5152c32fe88deff401c20097d236b1b",
+    "src/br/encoder/fixed_split/wire_tests.zig": "9d80c7ade0e4b5aa3bfec09c375f182d3842b3daf2bdcb6cf92cd2df75003677"
+  },
+  "zig_version": "0.16.0",
+  "utc": "2026-11-25T12:35:59.157089+00:00",
+  "focused_codes": {
+    "Debug": {
+      "passed": 10
+    },
+    "ReleaseSafe": {
+      "passed": 10
+    },
+    "ReleaseFast": {
+      "passed": 10
+    },
+    "x86-linux-musl/ReleaseSafe": {
+      "passed": 10
+    }
+  },
+  "registered_native": {
+    "steps_succeeded": 8,
+    "passed": 35,
+    "exit_code": 0
+  },
+  "full_native_brotli": {
+    "steps_succeeded": 5,
+    "passed": 1707,
+    "skipped": 1,
+    "exit_code": 0,
+    "skip_scope": "32-bit-only general large-window resource contract"
+  },
+  "registered_wasi_wires": {
+    "passed": 25,
+    "exit_code": 0,
+    "wasm_sha256": "1f3b740ec136a9b1f7b96c33a1b51723d44115873d00513435d2d2b30fd5f607"
+  },
+  "reference": {
+    "reference_path": "/tmp/vort-decode-current-20261125.NcQHi5/references/brotli/libbrotlidec.so.1.2.0",
+    "reference_sha256": "916a4e22b249bb9b5024ed6d6956431fbcdea31f0cf157474de36c529a961750",
+    "queried_decoder_version": 16785408,
+    "rows": [
+      {
+        "case": "command-5",
+        "wire_bytes": 25,
+        "plain_bytes": 163,
+        "wire_sha256": "e0fc5ec1f919fd6372c40ecb8bdc3f6db2708b363d29983edbefbcd2acc49829",
+        "plain_sha256": "eebf59a76255d00465005349dd5749d41ca0b5325caa659f5ca9fe4273b63e6a",
+        "result": 1
+      },
+      {
+        "case": "command-6",
+        "wire_bytes": 29,
+        "plain_bytes": 389,
+        "wire_sha256": "d531333d51eaab6a4d49c8ad1050df5f4e15a5295334add7d801fe2a50ac1626",
+        "plain_sha256": "3bb65b6d200b4f2a0281b65bea77193aa2d71426cd7ef37b50bb64840eb49c1e",
+        "result": 1
+      },
+      {
+        "case": "distance-5",
+        "wire_bytes": 44,
+        "plain_bytes": 163,
+        "wire_sha256": "d190da2dee3c4d0cae11ceeed87f5f8346d48e60996d318e8ccb13c11567e4ca",
+        "plain_sha256": "eebf59a76255d00465005349dd5749d41ca0b5325caa659f5ca9fe4273b63e6a",
+        "result": 1
+      },
+      {
+        "case": "distance-6",
+        "wire_bytes": 66,
+        "plain_bytes": 389,
+        "wire_sha256": "4059b0972ebc970f387bb3cc4751c43fd11e2c93371140c4212909d6bfcb5508",
+        "plain_sha256": "3bb65b6d200b4f2a0281b65bea77193aa2d71426cd7ef37b50bb64840eb49c1e",
+        "result": 1
+      },
+      {
+        "case": "literal-5",
+        "wire_bytes": 244,
+        "plain_bytes": 81,
+        "wire_sha256": "9b64bd6a965c6c6e353f7fe01c293fd5b8cd42d664df71f1e9c23ea37a92bfc1",
+        "plain_sha256": "fe51dce3f5f9a2492d9b6f8a9f2ef0693dcba656ac21c012fffee3d5fdec4ded",
+        "result": 1
+      },
+      {
+        "case": "literal-6",
+        "wire_bytes": 427,
+        "plain_bytes": 194,
+        "wire_sha256": "1d9d7f6a9f6fe06b3f58782ff2beb11820e03caf07191cc64137d20e0cb26767",
+        "plain_sha256": "38320d6de914b8b41cacd04bf0d2303a2792b808a28b612669f02824e1fe1b2a",
+        "result": 1
+      }
+    ],
+    "complete_output_verified": true
+  },
+  "performance_claim": null
+}

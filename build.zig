@@ -595,6 +595,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     br_tests_mod.addObject(br_record_optimal_obj);
+    @import("build/br_fixed_lengths.zig").register(b, target, optimize, br_tests_mod);
     const br_test_filter = b.option(
         []const u8,
         "br-test-filter",

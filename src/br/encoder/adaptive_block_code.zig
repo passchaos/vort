@@ -3,12 +3,9 @@ const huffman = @import("../../huffman.zig");
 const command_plan = @import("command_plan.zig");
 const block_split_plan = @import("block_split_plan.zig");
 const block_switch_model = @import("block_switch_model.zig");
+const block_length_format = @import("../format/block_length.zig");
 
-pub const LengthEncoding = struct {
-    symbol: u5,
-    extra: usize,
-    extra_bits: u5,
-};
+pub const LengthEncoding = block_length_format.Encoding;
 
 /// Allocator-owned RFC 7932 block-type and block-length code shared by the
 /// adaptive literal, command, and distance writers. The block payload trees
@@ -130,52 +127,8 @@ pub const Code = struct {
     }
 };
 
-const LengthSpec = struct {
-    base: usize,
-    extra_bits: u5,
-};
-
-const length_specs = [_]LengthSpec{
-    .{ .base = 1, .extra_bits = 2 },
-    .{ .base = 5, .extra_bits = 2 },
-    .{ .base = 9, .extra_bits = 2 },
-    .{ .base = 13, .extra_bits = 2 },
-    .{ .base = 17, .extra_bits = 3 },
-    .{ .base = 25, .extra_bits = 3 },
-    .{ .base = 33, .extra_bits = 3 },
-    .{ .base = 41, .extra_bits = 3 },
-    .{ .base = 49, .extra_bits = 4 },
-    .{ .base = 65, .extra_bits = 4 },
-    .{ .base = 81, .extra_bits = 4 },
-    .{ .base = 97, .extra_bits = 4 },
-    .{ .base = 113, .extra_bits = 5 },
-    .{ .base = 145, .extra_bits = 5 },
-    .{ .base = 177, .extra_bits = 5 },
-    .{ .base = 209, .extra_bits = 5 },
-    .{ .base = 241, .extra_bits = 6 },
-    .{ .base = 305, .extra_bits = 6 },
-    .{ .base = 369, .extra_bits = 7 },
-    .{ .base = 497, .extra_bits = 8 },
-    .{ .base = 753, .extra_bits = 9 },
-    .{ .base = 1265, .extra_bits = 10 },
-    .{ .base = 2289, .extra_bits = 11 },
-    .{ .base = 4337, .extra_bits = 12 },
-    .{ .base = 8433, .extra_bits = 13 },
-    .{ .base = 16625, .extra_bits = 24 },
-};
-
 fn lengthEncoding(len: usize) ?LengthEncoding {
-    if (len == 0 or len > (@as(usize, 1) << 24)) return null;
-    for (length_specs, 0..) |spec, symbol| {
-        const capacity = @as(usize, 1) << @intCast(spec.extra_bits);
-        if (len < spec.base or len - spec.base >= capacity) continue;
-        return .{
-            .symbol = @intCast(symbol),
-            .extra = len - spec.base,
-            .extra_bits = spec.extra_bits,
-        };
-    }
-    return null;
+    return block_length_format.encode(len);
 }
 
 test "adaptive block code emits every switch and length" {

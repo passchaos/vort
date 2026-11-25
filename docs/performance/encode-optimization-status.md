@@ -31,6 +31,14 @@ before a numeric-quality round. These are measurement fixes, not codec wins.
 
 ## Next measured structural boundary
 
+The [fixed block-length repair](br/fixed-length-complex-20261125/README.md)
+closes a functional blocker found while preparing this boundary: legal five-
+and six-symbol fixed length trees previously failed at `simpleCode`. Shared
+RFC geometry and prepared complex length codes now preserve simple wire bits
+and pass focused native/32-bit/WASI and complete-stream libbrotli checks. The
+full native Brotli suite passed 1707 tests with one platform-specific skip.
+No throughput gain is attributed to this functional repair.
+
 Current q8 can execute a lazy seed plus four optimal proposals, followed by
 context and split candidate families. Static dictionary proposals are already
 precomputed, and command-model lifetime reuse is already present. Do not

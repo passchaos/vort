@@ -1,0 +1,15 @@
+[
+  "taskset",
+  "-c",
+  "1",
+  "zig",
+  "build",
+  "-j1",
+  "--prefix",
+  "../wasi-install",
+  "-Dtarget=wasm32-wasi",
+  "-Doptimize=ReleaseSafe",
+  "--summary",
+  "all",
+  "build-br-fixed-length-wires"
+]
