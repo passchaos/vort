@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
@@ -30,7 +31,36 @@ def candidate_bytes(event: dict) -> int:
     return integer(event.get(field), "candidate reference bytes")
 
 
-def validate(report: dict, executable: Path | None = None) -> dict:
+def physical_wires(wires: list[dict], returned: int | None, coverage_complete: bool) -> dict:
+    """Count completed emissions, independent of intermediate selection wins.
+
+    The byte sum is output materialization size, not heap or memory traffic.
+    Auxiliary context-detail truncation does not remove wire events.
+    """
+    require(type(coverage_complete) is bool, "invalid wire coverage flag")
+    require(all(isinstance(event.get("error_name", ""), str) for event in wires), "invalid wire error name")
+    succeeded = [event for event in wires
+                 if event.get("error_name", "") == "" and event.get("wire_bytes") is not None]
+    failed = [event for event in wires if event.get("error_name", "") != ""]
+    unclassified = len(wires) - len(succeeded) - len(failed)
+    complete = coverage_complete and returned is not None and unclassified == 0
+    if complete:
+        require(sum(event["id"] == returned for event in succeeded) == 1, "returned physical wire missing")
+    lost = [event for event in succeeded if event["id"] != returned] if complete else []
+    return {
+        "successful_wire_materializations": len(succeeded),
+        "failed_wire_attempts": len(failed),
+        "unclassified_wire_attempts": unclassified,
+        "completed_wire_bytes_total": sum(integer(event["wire_bytes"], "materialized wire bytes") for event in succeeded),
+        "returned_wire_event_id": returned,
+        "exact_lost_wire_count_available": complete,
+        "lost_wire_materializations": len(lost) if complete else None,
+        "successful_wires_by_origin": dict(Counter(event.get("origin", "unknown") for event in succeeded)),
+        "lost_wires_by_origin": dict(Counter(event.get("origin", "unknown") for event in lost)) if complete else None,
+    }
+
+
+def validate(report: dict, executable: Path | None = None, *, allow_truncated_context_details: bool = False) -> dict:
     require(report.get("schema") in {"vort.brotli.q8-candidate-profile.v1", "vort.brotli.q8-candidate-profile.v2"}, "wrong schema")
     evaluated_schema = report["schema"].endswith(".v2")
     require(report.get("quality") == 8 and report.get("mode") == "generic", "wrong policy")
@@ -126,7 +156,8 @@ def validate(report: dict, executable: Path | None = None) -> dict:
             require(len(wires) == profile["wire_attempts"], "wire attempt count")
             require(len(evaluations) == integer(profile.get("evaluation_attempts", 0), "evaluation attempts"), "evaluation attempt count")
             if "context_details" in profile:
-                require(not profile.get("context_details_truncated", False), "context detail truncated")
+                require(type(profile.get("context_details_truncated", False)) is bool, "invalid context truncation flag")
+                require(allow_truncated_context_details or not profile.get("context_details_truncated", False), "context detail truncated")
                 details = profile["context_details"]
                 require(len(details) <= 8, "context detail capacity")
                 proposal_events = [e for e in events if e["stage"] == "context_proposals" and e["error_name"] == ""]
@@ -192,10 +223,13 @@ def validate(report: dict, executable: Path | None = None) -> dict:
                               "evaluation_attempts": len(evaluations),
                               "exclusive_ns": exclusive, "unaccounted_ns": profile["unaccounted_ns"],
                               "classified_fraction": (total - exclusive["other"]) / outer if outer else None,
-                              "wire_coverage_complete": profile["wire_attempt_coverage_complete"]})
+                              "wire_coverage_complete": profile["wire_attempt_coverage_complete"],
+                              "context_detail_coverage_complete": (not profile.get("context_details_truncated", False)) if "context_details" in profile else None,
+                              "physical_wires": physical_wires(wires, returned, profile["wire_attempt_coverage_complete"])})
     require(bool(summaries), "empty report")
     return {"validated_runs": len(summaries), "rows": summaries,
-            "scope": "Exact wire equality/roundtrip asserted by producer; local input and optional executable identity, event topology and non-overlapping timing independently checked. No competitor throughput claim."}
+            "scope": "Exact wire equality/roundtrip asserted by producer; local input and optional executable identity, event topology and non-overlapping timing independently checked. No competitor throughput claim.",
+            "context_detail_policy": "recorded prefix may be truncated; coverage reported per run" if allow_truncated_context_details else "provided context details must be complete"}
 
 
 def main() -> None:
@@ -203,8 +237,9 @@ def main() -> None:
     parser.add_argument("--json", type=Path, required=True)
     parser.add_argument("--executable", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--wire-counts-only", action="store_true", help="Allow a reported truncated context-detail prefix while retaining complete wire-event requirements")
     args = parser.parse_args()
-    result = validate(json.loads(args.json.read_text()), args.executable)
+    result = validate(json.loads(args.json.read_text()), args.executable, allow_truncated_context_details=args.wire_counts_only)
     text = json.dumps(result, indent=2) + "\n"
     if args.output:
         args.output.write_text(text)
