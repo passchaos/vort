@@ -57,7 +57,8 @@ pub fn register(
         if (index == 2) {
             implementation_tests.stack_size = 8 * 1024 * 1024;
             compile_wasm.dependOn(&implementation_tests.step);
-            const run = b.addSystemCommand(&.{ "node", "tools/zstd/source_reverse_wasm_gate.js" });
+            const run = b.addSystemCommand(&.{"node"});
+            run.addFileArg(b.path("tools/zstd/source_reverse_wasm_gate.js"));
             run.addArtifactArg(implementation_tests);
             gate.dependOn(&b.addInstallFile(
                 run.captureStdOut(.{}),
