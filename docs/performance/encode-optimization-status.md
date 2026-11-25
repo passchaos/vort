@@ -1,5 +1,47 @@
 # Encoder optimization status
 
+## 2026-11-26 public Zstd L3 evidence correction and actual search profile
+
+The allocating Zstd benchmark now captures the effective public primary from
+`nativeEncodeLevelDiagnostics`, matching `Pair.encodeVort`. Default L3 reports
+controlled greedy, search budget 24 and rep-beam disabled; previous raw samples
+reported the nominal resolver's auto/64/true. Explicit native options retain
+their exact settings, and `fast_parser` is now recorded for level 1/2 policy.
+This changes evidence metadata, not compression policy or throughput.
+
+The [actual public L3 profile](zstd/public-l3-profile-20261126/README.md) uses the
+original full NCI bytes and libzstd 1.6.0 with the default level entry point.
+Its function-symbol leaf cycles are controlled `matchAt` **21.84%**, `planReuse`
+**20.43%**, `findBest` **17.09%**, and `Index.seed` **13.26%**. Their non-overlapping
+sum is **72.62%** of all sampled cycles, including reference, checksum and
+validation work. `planReuse` self cost includes inlined helpers; inclusive
+percentages overlap and the root call chain is partially unresolved. These
+are diagnostic observations, not a clean-host throughput or pure-stage matrix.
+
+Prioritize the current controlled-search/index lifecycle before assuming
+winner-only fallback planning is the dominant L3 cost. The current L3 path
+does not run the historical legacy five-parser sweep or per-call candidate
+threads. Historical Zstd source is unchanged, but the original nonquiet
+throughput epoch and incorrect nominal metadata stay historical and unmodified.
+
+## 2026-11-26 adjacent extents and frontier caps: pilot screens not accepted
+
+Both isolated follow-ups retain the accepted V7 output bytes and original
+public q8/generic/window16 settings. Each two-round screen covers all twelve
+fixed 64 KiB inputs, with one AB and one BA pair per row: 24 pairs/48 timed
+calls. The [4 KiB exact adjacent-match cache](br/match-extents-20261126/README.md)
+gives throughput **0.992589x**, NCI **0.983570x**. The
+[known-frontier comparison cap](br/frontier-caps-20261126/README.md) gives
+**0.998768x**, NCI **0.986424x**. Both also close the lazy proposal cache before
+optimal scratch; these combined variants do not isolate any single cause.
+
+All initial complete wires pass full-byte comparison and pinned Brotli 1.2.0
+decode. Extent fixtures and actual scalar parser comparisons pass; frontier
+fixtures prove that a result equal to the comparison cap still examines later
+cheaper distances. Correctness did not produce the required ROI. The routes
+remain unmerged, all raw samples/negative rows remain, and the pilot does not
+claim a confidence interval or completion of the full acceptance matrix.
+
 ## 2026-11-26 paired search and exact histogram proposals: accepted increment
 
 The [complete V7 gate](br/histogram-proposals-20261126/README.md) combines the
