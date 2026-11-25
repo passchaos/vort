@@ -1,0 +1,102 @@
+{
+  "files": {
+    ".gitattributes": {
+      "bytes": 16,
+      "sha256": "9066d591f6805f70135c4913ef8bd585214c460caf0290ab86724deeccddd22e"
+    },
+    "README.md": {
+      "bytes": 14051,
+      "sha256": "6873387a46e4b3a89d35ec014f06f952e1659d3e76eae7a459148e012eb8cb38"
+    },
+    "archive-bindings.json": {
+      "bytes": 989628,
+      "sha256": "414164558a96eaff3b26e5049d41b833359970f4a0c10551afc18e1fa1439697"
+    },
+    "archive_io.py": {
+      "bytes": 2656,
+      "sha256": "e4244c0a24fa472e58211f5218595e1c8a3aa548481b21adbfe41d952722feda"
+    },
+    "code-tests.tar.gz": {
+      "bytes": 480645,
+      "sha256": "bb8c414c3543808142690363dec4ffc8db2ed8f072babf83820f2e637d082263"
+    },
+    "control-calls.csv": {
+      "bytes": 68158,
+      "sha256": "276f9f6cece7188d6556c2cb0bfe63fa327c1d3e328091fe914c5c8bbc31f2b2"
+    },
+    "controls.tar.gz": {
+      "bytes": 8086914,
+      "sha256": "77ace37eb4c11e07da5c87ec918354a22dd2d37f1aa437c7b9d02f533920e4db"
+    },
+    "controls_replay.py": {
+      "bytes": 11398,
+      "sha256": "b866aafd5af5f4f73ea05b22012444139864396b28b34e602edaecf5b30ae10b"
+    },
+    "migration-verification.json": {
+      "bytes": 2542,
+      "sha256": "fe444bd8c017e046de97336cb1255bf625b019e3e3978bd1ad0ad4a79185c21c"
+    },
+    "offline-receipt.json": {
+      "bytes": 1676,
+      "sha256": "2b02bb285210cb2e59cf40af42c9d3f20fb2c781cfe90551d5afc91ac0cfe6be"
+    },
+    "primary-pairs.csv": {
+      "bytes": 6877,
+      "sha256": "e95fe03c0b76582d325fef844d24f3180b895dc8f54856b0e6675bedf3eb670d"
+    },
+    "primary.tar.gz": {
+      "bytes": 16132656,
+      "sha256": "327f7a4dc6f8aeb8503000964f40ae2234f59b6184bac1f41cc9d1728bd1106f"
+    },
+    "primary_replay.py": {
+      "bytes": 6846,
+      "sha256": "ba7fb7d94243456b6014231f96974ec5b0de3d4c3fca965e692601bd7e441f71"
+    },
+    "process-intervals.csv": {
+      "bytes": 18169,
+      "sha256": "3e2bb1aa93727866d409150bcdc48569e9fd9b01526882766fefcf0016f434d7"
+    },
+    "profile.tar.gz": {
+      "bytes": 15345924,
+      "sha256": "fe23e26b72817c8a3ab829992efe9f1ee7c80af8c487674a970a16da5a7b04fd"
+    },
+    "profile_math.py": {
+      "bytes": 12569,
+      "sha256": "e443519b84ec3ad730d8cb3754f72affe54cbb8476d9ad2046d69971637f7061"
+    },
+    "profile_replay.py": {
+      "bytes": 4023,
+      "sha256": "ca9ab3d11201b61891d72a3092daa10fdbcb1b0733062e5565b94817a6aa309e"
+    },
+    "provenance_replay.py": {
+      "bytes": 8565,
+      "sha256": "91406d4e0265a57972b65beb78588a8a19c76a91b7b15b1f51efcd2552fd2879"
+    },
+    "resource-rows.csv": {
+      "bytes": 3851,
+      "sha256": "7c1978f7b53a96bb89b1ebe2cdaf0b39914dba0e05f9298622ea44b13472c57c"
+    },
+    "resources.tar.gz": {
+      "bytes": 10330159,
+      "sha256": "51cae847adb2f10cd08dc3860252b3b9861b896229ffff543886dc7887fbb566"
+    },
+    "resources_replay.py": {
+      "bytes": 9684,
+      "sha256": "b35ab133f96af5adb9626000b0d9a2ffa174d354a95ff9014c49922981f5dd36"
+    },
+    "screening.py": {
+      "bytes": 7994,
+      "sha256": "11c9bc381d9840219fdb2961d4da130b6aea216d01829438e5b22fb03783d98b"
+    },
+    "summary.json": {
+      "bytes": 189778,
+      "sha256": "e0c98b93a0cf5e361f4f38ae953e1d608727864c134d15cb7f07c64880ecd307"
+    },
+    "verify.py": {
+      "bytes": 9759,
+      "sha256": "ba474b19572443ffbec0428e018eb9f6cbfedf84c04da37d5fcef5c6e38a5ae2"
+    }
+  },
+  "schema": "vort.parameter-context.publication-inventory.v1",
+  "scope": "All publication files except inventory.json and SHA256SUMS; SHA256SUMS binds inventory.json and every other file"
+}

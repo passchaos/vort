@@ -1,5 +1,37 @@
 # Encoder optimization status
 
+## 2026-11-26 parameter-family context reuse gate: not accepted
+
+The isolated v6 parameter-family owner shares complete literal/context
+proposals only for one immutable input and commands slice. Changed slices
+retain independent analysis. Fixture, real analysis and full Brotli checks
+pass (full ReleaseSafe 1715 passed, one skipped); all twelve primary initial
+wires and three public controls remain byte-identical to c2.
+
+Actual public q8 diagnostics show Mozilla proposal builds **10 to 9**. The
+observed same-commands parameter branch slots perform **2 to 1** analyses;
+NCI remains **8 to 8**. Mozilla details cover only the first eight builds in
+each run, while the complete event sequence remains available. Do not compare
+their different detail prefixes as full-row totals or invent a cache-hit ID.
+Fourteen-case resource checks pass 42 caps and six budget-layer tests. Whole
+requested-heap peaks are unchanged; twelve-row allocated bytes are
+**0.995316x** baseline under the existing forced-moving policy.
+
+The completed reserved-host primary A/B retains 90 pairs/180 timed calls.
+Candidate/baseline elapsed is **0.982508x**, paired round-block 95% CI
+**0.975227–0.990389x**, or throughput **1.017804x**. It misses the unchanged
+1.03x aggregate target. NCI is **0.986537x**, below its 1.20x repair target;
+ooffice **0.974209x** and samba **0.969958x** miss the 0.98x control floor.
+Separate q4/q11/legacy-ratio controls pass at **1.002646x/1.046321x/0.998576x**,
+but do not override the primary failures. All observations and outliers stay
+in the evidence. **The candidate remains rejected and unmerged.**
+
+The result does not prove the new borrowed pointer or option layout caused
+the losses. A follow-up must isolate the parameter-family boundary while
+retaining actual analysis reuse and measure any layout-only control before
+attributing the regression. Smaller scoped work still needs the declared
+whole-operation and control gates; correctness alone does not justify adoption.
+
 ## 2026-11-26 compact single-DP gate: not accepted
 
 The isolated v5 candidate compacts the first modeled parser as well as the

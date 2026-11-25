@@ -1,0 +1,44 @@
+{
+  "archives": {
+    "code-tests.tar.gz": {
+      "bytes": 480645,
+      "sha256": "bb8c414c3543808142690363dec4ffc8db2ed8f072babf83820f2e637d082263"
+    },
+    "controls.tar.gz": {
+      "bytes": 8086914,
+      "sha256": "77ace37eb4c11e07da5c87ec918354a22dd2d37f1aa437c7b9d02f533920e4db"
+    },
+    "primary.tar.gz": {
+      "bytes": 16132656,
+      "sha256": "327f7a4dc6f8aeb8503000964f40ae2234f59b6184bac1f41cc9d1728bd1106f"
+    },
+    "profile.tar.gz": {
+      "bytes": 15345924,
+      "sha256": "fe23e26b72817c8a3ab829992efe9f1ee7c80af8c487674a970a16da5a7b04fd"
+    },
+    "resources.tar.gz": {
+      "bytes": 10330159,
+      "sha256": "51cae847adb2f10cd08dc3860252b3b9861b896229ffff543886dc7887fbb566"
+    }
+  },
+  "baseline_git_blobs_reconstructed": 2189,
+  "candidate_changed_or_new_files": 6,
+  "candidate_source_files": 2193,
+  "decision": "rejected",
+  "executable_artifacts_run": false,
+  "fixture_tests_per_platform_recorded": 10,
+  "merge_allowed": false,
+  "native_real_tests_with_imports_recorded": 22,
+  "new_resource_cap_operations": 42,
+  "primary_pairs": 90,
+  "primary_timed_calls": 180,
+  "profile_rows": 4,
+  "public_control_pairs": 18,
+  "public_control_processes": 36,
+  "public_control_timed_calls": 1224,
+  "schema": "vort.parameter-context.offline-receipt.v1",
+  "scope": "Only archive/source/ELF/reference/module hashes, raw samples, deterministic math, resource ledgers, recorded outputs and process intervals. Original absolute paths are provenance strings; no codec/test/build/ELF/WASM/Git execution or original directory dependency.",
+  "verification_passed": true,
+  "verified_member_count": 3678,
+  "verified_process_wall_intervals": 216
+}

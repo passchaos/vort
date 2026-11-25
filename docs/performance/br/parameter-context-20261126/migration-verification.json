@@ -1,0 +1,35 @@
+{
+  "arbitrary_directory_copy_verified": true,
+  "audit_scope": "Original V6/control/resource/profile/c2/reused/collector directories forbidden for file opens; ordinary Python archive/statistics temp files allowed",
+  "blocked_audit_events": [
+    "subprocess.Popen",
+    "os.system",
+    "os.exec",
+    "os.posix_spawn",
+    "ctypes.dlopen"
+  ],
+  "codec_test_build_wasm_git_executed": false,
+  "command_PATH": "/nonexistent",
+  "default_data_root_verified": true,
+  "exit_code": 0,
+  "original_artifact_directories_opened": false,
+  "schema": "vort.parameter-context.migration-verification.v1",
+  "scope": "Only the existing complete offline verifier was executed; no additional codec test, benchmark or resampling.",
+  "stderr": "",
+  "stdout": "{\"acceptance\": \"rejected\", \"control_calls\": 1224, \"control_pairs\": 18, \"merge_allowed\": false, \"primary_pairs\": 90, \"process_wall_intervals\": 216, \"rejection_reasons\": [{\"gate\": \"overall_throughput\", \"observed\": 1.0178033717822963, \"required_minimum\": 1.03}, {\"gate\": \"nci_throughput\", \"observed\": 0.986536882742244, \"required_minimum\": 1.2}, {\"gate\": \"primary_control_ooffice\", \"observed\": 0.9742092198163068, \"required_minimum\": 0.98}, {\"gate\": \"primary_control_samba\", \"observed\": 0.9699582906599781, \"required_minimum\": 0.98}], \"resource_cap_operations\": 42, \"verification\": \"passed\"}\n",
+  "temporary_copy_removed": true,
+  "tested_implementation_sha256": {
+    "archive_io.py": "e4244c0a24fa472e58211f5218595e1c8a3aa548481b21adbfe41d952722feda",
+    "controls_replay.py": "b866aafd5af5f4f73ea05b22012444139864396b28b34e602edaecf5b30ae10b",
+    "primary_replay.py": "ba7fb7d94243456b6014231f96974ec5b0de3d4c3fca965e692601bd7e441f71",
+    "profile_math.py": "e443519b84ec3ad730d8cb3754f72affe54cbb8476d9ad2046d69971637f7061",
+    "profile_replay.py": "ca9ab3d11201b61891d72a3092daa10fdbcb1b0733062e5565b94817a6aa309e",
+    "provenance_replay.py": "91406d4e0265a57972b65beb78588a8a19c76a91b7b15b1f51efcd2552fd2879",
+    "resources_replay.py": "a3c4c22c906891349293f93861851fe50758b9721d558a2cacf0800779fff0b2",
+    "screening.py": "11c9bc381d9840219fdb2961d4da130b6aea216d01829438e5b22fb03783d98b",
+    "verify.py": "ba474b19572443ffbec0428e018eb9f6cbfedf84c04da37d5fcef5c6e38a5ae2"
+  },
+  "tested_inventory_sha256": "d93e433b3da131f4421988c60029b8c33d7f08065d51c44355665f17727ca4fb",
+  "unrelated_working_directory": "/tmp/vort-v6-archive-relocation-pbvhd5po/unrelated-working-directory",
+  "utc": "2026-11-25T18:47:03.297311+00:00"
+}
