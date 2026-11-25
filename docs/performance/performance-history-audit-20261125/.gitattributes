@@ -1,0 +1,2 @@
+# Corpus fixtures preserve original byte identity, including line endings.
+inputs/** binary

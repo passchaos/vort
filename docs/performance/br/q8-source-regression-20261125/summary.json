@@ -1,0 +1,1253 @@
+{
+  "host_scope": "non-quiet-host observational; original collector coexists on CPU15",
+  "matrix": [
+    {
+      "geomean_encoded_bytes_current_over_old": 0.9565808633658663,
+      "lane": "explicit16",
+      "paired_geomean_ns_current_over_old": 3.833797433911128,
+      "paired_round_block_bootstrap_95pct_ci": [
+        3.817572379309717,
+        3.8522612681459565
+      ],
+      "primary_rounds": 6,
+      "rows": 12
+    }
+  ],
+  "ratio_direction": "current elapsed / exact-old elapsed; values above one mean current is slower",
+  "rows": [
+    {
+      "case": "dickens",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 22367,
+      "current_first_pairs": 6,
+      "current_per_call_median_ns": 117615527.0,
+      "current_wire_sha256": "6db3970cd1981290ca64a47f00e4fe30e28443eb19625e703e42525b960241c0",
+      "encoded_bytes_current_over_old": 0.9047041216680823,
+      "input_bytes": 65536,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 24723,
+      "old_first_pairs": 6,
+      "old_per_call_median_ns": 33171206.5,
+      "old_wire_sha256": "2d5a260a0e470c49372ad983dc6ef7ffb5a50658a16a2839e1dddc83381d9342",
+      "paired_geomean_ns_current_over_old": 3.5556002331591214,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.5151178788836273,
+        3.5924867404179848
+      ],
+      "pairs": 12,
+      "primary_six_round_paired_geomean": 3.5321459872296197,
+      "ratio_of_median_ns_current_over_old": 3.5457114591234418,
+      "raw_pairs": [
+        {
+          "current_ns": 124268936,
+          "current_over_old_ns_ratio": 3.6651760054589677,
+          "old_ns": 33905312,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 119256045,
+          "current_over_old_ns_ratio": 3.586119489157989,
+          "old_ns": 33254900,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 119619824,
+          "current_over_old_ns_ratio": 3.5114113698739837,
+          "old_ns": 34066024,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 117113047,
+          "current_over_old_ns_ratio": 3.5525330773448625,
+          "old_ns": 32966068,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 116482214,
+          "current_over_old_ns_ratio": 3.5018352268127253,
+          "old_ns": 33263191,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 116797350,
+          "current_over_old_ns_ratio": 3.382180110679143,
+          "old_ns": 34533155,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        },
+        {
+          "current_ns": 116592802,
+          "current_over_old_ns_ratio": 3.520475531471386,
+          "old_ns": 33118481,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 6
+        },
+        {
+          "current_ns": 116802932,
+          "current_over_old_ns_ratio": 3.5654692241184263,
+          "old_ns": 32759484,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 7
+        },
+        {
+          "current_ns": 121213339,
+          "current_over_old_ns_ratio": 3.6542038164139505,
+          "old_ns": 33170930,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 8
+        },
+        {
+          "current_ns": 118869945,
+          "current_over_old_ns_ratio": 3.583498060668557,
+          "old_ns": 33171483,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 9
+        },
+        {
+          "current_ns": 118118007,
+          "current_over_old_ns_ratio": 3.582420397697228,
+          "old_ns": 32971565,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 10
+        },
+        {
+          "current_ns": 116819604,
+          "current_over_old_ns_ratio": 3.5704974680771473,
+          "old_ns": 32718019,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 11
+        }
+      ]
+    },
+    {
+      "case": "mozilla",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 13924,
+      "current_first_pairs": 6,
+      "current_per_call_median_ns": 168848156.0,
+      "current_wire_sha256": "29686649968e0dadd3dec91675d545298aa37fbbb58c00e3b6277881f9a6d2eb",
+      "encoded_bytes_current_over_old": 0.9794597636465954,
+      "input_bytes": 65536,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 14216,
+      "old_first_pairs": 6,
+      "old_per_call_median_ns": 36974721.5,
+      "old_wire_sha256": "0edaa9cf782d41223ce9cca5f4811d94e2bcfe58185ab88a513d297b210f6209",
+      "paired_geomean_ns_current_over_old": 4.5985658073933875,
+      "paired_ratio_bootstrap_95pct_ci": [
+        4.5423978029090755,
+        4.643472533744602
+      ],
+      "pairs": 12,
+      "primary_six_round_paired_geomean": 4.586574867256835,
+      "ratio_of_median_ns_current_over_old": 4.5665835779182276,
+      "raw_pairs": [
+        {
+          "current_ns": 168380662,
+          "current_over_old_ns_ratio": 4.537043814742651,
+          "old_ns": 37112417,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 172693056,
+          "current_over_old_ns_ratio": 4.6377818190138544,
+          "old_ns": 37236132,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 172312937,
+          "current_over_old_ns_ratio": 4.62779532564382,
+          "old_ns": 37234347,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 174548466,
+          "current_over_old_ns_ratio": 4.711681331088262,
+          "old_ns": 37045898,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 168870295,
+          "current_over_old_ns_ratio": 4.648739572184019,
+          "old_ns": 36326039,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 173446194,
+          "current_over_old_ns_ratio": 4.364780059707073,
+          "old_ns": 39737671,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        },
+        {
+          "current_ns": 168690182,
+          "current_over_old_ns_ratio": 4.56380169763284,
+          "old_ns": 36962645,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 6
+        },
+        {
+          "current_ns": 168826017,
+          "current_over_old_ns_ratio": 4.6510094964598,
+          "old_ns": 36298790,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 7
+        },
+        {
+          "current_ns": 167436618,
+          "current_over_old_ns_ratio": 4.52692925729878,
+          "old_ns": 36986798,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 8
+        },
+        {
+          "current_ns": 168396665,
+          "current_over_old_ns_ratio": 4.621248526364703,
+          "old_ns": 36439647,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 9
+        },
+        {
+          "current_ns": 171041213,
+          "current_over_old_ns_ratio": 4.680427703338295,
+          "old_ns": 36543928,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 10
+        },
+        {
+          "current_ns": 168197113,
+          "current_over_old_ns_ratio": 4.621845055727988,
+          "old_ns": 36391768,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 11
+        }
+      ]
+    },
+    {
+      "case": "mr",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 15438,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 187551867.5,
+      "current_wire_sha256": "ac21230eff6de6294b84a2af3f64508c05fe4ab93f3ad5741a1f180525813513",
+      "encoded_bytes_current_over_old": 0.9971579899237825,
+      "input_bytes": 65536,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 15482,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 43661359.0,
+      "old_wire_sha256": "57619fbc05dc6474c2e48c73a9e44d193ffdd1630ed78fcd1a223f8dc180209b",
+      "paired_geomean_ns_current_over_old": 4.310425381461372,
+      "paired_ratio_bootstrap_95pct_ci": [
+        4.2708489135751355,
+        4.366452201512774
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 4.310425381461372,
+      "ratio_of_median_ns_current_over_old": 4.295603064027393,
+      "raw_pairs": [
+        {
+          "current_ns": 187564513,
+          "current_over_old_ns_ratio": 4.242140823699616,
+          "old_ns": 44214589,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 194265908,
+          "current_over_old_ns_ratio": 4.484064432195083,
+          "old_ns": 43323621,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 191891189,
+          "current_over_old_ns_ratio": 4.234071476129299,
+          "old_ns": 45320725,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 187266775,
+          "current_over_old_ns_ratio": 4.322617825391486,
+          "old_ns": 43322538,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 187539222,
+          "current_over_old_ns_ratio": 4.287857648571546,
+          "old_ns": 43737278,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 187266422,
+          "current_over_old_ns_ratio": 4.296536228612124,
+          "old_ns": 43585440,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "nci",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 4206,
+      "current_first_pairs": 6,
+      "current_per_call_median_ns": 95964836.5,
+      "current_wire_sha256": "5e82ff1682e22f8b9e9bbe0f06f49e43b6679bcc736f691a24261295a1d13615",
+      "encoded_bytes_current_over_old": 0.9580865603644647,
+      "input_bytes": 65536,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 4390,
+      "old_first_pairs": 6,
+      "old_per_call_median_ns": 25088796.0,
+      "old_wire_sha256": "fc61d8a4ab072fddd1c345f5ceaa2f66c2416b7d39f6e3351d85d52b01f38a87",
+      "paired_geomean_ns_current_over_old": 3.8169939429749618,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.801417685571162,
+        3.8336095792732716
+      ],
+      "pairs": 12,
+      "primary_six_round_paired_geomean": 3.8116008081431976,
+      "ratio_of_median_ns_current_over_old": 3.8250076448467274,
+      "raw_pairs": [
+        {
+          "current_ns": 95949510,
+          "current_over_old_ns_ratio": 3.77980660606418,
+          "old_ns": 25384767,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 99014953,
+          "current_over_old_ns_ratio": 3.859429956292515,
+          "old_ns": 25655331,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 98270549,
+          "current_over_old_ns_ratio": 3.7458730730560097,
+          "old_ns": 26234351,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 95503727,
+          "current_over_old_ns_ratio": 3.8197322708146086,
+          "old_ns": 25002728,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 96465896,
+          "current_over_old_ns_ratio": 3.8318338482384653,
+          "old_ns": 25174864,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 95542342,
+          "current_over_old_ns_ratio": 3.834061442037266,
+          "old_ns": 24919356,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        },
+        {
+          "current_ns": 95578537,
+          "current_over_old_ns_ratio": 3.8410739176921376,
+          "old_ns": 24883285,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 6
+        },
+        {
+          "current_ns": 95980163,
+          "current_over_old_ns_ratio": 3.856835807931189,
+          "old_ns": 24885727,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 7
+        },
+        {
+          "current_ns": 95599345,
+          "current_over_old_ns_ratio": 3.756722162006845,
+          "old_ns": 25447542,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 8
+        },
+        {
+          "current_ns": 96144924,
+          "current_over_old_ns_ratio": 3.8545940687675038,
+          "old_ns": 24942944,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 9
+        },
+        {
+          "current_ns": 95801521,
+          "current_over_old_ns_ratio": 3.7626566809386133,
+          "old_ns": 25461138,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 10
+        },
+        {
+          "current_ns": 96109527,
+          "current_over_old_ns_ratio": 3.8640883945025704,
+          "old_ns": 24872497,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 11
+        }
+      ]
+    },
+    {
+      "case": "ooffice",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 30682,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 165883887.0,
+      "current_wire_sha256": "07dd260479a5110d57c3848747a70faf7ae17436dbdd60b7b43a6f82dcd7efe8",
+      "encoded_bytes_current_over_old": 0.9931056805308303,
+      "input_bytes": 65536,
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 30895,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 46939479.0,
+      "old_wire_sha256": "336f1816d7513e399c951f648edd9343d9aa72102994711a6df35cf5e1ea1079",
+      "paired_geomean_ns_current_over_old": 3.538498189220499,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.5272350830438883,
+        3.549797260553317
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.538498189220499,
+      "ratio_of_median_ns_current_over_old": 3.533995062024442,
+      "raw_pairs": [
+        {
+          "current_ns": 164594721,
+          "current_over_old_ns_ratio": 3.5213553733605756,
+          "old_ns": 46741866,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 170573973,
+          "current_over_old_ns_ratio": 3.5311548166131863,
+          "old_ns": 48305436,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 168644314,
+          "current_over_old_ns_ratio": 3.511336815889042,
+          "old_ns": 48028521,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 164782345,
+          "current_over_old_ns_ratio": 3.567638909850893,
+          "old_ns": 46188067,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 166985429,
+          "current_over_old_ns_ratio": 3.5425483820682024,
+          "old_ns": 47137092,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 164137072,
+          "current_over_old_ns_ratio": 3.5572802336828477,
+          "old_ns": 46141170,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "osdb",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 25418,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 155297497.5,
+      "current_wire_sha256": "25b9eb69a216524b5598bb5d4db0c8684b657462b55cd921573f8eb2288ee0e5",
+      "encoded_bytes_current_over_old": 0.9915736911913864,
+      "input_bytes": 65536,
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 25634,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 40178506.5,
+      "old_wire_sha256": "6bba03ab24628b41d4a24322db82a6650752ad63ff9fa49a3a2b46e6bf96bfb4",
+      "paired_geomean_ns_current_over_old": 3.864903900322512,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.773948819663903,
+        3.9361235830807138
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.864903900322512,
+      "ratio_of_median_ns_current_over_old": 3.865188406144464,
+      "raw_pairs": [
+        {
+          "current_ns": 156591771,
+          "current_over_old_ns_ratio": 3.8428978828004743,
+          "old_ns": 40748356,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 156646061,
+          "current_over_old_ns_ratio": 3.9548440382616357,
+          "old_ns": 39608657,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 159754148,
+          "current_over_old_ns_ratio": 3.8561088640456522,
+          "old_ns": 41428848,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 152241826,
+          "current_over_old_ns_ratio": 3.6588276871206316,
+          "old_ns": 41609455,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 154003224,
+          "current_over_old_ns_ratio": 3.9669031200533884,
+          "old_ns": 38822028,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 151703577,
+          "current_over_old_ns_ratio": 3.9183313219965106,
+          "old_ns": 38716373,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "reymont",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 17128,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 109443588.5,
+      "current_wire_sha256": "89089f56936eb2c4497c81db1135940fee141be4d5e4a447ef53bbdeb21f1de7",
+      "encoded_bytes_current_over_old": 0.9796385266529398,
+      "input_bytes": 65536,
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 17484,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 31762366.0,
+      "old_wire_sha256": "a3c8bec39491e8c0f39ef74b6bf351b5dd93a3844e08d00bc1a0475e9a891a28",
+      "paired_geomean_ns_current_over_old": 3.4688563608737066,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.4117825326655082,
+        3.5504110557063684
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.4688563608737066,
+      "ratio_of_median_ns_current_over_old": 3.445700125110327,
+      "raw_pairs": [
+        {
+          "current_ns": 109235581,
+          "current_over_old_ns_ratio": 3.42551396155674,
+          "old_ns": 31888815,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 117931925,
+          "current_over_old_ns_ratio": 3.705587912106385,
+          "old_ns": 31825429,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 109694390,
+          "current_over_old_ns_ratio": 3.3546636016256484,
+          "old_ns": 32699073,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 107032951,
+          "current_over_old_ns_ratio": 3.4391376180064337,
+          "old_ns": 31122032,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 106636184,
+          "current_over_old_ns_ratio": 3.439309528099139,
+          "old_ns": 31005114,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 109651596,
+          "current_over_old_ns_ratio": 3.4591169402052784,
+          "old_ns": 31699303,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "samba",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 18744,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 115274801.0,
+      "current_wire_sha256": "162da25cc8a4705fbb7b548ad2396f46497d0b80367602c8a1a68e992fa0b907",
+      "encoded_bytes_current_over_old": 0.8911710169733277,
+      "input_bytes": 65536,
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 21033,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 31488883.5,
+      "old_wire_sha256": "605aeee381290d2b64baf1385e69947079ff88074324b4e7c10c7238db199e17",
+      "paired_geomean_ns_current_over_old": 3.6733519615622545,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.6437044076396665,
+        3.703038547397935
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.6733519615622545,
+      "ratio_of_median_ns_current_over_old": 3.660809409136402,
+      "raw_pairs": [
+        {
+          "current_ns": 117614003,
+          "current_over_old_ns_ratio": 3.6589209956928803,
+          "old_ns": 32144450,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 120696666,
+          "current_over_old_ns_ratio": 3.653306636519244,
+          "old_ns": 33037650,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 116070496,
+          "current_over_old_ns_ratio": 3.5990749917573877,
+          "old_ns": 32250091,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 114082562,
+          "current_over_old_ns_ratio": 3.70078651625617,
+          "old_ns": 30826572,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 113835853,
+          "current_over_old_ns_ratio": 3.716594542930206,
+          "old_ns": 30629075,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 114479106,
+          "current_over_old_ns_ratio": 3.7128378370708544,
+          "old_ns": 30833317,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "sao",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 46709,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 186610031.0,
+      "current_wire_sha256": "1311bab7bf6d3eec56f1d39a4494b10069af0b63de8004c0da679b52d26e3095",
+      "encoded_bytes_current_over_old": 0.9890526404946428,
+      "input_bytes": 65536,
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 47226,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 50129464.0,
+      "old_wire_sha256": "66857e85f96877f63c451dd9144a849c2555e9a95a93f8b4bfe0bb930a579f1f",
+      "paired_geomean_ns_current_over_old": 3.768816615123579,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.7124347669293405,
+        3.8221831626851883
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.768816615123579,
+      "ratio_of_median_ns_current_over_old": 3.722561865014156,
+      "raw_pairs": [
+        {
+          "current_ns": 185489356,
+          "current_over_old_ns_ratio": 3.71789644701437,
+          "old_ns": 49890942,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 192691950,
+          "current_over_old_ns_ratio": 3.8256830439875045,
+          "old_ns": 50367986,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 195671757,
+          "current_over_old_ns_ratio": 3.8228542896623385,
+          "old_ns": 51184728,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 186613300,
+          "current_over_old_ns_ratio": 3.805734098360529,
+          "old_ns": 49034771,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 185350970,
+          "current_over_old_ns_ratio": 3.5939226088154475,
+          "old_ns": 51573445,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 186606762,
+          "current_over_old_ns_ratio": 3.8532647760638414,
+          "old_ns": 48428222,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "webster",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 19555,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 110858767.0,
+      "current_wire_sha256": "163be5f6961e27ba522fca7e46132ca8af8249563260c0090269d776df4ec05c",
+      "encoded_bytes_current_over_old": 0.9043610969800675,
+      "input_bytes": 65536,
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 21623,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 30805411.0,
+      "old_wire_sha256": "9982051ee8637f74ba4cfb212f458335d73b8d6b609d19f14177fa007f1c5b67",
+      "paired_geomean_ns_current_over_old": 3.5973957124285274,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.5792292936565606,
+        3.615237472122638
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.5973957124285274,
+      "ratio_of_median_ns_current_over_old": 3.598678394519716,
+      "raw_pairs": [
+        {
+          "current_ns": 116590293,
+          "current_over_old_ns_ratio": 3.629997176399206,
+          "old_ns": 32118563,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 110495140,
+          "current_over_old_ns_ratio": 3.6099843162968885,
+          "old_ns": 30608205,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 110877650,
+          "current_over_old_ns_ratio": 3.5549406594791946,
+          "old_ns": 31189733,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 110954184,
+          "current_over_old_ns_ratio": 3.5993042883404067,
+          "old_ns": 30826564,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 110485677,
+          "current_over_old_ns_ratio": 3.590040780676773,
+          "old_ns": 30775605,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 110839884,
+          "current_over_old_ns_ratio": 3.6005377813556527,
+          "old_ns": 30784258,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "x-ray",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 41180,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 160474351.0,
+      "current_wire_sha256": "53c68176c0cb8c2ffd1759afa6f786fc277750d1108fe12037c822e0d19df288",
+      "encoded_bytes_current_over_old": 0.9664171223393021,
+      "input_bytes": 65536,
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 42611,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 42289077.5,
+      "old_wire_sha256": "aa8729893be82d2491dedd3cd67f681b86e90fb8e716acae159ca8fd69d0ef86",
+      "paired_geomean_ns_current_over_old": 3.806348974608933,
+      "paired_ratio_bootstrap_95pct_ci": [
+        3.782597416149343,
+        3.8421814039560216
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 3.806348974608933,
+      "ratio_of_median_ns_current_over_old": 3.7946997306810486,
+      "raw_pairs": [
+        {
+          "current_ns": 164150486,
+          "current_over_old_ns_ratio": 3.799816447302281,
+          "old_ns": 43199583,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 160543687,
+          "current_over_old_ns_ratio": 3.7867661153872887,
+          "old_ns": 42395987,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 160405015,
+          "current_over_old_ns_ratio": 3.7719501115465284,
+          "old_ns": 42525752,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 163353924,
+          "current_over_old_ns_ratio": 3.9028574752977274,
+          "old_ns": 41854955,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 159422215,
+          "current_over_old_ns_ratio": 3.787708853590598,
+          "old_ns": 42089353,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 159891064,
+          "current_over_old_ns_ratio": 3.7904894788717356,
+          "old_ns": 42182168,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    },
+    {
+      "case": "xml",
+      "current_actual_window_bits": 16,
+      "current_encoded_bytes": 4407,
+      "current_first_pairs": 3,
+      "current_per_call_median_ns": 98240786.0,
+      "current_wire_sha256": "e6446e2083669a87277a22328ceae0f3a3b4e227129c401c10bde2f110d28658",
+      "encoded_bytes_current_over_old": 0.9330933728562354,
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "lane": "explicit16",
+      "old_actual_window_bits": 16,
+      "old_encoded_bytes": 4723,
+      "old_first_pairs": 3,
+      "old_per_call_median_ns": 23289176.0,
+      "old_wire_sha256": "04758d4623584bcf0ee7d3b4383c70659877a2f42d26b279af116f0d9cde60bb",
+      "paired_geomean_ns_current_over_old": 4.211985976935252,
+      "paired_ratio_bootstrap_95pct_ci": [
+        4.186865515051539,
+        4.231334106297095
+      ],
+      "pairs": 6,
+      "primary_six_round_paired_geomean": 4.211985976935252,
+      "ratio_of_median_ns_current_over_old": 4.218302356425148,
+      "raw_pairs": [
+        {
+          "current_ns": 100248277,
+          "current_over_old_ns_ratio": 4.137918385308201,
+          "old_ns": 24226741,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 0
+        },
+        {
+          "current_ns": 101648893,
+          "current_over_old_ns_ratio": 4.249228159952137,
+          "old_ns": 23921731,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 1
+        },
+        {
+          "current_ns": 98134704,
+          "current_over_old_ns_ratio": 4.220317448303267,
+          "old_ns": 23252920,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 2
+        },
+        {
+          "current_ns": 98346868,
+          "current_over_old_ns_ratio": 4.21629352888298,
+          "old_ns": 23325432,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 3
+        },
+        {
+          "current_ns": 97806995,
+          "current_over_old_ns_ratio": 4.219047776393001,
+          "old_ns": 23182244,
+          "order": [
+            "old_exact",
+            "current"
+          ],
+          "round": 4
+        },
+        {
+          "current_ns": 97695082,
+          "current_over_old_ns_ratio": 4.229987924227014,
+          "old_ns": 23095830,
+          "order": [
+            "current",
+            "old_exact"
+          ],
+          "round": 5
+        }
+      ]
+    }
+  ],
+  "schema": "vort.q8-source-history-ab.summary.v1",
+  "source_revisions": {
+    "current": "c2c8f250302ca2f223740076482dd95b1788eeb1",
+    "old_exact": "0a673757ea6a1e88b90794ad44dce1a8a824f371"
+  },
+  "statistics_scope": "Descriptive paired bootstrap, 20000 draws, 95 percent percentile interval, stratified by AB/BA. Matrix resamples shared primary-round blocks. Small sample on a non-quiet host; not an acceptance gate or an industry ranking.",
+  "timer_scope": "Continuous per-call allocating public encode, length mix and free; one encode/free warmup per process; complete SHA256/cross-library decode initial_wire_only outside timing.",
+  "total_pairs": 90,
+  "total_timed_calls": 180,
+  "wire_identity_scope": "All initial complete wires pinned-decoder verified before sampling; each sample process's initial wire SHA matches preflight. Timed output identity is checked by length/mix only, with no SHA inside the continuous encode/free timer."
+}

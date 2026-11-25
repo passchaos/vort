@@ -1,0 +1,19 @@
+{
+  "old_exact": {
+    "revision": "0a673757ea6a1e88b90794ad44dce1a8a824f371",
+    "tree": "da6294ca0cb9dce2153c69cf732da18ed5e9a9b4",
+    "clean": true,
+    "record_object_sha256": "0d7b10ad3d038a5641869746ddb744c33f1259ea203184375c6f36e04f19a9c2",
+    "executable_sha256": "b216632c3b3a7925790a5210313c795ece992310686d330abc2f3bb755ea5cda"
+  },
+  "current": {
+    "revision": "c2c8f250302ca2f223740076482dd95b1788eeb1",
+    "tree": "08998a4df8c08ad0289a148f485994a8104e65bc",
+    "clean": true,
+    "record_object_sha256": "bbcb3ae9dd9ec4999e4b5bd896d1ed762c2f27f0daa1f231c19fde9202ebb6fd",
+    "executable_sha256": "f634b02f8e63bf497c5eb3dcd17acbc791b2db46b5a6d534d73ef0ca3a047df5"
+  },
+  "common_probe_sha256": "346ed5e94e295f9222bb8ff775103265d3f8da5d248c343804a9210c7645c821",
+  "common_provenance_sha256": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+  "zig_version": "0.16.0"
+}

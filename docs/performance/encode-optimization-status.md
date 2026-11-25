@@ -1,5 +1,48 @@
 # Encoder optimization status
 
+## 2026-11-25 controlled q8 source regression
+
+The [same-probe source A/B](br/q8-source-regression-20261125/README.md)
+compares exact historical source `0a673757` with `c2c8f250`. Both use public
+allocating q8/generic/window16, Zig 0.16.0 ReleaseFast, identical target
+features and CPU2, with encode and free inside one uninterrupted timer.
+Across twelve 64 KiB Silesia inputs the current/old paired time ratio is
+**3.8338x** (fixed-row round-block 95% CI **3.8176–3.8523x**), for encoded
+size **0.956581x**. All twelve rows are slower. The 90 pairs include six
+primary rounds per row and six extra rounds on three weak rows; the aggregate
+uses only the primary rounds. Pinned cross-library decoding passes every
+initial complete wire, and the old source reproduces the three historical
+weak-row goldens with explicit window16.
+
+This confirms a substantial q8 latency regression on the declared source A/B,
+not merely a change in benchmark reporting. The development-host run overlaps
+the original CPU15 collector, so it remains observational and does not rank
+competitors or isolate one commit's contribution. Default q8/q9 feedback
+expansion is an identified mechanism, but intermediate-source controls are
+still needed to attribute its exact share. Prioritize recovering throughput
+with shared search/context work; further default effort expansion must pass
+speed/size gates together.
+
+## 2026-11-25 historical preset latency audit
+
+The [history audit](performance-history-audit-20261125/README.md) freezes
+and uniformly reduces the twelve matching 64 KiB inputs. Brotli q8's recorded
+allocating latency grew 3.66687x while encoded size fell to 0.956581x of its
+old value. Input hashes, requested Brotli 1.2.0 library bytes and reference
+wire hashes agree. The old source is exactly `0a673757`; the newer allocating
+epoch is `4a9796b0`. Window requests, warmup and CPU differ, so these are
+cross-epoch observations rather than a controlled source A/B. Deflate L9's
+same-input/same-wire 64 KiB history gives 0.925715x time and does not show an
+aggregate slowdown; it is not credited as a causal source speedup.
+
+Commit `cf4e870c` explicitly enabled q8/q9 entropy feedback and recorded
+increased text-row latency. A default quality policy that does more work for
+smaller output must be described as a speed/size tradeoff, not a speed win.
+Investigate that workload expansion together with repeated parse/context
+preparation. The audit binds the historical source for a new controlled
+comparison against `c2c8f250` using one allocating probe and explicit window16;
+it does not attribute the whole observed increase to one commit.
+
 ## 2026-11-25 complete 1 MiB allocating-preset cohort
 
 The [same current epoch](modern-encode-refresh-20261125/README.md) now retains

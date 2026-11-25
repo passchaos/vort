@@ -1,0 +1,62 @@
+{
+  "real_geomean": 0.9927566981616687,
+  "reference_latency_geomean": 30.086271170091585,
+  "reference_size_geomean": 0.9955608655648552,
+  "matrix_sha256": "08bb4cfffe8833a5868c12b463365d6636d1aa9a44ac475ea1622269e423b53b",
+  "scopes": [
+    {
+      "input_bytes": 4096,
+      "geomean": 1.0007425434124402,
+      "faster_rows": 4,
+      "rows": 12
+    },
+    {
+      "input_bytes": 16384,
+      "geomean": 1.0000332277652992,
+      "faster_rows": 8,
+      "rows": 12
+    },
+    {
+      "input_bytes": 65536,
+      "geomean": 0.9776686394527432,
+      "faster_rows": 11,
+      "rows": 12
+    }
+  ],
+  "worst_real": [
+    {
+      "id": "webster-16384",
+      "ratio": 1.0283021208258407
+    },
+    {
+      "id": "sao-4096",
+      "ratio": 1.005985950107681
+    },
+    {
+      "id": "sao-65536",
+      "ratio": 1.004601957864153
+    },
+    {
+      "id": "reymont-4096",
+      "ratio": 1.0041872521547217
+    },
+    {
+      "id": "mr-4096",
+      "ratio": 1.0032278792770248
+    }
+  ],
+  "controls": [
+    {
+      "id": "random-16384",
+      "ratio": 0.9980075610449439
+    },
+    {
+      "id": "random-65536",
+      "ratio": 1.0308462543630361
+    },
+    {
+      "id": "repeated-65536",
+      "ratio": 1.004214549146895
+    }
+  ]
+}

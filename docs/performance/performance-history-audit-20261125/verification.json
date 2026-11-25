@@ -1,0 +1,25 @@
+{
+  "brotli_geomean_new_over_old_vort_time": 3.666870541398834,
+  "brotli_raw_rounds_new_per_row": 5,
+  "brotli_raw_rounds_old_per_row": 15,
+  "codec_builds_or_benchmarks_executed": false,
+  "cpu_affinity_for_python_verification": "4",
+  "cross_epoch_causal_acceptance": false,
+  "deflate_geomean_new_over_old_vort_time": 0.9257153438218488,
+  "finalization_retry": "corrected receipt writer cwd before final checksums",
+  "independent_copy_optimized_offline_verify": "passed",
+  "normal_python_verify": "passed",
+  "old_git_blob_matches": 1790,
+  "old_source_archive_verified_files": 1807,
+  "old_untracked_python_cache_files": 17,
+  "optimized_python_verify": "passed",
+  "rows_per_codec": 12,
+  "schema": "vort.performance_history_audit.verification",
+  "semantic_negative_checks": {
+    "missing_brotli_round": "ValueError",
+    "wrong_brotli_length_mix": "ValueError"
+  },
+  "sha256sum_check_before_receipt": "97 files passed",
+  "verified_utc": "2026-11-25T12:54:10.101638+00:00",
+  "version": 1
+}

@@ -1,0 +1,49 @@
+{
+  "codec_or_elf_executed": false,
+  "inventory_verified": true,
+  "old_weak_golden_matches": {
+    "dickens": true,
+    "mozilla": true,
+    "nci": true
+  },
+  "original_source_build_receipts_verified": true,
+  "original_tar_members_verified": 884,
+  "primary_matrix": {
+    "pairs": 72,
+    "pairs_per_row": 6,
+    "rows": 12
+  },
+  "recomputed_matrix": [
+    {
+      "geomean_encoded_bytes_current_over_old": 0.9565808633658663,
+      "lane": "explicit16",
+      "paired_geomean_ns_current_over_old": 3.833797433911128,
+      "paired_round_block_bootstrap_95pct_ci": [
+        3.817572379309717,
+        3.8522612681459565
+      ],
+      "primary_rounds": 6,
+      "rows": 12
+    }
+  ],
+  "schema": "vort.q8-source-regression.offline-verification.v1",
+  "scope": "Offline archive bytes, recorded source/build/decoder assertions, identity/order/count/mix and paired-statistics replay. No build, Git, codec or original ELF execution. Fixed-row development-host observational CI; no acceptance/ranking claim.",
+  "source_rebuild_performed": false,
+  "source_revisions": {
+    "current": "c2c8f250302ca2f223740076482dd95b1788eeb1",
+    "old_exact": "0a673757ea6a1e88b90794ad44dce1a8a824f371"
+  },
+  "summary_sha256": "39ca702544592dfac08baf268fe9c47bd106683a9dfaa2b12312b72c11899009",
+  "verified_initial_wire_hashes": 24,
+  "verified_processes": 180,
+  "weak_rows": {
+    "additional_pairs": 18,
+    "pairs_per_row": 12,
+    "rows": [
+      "dickens",
+      "mozilla",
+      "nci"
+    ]
+  },
+  "wire_identity_scope": "initial_wire_only; timed outputs validated by length/mix"
+}
