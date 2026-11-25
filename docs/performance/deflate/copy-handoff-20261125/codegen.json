@@ -1,0 +1,27 @@
+{
+  "baseline": {
+    "symbol_bytes": 3659,
+    "prologue_stack_bytes": 296,
+    "whole_symbol_instruction_lines": 897,
+    "negative_rbp_references": 131,
+    "mnemonics": {
+      "shrx": 11,
+      "shlx": 16,
+      "bzhi": 4,
+      "call": 8
+    }
+  },
+  "candidate": {
+    "symbol_bytes": 3643,
+    "prologue_stack_bytes": 296,
+    "whole_symbol_instruction_lines": 900,
+    "negative_rbp_references": 126,
+    "mnemonics": {
+      "shrx": 11,
+      "shlx": 16,
+      "bzhi": 4,
+      "call": 8
+    }
+  },
+  "scope": "Static complete aligned symbol; includes tails, errors and padding; not dynamic spills or timing"
+}

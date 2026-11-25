@@ -4,6 +4,20 @@ This note consolidates the 2026-11-01/02 decoder-performance session so the
 next work does not repeat rejected experiments. Raw evidence stays in
 `docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
 
+## 2026-11-25 Deflate copy-before-prefetch rejection
+
+The [copy handoff screen](deflate/copy-handoff-20261125/README.md) moves only
+the ordinary match's unchanged next-entry prefetch/refill after copying.
+The aligned symbol shrinks 3,659→3,643 bytes with the same 296-byte stack,
+but twelve cold rows reach only **0.97856x** (95% CI 0.97380–0.98319x).
+The `mr` 64 KiB L9 target improves **1.03382x**; six controls break 0.98x.
+Original/candidate differential checks pass 25,092 cases per build in Debug,
+Safe and Fast, full native Deflate passes 831/831, and native/actual WASI
+wide contracts pass 63/63 each. All 144 timing children validate. No codec
+change is adopted. Retain the original pre-copy overlap of prefetch and copy;
+refresh current encoding speed/size evidence before another isolated
+instruction reorder.
+
 ## 2026-11-25 route-scoped Brotli distance reuse and placement control
 
 The [routed FIFO and no-cache control](br/routed-distance-reuse-20261125/README.md)

@@ -1,0 +1,38 @@
+{
+  "base_revision": "eb9a65a9b203c0bfc6b06905fc5055afec130e31",
+  "oracle_exact_git_head_source": true,
+  "oracle_sha256": "40a27a65d08fbb82a507978d02a987971dbf91ac15b3b71edd99fef00b00fd3c",
+  "candidate_sha256": "7b445d4fa3b3b6f109f5174a116e6fb4fb3c1d6ac0ac07e1c8cd7aa5acd4145c",
+  "test_root_sha256": "297892e7143f072730f9454c5b849da74384f686816aff75e689fd38953ac8e1",
+  "zig_version": "0.16.0",
+  "finished_utc": "2026-11-25T10:31:33.847162+00:00",
+  "release_safe_build_exit_code": 0,
+  "debug_build_exit_code": 0,
+  "release_safe_run_exit_code": 0,
+  "debug_run_exit_code": 0,
+  "standalone_zig_test_count_each_build": 2,
+  "additional_test": "bitstream.test_0",
+  "differential_cases_each_build": 25092,
+  "paired_calls_each_build": 25113,
+  "fast_loop_admissions_each_build": 10707,
+  "pause_results_each_build": 6996,
+  "error_results_each_build": 11183,
+  "case_counts_by_mode": {
+    "ordinary": 5086,
+    "single": 2362,
+    "non_overlap": 5086,
+    "window": 5094,
+    "single_window": 2370,
+    "non_overlap_window": 5094
+  },
+  "benchmark_timing_performed": false,
+  "build_zig_changed": false,
+  "execution_cpu_affinity": {
+    "release_safe": 4,
+    "debug": 12,
+    "compilation": [
+      4,
+      12
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "base_revision": "eb9a65a9b203c0bfc6b06905fc5055afec130e31",
+  "decoder_source": "src/deflate/semantic/decoder.zig",
+  "baseline_source_sha256": "40a27a65d08fbb82a507978d02a987971dbf91ac15b3b71edd99fef00b00fd3c",
+  "candidate_source_sha256": "7b445d4fa3b3b6f109f5174a116e6fb4fb3c1d6ac0ac07e1c8cd7aa5acd4145c",
+  "candidate_patch_sha256": "b0071307b7c01adc9d36d0824f9d37fc1a8ffb21d85e04d26f40c0a945386bdf",
+  "probe_sha256": {
+    "baseline": "37ddb127efa5b484414ff59745a188e19d836c48706a7167c2665212d934a105",
+    "candidate": "ac5da9ece15f8722ed54de77e63fde0302230088b9873156bf5d242959dd4798"
+  },
+  "dependency_revision": "43fb07b44d5b517cafc4f574c333fda9aafbe36d",
+  "build_command": "taskset -c 0-3 zig build -j2 --prefix ../candidate-bin -Dtarget=x86_64-linux-gnu -Dcpu=skylake+pku+sgx -Doptimize=ReleaseFast --summary all build-decode-compare",
+  "inspection": "nm -S and objdump exact aligned symbol bounds; no dynamic metrics"
+}

@@ -1,0 +1,11 @@
+{
+  "build_exit_code": 0,
+  "run_exit_code": 0,
+  "optimize": "ReleaseFast",
+  "root_sha256": "297892e7143f072730f9454c5b849da74384f686816aff75e689fd38953ac8e1",
+  "binary_sha256": "1da5b0a0592464de33d58cf96450688d280b232a87c75b9718b079e5efefa61b",
+  "reported_cases": 25092,
+  "paired_calls": 25113,
+  "zig_runner_tests": 2,
+  "interpretation": "One differential aggregate plus imported bitstream.test_0; projected admissions are not instrumentation"
+}
