@@ -2354,42 +2354,7 @@ pub fn build(b: *std.Build) void {
     const deflate_reference_bench_step = b.step("run-deflate-reference-bench", "Compare one-shot raw Deflate decode against libdeflate");
     deflate_reference_bench_step.dependOn(&run_deflate_reference_bench.step);
 
-    const deflate_reference_encode_bench_exe = b.addExecutable(.{
-        .name = "vort-deflate-encode-bench",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/deflate/encode_bench.zig"),
-            .target = target,
-            .optimize = .ReleaseFast,
-            .link_libc = true,
-            .imports = &.{
-                .{ .name = "vort", .module = vort_mod_releasefast },
-                .{ .name = "zlib", .module = zlib_compat_mod },
-                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
-            },
-        }),
-    });
-    const deflate_reference_library_dir = b.option(
-        []const u8,
-        "deflate-reference-dir",
-        "Directory containing a libdeflate shared library to link and load first",
-    );
-    if (deflate_reference_library_dir) |dir| {
-        deflate_reference_encode_bench_exe.root_module.addLibraryPath(.{ .cwd_relative = dir });
-        deflate_reference_encode_bench_exe.root_module.addRPath(.{ .cwd_relative = dir });
-    }
-    const deflate_reference_include_dir = b.option(
-        []const u8,
-        "deflate-reference-include",
-        "Directory containing the matching libdeflate.h for version reporting",
-    );
-    if (deflate_reference_include_dir) |dir|
-        deflate_reference_encode_bench_exe.root_module.addIncludePath(.{ .cwd_relative = dir });
-    deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("deflate", .{});
-    deflate_reference_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
-    const run_deflate_reference_encode_bench = b.addRunArtifact(deflate_reference_encode_bench_exe);
-    if (b.args) |args| run_deflate_reference_encode_bench.addArgs(args);
-    const deflate_reference_encode_bench_step = b.step("run-deflate-encode-bench", "Compare one-shot raw Deflate encode against zlib and libdeflate");
-    deflate_reference_encode_bench_step.dependOn(&run_deflate_reference_encode_bench.step);
+    @import("build/deflate_encode_bench.zig").register(b, target, vort_mod_releasefast, benchmark_provenance_mod);
 
     const deflate_incremental_decode_gate = b.addSystemCommand(&.{
         "python3",
@@ -4196,6 +4161,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    b.step("build-br-planned-encode-bench", "Build the allocating encoder comparison").dependOn(&b.addInstallArtifact(br_planned_encode_bench_exe, .{}).step);
     const run_br_planned_encode_bench = b.addRunArtifact(br_planned_encode_bench_exe);
 
     const br_reference_parameter_tests = b.addTest(.{
@@ -6989,6 +6955,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    b.step("build-zstd-encode-bench", "Build the allocating encoder comparison").dependOn(&b.addInstallArtifact(zstd_encode_bench_exe, .{}).step);
     const run_zstd_encode_bench = b.addRunArtifact(zstd_encode_bench_exe);
     if (b.args) |args| run_zstd_encode_bench.addArgs(args);
     const zstd_encode_bench_step = b.step("run-zstd-encode-bench", "Compare Zstd encoding with runtime libzstd");

@@ -145,14 +145,8 @@ pub fn main(init: std.process.Init) !void {
         selected_cases += 1;
         const quality = options.quality_override orelse case.quality orelse 3;
         const reference_settings = try options.reference_parameters.resolve(quality);
-        const vort_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
-            .level = .fast,
-            .quality = options.planned_quality,
-            .mode = options.planned_mode,
-            .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
-            .window_bits = options.window_bits,
-            .disable_literal_context_modeling = options.disable_literal_context_modeling,
-        });
+        const primary_options = primaryEncodeOptions(options);
+        const vort_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, primary_options);
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeWithOptionsAlloc(init.gpa, case.payload, reference_settings);
         defer init.gpa.free(reference_encoded);
@@ -218,6 +212,8 @@ pub fn main(init: std.process.Init) !void {
                     .vort_mode = @tagName(options.planned_mode),
                     .vort_command_state_max_input_kib = options.command_state_max_input_kib orelse br.command_state_default_max_input_kib,
                     .vort_command_state_override_requested = options.command_state_max_input_kib,
+                    .vort_window_bits = primary_options.window_bits,
+                    .vort_hq_enabled = primary_options.hq != null,
                     .vort_default_window_bits = br.default_window_bits,
                     .reference_quality = quality,
                     .reference_quality_override_requested = options.quality_override,
@@ -333,20 +329,25 @@ fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbr
     return encode_samples.Interleaved.fromRounds(rounds);
 }
 
+/// Validation and measurement must use the same effective policy.
+fn primaryEncodeOptions(options: Options) br.PlannedEncodeOptions {
+    return .{
+        .level = .fast,
+        .quality = options.planned_quality,
+        .mode = options.planned_mode,
+        .command_state_max_input_kib = options.command_state_max_input_kib orelse br.command_state_default_max_input_kib,
+        .window_bits = options.window_bits,
+        .disable_literal_context_modeling = options.disable_literal_context_modeling,
+        .hq = options.hq,
+    };
+}
+
 fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, options: Options) !Sample {
     if (options.planned_quality == null)
         return measureVortLegacy(io, allocator, payload, options.iterations);
 
     var mix: usize = 0;
-    const encode_options: br.PlannedEncodeOptions = .{
-        .level = .fast,
-        .quality = options.planned_quality,
-        .mode = options.planned_mode,
-        .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
-        .window_bits = options.window_bits,
-        .disable_literal_context_modeling = options.disable_literal_context_modeling,
-        .hq = options.hq,
-    };
+    const encode_options = primaryEncodeOptions(options);
     const warmup = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
     allocator.free(warmup);
     const start = std.Io.Clock.awake.now(io);
@@ -375,6 +376,8 @@ fn measureVortLegacy(io: std.Io, allocator: std.mem.Allocator, payload: []const 
 
 fn measureReference(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, iterations: usize, reference_settings: libbrotli.Runtime.OneShotOptions) !Sample {
     var mix: usize = 0;
+    const warmup = try reference.encodeWithOptionsAlloc(allocator, payload, reference_settings);
+    allocator.free(warmup);
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         const encoded = try reference.encodeWithOptionsAlloc(allocator, payload, reference_settings);
@@ -600,4 +603,18 @@ test "Brotli encode benchmark validates sample output and incomplete paths befor
     var same_args = try std.process.Args.Iterator.initAllocator(.{ .vector = &same }, std.testing.allocator);
     defer same_args.deinit();
     try std.testing.expectError(error.OutputPathCollision, parseOptions(std.testing.allocator, &same_args));
+}
+
+test "Brotli reference benchmark primary options preserve explicit HQ and window controls" {
+    const argv = [_][*:0]const u8{ "--planned-quality=11", "--command-state-max-input-kib=8", "--window-bits=18", "--hq-iterations", "2" };
+    var args = try std.process.Args.Iterator.initAllocator(.{ .vector = &argv }, std.testing.allocator);
+    defer args.deinit();
+    var options = try parseOptions(std.testing.allocator, &args);
+    defer options.deinit(std.testing.allocator);
+    const effective = primaryEncodeOptions(options);
+    try std.testing.expectEqual(@as(?u4, 11), effective.quality);
+    try std.testing.expectEqual(@as(u8, 8), effective.command_state_max_input_kib);
+    try std.testing.expectEqual(@as(?u5, 18), effective.window_bits);
+    try std.testing.expect(effective.hq != null);
+    try std.testing.expectEqualDeep(options.hq, effective.hq);
 }

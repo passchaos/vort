@@ -258,7 +258,7 @@ pub fn jsonAlloc(allocator: std.mem.Allocator, rows: []const Row, references: Re
             .median_statistic = "integer_floor",
             .mix = "sum_of_encoded_lengths_wrapping_target_usize",
             .vort_warmup = "one_untimed_encode_before_each_primary_vort_round",
-            .reference_warmup = "none",
+            .reference_warmup = "one_untimed_encode_before_each_primary_reference_round",
             .timed_work = "encoding_allocation_and_free",
             .metadata_outside_timing = true,
         },
