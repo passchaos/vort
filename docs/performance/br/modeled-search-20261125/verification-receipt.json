@@ -1,0 +1,105 @@
+{
+  "acceptance": "rejected",
+  "collector_restored_at_or_after_quiet_end": true,
+  "full_br_pass": 1710,
+  "full_br_skip": 1,
+  "inventory_verified": true,
+  "merge_allowed": false,
+  "native_tests": 14,
+  "quiet_all180_process_intervals_inside_reservation": true,
+  "quiet_gate_checks": {
+    "control_throughput_at_least_0_98": true,
+    "overall_ci_excludes_parity": true,
+    "overall_throughput_at_least_3pct": true,
+    "weak_nci_throughput_at_least_20pct": false,
+    "wire_size_identity": true
+  },
+  "quiet_gate_results_included": true,
+  "quiet_recomputed_matrix": [
+    {
+      "geomean_encoded_bytes_current_over_old": 1.0,
+      "lane": "explicit16",
+      "paired_geomean_ns_current_over_old": 0.9254870790583916,
+      "paired_round_block_bootstrap_95pct_ci": [
+        0.9223183939088768,
+        0.9284767009919916
+      ],
+      "primary_rounds": 6,
+      "rows": 12
+    }
+  ],
+  "recomputed_matrices": {
+    "s1-pair": [
+      {
+        "geomean_encoded_bytes_current_over_old": 1.0,
+        "lane": "explicit16",
+        "paired_geomean_ns_current_over_old": 0.9716072364456794,
+        "paired_round_block_bootstrap_95pct_ci": [
+          0.9681791732885661,
+          0.975047437456336
+        ],
+        "primary_rounds": 6,
+        "rows": 12
+      }
+    ],
+    "s2-pair-bound": [
+      {
+        "geomean_encoded_bytes_current_over_old": 1.0,
+        "lane": "explicit16",
+        "paired_geomean_ns_current_over_old": 0.9503854136998398,
+        "paired_round_block_bootstrap_95pct_ci": [
+          0.9468411272987549,
+          0.9539429673384058
+        ],
+        "primary_rounds": 6,
+        "rows": 12
+      }
+    ],
+    "s3-first-bound": [
+      {
+        "geomean_encoded_bytes_current_over_old": 1.0,
+        "lane": "explicit16",
+        "paired_geomean_ns_current_over_old": 0.9411699494584085,
+        "paired_round_block_bootstrap_95pct_ci": [
+          0.9363749258526209,
+          0.9459895275997195
+        ],
+        "primary_rounds": 6,
+        "rows": 12
+      }
+    ],
+    "s4-compact": [
+      {
+        "geomean_encoded_bytes_current_over_old": 1.0,
+        "lane": "explicit16",
+        "paired_geomean_ns_current_over_old": 0.9244853695288553,
+        "paired_round_block_bootstrap_95pct_ci": [
+          0.9222065462834935,
+          0.9264285038730159
+        ],
+        "primary_rounds": 6,
+        "rows": 12
+      }
+    ]
+  },
+  "resource_v3_operations": 84,
+  "resource_v3_peak_ratio": 0.8615301387419889,
+  "resource_v4_new_operations": 42,
+  "resource_v4_peak_ratio": 0.7570382893630602,
+  "schema": "vort.modeled-search.publication-verification.v1",
+  "scope": "Offline compressed original bytes, frozen source/ELF/reference/input/wire/lifecycle and resource/cap arithmetic plus paired bootstrap replay including completed temporary developer-host reservation. Original code builds/tests are retained receipts. No ELF/codec/WASM/test/Git/build execution; completed quiet fails unchanged NCI20% gate, not an industry ranking.",
+  "stage_pairs": {
+    "s1-pair": 90,
+    "s2-pair-bound": 90,
+    "s3-first-bound": 90,
+    "s4-compact": 90
+  },
+  "stage_timed_calls": {
+    "s1-pair": 180,
+    "s2-pair-bound": 180,
+    "s3-first-bound": 180,
+    "s4-compact": 180
+  },
+  "wasi_tests": 14,
+  "x86_tests": 14
+}

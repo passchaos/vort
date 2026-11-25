@@ -1,5 +1,67 @@
 # Encoder optimization status
 
+## 2026-11-26 reserved-window paired-search result: not accepted
+
+The [completed reserved-window run](br/modeled-search-20261125/README.md)
+retains all 90 balanced pairs and 180 timed calls on the same frozen v4
+candidate. The original full-file q11 child finished naturally; its parent
+collector stayed stopped throughout the measurement window and resumed
+automatically afterwards. The original fixed-source matrix reached 193/216
+completed conditions after resumption.
+
+Candidate/baseline time is **0.925487x**, with paired round-block 95% CI
+**0.922318–0.928477x**: whole-matrix throughput improves **8.05%**. Every
+initial complete wire remains identical, and the weakest control reaches
+**1.013705x** throughput, above the 0.98x floor. However, NCI reaches only
+**1.181598x** throughput, below the predeclared **1.20x** repair target.
+The candidate therefore **fails the merge gate**. Overall improvement and
+resource savings do not lower or replace that weak-row threshold.
+
+This was a temporarily reserved development-host window, not an industry
+ranking. Its original copied analysis metadata still calls the statistics
+nonquiet; the separate reservation and process interval records establish
+the actual run boundary without silently rewriting the raw report.
+
+Keep v4 unmerged and preserve its complete positive and negative evidence.
+The next isolated candidate compacts the first modeled parser's costs/steps
+and avoids its final token duplication while retaining the existing wider
+bounded branch for unsupported inputs or prices. Static DP storage can be
+8 bytes per position; actual full-encoder speed, peak, quota refusal and
+allocation cleanup still require fresh validation and a fixed-source A/B.
+
+## 2026-11-25 bounded paired modeled-search screening
+
+The [four-stage evidence package](br/modeled-search-20261125/README.md)
+preserves the paired-search prototype, exact both-model cost pruning,
+first-modeled-pass pruning and compact four-anchor index as separate frozen
+experiments. Each stage retains 90 AB/BA pairs and 180 timed calls across the
+same twelve 64 KiB inputs. These compare current-policy baseline `c2c8f250`
+against the candidate; the inherited `old_exact` slot is not the historical
+`0a673757` source used by the regression audit.
+
+The final screen gives candidate/baseline elapsed **0.924485x**, a descriptive
+paired round-block 95% CI of **0.922207–0.926429x**, and throughput **1.08168x**.
+All initial complete wires match the baseline byte for byte; timed outputs
+are checked by length/mix rather than complete hashes. The pair-only stage
+gains only 2.92%, below the default 3% gate. Final NCI throughput is **1.19040x**,
+still below the declared 20% weak-row repair target. These nonquiet
+development-host screens do not establish acceptance or competitor parity.
+
+Separate untimed requested-heap measurements cover fourteen cases with
+unlimited, exact-peak and peak-minus-one caps. Final/baseline geometric peak
+is **0.757038x**. Exact caps preserve the same wires, peak-minus-one returns
+`WorkingMemoryLimitExceeded`, and caller-freed outputs leave zero live
+requests. This uses forced-moving growth in the existing tracking allocator;
+it is not a native RSS, stack or in-place-remap measurement.
+
+The reviewed source passes the native, 32-bit x86 and WASI focused gates
+(14 tests each) and the full Brotli ReleaseSafe suite (1710 passed, one
+platform-specific skip). The optimization remains unmerged while the existing
+driver waits for the original full-file q11 sample to finish naturally, then
+runs the frozen candidate in a reserved measurement window and resumes the
+original 216-condition collector. Preserve the source, corpus and predeclared
+gates when making the acceptance decision.
+
 ## 2026-11-25 q8 feedback cost and repeated search work
 
 The [single-flag control](br/q8-feedback-control-20261125/README.md) changes

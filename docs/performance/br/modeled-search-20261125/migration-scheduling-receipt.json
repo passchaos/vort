@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-11-25T15:58:46.497570+00:00",
+  "completion_lifecycle_check": {
+    "original_codec_pid": 3822204,
+    "original_codec_state": "R",
+    "reservation_exists": false,
+    "waiting_driver_pid": 3825788,
+    "waiting_driver_state": "S"
+  },
+  "migration_exec_session": 51917,
+  "migration_exit_code": 0,
+  "migration_started_before_protection_instruction": true,
+  "schema": "vort.modeled-search.migration-scheduling.v1",
+  "scope": "Final migration statistics replay completed before formal reservation; original codec/collector untouched. No further heavy validation scheduled and no quiet samples read. This is a lifecycle observation, not a formal gate result.",
+  "signals_sent": []
+}
