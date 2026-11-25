@@ -86,3 +86,31 @@ seek table. Bytes already written to stdout cannot be withdrawn. A named
 output is replaced only after encoding and flush succeed; stdin to a named
 output is quiet on success. Use `zig build test-zstd-seekable-cli` for native
 and WASI coverage.
+
+### Extract a byte range
+
+```sh
+vort decode-zstd-seekable-range-file data.seekable.zst - 65530 24 > slice.bin
+vort decode-zstd-seekable-range-file data.seekable.zst slice.bin 65530 24
+```
+
+Offset and length are unsigned 64-bit plaintext byte counts. The input must
+be a regular seekable file, not stdin: the reader uses the table at EOF.
+Only frames intersecting the requested range are decoded, and each is fully
+checked against its frame and seek-table checksums when present before its
+requested bytes are written. An empty range at EOF succeeds. A malformed or
+missing terminal table, an out-of-bounds range, or corruption in a selected
+frame fails the command. Unselected frames are not verified. To supply a
+preset dictionary or dictionary catalog, use the [library range APIs](zstd-source-seekable.md).
+
+`--max-frames` caps index entries before allocation (default 1,048,576).
+`--max-window-size` and `--max-frame-decoded-size` each default to 128 MiB and
+apply to the complete selected frame even for a one-byte request. Apart from
+the index and frame decoding workspace, the command stages only the largest
+selected frame intersection, not the entire range.
+
+A named output is replaced only after the whole request and flush succeed.
+Stdout carries only plaintext and may retain an earlier verified prefix when
+a later frame fails. Use `zig build test-zstd-seekable-range-cli` for native
+and WASI coverage, including sparse offsets above 4 GiB when the host
+filesystem supports sparse files.

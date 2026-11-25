@@ -2,6 +2,7 @@
 const std = @import("std");
 const controls = @import("cli/zstd_controls.zig");
 const seekable = @import("cli/zstd_seekable.zig");
+const seekable_range = @import("cli/zstd_seekable_range.zig");
 pub fn main(init: std.process.Init) !void {
     var buffer: [2048]u8 = undefined;
     var writer = std.Io.File.stdout().writerStreaming(init.io, &buffer);
@@ -28,6 +29,8 @@ pub fn dispatch(command: []const u8, init: std.process.Init, args: *std.process.
         try controls.encodeStreamFile(init, args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-seekable-file")) {
         try seekable.encodeFile(init, args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-zstd-seekable-range-file")) {
+        try seekable_range.decodeFile(init, args, stdout);
     } else return false;
     return true;
 }
