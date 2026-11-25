@@ -1,11 +1,14 @@
 const std = @import("std");
 const vort = @import("vort");
 const stream_files = @import("stream_files.zig");
+const dictionaries = @import("zstd_dictionary_catalog.zig");
 
 const Option = enum {
     @"--max-frames",
     @"--max-window-size",
     @"--max-frame-decoded-size",
+    @"--dictionary",
+    @"--max-dictionary-bytes",
 };
 
 const Controls = struct {
@@ -15,22 +18,33 @@ const Controls = struct {
         .frame_decoded_max = 128 * 1024 * 1024,
     },
 
-    fn parse(args: *std.process.Args.Iterator) !Controls {
-        var result: Controls = .{};
+    dictionary_paths: [dictionaries.max_files][]const u8 = undefined,
+    dictionary_count: usize = 0,
+    dictionary_byte_limit: usize = dictionaries.default_byte_limit,
+
+    fn parse(self: *Controls, args: *std.process.Args.Iterator) !void {
         var seen: std.EnumSet(Option) = .initEmpty();
         while (args.next()) |arg| {
             const split = std.mem.indexOfScalar(u8, arg, '=');
             const option = std.meta.stringToEnum(Option, arg[0 .. split orelse arg.len]) orelse return error.UnknownZstdOption;
-            if (seen.contains(option)) return error.DuplicateZstdOption;
-            seen.insert(option);
+            if (option != .@"--dictionary") {
+                if (seen.contains(option)) return error.DuplicateZstdOption;
+                seen.insert(option);
+            }
             const value = if (split) |i| arg[i + 1 ..] else args.next() orelse return error.MissingZstdOptionValue;
             switch (option) {
-                .@"--max-frames" => result.max_frames = try std.fmt.parseInt(usize, value, 10),
-                .@"--max-window-size" => result.options.max_window_size = try std.fmt.parseInt(u64, value, 10),
-                .@"--max-frame-decoded-size" => result.options.frame_decoded_max = try std.fmt.parseInt(u64, value, 10),
+                .@"--max-frames" => self.max_frames = try std.fmt.parseInt(usize, value, 10),
+                .@"--max-window-size" => self.options.max_window_size = try std.fmt.parseInt(u64, value, 10),
+                .@"--max-frame-decoded-size" => self.options.frame_decoded_max = try std.fmt.parseInt(u64, value, 10),
+                .@"--max-dictionary-bytes" => self.dictionary_byte_limit = try std.fmt.parseInt(usize, value, 10),
+                .@"--dictionary" => {
+                    if (value.len == 0) return error.MissingZstdOptionValue;
+                    if (self.dictionary_count == self.dictionary_paths.len) return error.OutputLimitExceeded;
+                    self.dictionary_paths[self.dictionary_count] = value;
+                    self.dictionary_count += 1;
+                },
             }
         }
-        return result;
     }
 };
 
@@ -41,7 +55,8 @@ pub fn decodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     if (std.mem.startsWith(u8, input_path, "--") or std.mem.startsWith(u8, output_path, "--")) return error.MissingCorpusPath;
     const offset = try std.fmt.parseInt(u64, args.next() orelse return error.MissingCorpusPath, 10);
     const length = try std.fmt.parseInt(u64, args.next() orelse return error.MissingCorpusPath, 10);
-    const controls = try Controls.parse(args);
+    var controls: Controls = .{};
+    try controls.parse(args);
 
     const cwd = std.Io.Dir.cwd();
     const input = try cwd.openFile(init.io, input_path, .{});
@@ -53,6 +68,9 @@ pub fn decodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     const entries = try init.gpa.alloc(vort.ZstdNativeSeekTableEntry, @intCast(table.entry_count));
     defer init.gpa.free(entries);
     const index = try table.buildIndex(entries);
+    const catalog = try dictionaries.Catalog.load(cwd, init.io, init.gpa, controls.dictionary_paths[0..controls.dictionary_count], controls.dictionary_byte_limit);
+    defer catalog.deinit(init.gpa);
+    controls.options.dictionary_set = catalog.binding();
     const needed = try vort.zstdSourceSeekableRangeRequirementsWide(index, offset, length, controls.options);
 
     const history = try init.gpa.alloc(u8, needed.history);

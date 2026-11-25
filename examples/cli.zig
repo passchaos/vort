@@ -2850,6 +2850,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\    Write a seekable Zstd archive; --max-frames is required for stdin
         \\  decode-zstd-seekable-range-file <in> <out|-> <offset> <length> [--max-frames=N]
         \\    [--max-window-size=BYTES] [--max-frame-decoded-size=BYTES]
+        \\    [--dictionary=PATH ...] [--max-dictionary-bytes=BYTES]
         \\    Verify and extract a plaintext byte range from a seekable Zstd file
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]

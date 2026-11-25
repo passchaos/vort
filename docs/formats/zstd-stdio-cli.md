@@ -100,8 +100,26 @@ Only frames intersecting the requested range are decoded, and each is fully
 checked against its frame and seek-table checksums when present before its
 requested bytes are written. An empty range at EOF succeeds. A malformed or
 missing terminal table, an out-of-bounds range, or corruption in a selected
-frame fails the command. Unselected frames are not verified. To supply a
-preset dictionary or dictionary catalog, use the [library range APIs](zstd-source-seekable.md).
+frame fails the command. Unselected frames are not verified.
+
+Pass repeatable `--dictionary=PATH` options to load a catalog of standard full
+Zstd dictionaries. Each selected frame uses the dictionary matching its
+nonzero wire ID, regardless of argument order. Duplicate IDs are rejected;
+ID-less frames do not use the catalog. The command prepares each dictionary
+once and checks all selected frame headers before opening the output. If a
+selected frame needs a missing dictionary, the command publishes no bytes.
+A supplied dictionary with the right ID but wrong contents can instead fail
+later when verifying that frame.
+
+```sh
+vort decode-zstd-seekable-range-file archive.zst - 65530 24 \
+  --dictionary=first.zdict --dictionary=second.zdict > slice.bin
+```
+
+The catalog accepts at most 64 regular dictionary files.
+`--max-dictionary-bytes=BYTES` limits their aggregate file size (32 MiB by
+default), excluding prepared decoder state. To supply raw history for an
+ID-less frame, use the [library range APIs](zstd-source-seekable.md).
 
 `--max-frames` caps index entries before allocation (default 1,048,576).
 `--max-window-size` and `--max-frame-decoded-size` each default to 128 MiB and
