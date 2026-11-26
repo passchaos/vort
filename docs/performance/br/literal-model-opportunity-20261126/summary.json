@@ -1,0 +1,2312 @@
+{
+  "complete_event_scope": {
+    "all_event_logs_complete": true,
+    "context_proposal_events": 309,
+    "input_rows": 12,
+    "nonrecent_categories": {
+      "adaptive_distance_context": 48,
+      "adaptive_literal_plain": 12,
+      "ordinary_context": 48,
+      "ordinary_plain": 309
+    },
+    "nonrecent_successful_physical_wires": 417,
+    "successful_physical_wires": 1029,
+    "trace_runs": 36
+  },
+  "context_detail_scope": {
+    "full_reuses_in_truncated_runs": null,
+    "limitation": "Truncated runs retain only context-detail prefixes. Do not infer their complete reuse or scorer totals. Physical classification and opportunity joins use complete events, not the truncated context-detail arrays.",
+    "observed_reuses_in_recorded_details": 87,
+    "recorded_details": 288,
+    "truncated_runs": 18
+  },
+  "execution_scope": {
+    "build_or_timing_executed": false,
+    "codec_executed": false,
+    "new_measurement": false,
+    "producer_imported_or_executed": false,
+    "pure_data_reduction": true,
+    "wire_identity_verified_by_this_script": false
+  },
+  "first_round_opportunity_scope": {
+    "identity_verified": false,
+    "input_rows": 12,
+    "limitation": "These are metadata-matching opportunity slots, not cache hits or proof of command/input/histogram identity. Command count does not establish command-list equality.",
+    "match_fields": [
+      "command_count",
+      "context_mode",
+      "context_trees",
+      "complete_serialized_context_map"
+    ],
+    "matching_opportunity_slots": 238,
+    "max_slots_in_one_preferred_scope": 5,
+    "max_tree_sum_in_one_preferred_scope": 27,
+    "non_temporal_build_slots": 238,
+    "rows": [
+      {
+        "case": "dickens",
+        "matching_opportunity_slots": 24,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 27,
+        "non_temporal_build_slots": 24,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 14
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 14
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 55,
+            "sum_effective_trees": 14
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 81,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 100,
+            "sum_effective_trees": 23
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 127,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 147,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 171,
+            "sum_effective_trees": 27
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 196,
+            "sum_effective_trees": 26
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              69,
+              70,
+              72
+            ],
+            "matching_consumer_event_ids": [
+              69,
+              70,
+              72
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 54,
+            "preferred_event_id": 55,
+            "split_planning_event_id": 65
+          },
+          {
+            "eligible_consumer_event_ids": [
+              94,
+              95
+            ],
+            "matching_consumer_event_ids": [
+              94,
+              95
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 80,
+            "preferred_event_id": 81,
+            "split_planning_event_id": 90
+          },
+          {
+            "eligible_consumer_event_ids": [
+              115,
+              116,
+              118
+            ],
+            "matching_consumer_event_ids": [
+              115,
+              116,
+              118
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 99,
+            "preferred_event_id": 100,
+            "split_planning_event_id": 111
+          },
+          {
+            "eligible_consumer_event_ids": [
+              140,
+              141
+            ],
+            "matching_consumer_event_ids": [
+              140,
+              141
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 126,
+            "preferred_event_id": 127,
+            "split_planning_event_id": 136
+          },
+          {
+            "eligible_consumer_event_ids": [
+              160,
+              161
+            ],
+            "matching_consumer_event_ids": [
+              160,
+              161
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 146,
+            "preferred_event_id": 147,
+            "split_planning_event_id": 156
+          },
+          {
+            "eligible_consumer_event_ids": [
+              186,
+              187,
+              189
+            ],
+            "matching_consumer_event_ids": [
+              186,
+              187,
+              189
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 170,
+            "preferred_event_id": 171,
+            "split_planning_event_id": 182
+          },
+          {
+            "eligible_consumer_event_ids": [
+              211,
+              212,
+              214
+            ],
+            "matching_consumer_event_ids": [
+              211,
+              212,
+              214
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 195,
+            "preferred_event_id": 196,
+            "split_planning_event_id": 207
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "mozilla",
+        "matching_opportunity_slots": 24,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 9,
+        "non_temporal_build_slots": 24,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 7
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 7
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 58,
+            "sum_effective_trees": 7
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 80,
+            "sum_effective_trees": 7
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 105,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 124,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 147,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 167,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 191,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 212,
+            "sum_effective_trees": 9
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              72,
+              73,
+              75
+            ],
+            "matching_consumer_event_ids": [
+              72,
+              73,
+              75
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 57,
+            "preferred_event_id": 58,
+            "split_planning_event_id": 68
+          },
+          {
+            "eligible_consumer_event_ids": [
+              93,
+              94,
+              96
+            ],
+            "matching_consumer_event_ids": [
+              93,
+              94,
+              96
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 79,
+            "preferred_event_id": 80,
+            "split_planning_event_id": 89
+          },
+          {
+            "eligible_consumer_event_ids": [
+              118,
+              119
+            ],
+            "matching_consumer_event_ids": [
+              118,
+              119
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 104,
+            "preferred_event_id": 105,
+            "split_planning_event_id": 114
+          },
+          {
+            "eligible_consumer_event_ids": [
+              137,
+              138
+            ],
+            "matching_consumer_event_ids": [
+              137,
+              138
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 123,
+            "preferred_event_id": 124,
+            "split_planning_event_id": 133
+          },
+          {
+            "eligible_consumer_event_ids": [
+              160,
+              161
+            ],
+            "matching_consumer_event_ids": [
+              160,
+              161
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 146,
+            "preferred_event_id": 147,
+            "split_planning_event_id": 156
+          },
+          {
+            "eligible_consumer_event_ids": [
+              180,
+              181
+            ],
+            "matching_consumer_event_ids": [
+              180,
+              181
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 166,
+            "preferred_event_id": 167,
+            "split_planning_event_id": 176
+          },
+          {
+            "eligible_consumer_event_ids": [
+              204,
+              205
+            ],
+            "matching_consumer_event_ids": [
+              204,
+              205
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 190,
+            "preferred_event_id": 191,
+            "split_planning_event_id": 200
+          },
+          {
+            "eligible_consumer_event_ids": [
+              225,
+              226
+            ],
+            "matching_consumer_event_ids": [
+              225,
+              226
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 211,
+            "preferred_event_id": 212,
+            "split_planning_event_id": 221
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "mr",
+        "matching_opportunity_slots": 27,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 20,
+        "non_temporal_build_slots": 27,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 20
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 31,
+            "sum_effective_trees": 20
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 64,
+            "sum_effective_trees": 20
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 89,
+            "sum_effective_trees": 20
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 117,
+            "sum_effective_trees": 13
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 146,
+            "sum_effective_trees": 13
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 173,
+            "sum_effective_trees": 13
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 204,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 232,
+            "sum_effective_trees": 9
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              23,
+              24,
+              26
+            ],
+            "matching_consumer_event_ids": [
+              23,
+              24,
+              26
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              49,
+              50,
+              52
+            ],
+            "matching_consumer_event_ids": [
+              49,
+              50,
+              52
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 30,
+            "preferred_event_id": 31,
+            "split_planning_event_id": 42
+          },
+          {
+            "eligible_consumer_event_ids": [
+              81,
+              82,
+              84
+            ],
+            "matching_consumer_event_ids": [
+              81,
+              82,
+              84
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 63,
+            "preferred_event_id": 64,
+            "split_planning_event_id": 74
+          },
+          {
+            "eligible_consumer_event_ids": [
+              105,
+              106,
+              108
+            ],
+            "matching_consumer_event_ids": [
+              105,
+              106,
+              108
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 88,
+            "preferred_event_id": 89,
+            "split_planning_event_id": 98
+          },
+          {
+            "eligible_consumer_event_ids": [
+              135,
+              136,
+              138
+            ],
+            "matching_consumer_event_ids": [
+              135,
+              136,
+              138
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 116,
+            "preferred_event_id": 117,
+            "split_planning_event_id": 128
+          },
+          {
+            "eligible_consumer_event_ids": [
+              164,
+              165,
+              167
+            ],
+            "matching_consumer_event_ids": [
+              164,
+              165,
+              167
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 145,
+            "preferred_event_id": 146,
+            "split_planning_event_id": 157
+          },
+          {
+            "eligible_consumer_event_ids": [
+              191,
+              192,
+              194
+            ],
+            "matching_consumer_event_ids": [
+              191,
+              192,
+              194
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 172,
+            "preferred_event_id": 173,
+            "split_planning_event_id": 184
+          },
+          {
+            "eligible_consumer_event_ids": [
+              222,
+              223,
+              225
+            ],
+            "matching_consumer_event_ids": [
+              222,
+              223,
+              225
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 203,
+            "preferred_event_id": 204,
+            "split_planning_event_id": 215
+          },
+          {
+            "eligible_consumer_event_ids": [
+              250,
+              251,
+              253
+            ],
+            "matching_consumer_event_ids": [
+              250,
+              251,
+              253
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 231,
+            "preferred_event_id": 232,
+            "split_planning_event_id": 243
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "nci",
+        "matching_opportunity_slots": 0,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 10,
+        "non_temporal_build_slots": 0,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 5
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 16,
+            "sum_effective_trees": 5
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 31,
+            "sum_effective_trees": 5
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 45,
+            "sum_effective_trees": 5
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 59,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 75,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 95,
+            "sum_effective_trees": 10
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 112,
+            "sum_effective_trees": 8
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 14
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 15,
+            "preferred_event_id": 16,
+            "split_planning_event_id": 25
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 30,
+            "preferred_event_id": 31,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 44,
+            "preferred_event_id": 45,
+            "split_planning_event_id": 54
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 58,
+            "preferred_event_id": 59,
+            "split_planning_event_id": 70
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 74,
+            "preferred_event_id": 75,
+            "split_planning_event_id": 86
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 94,
+            "preferred_event_id": 95,
+            "split_planning_event_id": 106
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 111,
+            "preferred_event_id": 112,
+            "split_planning_event_id": 123
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "ooffice",
+        "matching_opportunity_slots": 24,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 11,
+        "non_temporal_build_slots": 24,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 55,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 81,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 107,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 131,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 159,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 184,
+            "sum_effective_trees": 11
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              69,
+              70,
+              72
+            ],
+            "matching_consumer_event_ids": [
+              69,
+              70,
+              72
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 54,
+            "preferred_event_id": 55,
+            "split_planning_event_id": 65
+          },
+          {
+            "eligible_consumer_event_ids": [
+              96,
+              97,
+              99
+            ],
+            "matching_consumer_event_ids": [
+              96,
+              97,
+              99
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 80,
+            "preferred_event_id": 81,
+            "split_planning_event_id": 92
+          },
+          {
+            "eligible_consumer_event_ids": [
+              122,
+              123,
+              125
+            ],
+            "matching_consumer_event_ids": [
+              122,
+              123,
+              125
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 106,
+            "preferred_event_id": 107,
+            "split_planning_event_id": 118
+          },
+          {
+            "eligible_consumer_event_ids": [
+              146,
+              147,
+              149
+            ],
+            "matching_consumer_event_ids": [
+              146,
+              147,
+              149
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 130,
+            "preferred_event_id": 131,
+            "split_planning_event_id": 142
+          },
+          {
+            "eligible_consumer_event_ids": [
+              174,
+              175,
+              177
+            ],
+            "matching_consumer_event_ids": [
+              174,
+              175,
+              177
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 158,
+            "preferred_event_id": 159,
+            "split_planning_event_id": 170
+          },
+          {
+            "eligible_consumer_event_ids": [
+              199,
+              200,
+              202
+            ],
+            "matching_consumer_event_ids": [
+              199,
+              200,
+              202
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 183,
+            "preferred_event_id": 184,
+            "split_planning_event_id": 195
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "osdb",
+        "matching_opportunity_slots": 27,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 9,
+        "non_temporal_build_slots": 27,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 57,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 79,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 104,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 130,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 154,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 182,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 207,
+            "sum_effective_trees": 9
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              71,
+              72,
+              74
+            ],
+            "matching_consumer_event_ids": [
+              71,
+              72,
+              74
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 56,
+            "preferred_event_id": 57,
+            "split_planning_event_id": 67
+          },
+          {
+            "eligible_consumer_event_ids": [
+              92,
+              93,
+              95
+            ],
+            "matching_consumer_event_ids": [
+              92,
+              93,
+              95
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 78,
+            "preferred_event_id": 79,
+            "split_planning_event_id": 88
+          },
+          {
+            "eligible_consumer_event_ids": [
+              119,
+              120,
+              122
+            ],
+            "matching_consumer_event_ids": [
+              119,
+              120,
+              122
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 103,
+            "preferred_event_id": 104,
+            "split_planning_event_id": 115
+          },
+          {
+            "eligible_consumer_event_ids": [
+              145,
+              146,
+              148
+            ],
+            "matching_consumer_event_ids": [
+              145,
+              146,
+              148
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 129,
+            "preferred_event_id": 130,
+            "split_planning_event_id": 141
+          },
+          {
+            "eligible_consumer_event_ids": [
+              169,
+              170,
+              172
+            ],
+            "matching_consumer_event_ids": [
+              169,
+              170,
+              172
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 153,
+            "preferred_event_id": 154,
+            "split_planning_event_id": 165
+          },
+          {
+            "eligible_consumer_event_ids": [
+              197,
+              198,
+              200
+            ],
+            "matching_consumer_event_ids": [
+              197,
+              198,
+              200
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 181,
+            "preferred_event_id": 182,
+            "split_planning_event_id": 193
+          },
+          {
+            "eligible_consumer_event_ids": [
+              222,
+              223,
+              225
+            ],
+            "matching_consumer_event_ids": [
+              222,
+              223,
+              225
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 206,
+            "preferred_event_id": 207,
+            "split_planning_event_id": 218
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "reymont",
+        "matching_opportunity_slots": 24,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 16,
+        "non_temporal_build_slots": 24,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 55,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 81,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 107,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 131,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 159,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 184,
+            "sum_effective_trees": 16
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              69,
+              70,
+              72
+            ],
+            "matching_consumer_event_ids": [
+              69,
+              70,
+              72
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 54,
+            "preferred_event_id": 55,
+            "split_planning_event_id": 65
+          },
+          {
+            "eligible_consumer_event_ids": [
+              96,
+              97,
+              99
+            ],
+            "matching_consumer_event_ids": [
+              96,
+              97,
+              99
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 80,
+            "preferred_event_id": 81,
+            "split_planning_event_id": 92
+          },
+          {
+            "eligible_consumer_event_ids": [
+              122,
+              123,
+              125
+            ],
+            "matching_consumer_event_ids": [
+              122,
+              123,
+              125
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 106,
+            "preferred_event_id": 107,
+            "split_planning_event_id": 118
+          },
+          {
+            "eligible_consumer_event_ids": [
+              146,
+              147,
+              149
+            ],
+            "matching_consumer_event_ids": [
+              146,
+              147,
+              149
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 130,
+            "preferred_event_id": 131,
+            "split_planning_event_id": 142
+          },
+          {
+            "eligible_consumer_event_ids": [
+              174,
+              175,
+              177
+            ],
+            "matching_consumer_event_ids": [
+              174,
+              175,
+              177
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 158,
+            "preferred_event_id": 159,
+            "split_planning_event_id": 170
+          },
+          {
+            "eligible_consumer_event_ids": [
+              199,
+              200,
+              202
+            ],
+            "matching_consumer_event_ids": [
+              199,
+              200,
+              202
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 183,
+            "preferred_event_id": 184,
+            "split_planning_event_id": 195
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "samba",
+        "matching_opportunity_slots": 18,
+        "max_slots_in_one_preferred_scope": 3,
+        "max_tree_sum_in_one_preferred_scope": 16,
+        "non_temporal_build_slots": 18,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 12
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 24,
+            "sum_effective_trees": 12
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 47,
+            "sum_effective_trees": 12
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 69,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 88,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 111,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 131,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 155,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 176,
+            "sum_effective_trees": 16
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              18,
+              19
+            ],
+            "matching_consumer_event_ids": [
+              18,
+              19
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 14
+          },
+          {
+            "eligible_consumer_event_ids": [
+              37,
+              38
+            ],
+            "matching_consumer_event_ids": [
+              37,
+              38
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 23,
+            "preferred_event_id": 24,
+            "split_planning_event_id": 33
+          },
+          {
+            "eligible_consumer_event_ids": [
+              59,
+              60
+            ],
+            "matching_consumer_event_ids": [
+              59,
+              60
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 46,
+            "preferred_event_id": 47,
+            "split_planning_event_id": 55
+          },
+          {
+            "eligible_consumer_event_ids": [
+              82,
+              83
+            ],
+            "matching_consumer_event_ids": [
+              82,
+              83
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 68,
+            "preferred_event_id": 69,
+            "split_planning_event_id": 78
+          },
+          {
+            "eligible_consumer_event_ids": [
+              101,
+              102
+            ],
+            "matching_consumer_event_ids": [
+              101,
+              102
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 87,
+            "preferred_event_id": 88,
+            "split_planning_event_id": 97
+          },
+          {
+            "eligible_consumer_event_ids": [
+              124,
+              125
+            ],
+            "matching_consumer_event_ids": [
+              124,
+              125
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 110,
+            "preferred_event_id": 111,
+            "split_planning_event_id": 120
+          },
+          {
+            "eligible_consumer_event_ids": [
+              144,
+              145
+            ],
+            "matching_consumer_event_ids": [
+              144,
+              145
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 130,
+            "preferred_event_id": 131,
+            "split_planning_event_id": 140
+          },
+          {
+            "eligible_consumer_event_ids": [
+              168,
+              169
+            ],
+            "matching_consumer_event_ids": [
+              168,
+              169
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 154,
+            "preferred_event_id": 155,
+            "split_planning_event_id": 164
+          },
+          {
+            "eligible_consumer_event_ids": [
+              189,
+              190
+            ],
+            "matching_consumer_event_ids": [
+              189,
+              190
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 175,
+            "preferred_event_id": 176,
+            "split_planning_event_id": 185
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "sao",
+        "matching_opportunity_slots": 24,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 9,
+        "non_temporal_build_slots": 24,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 58,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 80,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 105,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 131,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 159,
+            "sum_effective_trees": 8
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 184,
+            "sum_effective_trees": 9
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              72,
+              73,
+              75
+            ],
+            "matching_consumer_event_ids": [
+              72,
+              73,
+              75
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 57,
+            "preferred_event_id": 58,
+            "split_planning_event_id": 68
+          },
+          {
+            "eligible_consumer_event_ids": [
+              93,
+              94,
+              96
+            ],
+            "matching_consumer_event_ids": [
+              93,
+              94,
+              96
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 79,
+            "preferred_event_id": 80,
+            "split_planning_event_id": 89
+          },
+          {
+            "eligible_consumer_event_ids": [
+              120,
+              121,
+              123
+            ],
+            "matching_consumer_event_ids": [
+              120,
+              121,
+              123
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 104,
+            "preferred_event_id": 105,
+            "split_planning_event_id": 116
+          },
+          {
+            "eligible_consumer_event_ids": [
+              146,
+              147,
+              149
+            ],
+            "matching_consumer_event_ids": [
+              146,
+              147,
+              149
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 130,
+            "preferred_event_id": 131,
+            "split_planning_event_id": 142
+          },
+          {
+            "eligible_consumer_event_ids": [
+              174,
+              175,
+              177
+            ],
+            "matching_consumer_event_ids": [
+              174,
+              175,
+              177
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 158,
+            "preferred_event_id": 159,
+            "split_planning_event_id": 170
+          },
+          {
+            "eligible_consumer_event_ids": [
+              199,
+              200,
+              202
+            ],
+            "matching_consumer_event_ids": [
+              199,
+              200,
+              202
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 183,
+            "preferred_event_id": 184,
+            "split_planning_event_id": 195
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "webster",
+        "matching_opportunity_slots": 18,
+        "max_slots_in_one_preferred_scope": 3,
+        "max_tree_sum_in_one_preferred_scope": 15,
+        "non_temporal_build_slots": 18,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 24,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 47,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 69,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 88,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 111,
+            "sum_effective_trees": 9
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 131,
+            "sum_effective_trees": 14
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 155,
+            "sum_effective_trees": 14
+          },
+          {
+            "distinct_literal_metadata_slots": 3,
+            "preferred_event_id": 176,
+            "sum_effective_trees": 14
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              18,
+              19
+            ],
+            "matching_consumer_event_ids": [
+              18,
+              19
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 14
+          },
+          {
+            "eligible_consumer_event_ids": [
+              37,
+              38
+            ],
+            "matching_consumer_event_ids": [
+              37,
+              38
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 23,
+            "preferred_event_id": 24,
+            "split_planning_event_id": 33
+          },
+          {
+            "eligible_consumer_event_ids": [
+              59,
+              60
+            ],
+            "matching_consumer_event_ids": [
+              59,
+              60
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 46,
+            "preferred_event_id": 47,
+            "split_planning_event_id": 55
+          },
+          {
+            "eligible_consumer_event_ids": [
+              82,
+              83
+            ],
+            "matching_consumer_event_ids": [
+              82,
+              83
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 68,
+            "preferred_event_id": 69,
+            "split_planning_event_id": 78
+          },
+          {
+            "eligible_consumer_event_ids": [
+              101,
+              102
+            ],
+            "matching_consumer_event_ids": [
+              101,
+              102
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 87,
+            "preferred_event_id": 88,
+            "split_planning_event_id": 97
+          },
+          {
+            "eligible_consumer_event_ids": [
+              124,
+              125
+            ],
+            "matching_consumer_event_ids": [
+              124,
+              125
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 110,
+            "preferred_event_id": 111,
+            "split_planning_event_id": 120
+          },
+          {
+            "eligible_consumer_event_ids": [
+              144,
+              145
+            ],
+            "matching_consumer_event_ids": [
+              144,
+              145
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 130,
+            "preferred_event_id": 131,
+            "split_planning_event_id": 140
+          },
+          {
+            "eligible_consumer_event_ids": [
+              168,
+              169
+            ],
+            "matching_consumer_event_ids": [
+              168,
+              169
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 154,
+            "preferred_event_id": 155,
+            "split_planning_event_id": 164
+          },
+          {
+            "eligible_consumer_event_ids": [
+              189,
+              190
+            ],
+            "matching_consumer_event_ids": [
+              189,
+              190
+            ],
+            "matching_opportunity_slots": 2,
+            "non_temporal_build_slots": 2,
+            "parent_event_id": 175,
+            "preferred_event_id": 176,
+            "split_planning_event_id": 185
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "x-ray",
+        "matching_opportunity_slots": 28,
+        "max_slots_in_one_preferred_scope": 5,
+        "max_tree_sum_in_one_preferred_scope": 27,
+        "non_temporal_build_slots": 28,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 28,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 57,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 79,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 5,
+            "preferred_event_id": 104,
+            "sum_effective_trees": 27
+          },
+          {
+            "distinct_literal_metadata_slots": 5,
+            "preferred_event_id": 133,
+            "sum_effective_trees": 27
+          },
+          {
+            "distinct_literal_metadata_slots": 5,
+            "preferred_event_id": 164,
+            "sum_effective_trees": 27
+          },
+          {
+            "distinct_literal_metadata_slots": 5,
+            "preferred_event_id": 192,
+            "sum_effective_trees": 27
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_consumer_event_ids": [
+              20,
+              21,
+              23
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_consumer_event_ids": [
+              43,
+              44,
+              46
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 27,
+            "preferred_event_id": 28,
+            "split_planning_event_id": 39
+          },
+          {
+            "eligible_consumer_event_ids": [
+              71,
+              72,
+              74
+            ],
+            "matching_consumer_event_ids": [
+              71,
+              72,
+              74
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 56,
+            "preferred_event_id": 57,
+            "split_planning_event_id": 67
+          },
+          {
+            "eligible_consumer_event_ids": [
+              92,
+              93,
+              95
+            ],
+            "matching_consumer_event_ids": [
+              92,
+              93,
+              95
+            ],
+            "matching_opportunity_slots": 3,
+            "non_temporal_build_slots": 3,
+            "parent_event_id": 78,
+            "preferred_event_id": 79,
+            "split_planning_event_id": 88
+          },
+          {
+            "eligible_consumer_event_ids": [
+              121,
+              122,
+              124,
+              126
+            ],
+            "matching_consumer_event_ids": [
+              121,
+              122,
+              124,
+              126
+            ],
+            "matching_opportunity_slots": 4,
+            "non_temporal_build_slots": 4,
+            "parent_event_id": 103,
+            "preferred_event_id": 104,
+            "split_planning_event_id": 116
+          },
+          {
+            "eligible_consumer_event_ids": [
+              150,
+              151,
+              153,
+              155
+            ],
+            "matching_consumer_event_ids": [
+              150,
+              151,
+              153,
+              155
+            ],
+            "matching_opportunity_slots": 4,
+            "non_temporal_build_slots": 4,
+            "parent_event_id": 132,
+            "preferred_event_id": 133,
+            "split_planning_event_id": 145
+          },
+          {
+            "eligible_consumer_event_ids": [
+              181,
+              182,
+              184,
+              186
+            ],
+            "matching_consumer_event_ids": [
+              181,
+              182,
+              184,
+              186
+            ],
+            "matching_opportunity_slots": 4,
+            "non_temporal_build_slots": 4,
+            "parent_event_id": 163,
+            "preferred_event_id": 164,
+            "split_planning_event_id": 176
+          },
+          {
+            "eligible_consumer_event_ids": [
+              209,
+              210,
+              212,
+              214
+            ],
+            "matching_consumer_event_ids": [
+              209,
+              210,
+              212,
+              214
+            ],
+            "matching_opportunity_slots": 4,
+            "non_temporal_build_slots": 4,
+            "parent_event_id": 191,
+            "preferred_event_id": 192,
+            "split_planning_event_id": 204
+          }
+        ],
+        "stored_round_position": 0
+      },
+      {
+        "case": "xml",
+        "matching_opportunity_slots": 0,
+        "max_slots_in_one_preferred_scope": 4,
+        "max_tree_sum_in_one_preferred_scope": 16,
+        "non_temporal_build_slots": 0,
+        "preferred_scope_slot_counts": [
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 5,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 18,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 35,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 51,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 69,
+            "sum_effective_trees": 16
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 85,
+            "sum_effective_trees": 11
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 105,
+            "sum_effective_trees": 15
+          },
+          {
+            "distinct_literal_metadata_slots": 4,
+            "preferred_event_id": 122,
+            "sum_effective_trees": 13
+          }
+        ],
+        "round_index": 0,
+        "scope_pairs": [
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 4,
+            "preferred_event_id": 5,
+            "split_planning_event_id": 16
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 17,
+            "preferred_event_id": 18,
+            "split_planning_event_id": 29
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 34,
+            "preferred_event_id": 35,
+            "split_planning_event_id": 45
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 50,
+            "preferred_event_id": 51,
+            "split_planning_event_id": 62
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 68,
+            "preferred_event_id": 69,
+            "split_planning_event_id": 80
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 84,
+            "preferred_event_id": 85,
+            "split_planning_event_id": 96
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 104,
+            "preferred_event_id": 105,
+            "split_planning_event_id": 116
+          },
+          {
+            "eligible_consumer_event_ids": [],
+            "matching_consumer_event_ids": [],
+            "matching_opportunity_slots": 0,
+            "non_temporal_build_slots": 0,
+            "parent_event_id": 121,
+            "preferred_event_id": 122,
+            "split_planning_event_id": 133
+          }
+        ],
+        "stored_round_position": 0
+      }
+    ],
+    "stored_round_position": 0
+  },
+  "input": {
+    "package_argument": "docs/performance/br/q8-main-history-20261126/diagnostic.tar.gz",
+    "package_bytes": 5126355,
+    "package_sha256": "f7c0ffb41e759bdb389843f4b53f07a393b5408c77d3aed0e8765a9f334dc8ee",
+    "profile_bytes": 10398238,
+    "profile_member": "profile.json",
+    "profile_sha256": "42a5c8596fec40d8fe5d01775d06a7e695c4b7ad39d97b3b8a5a075071398b1a"
+  },
+  "profile_policy": {
+    "mode": "generic",
+    "quality": 8,
+    "window_bits": 16
+  },
+  "profile_schema": "vort.brotli.q8-candidate-profile.v2",
+  "schema": "vort.brotli.literal-model-opportunity.v1"
+}

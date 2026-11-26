@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-B",
+    "docs/performance/br/literal-model-opportunity-20261126/audit.py"
+  ],
+  "started_utc": "2026-11-26T13:07:54.651429+00:00",
+  "completed_utc": "2026-11-26T13:07:54.931140+00:00",
+  "actual_exit": 0,
+  "script_sha256": "5f7a8ecd8c7867da84370a0b2a228f91924365842a51ea7d5455ecb809b8ffda",
+  "stdout_sha256": "b45b8ca1ede5076808ebb6ed90f5a604259993bd9db2b7ee5a9c1c6351b5f9de",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr": "",
+  "pure_data_only": true,
+  "new_codec_build_or_timing": false,
+  "origin": "Architect supplied merged existing static-query logic; Root wrote and actually executed it. No historical query exit was reused."
+}

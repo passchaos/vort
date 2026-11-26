@@ -1,0 +1,7 @@
+{
+  "actual_exit_code": 1,
+  "cause": "First WASI resource debug line is joined to the test runner name; initial data-reader required line-start prefix and omitted it",
+  "resolution": "Parse the exact debug prefix within a line while preserving all original captured bytes; no source/raw/producer change",
+  "schema": "vort.brotli.final-entropy-bound.offline-reader-first-attempt.v1",
+  "stderr": "Traceback (most recent call last):\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/verify.py\", line 28, in <module>\n    if __name__=='__main__':print(json.dumps(verify(Path(__file__).resolve().parent),indent=2,sort_keys=True))\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/verify.py\", line 12, in verify\n    provenance=verify_provenance(packages['sources.tar.gz'],packages['bench.tar.gz'],packages['validation.tar.gz'])\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/provenance.py\", line 111, in verify_provenance\n    require([r['stage'] for r in scoped]==['unlimited-probe','exact-D','D-minus-one-refused','quota-unlimited-retry'] and\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/package_io.py\", line 8, in require\n    raise ValueError(message)\nValueError: Resource success/quota/retry or ownership coverage differs\n"
+}

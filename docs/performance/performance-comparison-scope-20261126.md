@@ -116,6 +116,43 @@ The V1 working implementation is saved in local Git stash
 `c04cbff2ecefbb5e33fb3ea5ca1eea8bcc0b2134`; production source is restored to
 committed main. Before adoption, any new source must repair ordinary controls
 and pass fresh complete-source gates.
-Prioritize a direct historical/current-main q8 comparison and removal of
-repeated match/entropy planning and losing candidate output. Local target
-gains must retain small/cold latency, ordinary API, wire and resource controls.
+The direct historical/current-main q8 comparison is complete. Prioritize
+removing repeated match/entropy planning and losing candidate output. Local
+target gains must retain small/cold latency, ordinary API, wire and resource
+controls.
+
+## Two rejected Brotli emission pilots
+
+The [local counted-distance pilot](br/counted-distance-local-20261126/README.md)
+and [global final-entropy-bound pilot](br/final-entropy-bound-20261126/README.md)
+each compare a separately frozen prototype with clean `cf442dee` through the
+same public q8/generic/explicit-window16 allocating call. Each retains all
+24 AB/BA pairs / 48 calls and byte-identical initial wires. Independent
+data-only verification reproduces throughput GMs **1.01382176x** and
+**1.01564227x**, respectively. Both pass every pilot row's 0.98 floor but
+miss the predeclared 1.03 target. Neither has a formal CI or an approved/run
+full campaign; neither is adopted.
+
+The global prototype passes its recorded native/WASI functionality and resource
+prerequisites, but those do not override the failed performance screen. It is
+saved in local Git stash `5e431ffff10d57fc576c97f49d1fbb5ea330cf58`, with the
+ignored source bytecode preserved separately in the frozen evidence. Production
+source is restored to committed main. These gains cannot be multiplied with
+historical or local pilot ratios to claim recovery.
+
+The current-source stage diagnostic attributes 30.23% of total measured stage
+time to context proposals and 22.85% to optimal parsing. Mozilla's context
+proposal share is 49.82%; NCI's optimal parser share is 73.74%. It observes
+1,029 physical outputs, of which 993 lose, across 36 trace calls. These are
+diagnostic routing facts, not a prediction of recoverable throughput or a
+single-commit attribution. A previous
+[nonrecent prepared-context prototype](data/brotli-nonrecent-context-full-20261123/README.md)
+already failed its whole-operation target and row floors. The next source epoch
+must address a larger measured planning boundary rather than repeat that
+extension or the two sub-threshold emission pilots.
+
+The [source-history follow-up](br/q8-structural-followup-20261126.md) identifies
+default entropy feedback, the inclusive 64 KiB extra-feedback gate and complete
+distance-parameter split candidate groups as concrete expansions of q8 work.
+It records the next literal-model reuse boundary and preserves the distinction
+between this source audit and measured per-commit regression attribution.

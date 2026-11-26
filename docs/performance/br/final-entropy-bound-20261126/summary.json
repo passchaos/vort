@@ -1,0 +1,26 @@
+{
+  "CI": null,
+  "Native_OOMs": 550,
+  "Native_tests": 36,
+  "ROI_minimum": 1.03,
+  "WASI_OOMs": 583,
+  "WASI_tests": 36,
+  "accepted": false,
+  "all_row_floor_pass": true,
+  "full_approved": false,
+  "full_started": false,
+  "global_source_files": 2211,
+  "ignored_source_asset_count": 1,
+  "minimum_row": {
+    "case": "nci",
+    "speedup": 0.993756037054902
+  },
+  "owned_release_positive_coverage": false,
+  "owned_release_scope": "Mozilla/Xray owned_releases0 and owned_release_retries0; nonzero owned normal discard not exercised",
+  "pairs": 24,
+  "point_estimate_speedup_GM": 1.0156422687081639,
+  "processes": 48,
+  "schema": "vort.brotli.final-entropy-bound.package-summary.v1",
+  "scope": "Frozen global ROI rejection, precise original combined results and resource validation; not local epoch, no formal/full/industry claim",
+  "stash": "5e431ffff10d57fc576c97f49d1fbb5ea330cf58"
+}

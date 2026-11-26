@@ -3150,3 +3150,25 @@ CI null, full matrix neither approved nor run. Both packages retain source,
 raw observations and failures. The subsequent global final-entropy-bound
 source is a separate experiment; its gains cannot be assembled from these
 pilot ratios.
+
+## Global final-entropy bound rejected (2026-11-26)
+
+The [separate global-bound epoch](br/final-entropy-bound-20261126/README.md)
+preserves preliminary command/context selection and applies a retained complete
+parent winner only to final exact entropy arbitration. Standard LZ77 and
+existing RFC static references remain eligible; the tested excluded modes keep
+the prior route. Recorded native/WASI groups pass 36/36, including real golden
+wire activation, exact-peak/peak-minus-one limits and 550/583 OOM points with
+retries. The native result's archival scope is stated in the package; the
+complete WASI output and artifacts are retained.
+
+Independent pure-data verification of all 24 pairs / 48 calls reproduces
+1.0156422687081639x, every row floor passes, minimum NCI 0.993756037054902x.
+Initial complete wires equal CF/C2 gold and decode with pinned Brotli 1.2.0;
+timed output checks remain length/mix only. The pilot misses the frozen 1.03
+target: rejected, CI null, full not approved or run. No retry or source adoption
+follows. The source is saved in Git stash
+5e431ffff10d57fc576c97f49d1fbb5ea330cf58 plus its separately preserved ignored
+bytecode; all 2,211 frozen source assets match, and production source is restored
+to committed main. Further context/nonrecent work requires a fresh epoch and
+must account for the already rejected nonrecent prepared-context extension.

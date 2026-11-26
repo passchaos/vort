@@ -1,0 +1,7 @@
+{
+  "actual_exit_code": 1,
+  "cause": "Prior local reader expected a separate before-pilot decoder-binding file; the new global epoch has only its actual decoder-binding.json",
+  "resolution": "Verify the actual global decoder receipt and preserved library bytes only; no invented/local before snapshot or raw/source change",
+  "schema": "vort.brotli.final-entropy-bound.offline-reader-second-attempt.v1",
+  "stderr": "Traceback (most recent call last):\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/verify.py\", line 28, in <module>\n    if __name__=='__main__':print(json.dumps(verify(Path(__file__).resolve().parent),indent=2,sort_keys=True))\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/verify.py\", line 13, in verify\n    pilot=verify_pilot(packages['bench.tar.gz'])\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/pilot.py\", line 70, in verify_pilot\n    before = load(bench, 'pre-pilot-decoder-binding.json')\n  File \"/home/passchaos/project-z/vort/docs/performance/br/final-entropy-bound-20261126/package_io.py\", line 16, in load\n    return json.loads(files[name])\nKeyError: 'pre-pilot-decoder-binding.json'\n"
+}

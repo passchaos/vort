@@ -1,0 +1,75 @@
+{
+  "archive_member_counts": {
+    "bench.tar.gz": 391,
+    "sources.tar.gz": 6121,
+    "validation.tar.gz": 15
+  },
+  "archives": {
+    "bench.tar.gz": {
+      "bytes": 8102855,
+      "sha256": "afa19b0f8e1952ee89946656bb9f2abbe974b27ba986b68fd7e94828a1c86aec"
+    },
+    "sources.tar.gz": {
+      "bytes": 19995983,
+      "sha256": "b188fd1b4a7875f4bd1a813bcc8a6e80a6e13cde4ac3313655290af3db3efcbf"
+    },
+    "validation.tar.gz": {
+      "bytes": 3117603,
+      "sha256": "482887f913f12ae84db2b5c86eae91d475503552d0b7269148bf4add2799b877"
+    }
+  },
+  "checksum_policy": "SHA256SUMS covers every package file including this inventory and final receipt except itself",
+  "payload_files": {
+    "README.md": {
+      "bytes": 5169,
+      "sha256": "669ae2fba40727b458e6c4002b61d7d4d9e25b7b74e6ac4733d6ff4f1db63682"
+    },
+    "archive-bindings.json": {
+      "bytes": 1983267,
+      "sha256": "fa96cd6c295038227fa8e43c005bb560b2862c7ab5ae3d774235eec9539c2879"
+    },
+    "bench.tar.gz": {
+      "bytes": 8102855,
+      "sha256": "afa19b0f8e1952ee89946656bb9f2abbe974b27ba986b68fd7e94828a1c86aec"
+    },
+    "package_io.py": {
+      "bytes": 2871,
+      "sha256": "95ba9a59e1b845ba2f1e0feb2f1dedd2e5246aeef7ff951e1850842a0326129d"
+    },
+    "pilot.py": {
+      "bytes": 12477,
+      "sha256": "32b7deea0c14a7216c8273b6ad96392540081103e0d4e92952e137981d4a2668"
+    },
+    "provenance.py": {
+      "bytes": 10841,
+      "sha256": "17ee16a166113819198bfe0a29028fd57897b308a11b5ded7d2e5d20598af689"
+    },
+    "sources.tar.gz": {
+      "bytes": 19995983,
+      "sha256": "b188fd1b4a7875f4bd1a813bcc8a6e80a6e13cde4ac3313655290af3db3efcbf"
+    },
+    "summary.json": {
+      "bytes": 895,
+      "sha256": "d9e2eeca6c72bc989512552c8e5c8ce2474db6666b13f863fddb0957d1e6ef61"
+    },
+    "validation.tar.gz": {
+      "bytes": 3117603,
+      "sha256": "482887f913f12ae84db2b5c86eae91d475503552d0b7269148bf4add2799b877"
+    },
+    "verification-attempt1.json": {
+      "bytes": 1404,
+      "sha256": "5bbd592611c5ed4110ee11dae8b1476366627eeb23919160bc297342134db467"
+    },
+    "verification-attempt2.json": {
+      "bytes": 1258,
+      "sha256": "f0f4a217ce10963bbdd3233739f5ce1061c3b765d9400b9759a0ffa3ee80e2f0"
+    },
+    "verify.py": {
+      "bytes": 1735,
+      "sha256": "de4c6b9066b7f62eb30ad76843e1c64b829072ce8c48c83cc74d696dbba8257d"
+    }
+  },
+  "schema": "vort.brotli.final-entropy-bound.sealed-inventory.v1",
+  "scope": "Global2211source/24pairs48calls ROI rejection; actual Native/WASI36 and550/583 OOM evidence, original activation failure and stash/ignored asset reconciliation; ownedpositive coverage not claimed",
+  "sealed": true
+}

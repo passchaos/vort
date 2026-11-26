@@ -1,0 +1,450 @@
+{
+  "actual_exits": {
+    "initial_activation_failure": 1,
+    "normal": 0,
+    "original_Native": 0,
+    "original_WASI": 0,
+    "original_independent": 0,
+    "pilot": 0,
+    "readonly_copy": 0,
+    "tamper_test_driver": 0
+  },
+  "all_original_frozen_files_unchanged": true,
+  "normal": {
+    "actual_exit_code": 0,
+    "stderr_bytes": 0,
+    "stdout_sha256": "99e03af834293ed08645cabd19e19c6dca0ae2da2b9a4c8bb22527f3ecafa35b"
+  },
+  "normal_copy_output_identical": true,
+  "original_frozen_files_rechecked": 6522,
+  "readonly_copy": {
+    "copy_bytes_unchanged": true,
+    "copy_path": "/tmp/vort-final-entropy-bound-copy.l6z3pte2/package",
+    "copy_readonly": true,
+    "original_path_access_forbidden": true,
+    "package_opened_files": [
+      "README.md",
+      "SHA256SUMS",
+      "archive-bindings.json",
+      "bench.tar.gz",
+      "package_io.cpython-310.pyc",
+      "package_io.py",
+      "pilot.cpython-310.pyc",
+      "pilot.py",
+      "provenance.cpython-310.pyc",
+      "provenance.py",
+      "sources.tar.gz",
+      "summary.json",
+      "validation.tar.gz",
+      "verification-attempt1.json",
+      "verification-attempt2.json",
+      "verify.py"
+    ],
+    "process_and_foreign_library_actions_forbidden": true,
+    "schema": "vort.brotli.final-entropy-bound.independent-copy-check.v1",
+    "stdout_sha256": "99e03af834293ed08645cabd19e19c6dca0ae2da2b9a4c8bb22527f3ecafa35b",
+    "verified": true
+  },
+  "schema": "vort.brotli.final-entropy-bound.verification-receipt.v1",
+  "scope": "Onlyarchive/hash/offline data replay; no codec/producer/foreign library/compiler/timing execution",
+  "tamper_checks": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "missing global pilot raw",
+        "reason": "'pilot/runs/explicit16-00-dickens-current.json'",
+        "rejected": true
+      },
+      {
+        "case": "invented full CI from pilot",
+        "reason": "Global pilot rejection/CI scope differs",
+        "rejected": true
+      },
+      {
+        "case": "unapproved full marker",
+        "reason": "Global archive contains approved/full output",
+        "rejected": true
+      },
+      {
+        "case": "local2204 manifest substituted as global",
+        "reason": "Authoritative global source/marker differs",
+        "rejected": true
+      },
+      {
+        "case": "invented positive owned-release coverage",
+        "reason": "Recorded allocation-failure sweep differs",
+        "rejected": true
+      },
+      {
+        "case": "ignored frozen pyc discarded",
+        "reason": "'ignored-source-assets/src/deflate/zlib/fixtures/__pycache__/generate_small_cinfo.cpython-310.pyc'",
+        "rejected": true
+      },
+      {
+        "case": "original activation failure relabeled pass",
+        "reason": "Original activation failure changed",
+        "rejected": true
+      }
+    ]
+  },
+  "utc": "2026-11-26T13:06:53.246648+00:00",
+  "verification": {
+    "archive_members": {
+      "bench.tar.gz": 391,
+      "sources.tar.gz": 6121,
+      "validation.tar.gz": 15
+    },
+    "conclusion": "Global primary pilot ROI rejected; no formal CI/full/global industry conclusion or nonzero owned-release coverage",
+    "pilot": {
+      "CI": null,
+      "accepted": false,
+      "all_row_floor_pass": true,
+      "complete_initial_wires": 24,
+      "full_approved": false,
+      "full_started": false,
+      "pairs": 24,
+      "pilot_wall_seconds": 14.035952806472778,
+      "point_estimate_speedup_GM": 1.0156422687081639,
+      "processes": 48,
+      "rows": [
+        {
+          "case": "dickens",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0121329055479573,
+            1.0331428914320624
+          ],
+          "speedup_geomean": 1.0225839410783601
+        },
+        {
+          "case": "mozilla",
+          "pairs": 2,
+          "raw_speedups": [
+            1.028715383160308,
+            1.0051522345349202
+          ],
+          "speedup_geomean": 1.0168655594935008
+        },
+        {
+          "case": "mr",
+          "pairs": 2,
+          "raw_speedups": [
+            1.006863741022763,
+            1.0007054373396007
+          ],
+          "speedup_geomean": 1.0037798664555744
+        },
+        {
+          "case": "nci",
+          "pairs": 2,
+          "raw_speedups": [
+            0.9927046616705354,
+            0.9948085259529263
+          ],
+          "speedup_geomean": 0.993756037054902
+        },
+        {
+          "case": "ooffice",
+          "pairs": 2,
+          "raw_speedups": [
+            1.021949159155844,
+            1.0817118996824342
+          ],
+          "speedup_geomean": 1.0514059950035164
+        },
+        {
+          "case": "osdb",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0501610246065998,
+            1.0069706573661463
+          ],
+          "speedup_geomean": 1.0283391158992317
+        },
+        {
+          "case": "reymont",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0123672587271724,
+            1.0217343324957882
+          ],
+          "speedup_geomean": 1.017040011669255
+        },
+        {
+          "case": "samba",
+          "pairs": 2,
+          "raw_speedups": [
+            1.024643677695249,
+            1.0115427029406063
+          ],
+          "speedup_geomean": 1.0180721169381153
+        },
+        {
+          "case": "sao",
+          "pairs": 2,
+          "raw_speedups": [
+            0.9628783776574802,
+            1.0265299647796249
+          ],
+          "speedup_geomean": 0.9941949039820087
+        },
+        {
+          "case": "webster",
+          "pairs": 2,
+          "raw_speedups": [
+            1.033171191818238,
+            1.0151113196681762
+          ],
+          "speedup_geomean": 1.024101446132049
+        },
+        {
+          "case": "x-ray",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0166354690599664,
+            1.0165364144874032
+          ],
+          "speedup_geomean": 1.016585940567219
+        },
+        {
+          "case": "xml",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0095406023522753,
+            0.9952428944743894
+          ],
+          "speedup_geomean": 1.0023662560035114
+        }
+      ],
+      "scope": "Descriptive two-pair pilot only, initial fullwire/decode receipts and timed length/mix; no formal CI or performance recovery claim"
+    },
+    "provenance": {
+      "RFC_static_eligibility_correction_preserved": true,
+      "actual_WASI_tests": 36,
+      "authoritative_global_freeze_verified": true,
+      "baseline_compile_files": 2992,
+      "current_compile_files": 3127,
+      "generated_current_pyc_files": 125,
+      "global_source_files": 2211,
+      "initial_activation_failure_actual_exit": 1,
+      "initial_activation_failure_tests": {
+        "failed": 1,
+        "passed": 34
+      },
+      "native_tests": 36,
+      "original_combined_results_recovered": true,
+      "owned_release_positive_coverage": false,
+      "resource": {
+        "Native": {
+          "active_retries": 550,
+          "observed_OOMs": 550,
+          "owned_release_retries": 0,
+          "records": [
+            {
+              "allocations": 550,
+              "bound_entries": 1,
+              "global_rejections": 6,
+              "gold": "mozilla-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 5115927,
+              "stage": "unlimited-probe"
+            },
+            {
+              "allocations": 550,
+              "bound_entries": 1,
+              "global_rejections": 6,
+              "gold": "mozilla-64k",
+              "limit": 5115927,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 5115927,
+              "stage": "exact-D"
+            },
+            {
+              "allocations": 334,
+              "bound_entries": 1,
+              "global_rejections": 2,
+              "gold": "mozilla-64k",
+              "limit": 5115926,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 4955955,
+              "stage": "D-minus-one-refused"
+            },
+            {
+              "allocations": 884,
+              "bound_entries": 1,
+              "global_rejections": 6,
+              "gold": "mozilla-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 5115927,
+              "stage": "quota-unlimited-retry"
+            },
+            {
+              "active_retries": 550,
+              "gold": "mozilla-64k",
+              "observed_OOMs": 550,
+              "owned_release_retries": 0,
+              "sweep_allocations": 550
+            },
+            {
+              "allocations": 733,
+              "bound_entries": 1,
+              "global_rejections": 4,
+              "gold": "xray-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 7901911,
+              "stage": "unlimited-probe"
+            },
+            {
+              "allocations": 733,
+              "bound_entries": 1,
+              "global_rejections": 4,
+              "gold": "xray-64k",
+              "limit": 7901911,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 7901911,
+              "stage": "exact-D"
+            },
+            {
+              "allocations": 367,
+              "bound_entries": 1,
+              "global_rejections": 1,
+              "gold": "xray-64k",
+              "limit": 7901910,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 7452158,
+              "stage": "D-minus-one-refused"
+            },
+            {
+              "allocations": 1100,
+              "bound_entries": 1,
+              "global_rejections": 4,
+              "gold": "xray-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 7901911,
+              "stage": "quota-unlimited-retry"
+            }
+          ]
+        },
+        "WASI": {
+          "active_retries": 583,
+          "observed_OOMs": 583,
+          "owned_release_retries": 0,
+          "records": [
+            {
+              "allocations": 583,
+              "bound_entries": 1,
+              "global_rejections": 6,
+              "gold": "mozilla-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 4430787,
+              "stage": "unlimited-probe"
+            },
+            {
+              "allocations": 583,
+              "bound_entries": 1,
+              "global_rejections": 6,
+              "gold": "mozilla-64k",
+              "limit": 4430787,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 4430787,
+              "stage": "exact-D"
+            },
+            {
+              "allocations": 355,
+              "bound_entries": 1,
+              "global_rejections": 2,
+              "gold": "mozilla-64k",
+              "limit": 4430786,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 4294935,
+              "stage": "D-minus-one-refused"
+            },
+            {
+              "allocations": 938,
+              "bound_entries": 1,
+              "global_rejections": 6,
+              "gold": "mozilla-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 4430787,
+              "stage": "quota-unlimited-retry"
+            },
+            {
+              "active_retries": 583,
+              "gold": "mozilla-64k",
+              "observed_OOMs": 583,
+              "owned_release_retries": 0,
+              "sweep_allocations": 583
+            },
+            {
+              "allocations": 800,
+              "bound_entries": 1,
+              "global_rejections": 4,
+              "gold": "xray-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 6930055,
+              "stage": "unlimited-probe"
+            },
+            {
+              "allocations": 800,
+              "bound_entries": 1,
+              "global_rejections": 4,
+              "gold": "xray-64k",
+              "limit": 6930055,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 6930055,
+              "stage": "exact-D"
+            },
+            {
+              "allocations": 557,
+              "bound_entries": 1,
+              "global_rejections": 2,
+              "gold": "xray-64k",
+              "limit": 6930054,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 6702055,
+              "stage": "D-minus-one-refused"
+            },
+            {
+              "allocations": 1357,
+              "bound_entries": 1,
+              "global_rejections": 4,
+              "gold": "xray-64k",
+              "limit": null,
+              "live": 0,
+              "owned_releases": 0,
+              "peak": 6930055,
+              "stage": "quota-unlimited-retry"
+            }
+          ]
+        }
+      },
+      "scope": "Global frozen source and actual captured prerequisites only; no execution, no local29-source substitution, no nonzero owned-discard coverage claim",
+      "stash_and_ignored_asset_receipts_verified": true
+    },
+    "schema": "vort.brotli.final-entropy-bound.offline-verification.v1",
+    "scope": "Package bytes only; no extraction/original-path access/producer import or eval/codec/foreign/build/timing execution",
+    "verified": true
+  }
+}
