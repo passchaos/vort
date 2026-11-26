@@ -1,0 +1,147 @@
+{
+  "candidate_compile_files_rechecked": 2995,
+  "frozen_source_and_raw_unchanged": true,
+  "normal": {
+    "actual_exit_code": 0,
+    "argv": [
+      "python3",
+      "-B",
+      "verify.py"
+    ],
+    "stderr_bytes": 0,
+    "stdout_sha256": "23fbe7e76a74ab2f21c52d962cec2299bc51449ced8ceabea78668066b926f17"
+  },
+  "normal_and_readonly_copy_outputs_identical": true,
+  "origin_files_rechecked": 128,
+  "readonly_copy": {
+    "copy_bytes_unchanged": true,
+    "copy_path": "/tmp/vort-complex-header-copy.053w647h/package",
+    "copy_readonly": true,
+    "original_path_access_forbidden": true,
+    "package_opened_files": [
+      "README.md",
+      "SHA256SUMS",
+      "archive-bindings.json",
+      "evidence.tar.gz",
+      "evidence_contracts.cpython-310.pyc",
+      "evidence_contracts.py",
+      "memo_replay.cpython-310.pyc",
+      "memo_replay.py",
+      "package_io.cpython-310.pyc",
+      "package_io.py",
+      "sources.tar.gz",
+      "summary.json",
+      "verification-attempt1.json",
+      "verify.py"
+    ],
+    "process_and_foreign_library_actions_forbidden": true,
+    "schema": "vort.brotli.complex-header.independent-copy-check.v1",
+    "stdout_sha256": "23fbe7e76a74ab2f21c52d962cec2299bc51449ced8ceabea78668066b926f17",
+    "verified": true
+  },
+  "schema": "vort.brotli.complex-header.verification-receipt.v1",
+  "scope": "Archive/hash and independent package-data replay only; no producer/analyzer, codec, foreign executable/SO, compiler or timing run",
+  "tamper_and_model_checks": {
+    "all_invalid_evidence_rejected": true,
+    "cases": [
+      {
+        "case": "truncated canonical256 key",
+        "reason": "Invalid canonical256u8 lengths",
+        "rejected": true
+      },
+      {
+        "case": "missing successful capture request",
+        "reason": "Header capture completeness differs",
+        "rejected": true
+      },
+      {
+        "case": "normal trace golden bytes differ",
+        "reason": "Normal/trace/gold/input bytes differ",
+        "rejected": true
+      },
+      {
+        "case": "same full key conflicting exact cost",
+        "reason": "Same full canonical key changed exact header cost",
+        "rejected": true
+      }
+    ],
+    "independent_model_checks": {
+      "analysis_and_operation_lifetimes_distinct": true,
+      "forced_hash_collision_uses_full_key": true,
+      "two_way_victim_is_LRU": true
+    }
+  },
+  "utc": "2026-11-26T11:12:25.839979+00:00",
+  "verification": {
+    "archive_members": {
+      "evidence.tar.gz": 100,
+      "sources.tar.gz": 30
+    },
+    "capture": {
+      "full_byte_gold_equality": true,
+      "max_observer_used_bytes": 2599800,
+      "normal_wires": 12,
+      "observer_memory": {
+        "capacity_per_row": 131072,
+        "inline_owner_bytes": 56,
+        "payload_bytes": 36700160,
+        "profile_state_bytes_separate": 178464,
+        "record_bytes": 280,
+        "scope": "Caller diagnostic requested heap; excludes allocator bookkeeping and I/O/JSON. No encoder resource improvement.",
+        "tls_pointer_bytes": 8
+      },
+      "recorded_roundtrips": 24,
+      "scope": "Captured complete wire/roundtrip assertions; caller observer heap only, no codec resource measurement",
+      "trace_wires": 12
+    },
+    "conclusion": "Opportunity diagnostic only; 32-entry memo not prioritized, no optimization or Huffman certificate adopted",
+    "original_receipts": {
+      "analysis_actual_exit": 0,
+      "build_epochs": 2,
+      "original_capture_codec_calls": 0,
+      "original_capture_exit": 1,
+      "original_python_exact_key_tests": 4,
+      "scope": "Stored original tests/build/capture terminals only; no programs or tests were rerun",
+      "successful_capture_actual_exit": 0
+    },
+    "requests": {
+      "all_same_full_key_exact_costs_consistent": true,
+      "analysis_reset": {
+        "additional_hits": 3374,
+        "cross_analysis_hits": 0,
+        "misses": 47476,
+        "repeat_misses": 1443,
+        "repeat_requests": 4817,
+        "requests": 50850,
+        "unknown_requests": 0
+      },
+      "distinct_complete_keys": 33650,
+      "hit_fraction": 0.0663520157325467,
+      "ledger_records": 50850,
+      "operation_retained": {
+        "additional_hits": 3374,
+        "cross_analysis_hits": 0,
+        "misses": 47476,
+        "repeat_misses": 13826,
+        "repeat_requests": 17200,
+        "requests": 50850,
+        "unknown_requests": 0
+      },
+      "scope": "Observed actual successful header execution requests; full256u8+stop+policy equality, two independent LRU lifetimes; no speed prediction",
+      "successful_requests": 50850,
+      "unknown_scope_requests": 0
+    },
+    "schema": "vort.brotli.complex-header.offline-verification.v1",
+    "scope": "Package bytes only; no archive extraction, original-path access, producer import/eval, codec, foreign executable/SO, build or timing rerun",
+    "source": {
+      "baseline_and_overlay_verified": true,
+      "baseline_compile_files": 2992,
+      "final_compile_files": 2995,
+      "first_driver_reconstructed_to_original_SHA": true,
+      "instrumentation_files": 6,
+      "scope": "Frozen8ccd compile closure and observer instrumentation; separate adaptive-distance epoch excluded",
+      "unchanged_builder_and_cache_hashes_verified": true
+    },
+    "verified": true
+  }
+}

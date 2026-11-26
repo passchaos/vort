@@ -1,0 +1,67 @@
+{
+  "archive_member_counts": {
+    "bench.tar.gz": 397,
+    "sources.tar.gz": 3123,
+    "validation.tar.gz": 16
+  },
+  "archives": {
+    "bench.tar.gz": {
+      "bytes": 8101976,
+      "sha256": "1f40d4994c4f363930331b6e1777c729c3223d7bf00cc485c50da70a7ea7a942"
+    },
+    "sources.tar.gz": {
+      "bytes": 19793906,
+      "sha256": "5253ef87a3acb47008dbfab37eb249e610dec9e2564cdd90438615433dc08efa"
+    },
+    "validation.tar.gz": {
+      "bytes": 2050505,
+      "sha256": "6346d75c1c65643eef7ff98ffe79d09ccd51d1999d8f10b987713dd38d9c8468"
+    }
+  },
+  "checksum_policy": "SHA256SUMS covers this inventory, verification receipt and all package files except itself",
+  "payload_files": {
+    "README.md": {
+      "bytes": 4508,
+      "sha256": "13a88369b9e51e2a4d5953ddf1556a884836a18d23ae0e082c7eaeb17866f686"
+    },
+    "archive-bindings.json": {
+      "bytes": 1030017,
+      "sha256": "5243854dd8c8b9d47fee428efe101ccbce201ed70d2f38fc1272502ebacb2004"
+    },
+    "bench.tar.gz": {
+      "bytes": 8101976,
+      "sha256": "1f40d4994c4f363930331b6e1777c729c3223d7bf00cc485c50da70a7ea7a942"
+    },
+    "package_io.py": {
+      "bytes": 2860,
+      "sha256": "fa40913b871569b8214b2108cad8a79937ceae0cdf4e89240d603e1b643a4165"
+    },
+    "pilot.py": {
+      "bytes": 12392,
+      "sha256": "fa671906d4bc0ce7a8ec144e0119f7c6916319dcc5881746a3f303bfb94ecb3e"
+    },
+    "provenance.py": {
+      "bytes": 7547,
+      "sha256": "5c217c9d635a032aff2fc8284a6d80003bd860803e2537ffc4dbf90ef00d719a"
+    },
+    "sources.tar.gz": {
+      "bytes": 19793906,
+      "sha256": "5253ef87a3acb47008dbfab37eb249e610dec9e2564cdd90438615433dc08efa"
+    },
+    "summary.json": {
+      "bytes": 904,
+      "sha256": "9e50670d5cec1c290b8dbdcded85d493a3514decffca13d950d661ec50d6e60d"
+    },
+    "validation.tar.gz": {
+      "bytes": 2050505,
+      "sha256": "6346d75c1c65643eef7ff98ffe79d09ccd51d1999d8f10b987713dd38d9c8468"
+    },
+    "verify.py": {
+      "bytes": 1458,
+      "sha256": "0bffd987ee9f297fdf9fd4c6497fc93733b367c390c4d707a6152f7e2376eac7"
+    }
+  },
+  "schema": "vort.brotli.counted-distance-local.sealed-inventory.v1",
+  "scope": "Frozen standalone local24pairs/48process pilot, no formalCI/full approval, all3120candidate files/125pyc preserved; global bound excluded",
+  "sealed": true
+}

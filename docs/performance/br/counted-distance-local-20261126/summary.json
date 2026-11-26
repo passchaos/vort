@@ -1,0 +1,27 @@
+{
+  "CI": null,
+  "ROI_minimum": 1.03,
+  "all_row_floor_pass": true,
+  "full_approved": false,
+  "full_started": false,
+  "original_validation": {
+    "Native_real_different_wire_ties": 6,
+    "Native_tests": 29,
+    "WASI_real_different_wire_ties": 6,
+    "WASI_tests": 29,
+    "historical_failures": "Actual frozen state and source/chunk indexes retained; complete failed outputs not synthesized"
+  },
+  "pairs": 24,
+  "point_estimate_speedup_GM": 1.0138217623027224,
+  "processes": 48,
+  "schema": "vort.brotli.counted-distance-local.package-summary.v1",
+  "scope": "Standalone local exact-count rejection pilot, no formal CI and no full approval; not global-bound epoch or historical-regression repair",
+  "source_counts": {
+    "CF_closure": 2992,
+    "CF_src": 2200,
+    "candidate_closure": 3120,
+    "candidate_src": 2204,
+    "generated_candidate_pyc": 125
+  },
+  "standalone_accepted": false
+}

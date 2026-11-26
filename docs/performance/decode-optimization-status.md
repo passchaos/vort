@@ -3127,3 +3127,26 @@ output as measured P0 targets. The current36trace diagnostic observes1029
 physical outputs/993lost; all events are complete, while18context-detail
 prefixes remain truncated. Root's proposal-reuse-aware Python gate and24+11
 tests are committed separately asbd934972, without changing codec source.
+
+
+## Complex literal header opportunity and local distance rejection (2026-11-26)
+
+The [complete header request capture](br/complex-header-opportunity-20261126/README.md)
+retains 50,850 successful requests and 33,650 distinct full keys. A 32-entry
+memo hits 3,374 requests (6.6352%) with either per-analysis or whole-operation
+lifetime; cross-analysis reuse adds zero hits. Complete keys and bit costs
+replay independently. These counts do not predict throughput, and the memo is
+not implemented or adopted. Caller diagnostic storage is 35 MiB requested,
+with 2,599,800 B used; this is not an encoder resource measurement.
+
+The [local distance screen](br/counted-distance-local-20261126/README.md)
+compares CF against a separately frozen counted-family incumbent check.
+Native and actual WASI 29/29 pass, including six real equal-length/different-
+wire pairs. All 24 initial wires equal CF/C2 byte for byte and decode through
+pinned Brotli 1.2.0. The complete twelve-row two-round pilot retains 24 pairs /
+48 timed calls and reaches 1.01382176x, minimum sao 0.98408655x. It passes the
+row floor but misses the predeclared 1.03 ROI threshold: standalone rejected,
+CI null, full matrix neither approved nor run. Both packages retain source,
+raw observations and failures. The subsequent global final-entropy-bound
+source is a separate experiment; its gains cannot be assembled from these
+pilot ratios.

@@ -1,0 +1,7 @@
+{
+  "actual_exit_code": 1,
+  "reason": "Stored artifact receipt contains source/ paths. Initial package adapter had no source-reconstruction mapping for those entries.",
+  "resolution": "Bind source/ artifact hashes to the already verified baseline+overlay reconstruction; original captured data unchanged",
+  "schema": "vort.brotli.complex-header.offline-adapter-first-attempt.v1",
+  "stderr": "Traceback (most recent call last):\n  File \"/home/passchaos/project-z/vort/docs/performance/br/complex-header-opportunity-20261126/verify.py\", line 108, in <module>\n    print(json.dumps(verify(Path(__file__).resolve().parent), indent=2, sort_keys=True))\n  File \"/home/passchaos/project-z/vort/docs/performance/br/complex-header-opportunity-20261126/verify.py\", line 89, in verify\n    receipts = verify_receipts(evidence, sources)\n  File \"/home/passchaos/project-z/vort/docs/performance/br/complex-header-opportunity-20261126/evidence_contracts.py\", line 73, in verify_receipts\n    data = sources[name] if name in ['source-baseline.tar', 'vail-dependency.tar'] else evidence[name]\nKeyError: 'source/tools/br/complex_header_observer.zig'\n"
+}

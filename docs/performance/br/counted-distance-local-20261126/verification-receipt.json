@@ -1,0 +1,229 @@
+{
+  "frozen_original_files_rechecked": 3533,
+  "frozen_source_raw_and_backups_unchanged": true,
+  "historical_failure_scope": "Original state/chunk indexes and existing source backups retained; original complete failed tool-result bytes not recovered or synthesized",
+  "normal": {
+    "actual_exit_code": 0,
+    "stderr_bytes": 0,
+    "stdout_sha256": "7c3a27898bea6bfdea489f35eab42e47511687110bb7cefb2214721456adbfb2"
+  },
+  "normal_copy_outputs_identical": true,
+  "readonly_copy": {
+    "copy_bytes_unchanged": true,
+    "copy_path": "/tmp/vort-counted-distance-local-copy.jmh4udm8/package",
+    "copy_readonly": true,
+    "original_path_access_forbidden": true,
+    "package_opened_files": [
+      "README.md",
+      "SHA256SUMS",
+      "archive-bindings.json",
+      "bench.tar.gz",
+      "package_io.cpython-310.pyc",
+      "package_io.py",
+      "pilot.cpython-310.pyc",
+      "pilot.py",
+      "provenance.cpython-310.pyc",
+      "provenance.py",
+      "sources.tar.gz",
+      "summary.json",
+      "validation.tar.gz",
+      "verify.py"
+    ],
+    "process_and_foreign_library_actions_forbidden": true,
+    "schema": "vort.brotli.counted-distance-local.independent-copy-check.v1",
+    "stdout_sha256": "7c3a27898bea6bfdea489f35eab42e47511687110bb7cefb2214721456adbfb2",
+    "verified": true
+  },
+  "schema": "vort.brotli.counted-distance-local.verification-receipt.v1",
+  "scope": "Package-only archive/hash and independent data replay; no producer/codec/foreign/build/timing execution",
+  "tamper_checks": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "missing pilot process raw",
+        "reason": "'pilot/runs/explicit16-00-dickens-current.json'",
+        "rejected": true
+      },
+      {
+        "case": "changed complete candidate wire",
+        "reason": "Complete CF/candidate/C2 wire identity differs",
+        "rejected": true
+      },
+      {
+        "case": "invented formal pilot CI",
+        "reason": "Standalone pilot rejection/CI scope differs",
+        "rejected": true
+      },
+      {
+        "case": "unapproved full flag inserted",
+        "reason": "Standalone archive contains approved/full output",
+        "rejected": true
+      },
+      {
+        "case": "registered generated src pyc removed",
+        "reason": "Complete frozen source closure differs",
+        "rejected": true
+      },
+      {
+        "case": "compiled WASM identity changed",
+        "reason": "Compiled WASM identity differs",
+        "rejected": true
+      }
+    ]
+  },
+  "utc": "2026-11-26T11:50:03.918224+00:00",
+  "verification": {
+    "archive_members": {
+      "bench.tar.gz": 397,
+      "sources.tar.gz": 3123,
+      "validation.tar.gz": 16
+    },
+    "conclusion": "Standalone local pilot rejected, no formal CI, full not approved; separate global-bound source excluded",
+    "pilot": {
+      "CI": null,
+      "all_row_floor_pass": true,
+      "complete_initial_wires": 24,
+      "full_approved": false,
+      "full_started": false,
+      "pairs": 24,
+      "pilot_wall_seconds": 14.028560876846313,
+      "point_estimate_speedup_GM": 1.0138217623027224,
+      "processes": 48,
+      "rows": [
+        {
+          "case": "dickens",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0369934557497764,
+            1.0360243119250623
+          ],
+          "speedup_geomean": 1.0365087705677916
+        },
+        {
+          "case": "mozilla",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0179265501974637,
+            0.9862990171604639
+          ],
+          "speedup_geomean": 1.0019880019248235
+        },
+        {
+          "case": "mr",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0042952591237329,
+            1.0092913663014114
+          ],
+          "speedup_geomean": 1.0067902136249747
+        },
+        {
+          "case": "nci",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0119215463264128,
+            1.0059231601155658
+          ],
+          "speedup_geomean": 1.0089178954056148
+        },
+        {
+          "case": "ooffice",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0330794928290417,
+            1.0556446585612398
+          ],
+          "speedup_geomean": 1.0443011292123228
+        },
+        {
+          "case": "osdb",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0468567014550898,
+            1.0068827457501912
+          ],
+          "speedup_geomean": 1.0266751920486288
+        },
+        {
+          "case": "reymont",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0181546400757766,
+            1.011597768741507
+          ],
+          "speedup_geomean": 1.0148709090985255
+        },
+        {
+          "case": "samba",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0067012308733398,
+            1.0074551643752288
+          ],
+          "speedup_geomean": 1.0070781270717013
+        },
+        {
+          "case": "sao",
+          "pairs": 2,
+          "raw_speedups": [
+            0.9719356362561702,
+            0.9963893743781251
+          ],
+          "speedup_geomean": 0.984086551348554
+        },
+        {
+          "case": "webster",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0231571298002438,
+            1.0156495044932936
+          ],
+          "speedup_geomean": 1.0193964056736702
+        },
+        {
+          "case": "x-ray",
+          "pairs": 2,
+          "raw_speedups": [
+            1.002988944149176,
+            1.0276627332466481
+          ],
+          "speedup_geomean": 1.015250885131607
+        },
+        {
+          "case": "xml",
+          "pairs": 2,
+          "raw_speedups": [
+            1.0051649039535138,
+            0.9977358407909526
+          ],
+          "speedup_geomean": 1.0014434834675476
+        }
+      ],
+      "scope": "Descriptive two-pair pilot only, initial fullwire/decode receipts and timed length/mix; no formal CI or performance recovery claim",
+      "standalone_accepted": false
+    },
+    "provenance": {
+      "Native_actual_tests": 29,
+      "Native_real_tie_pairs": 6,
+      "WASI_actual_tests": 29,
+      "WASI_real_tie_pairs": 6,
+      "baseline_compile_files": 2992,
+      "compiled_wasm_identity_verified": true,
+      "current_compile_files": 3120,
+      "generated_current_pyc_files": 125,
+      "historical_failure_output_scope": "Index-only; complete failed outputs not reconstructed",
+      "original_failure_chunk_indexes": [
+        "e9d8cb",
+        "9bda3c"
+      ],
+      "scope": "Frozen local source and recorded prerequisite validation; separate global-bound source excluded, no compilation/test/codec rerun",
+      "src_files": {
+        "baseline": 2200,
+        "current": 2204
+      }
+    },
+    "schema": "vort.brotli.counted-distance-local.offline-verification.v1",
+    "scope": "Package bytes only, no extraction/original-path access/producer eval/codec/foreign/build/timing execution",
+    "verified": true
+  }
+}

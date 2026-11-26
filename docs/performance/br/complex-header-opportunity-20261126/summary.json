@@ -1,0 +1,25 @@
+{
+  "cross_analysis_hits": 0,
+  "distinct_complete_keys": 33650,
+  "hit_fraction": 0.0663520157325467,
+  "hits_each_lifetime": 3374,
+  "max_observer_used_bytes": 2599800,
+  "memo": {
+    "entries": 32,
+    "full_key": "canonical256u8 lengths + stop_index + original policy_id",
+    "replacement": "LRU",
+    "sets": 16,
+    "ways": 2
+  },
+  "no_huffman_certificate": true,
+  "normal_trace_wire_pairs": 12,
+  "observer_payload_bytes": 36700160,
+  "observer_scope": "Caller diagnostic heap, not codec resource measurement; maximumused2,599,800bytes is about2.479MiB",
+  "optimization_adopted": false,
+  "recommendation": "Do not prioritize implementing32-entry memo from this opportunity diagnostic; no speed claim or accepted optimization",
+  "schema": "vort.brotli.complex-header.package-summary.v1",
+  "source_scope": "Frozen8ccd partial compile closure plus6 instrumentation files; no adaptive_distance_candidate epoch",
+  "successful_requests": 50850,
+  "throughput_prediction": false,
+  "unknown_scope_requests": 0
+}
