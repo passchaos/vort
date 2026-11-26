@@ -1,0 +1,15 @@
+{
+  "authority": "Root explicit HEAVY0 notification after formal and controls completed",
+  "controls_exit_code": 0,
+  "decision": "rejected",
+  "formal_exit_code": 0,
+  "heavy0_confirmed": true,
+  "merge_allowed": false,
+  "producer_complete_acceptance_pass": false,
+  "producer_evidence_integrity_pass": true,
+  "production_integrated": false,
+  "reducer_exit_code": 1,
+  "reducer_exit_reason": "expected_gate_failure",
+  "schema": "vort.zstd.controlled-index.archive-release.v1",
+  "source_root": "/tmp/vort-zstd-segment-kernel.ggk2tsh7"
+}

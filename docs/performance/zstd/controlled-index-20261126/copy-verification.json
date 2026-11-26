@@ -1,0 +1,22 @@
+{
+  "codec_build_test_wasm_so_executed": false,
+  "command_PATH": "/nonexistent",
+  "execution_events_blocked": [
+    "subprocess.Popen",
+    "os.system",
+    "os.exec",
+    "os.posix_spawn",
+    "ctypes.dlopen"
+  ],
+  "exit_code": 0,
+  "explicit_data_root_verified": true,
+  "independent_directory_verified": true,
+  "original_artifact_directory_access_blocked": true,
+  "schema": "vort.zstd.controlled-index.copy-verification.v1",
+  "scope": "Actual package-only replay; no new test matrix, instrumentation, benchmark or resampling",
+  "stderr": "",
+  "stdout": "{\"decision\": \"rejected\", \"failed_controls\": [{\"case\": \"nci.64k.L8\", \"paired_throughput_ratios\": [1.000396356310863, 0.978830490383778, 0.9994639398679253, 0.9949553512847915, 1.0119245396586092, 0.8735483481389418], \"required_minimum\": 0.98, \"throughput_ci95\": [0.9366101541066257, 0.9994238041839723], \"throughput_ratio\": 0.9753209757436222}, {\"case\": \"mozilla.64k.L2\", \"paired_throughput_ratios\": [0.999153447965335, 0.9922508494955573, 0.995855558111379, 0.9884358629857125, 0.8940417748070981, 1.0133641085109528], \"required_minimum\": 0.98, \"throughput_ci95\": [0.9451629332315777, 1.002156486355221], \"throughput_ratio\": 0.9796861638112642}], \"formal_throughput_ci95\": [1.1672281621148906, 1.1885141114220266], \"formal_throughput_geomean\": 1.1772681878687798, \"merge_allowed\": false, \"pack_readiness\": true, \"verification\": \"passed\"}\n",
+  "temporary_copy_removed": true,
+  "tested_inventory_sha256": "04aad662ba4fe696a0d028b32384599260328863c85ea85c5be48f42a01fd4cf",
+  "utc": "2026-11-26T00:38:18.869466+00:00"
+}

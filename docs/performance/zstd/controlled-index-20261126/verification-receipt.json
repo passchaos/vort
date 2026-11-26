@@ -1,0 +1,34 @@
+{
+  "archives": {
+    "campaign.tar.gz": {
+      "bytes": 81442562,
+      "sha256": "6b34892d410cc31090a2496f53654b6b19476b2daa90f3ff5cacaa6a2991a82f"
+    },
+    "resources.tar.gz": {
+      "bytes": 70044916,
+      "sha256": "eb11de2030e0617ba9d40843a16496d061058a49a88408e9b9e3d25276cece15"
+    },
+    "sources.tar.gz": {
+      "bytes": 36308734,
+      "sha256": "189718e736644f961e7cf5e5cb7006627a95ae5cc3bab09d10ffdbd02ec2a712"
+    },
+    "validation.tar.gz": {
+      "bytes": 1622568,
+      "sha256": "741b62e929f22fc05af18bf96aae99bf4a4c9fc85e7c80814f6f758f886680df"
+    }
+  },
+  "control_pairs": 90,
+  "control_vort_timed_batches": 180,
+  "control_vort_timed_calls": 10872,
+  "decision": "rejected",
+  "formal_pairs": 72,
+  "formal_vort_timed_batches": 144,
+  "members": 18804,
+  "merge_allowed": false,
+  "pack_readiness": true,
+  "resource_artifact_hashes": 828,
+  "resource_core_process_ledgers": 170,
+  "schema": "vort.zstd.controlled-index.archive-receipt.v1",
+  "scope": "Package byte hashes, source snapshots, original Planck math/draw digests/gates, all raw pairs and core resource ledgers. No codec/build/test/WASM/SO/original-path execution.",
+  "verification_passed": true
+}

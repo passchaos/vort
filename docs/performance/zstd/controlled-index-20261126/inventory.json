@@ -1,0 +1,81 @@
+{
+  "files": {
+    ".gitattributes": {
+      "bytes": 16,
+      "sha256": "9066d591f6805f70135c4913ef8bd585214c460caf0290ab86724deeccddd22e"
+    },
+    "README.md": {
+      "bytes": 5954,
+      "sha256": "cbb9862bb6ff3e48e381cb64a46cedc2f509a6158a5cd797381f4363184373b1"
+    },
+    "archive-bindings.json": {
+      "bytes": 5400236,
+      "sha256": "239aa0486dda9592aab0a99a3deda6264fe241948de22a2d97e287d650240d03"
+    },
+    "archive_io.py": {
+      "bytes": 2626,
+      "sha256": "7cae2b4719d116d436a249ce0c95042fc8c29d8f93a210508dfa4ba6381e9139"
+    },
+    "campaign.tar.gz": {
+      "bytes": 81442562,
+      "sha256": "6b34892d410cc31090a2496f53654b6b19476b2daa90f3ff5cacaa6a2991a82f"
+    },
+    "copy-verification.json": {
+      "bytes": 1626,
+      "sha256": "030f83e4f6a52173c990e9bcb04b7b409423fd978325dfa049dee4d6560acdfb"
+    },
+    "formal-control-raw.csv": {
+      "bytes": 54516,
+      "sha256": "f7080aa74b182c4efe1a8b01bbb02c8e69f8f5ec7d83cb140ba5f86d46798cd3"
+    },
+    "pack.py": {
+      "bytes": 8572,
+      "sha256": "148d3e4d8f59629775cd78fd62735709a46f26c2b1ede0d6c06a5adf9dd20b20"
+    },
+    "pilot_replay.py": {
+      "bytes": 3117,
+      "sha256": "5816a44ac632bfdb3b084b4a000ad797aca48f83d6ff87dd340b5be1a6768c03"
+    },
+    "release-state.json": {
+      "bytes": 543,
+      "sha256": "7ca12adcc170ea09ee114d16aba217c27a902bafe02d7d966f304963d693fa33"
+    },
+    "resource_replay.py": {
+      "bytes": 7690,
+      "sha256": "61182012c241537f58bb3893bc6da289449c7443a1a6d81bc1c43217325ce7f0"
+    },
+    "resources.tar.gz": {
+      "bytes": 70044916,
+      "sha256": "eb11de2030e0617ba9d40843a16496d061058a49a88408e9b9e3d25276cece15"
+    },
+    "source_tests.py": {
+      "bytes": 7346,
+      "sha256": "c1bb4a1e2e0b43b0de0aa67d1aeb383537fc20f22805b3d76eaf15a2100bc2e9"
+    },
+    "sources.tar.gz": {
+      "bytes": 36308734,
+      "sha256": "189718e736644f961e7cf5e5cb7006627a95ae5cc3bab09d10ffdbd02ec2a712"
+    },
+    "statistics_replay.py": {
+      "bytes": 4446,
+      "sha256": "8833702c24717938bb0312ec96287f3826c1c1d00fb0042d8db6ffe6f8a961d2"
+    },
+    "summary.json": {
+      "bytes": 493178,
+      "sha256": "a041c540ad9b4e13e81b03f0e1714aca2170107b0d94de7a189130d3438fd6a5"
+    },
+    "validation.tar.gz": {
+      "bytes": 1622568,
+      "sha256": "741b62e929f22fc05af18bf96aae99bf4a4c9fc85e7c80814f6f758f886680df"
+    },
+    "verification-receipt.json": {
+      "bytes": 1192,
+      "sha256": "816081f9d286f15afcd08df4f573b42318613fd04d835fda4f731fa1ef32247c"
+    },
+    "verify.py": {
+      "bytes": 6640,
+      "sha256": "9d7e1ae58ef52365b3e8c17c5f8a68f36b3f51f1441131de895c3cc4446c8862"
+    }
+  },
+  "schema": "vort.zstd.controlled-index.inventory.v1"
+}

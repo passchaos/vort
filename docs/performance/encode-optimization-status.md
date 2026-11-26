@@ -1,5 +1,47 @@
 # Encoder optimization status
 
+## 2026-11-26 controlled Zstd index: full L3 gain, rejected by level controls
+
+The [complete controlled-index screen](zstd/controlled-index-20261126/README.md)
+compares frozen `2d798695` public L3 with exact contiguous three-byte hashes,
+block-local matching with history, compact prefix positions and reduced index
+initialization. The scalar Source oracle, global sampling stride, extra-edge
+seed order and duplicates, search budget 24 and complete output remain fixed.
+Earlier hash/local and incumbent-bound variants remain separate pilot epochs;
+their differences do not identify individual component contributions.
+
+Six AB/BA rounds retain all twelve original full Silesia inputs: 72 pairs and
+144 timed Vort operations. Candidate/baseline throughput is **1.177268x**, with
+paired round-block 95% CI **1.167228–1.188514x**. NCI reaches **1.275295x** and
+the weakest primary row, x-ray, **1.084735x**. All primary gates pass. Fifteen
+64 KiB public L3/level1/2/8/19 controls retain 90 pairs; **NCI L8 is 0.975321x**
+and **Mozilla L2 is 0.979686x**, below the unchanged **0.98x** floor. The complete
+candidate is **rejected and unmerged**. No samples are removed or repeated.
+
+NCI L8's paired CI is **0.936610–0.999424x**; Mozilla L2's is
+**0.945163–1.002156x**. The latter includes parity and does not establish a
+causal source regression. Both point estimates still fail the declared floor;
+the slow samples remain evidence, rather than grounds to waive the controls.
+The independent reducer validates input/ELF/reference identity, raw samples,
+chronology, settings, length mixes and initial complete wires. Its exit 1 is
+the expected acceptance failure with evidence integrity passing.
+
+Native Zstd passes 1491 tests, encoder controls 62, scalar/planner native and
+actual WASI 23 each, and untouched-baseline large-prefix record equivalence one.
+The public requested-heap adapter passes 170 resource operations and two
+allocator self-tests. Seven multi-block inputs save **524288 bytes** of peak;
+full NCI peak remains **10762377 bytes**, while cumulative allocation falls
+**492794119 → 359100679 bytes**. Request counts are unchanged. Backing OOM
+injection covers ordinals 0/1, not all ordinals or actual host exhaustion.
+These requested-heap figures are separate from RSS and throughput acceptance.
+
+Secondary full-input default-preset observations give main/candidate throughput
+**0.077467x/0.090284x** libzstd 1.6.0 at **1.066077x** reference size. Window
+policies differ; this reserved development-host window is neither a matched
+quality frontier nor industry leadership. Only the main column is merged.
+Next isolate the failing level paths and remove whole-operation waste without
+changing quality, budget, original inputs or the control gates.
+
 ## 2026-11-26 public Zstd L3 evidence correction and actual search profile
 
 The allocating Zstd benchmark now captures the effective public primary from
