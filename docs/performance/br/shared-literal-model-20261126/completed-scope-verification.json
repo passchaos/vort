@@ -1,0 +1,833 @@
+{
+  "all_original_files_unchanged": true,
+  "final_sealed": false,
+  "full_library_gate": "pending",
+  "mergeAllowed": false,
+  "normal_actual_exit": 0,
+  "normal_copy_outputs_equal": true,
+  "original_frozen_files_rechecked": 8362,
+  "readonly_copy_actual_exit": 0,
+  "schema": "vort.brotli.shared-literal-model.completed-scope-receipt.v1",
+  "stdout_sha256": "43a75f6580fe3b85e24ce03f048cc69ed1b8e8ee21088950905f581e585afa27",
+  "tamper": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "missing full raw process",
+        "reason": "'runs/explicit16-00-dickens-current.json'",
+        "rejected": true
+      },
+      {
+        "case": "q11 explicit cap8 changed",
+        "reason": "q11 explicit8KiB cap differs",
+        "rejected": true
+      },
+      {
+        "case": "NCI lower CI raised to floor",
+        "reason": "Statistic differs: Auxiliary speedupCI",
+        "rejected": true
+      },
+      {
+        "case": "original37/38 campaign relabeled pass",
+        "reason": "Recorded terminal differs: native-contracts-2",
+        "rejected": true
+      },
+      {
+        "case": "precheck failure/start sequence hidden",
+        "reason": "Original failed precheck/started-sampling sequence hidden",
+        "rejected": true
+      },
+      {
+        "case": "pending full gate promoted to mergeAllowed",
+        "reason": "Unfinished Root full gate misrepresented",
+        "rejected": true
+      }
+    ]
+  },
+  "verification": {
+    "archive_members": {
+      "performance.tar.gz": 2266,
+      "sources.tar.gz": 6004,
+      "validation.tar.gz": 95
+    },
+    "full_library_gate_status": "pending",
+    "mergeAllowed": false,
+    "performance": {
+      "full90": {
+        "all12_row_floors": true,
+        "independent_primary_speedup_GM": 1.0320069538939025,
+        "independent_roundblock_95CI": [
+          1.0286014769465641,
+          1.0354237056386224
+        ],
+        "pairs": 90,
+        "pilot_records_not_used": true,
+        "primary_gate_pass": true,
+        "processes": 180,
+        "rows": [
+          {
+            "all_pair_speedup": 1.0164241502526408,
+            "all_pair_time_CI": [
+              0.9682394083031428,
+              0.9985853671756199
+            ],
+            "case": "dickens",
+            "floor_pass": true,
+            "pairs": 12,
+            "primary_speedup": 0.9993978405393293
+          },
+          {
+            "all_pair_speedup": 1.0245332647198193,
+            "all_pair_time_CI": [
+              0.9575445113177803,
+              0.9914578480826195
+            ],
+            "case": "mozilla",
+            "floor_pass": true,
+            "pairs": 12,
+            "primary_speedup": 1.037075514982051
+          },
+          {
+            "all_pair_speedup": 1.0347012330156469,
+            "all_pair_time_CI": [
+              0.9564478114508821,
+              0.9790468013920681
+            ],
+            "case": "mr",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.0347012330156469
+          },
+          {
+            "all_pair_speedup": 1.023914389122589,
+            "all_pair_time_CI": [
+              0.9647581867584174,
+              0.9882805440798691
+            ],
+            "case": "nci",
+            "floor_pass": true,
+            "pairs": 12,
+            "primary_speedup": 1.0259928067550366
+          },
+          {
+            "all_pair_speedup": 1.0477282480883126,
+            "all_pair_time_CI": [
+              0.9347806989478277,
+              0.9735836635271766
+            ],
+            "case": "ooffice",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.0477282480883126
+          },
+          {
+            "all_pair_speedup": 1.0520998549102378,
+            "all_pair_time_CI": [
+              0.9425115820218258,
+              0.9559216667317798
+            ],
+            "case": "osdb",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.0520998549102378
+          },
+          {
+            "all_pair_speedup": 1.017599178343021,
+            "all_pair_time_CI": [
+              0.97255219679936,
+              0.9929641878530441
+            ],
+            "case": "reymont",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.017599178343021
+          },
+          {
+            "all_pair_speedup": 1.025667353154505,
+            "all_pair_time_CI": [
+              0.9597965553904061,
+              0.990393425289012
+            ],
+            "case": "samba",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.025667353154505
+          },
+          {
+            "all_pair_speedup": 1.0682805120200354,
+            "all_pair_time_CI": [
+              0.9104356061430761,
+              0.9646272617938465
+            ],
+            "case": "sao",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.0682805120200354
+          },
+          {
+            "all_pair_speedup": 1.0125880124287454,
+            "all_pair_time_CI": [
+              0.9757676081623041,
+              0.9995120622397704
+            ],
+            "case": "webster",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.0125880124287454
+          },
+          {
+            "all_pair_speedup": 1.0586360982627927,
+            "all_pair_time_CI": [
+              0.920279043876121,
+              0.9734551878758168
+            ],
+            "case": "x-ray",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.0586360982627927
+          },
+          {
+            "all_pair_speedup": 1.006768766707217,
+            "all_pair_time_CI": [
+              0.9888756927037693,
+              0.9980781632771976
+            ],
+            "case": "xml",
+            "floor_pass": true,
+            "pairs": 6,
+            "primary_speedup": 1.006768766707217
+          }
+        ],
+        "timed_calls": 180
+      },
+      "public_controls": {
+        "all_row_floors_pass": true,
+        "pairs": 18,
+        "processes": 36,
+        "rows": [
+          {
+            "floor_pass": true,
+            "item": "q4",
+            "speedup": 1.0032949023648263,
+            "speedup_CI": [
+              0.9948116193445463,
+              1.010115900651459
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "q11",
+            "speedup": 1.0018750130542922,
+            "speedup_CI": [
+              0.9804756909899169,
+              1.0237413849282884
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "ratio",
+            "speedup": 1.0039215293816457,
+            "speedup_CI": [
+              0.9934963264775487,
+              1.0126587007741883
+            ]
+          }
+        ],
+        "timed_calls": 1224
+      },
+      "small4KiB_controls": {
+        "all_row_floors_pass": true,
+        "pairs": 72,
+        "processes": 144,
+        "rows": [
+          {
+            "floor_pass": true,
+            "item": "dickens",
+            "speedup": 1.003980589229371,
+            "speedup_CI": [
+              0.9948748510409824,
+              1.0175655418330831
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "mozilla",
+            "speedup": 0.9943648540720339,
+            "speedup_CI": [
+              0.9916298022088865,
+              0.9971972016109434
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "mr",
+            "speedup": 0.9929620178828865,
+            "speedup_CI": [
+              0.9882882625348656,
+              0.9963253736448008
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "nci",
+            "speedup": 0.9853882704418276,
+            "speedup_CI": [
+              0.9785405194196362,
+              0.9963229246292287
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "ooffice",
+            "speedup": 0.9944781244279629,
+            "speedup_CI": [
+              0.9857492006344792,
+              1.000134475506283
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "osdb",
+            "speedup": 0.9976826191609256,
+            "speedup_CI": [
+              0.9859115789886426,
+              1.0057634372846331
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "reymont",
+            "speedup": 0.9986276866596503,
+            "speedup_CI": [
+              0.9929983927141988,
+              1.0042888929934364
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "samba",
+            "speedup": 1.0047414461956414,
+            "speedup_CI": [
+              0.9950017251104968,
+              1.0222106188310116
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "sao",
+            "speedup": 1.0004785587694403,
+            "speedup_CI": [
+              0.9972352966014901,
+              1.0039337295823179
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "webster",
+            "speedup": 0.9983320418166188,
+            "speedup_CI": [
+              0.9953073054725798,
+              1.0005018039266473
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "x-ray",
+            "speedup": 0.9978883562074417,
+            "speedup_CI": [
+              0.9940499509116011,
+              1.002673811403889
+            ]
+          },
+          {
+            "floor_pass": true,
+            "item": "xml",
+            "speedup": 0.9935751542407573,
+            "speedup_CI": [
+              0.9914024940672268,
+              0.9960946223964579
+            ]
+          }
+        ],
+        "timed_calls": 14400
+      },
+      "small_NCI_CI_lower_below_floor": true
+    },
+    "schema": "vort.brotli.shared-literal-model.offline-verification.v1",
+    "scope": "Package data only; no producer imports/codec/foreign/compiler/timing execution; pending gate excludes final adoption claim",
+    "source": {
+      "frozen_full_closure_files": {
+        "current": 3010,
+        "old_exact": 2992
+      },
+      "full_sampling_approved_not_merge_approval": true,
+      "mozilla_pilot_two_raw_speedups": [
+        1.2669249970692857,
+        1.0026711751245123
+      ],
+      "pilot_GM": 1.0381130413183461,
+      "pilot_anomaly_preserved": true,
+      "pilot_pairs": 24,
+      "pilot_processes": 48,
+      "pinned_decoder": "1.2.0",
+      "precheck_error_then_sampling_started_preserved": true,
+      "preflight_complete_wires": 54,
+      "scope": "Frozen source/harness/protocol/ELF/wire/exit identities; no producer or codec execution",
+      "source_files": {
+        "CF": 2200,
+        "shared_model": 2218
+      }
+    },
+    "validation": {
+      "Owner14_modules_reverse_recovered": true,
+      "Owner_Native": 15,
+      "Owner_WASI": 15,
+      "fresh_decodes": 126,
+      "full_library_gate": {
+        "Root_session": 37380,
+        "dynamic_logs_not_archived": true,
+        "exact_zstd_source_reverse_rerun": {
+          "actual_exit": 0,
+          "separate_from_overall_gate": true,
+          "status": "completed",
+          "tests": 84,
+          "wasm_sha256": "28622456660ab41356d03e56b8ac4b3d45f29612329ed326bfc40a85d2beae8b"
+        },
+        "expected_supplement": "Root actual full-library terminal and exact zstd source-reverse failed/rerun receipts; no dynamic-log success inference",
+        "mergeAllowed": false,
+        "schema": "vort.brotli.shared-literal.full-library-gate-status.v1",
+        "status": "pending"
+      },
+      "history_uncached_cached_diagnostic_preserved": true,
+      "initial_Owner14_full_tree_snapshot_retained": false,
+      "named_public_gold_scope_cases": 4,
+      "original_campaigns": {
+        "Native": {
+          "fail": 1,
+          "pass": 37
+        },
+        "WASI": {
+          "fail": 1,
+          "pass": 37
+        }
+      },
+      "public_namedcase_success_not_overall37_38_pass": true,
+      "resource": {
+        "Native": {
+          "OOMs": 625,
+          "allocation_count_and_bytes_increase": true,
+          "peak_no_increase": true,
+          "positive_model_hits": {
+            "mozilla": 24,
+            "xray": 28
+          },
+          "retries": 625,
+          "rows": [
+            {
+              "allocated_bytes": 22667591,
+              "allocations": 557,
+              "backing_alloc_attempts": 557,
+              "backing_remap_attempts": 262,
+              "backing_resize_attempts": 0,
+              "builds": 0,
+              "corpus": "mozilla",
+              "freed_bytes": 22667591,
+              "groups": 0,
+              "hits": 0,
+              "limit": null,
+              "live": 0,
+              "misses": 0,
+              "peak": 5115910,
+              "stage": "disabled-probe",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 22731223,
+              "allocations": 625,
+              "backing_alloc_attempts": 625,
+              "backing_remap_attempts": 262,
+              "backing_resize_attempts": 0,
+              "builds": 34,
+              "corpus": "mozilla",
+              "freed_bytes": 22731223,
+              "groups": 10,
+              "hits": 24,
+              "limit": null,
+              "live": 0,
+              "misses": 34,
+              "peak": 5115910,
+              "stage": "enabled-probe",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 22731223,
+              "allocations": 625,
+              "backing_alloc_attempts": 625,
+              "backing_remap_attempts": 262,
+              "backing_resize_attempts": 0,
+              "builds": 34,
+              "corpus": "mozilla",
+              "freed_bytes": 22731223,
+              "groups": 10,
+              "hits": 24,
+              "limit": 5115910,
+              "live": 0,
+              "misses": 34,
+              "peak": 5115910,
+              "stage": "exact-D",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 14890657,
+              "allocations": 381,
+              "backing_alloc_attempts": 381,
+              "backing_remap_attempts": 158,
+              "backing_resize_attempts": 0,
+              "builds": null,
+              "corpus": "mozilla",
+              "freed_bytes": 14890657,
+              "groups": null,
+              "hits": null,
+              "limit": 5115909,
+              "live": 0,
+              "misses": null,
+              "peak": 4955938,
+              "stage": "D-minus-one-refused",
+              "wire_bytes": null
+            },
+            {
+              "allocated_bytes": 37621880,
+              "allocations": 1006,
+              "backing_alloc_attempts": 1006,
+              "backing_remap_attempts": 420,
+              "backing_resize_attempts": 0,
+              "builds": 34,
+              "corpus": "mozilla",
+              "freed_bytes": 37621880,
+              "groups": 10,
+              "hits": 24,
+              "limit": null,
+              "live": 0,
+              "misses": 34,
+              "peak": 5115910,
+              "stage": "quota-unlimited-retry",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 21185275503,
+              "allocation_ordinals": 625,
+              "backing_alloc_attempts": 586319,
+              "corpus": "mozilla",
+              "freed_bytes": 21185275503,
+              "observed_OOMs": 625,
+              "retries": 625,
+              "retry_groups": 6250,
+              "retry_hits": 15000,
+              "stage": "sweep"
+            },
+            {
+              "allocated_bytes": 36683602,
+              "allocations": 734,
+              "backing_alloc_attempts": 734,
+              "backing_remap_attempts": 551,
+              "backing_resize_attempts": 0,
+              "builds": 0,
+              "corpus": "xray",
+              "freed_bytes": 36683602,
+              "groups": 0,
+              "hits": 0,
+              "limit": null,
+              "live": 0,
+              "misses": 0,
+              "peak": 7901911,
+              "stage": "disabled-probe",
+              "wire_bytes": 41180
+            },
+            {
+              "allocated_bytes": 36813970,
+              "allocations": 806,
+              "backing_alloc_attempts": 806,
+              "backing_remap_attempts": 551,
+              "backing_resize_attempts": 0,
+              "builds": 36,
+              "corpus": "xray",
+              "freed_bytes": 36813970,
+              "groups": 8,
+              "hits": 28,
+              "limit": null,
+              "live": 0,
+              "misses": 40,
+              "peak": 7901911,
+              "stage": "enabled-probe",
+              "wire_bytes": 41180
+            },
+            {
+              "allocated_bytes": 36813970,
+              "allocations": 806,
+              "backing_alloc_attempts": 806,
+              "backing_remap_attempts": 551,
+              "backing_resize_attempts": 0,
+              "builds": 36,
+              "corpus": "xray",
+              "freed_bytes": 36813970,
+              "groups": 8,
+              "hits": 28,
+              "limit": 7901911,
+              "live": 0,
+              "misses": 40,
+              "peak": 7901911,
+              "stage": "exact-D",
+              "wire_bytes": 41180
+            },
+            {
+              "allocated_bytes": 22805085,
+              "allocations": 410,
+              "backing_alloc_attempts": 410,
+              "backing_remap_attempts": 248,
+              "backing_resize_attempts": 0,
+              "builds": null,
+              "corpus": "xray",
+              "freed_bytes": 22805085,
+              "groups": null,
+              "hits": null,
+              "limit": 7901910,
+              "live": 0,
+              "misses": null,
+              "peak": 7452158,
+              "stage": "D-minus-one-refused",
+              "wire_bytes": null
+            },
+            {
+              "allocated_bytes": 59619055,
+              "allocations": 1216,
+              "backing_alloc_attempts": 1216,
+              "backing_remap_attempts": 799,
+              "backing_resize_attempts": 0,
+              "builds": 36,
+              "corpus": "xray",
+              "freed_bytes": 59619055,
+              "groups": 8,
+              "hits": 28,
+              "limit": null,
+              "live": 0,
+              "misses": 40,
+              "peak": 7901911,
+              "stage": "quota-unlimited-retry",
+              "wire_bytes": 41180
+            }
+          ]
+        },
+        "WASI": {
+          "OOMs": 658,
+          "allocation_count_and_bytes_increase": true,
+          "peak_no_increase": true,
+          "positive_model_hits": {
+            "mozilla": 24,
+            "xray": 28
+          },
+          "retries": 658,
+          "rows": [
+            {
+              "allocated_bytes": 23457543,
+              "allocations": 590,
+              "backing_alloc_attempts": 590,
+              "backing_remap_attempts": 266,
+              "backing_resize_attempts": 0,
+              "builds": 0,
+              "corpus": "mozilla",
+              "freed_bytes": 23457543,
+              "groups": 0,
+              "hits": 0,
+              "limit": null,
+              "live": 0,
+              "misses": 0,
+              "peak": 4430770,
+              "stage": "disabled-probe",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 23520847,
+              "allocations": 658,
+              "backing_alloc_attempts": 658,
+              "backing_remap_attempts": 266,
+              "backing_resize_attempts": 0,
+              "builds": 34,
+              "corpus": "mozilla",
+              "freed_bytes": 23520847,
+              "groups": 10,
+              "hits": 24,
+              "limit": null,
+              "live": 0,
+              "misses": 34,
+              "peak": 4430770,
+              "stage": "enabled-probe",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 23520847,
+              "allocations": 658,
+              "backing_alloc_attempts": 658,
+              "backing_remap_attempts": 266,
+              "backing_resize_attempts": 0,
+              "builds": 34,
+              "corpus": "mozilla",
+              "freed_bytes": 23520847,
+              "groups": 10,
+              "hits": 24,
+              "limit": 4430770,
+              "live": 0,
+              "misses": 34,
+              "peak": 4430770,
+              "stage": "exact-D",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 15413929,
+              "allocations": 402,
+              "backing_alloc_attempts": 402,
+              "backing_remap_attempts": 162,
+              "backing_resize_attempts": 0,
+              "builds": null,
+              "corpus": "mozilla",
+              "freed_bytes": 15413929,
+              "groups": null,
+              "hits": null,
+              "limit": 4430769,
+              "live": 0,
+              "misses": null,
+              "peak": 4294918,
+              "stage": "D-minus-one-refused",
+              "wire_bytes": null
+            },
+            {
+              "allocated_bytes": 38934776,
+              "allocations": 1060,
+              "backing_alloc_attempts": 1060,
+              "backing_remap_attempts": 428,
+              "backing_resize_attempts": 0,
+              "builds": 34,
+              "corpus": "mozilla",
+              "freed_bytes": 38934776,
+              "groups": 10,
+              "hits": 24,
+              "limit": null,
+              "live": 0,
+              "misses": 34,
+              "peak": 4430770,
+              "stage": "quota-unlimited-retry",
+              "wire_bytes": 13924
+            },
+            {
+              "allocated_bytes": 23283755291,
+              "allocation_ordinals": 658,
+              "backing_alloc_attempts": 649848,
+              "corpus": "mozilla",
+              "freed_bytes": 23283755291,
+              "observed_OOMs": 658,
+              "retries": 658,
+              "retry_groups": 6580,
+              "retry_hits": 15792,
+              "stage": "sweep"
+            },
+            {
+              "allocated_bytes": 41499259,
+              "allocations": 801,
+              "backing_alloc_attempts": 801,
+              "backing_remap_attempts": 553,
+              "backing_resize_attempts": 0,
+              "builds": 0,
+              "corpus": "xray",
+              "freed_bytes": 41499259,
+              "groups": 0,
+              "hits": 0,
+              "limit": null,
+              "live": 0,
+              "misses": 0,
+              "peak": 6930055,
+              "stage": "disabled-probe",
+              "wire_bytes": 41180
+            },
+            {
+              "allocated_bytes": 41628955,
+              "allocations": 873,
+              "backing_alloc_attempts": 873,
+              "backing_remap_attempts": 553,
+              "backing_resize_attempts": 0,
+              "builds": 36,
+              "corpus": "xray",
+              "freed_bytes": 41628955,
+              "groups": 8,
+              "hits": 28,
+              "limit": null,
+              "live": 0,
+              "misses": 40,
+              "peak": 6930055,
+              "stage": "enabled-probe",
+              "wire_bytes": 41180
+            },
+            {
+              "allocated_bytes": 41628955,
+              "allocations": 873,
+              "backing_alloc_attempts": 873,
+              "backing_remap_attempts": 553,
+              "backing_resize_attempts": 0,
+              "builds": 36,
+              "corpus": "xray",
+              "freed_bytes": 41628955,
+              "groups": 8,
+              "hits": 28,
+              "limit": 6930055,
+              "live": 0,
+              "misses": 40,
+              "peak": 6930055,
+              "stage": "exact-D",
+              "wire_bytes": 41180
+            },
+            {
+              "allocated_bytes": 34218725,
+              "allocations": 610,
+              "backing_alloc_attempts": 610,
+              "backing_remap_attempts": 371,
+              "backing_resize_attempts": 0,
+              "builds": null,
+              "corpus": "xray",
+              "freed_bytes": 34218725,
+              "groups": null,
+              "hits": null,
+              "limit": 6930054,
+              "live": 0,
+              "misses": null,
+              "peak": 6702055,
+              "stage": "D-minus-one-refused",
+              "wire_bytes": null
+            },
+            {
+              "allocated_bytes": 75847680,
+              "allocations": 1483,
+              "backing_alloc_attempts": 1483,
+              "backing_remap_attempts": 924,
+              "backing_resize_attempts": 0,
+              "builds": 36,
+              "corpus": "xray",
+              "freed_bytes": 75847680,
+              "groups": 8,
+              "hits": 28,
+              "limit": null,
+              "live": 0,
+              "misses": 40,
+              "peak": 6930055,
+              "stage": "quota-unlimited-retry",
+              "wire_bytes": 41180
+            }
+          ]
+        }
+      },
+      "scope": "Recorded outcomes and frozen pre-fix source only; no codec/compiler/test execution; pending full library is NOT mergeAllowed",
+      "seeded_history_oracles": 36,
+      "smoke_Native": 25,
+      "writer_Native_WASI": 25,
+      "writer_wire_oracles": 162
+    },
+    "verified_completed_scope": true
+  }
+}

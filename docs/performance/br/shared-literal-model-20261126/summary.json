@@ -1,0 +1,48 @@
+{
+  "controls": {
+    "all_point_floors": true,
+    "pairs": 18,
+    "processes": 36,
+    "timed_calls": 1224
+  },
+  "final_sealed": true,
+  "full90": {
+    "CI": [
+      1.0286014769465641,
+      1.0354237056386224
+    ],
+    "GM": 1.0320069538939025,
+    "pairs": 90,
+    "processes": 180
+  },
+  "full_library_gate": "passed",
+  "historical_diagnostic_correction": "Failed-command hints are not actual nonzero subprocess records; authoritative whole actualexit0/all414steps succeeded",
+  "initial_campaign_overall_pass": false,
+  "mergeAllowed": true,
+  "resource_tradeoff": "Peak unchanged; allocation count and cumulativebytes increase; Native/WASI625/658OOM+retry, positivehits24/28",
+  "schema": "vort.brotli.shared-literal-model.package-summary.v1",
+  "small": {
+    "NCI": {
+      "CI": [
+        0.9785405194196362,
+        0.9963229246292287
+      ],
+      "CI_lower_passes_floor": false,
+      "point": 0.9853882704418276
+    },
+    "all_point_floors": true,
+    "pairs": 72,
+    "processes": 144,
+    "timed_calls": 14400
+  },
+  "source2218": "a3cc7ac8e424db04added9be220465f3428adc563b57f4b1de474a3ca6577153",
+  "whole_gate": {
+    "actual_exit": 0,
+    "completed_utc": "2026-11-26T16:25:19.713244+00:00",
+    "skipped": 2,
+    "steps_succeeded": 414,
+    "steps_total": 414,
+    "tests_passed": 6068,
+    "tests_total": 6070
+  }
+}

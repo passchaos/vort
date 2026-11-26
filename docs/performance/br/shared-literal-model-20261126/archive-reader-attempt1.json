@@ -1,0 +1,6 @@
+{
+  "actual_exit": 1,
+  "cause": "Auxiliary decoder receipt records SHA without bytes field; reader now validates only declared fields plus complete package-member identity",
+  "raw_source_unchanged": true,
+  "stderr": "Traceback (most recent call last):\n  File \"/home/passchaos/project-z/vort/docs/performance/br/shared-literal-model-20261126/verify.py\", line 23, in <module>\n    if __name__=='__main__':print(json.dumps(verify(Path(__file__).resolve().parent),indent=2,sort_keys=True))\n  File \"/home/passchaos/project-z/vort/docs/performance/br/shared-literal-model-20261126/verify.py\", line 13, in verify\n    source=verify_provenance(packages['sources.tar.gz'],files,validation)\n  File \"/home/passchaos/project-z/vort/docs/performance/br/shared-literal-model-20261126/provenance.py\", line 63, in verify_provenance\n    data=files[member(record['path'])];require(sha(data)==record['sha256'] and len(data)==record['bytes'],'Pinned decoder binary identity differs')\nKeyError: 'bytes'\n"
+}

@@ -1,0 +1,23 @@
+{
+  "Root_session": 37380,
+  "actual_exit": 0,
+  "completed_utc": "2026-11-26T16:25:19.713244+00:00",
+  "diagnostic_interpretation": "Failed-command strings are retained diagnostics; no actual subprocess nonzero is inferred from these hints. Authoritative terminal0 and all414steps succeeded.",
+  "dynamic_logs_not_archived": false,
+  "exact_zstd_source_reverse_rerun": {
+    "actual_exit": 0,
+    "separate_from_overall_gate": true,
+    "status": "completed",
+    "tests": 84,
+    "wasm_sha256": "28622456660ab41356d03e56b8ac4b3d45f29612329ed326bfc40a85d2beae8b"
+  },
+  "historical_correction": "Earlier pending-gate notes treated NodeZstd hints as nonzero; the completed actualexit0/allstep-success evidence supersedes that interpretation.",
+  "mergeAllowed": true,
+  "schema": "vort.brotli.shared-literal.full-library-gate-status.v1",
+  "status": "passed",
+  "steps_succeeded": 414,
+  "steps_total": 414,
+  "tests_passed": 6068,
+  "tests_skipped": 2,
+  "tests_total": 6070
+}
