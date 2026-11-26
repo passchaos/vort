@@ -1,0 +1,223 @@
+{
+  "claim_limit": "Combined candidate only; no component/source-causal/phase/industry-best attribution. Profile line0 stays unresolved; positive source-line periods are not pure encoder phase share.",
+  "decision": "rejected",
+  "declared_gates": {
+    "aggregate_ci_excludes_parity": true,
+    "aggregate_throughput_min": 1.03,
+    "all_rows_floor": 0.98,
+    "claim": "combined candidate; no component attribution or industry-best claim",
+    "control_floor": 0.98,
+    "nci_throughput_min": 1.2,
+    "pilot_rounds": 2,
+    "preserve_all_samples": true,
+    "primary_cases": [
+      "dickens",
+      "mozilla",
+      "mr",
+      "nci",
+      "ooffice",
+      "osdb",
+      "reymont",
+      "samba",
+      "sao",
+      "webster",
+      "x-ray",
+      "xml"
+    ],
+    "primary_rounds": 6,
+    "public_controls": [
+      "q4",
+      "q11-command-state-cap8KiB",
+      "legacy-ratio"
+    ],
+    "requested_heap_growth_max": 1.05,
+    "scope": "Public Brotli q8/generic/explicit window16, exact initial full wire and timed encode+lengthmix+free",
+    "source_components": [
+      "compact single u32 DP",
+      "adjacent paired u32 cost/step lanes",
+      "paired length choices in one loop",
+      "position prefix hoist"
+    ]
+  },
+  "failed_point_rows": [
+    {
+      "case": "mozilla",
+      "paired_throughput_ratios": [
+        0.8738694261727631,
+        0.9472272592612248
+      ],
+      "throughput_ratio": 0.9098092885356829
+    }
+  ],
+  "gate_results": {
+    "aggregate_point_at_least_1_03": false,
+    "all_pilot_rows_at_least_0_98": false,
+    "complete_initial_byte_wire_identity": true,
+    "formal_six_rounds_and_ci": null,
+    "nci_point_at_least_1_20": false,
+    "public_controls": null,
+    "recorded_pinned_decode_pass": true,
+    "requested_heap_growth_limit": null
+  },
+  "measurement_scope": {
+    "ci_computed": false,
+    "formal_six_rounds_executed": false,
+    "pairs": 24,
+    "pilot_rounds": 2,
+    "public_controls_executed": false,
+    "resource_campaign_executed": false,
+    "timed_calls": 48
+  },
+  "merge_allowed": false,
+  "pack_readiness": true,
+  "pilot": {
+    "complete_initial_wire_identity": true,
+    "pairs": 24,
+    "pilot_only": true,
+    "primary_point_gates_pass": false,
+    "reference_decode_pass": true,
+    "rounds": 2,
+    "rows": [
+      {
+        "case": "dickens",
+        "paired_throughput_ratios": [
+          1.0088771313706926,
+          0.9820570663913658
+        ],
+        "throughput_ratio": 0.9953767708678151
+      },
+      {
+        "case": "mozilla",
+        "paired_throughput_ratios": [
+          0.8738694261727631,
+          0.9472272592612248
+        ],
+        "throughput_ratio": 0.9098092885356829
+      },
+      {
+        "case": "mr",
+        "paired_throughput_ratios": [
+          1.0157963983415619,
+          1.0117247279257133
+        ],
+        "throughput_ratio": 1.0137585189481941
+      },
+      {
+        "case": "nci",
+        "paired_throughput_ratios": [
+          1.0517424666198127,
+          1.0503090903376846
+        ],
+        "throughput_ratio": 1.0510255341260593
+      },
+      {
+        "case": "ooffice",
+        "paired_throughput_ratios": [
+          1.0094060758400465,
+          1.0609383933664354
+        ],
+        "throughput_ratio": 1.0348515160911043
+      },
+      {
+        "case": "osdb",
+        "paired_throughput_ratios": [
+          0.9998971130193999,
+          1.001390722228092
+        ],
+        "throughput_ratio": 1.000643638944595
+      },
+      {
+        "case": "reymont",
+        "paired_throughput_ratios": [
+          1.0223351716450286,
+          1.006754762401138
+        ],
+        "throughput_ratio": 1.0145150579581446
+      },
+      {
+        "case": "samba",
+        "paired_throughput_ratios": [
+          1.0164487863600298,
+          1.0128673887014765
+        ],
+        "throughput_ratio": 1.0146565073901948
+      },
+      {
+        "case": "sao",
+        "paired_throughput_ratios": [
+          0.9988044158785501,
+          1.0497923979885897
+        ],
+        "throughput_ratio": 1.0239810949752617
+      },
+      {
+        "case": "webster",
+        "paired_throughput_ratios": [
+          1.052287513018498,
+          0.9956093030110417
+        ],
+        "throughput_ratio": 1.0235561720802475
+      },
+      {
+        "case": "x-ray",
+        "paired_throughput_ratios": [
+          0.9961953805219469,
+          1.0142630173138818
+        ],
+        "throughput_ratio": 1.0051886054280263
+      },
+      {
+        "case": "xml",
+        "paired_throughput_ratios": [
+          1.0366953483718064,
+          1.040399607597107
+        ],
+        "throughput_ratio": 1.0385458264533989
+      }
+    ],
+    "scope": "Public Brotli q8/generic/explicit window16, exact initial full wire and timed encode+lengthmix+free",
+    "throughput_geomean": 1.009891676846291
+  },
+  "profile_and_tests": {
+    "actual_wasi_tests_recorded": 12,
+    "children": 10,
+    "line0_unattributed": true,
+    "native_final_tests_recorded": 12,
+    "period_totals": {
+      "baseline_period": 16727563490,
+      "decoded_target_period": 10767592741,
+      "positive_line_target_period": 8003372635,
+      "total_period": 16836820271,
+      "zero_line_target_period": 2764220106
+    },
+    "positive_line_period_percent_all_samples": 47.53494131421675,
+    "profiled_elf_sha256": "437dc07dbc242dbdfc8d4d1399ef83e0790a6471a1ea5724fcc4aecc859a49ec",
+    "profiled_variant": "baseline",
+    "public_calls": 40,
+    "pure_encoder_phase_share": null,
+    "samples": 3502,
+    "scope": "All raw profile/ELF/code/source maps preserved. Inline diagnostic line periods include provenance/SHA/kernel/IO; no regex attribution to disjoint encoder phases. Stopped GNU addr2line report is not a codec failure.",
+    "timed_calls": 30,
+    "warmups": 10,
+    "wasi_module_sha256": "8f7802d02a424b11cdc2d218884dd3e77345cca112f9a097a855bc5798d2a5e2"
+  },
+  "schema": "vort.br.modeled-lanes.offline-summary.v1",
+  "sources": {
+    "base_head": "f60685e535e95a2ee01d31c68b760073ddad8783",
+    "baseline_elf_sha256": "437dc07dbc242dbdfc8d4d1399ef83e0790a6471a1ea5724fcc4aecc859a49ec",
+    "baseline_stamp_preserved": "b199db72+paired-search-histogram-proposals-v7",
+    "candidate_elf_sha256": "fa6534fe84b992c833532bfbccc11c2fcd20be201a638613d750d6e19f484302",
+    "candidate_source_files": 2201,
+    "overlay_files": [
+      "src/lz77.zig",
+      "src/lz77/modeled_pair_root_tests.zig",
+      "src/lz77/modeled_pair_tests.zig",
+      "src/lz77/modeled_plan.zig"
+    ],
+    "public_code_equivalence": {
+      "new_git_diff_executed": false,
+      "producer_statement": "br/lz77/encoder source unchanged since accepted7b575072"
+    },
+    "scope": "Complete base src/build/tools gitarchive plus exact four-file combined overlay; old accepted V7 stamp and receipt preserved, no component attribution"
+  }
+}

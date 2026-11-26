@@ -1,0 +1,31 @@
+{
+  "actual_wasi_tests_recorded": 12,
+  "archives": {
+    "evidence.tar.gz": {
+      "bytes": 8434217,
+      "sha256": "fa76ffba7176c9b4bd67635f239e261de86089bfb3330d2a02c8d0d78949744c"
+    },
+    "profile.tar.gz": {
+      "bytes": 2618613,
+      "sha256": "a83385d2013de301f3c0add648e0961236b83cf97fe962eef8abc60d8e25f4b6"
+    },
+    "source.tar.gz": {
+      "bytes": 9647617,
+      "sha256": "384aefc5d50c42fa1cc86119793f4f7cc5b4fa080a87c639c3960e68e14748b6"
+    }
+  },
+  "candidate_src_files": 2201,
+  "decision": "rejected",
+  "members": 339,
+  "merge_allowed": false,
+  "native_final_tests_recorded": 12,
+  "pilot_pairs": 24,
+  "pilot_timed_calls": 48,
+  "profile_children": 10,
+  "profile_public_calls": 40,
+  "profile_samples": 3502,
+  "schema": "vort.br.modeled-lanes.offline-receipt.v1",
+  "scope": "Package-only source reconstruction, byte/hash/ELF/receipt/pilot point math and profile totals. No original tmp/source access or codec/SO/build/test/profile-tool execution.",
+  "source_overlay_files": 4,
+  "verification_passed": true
+}

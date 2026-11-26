@@ -1,5 +1,42 @@
 # Encoder optimization status
 
+## 2026-11-26 compact modeled DP and adjacent lanes: rejected pilot
+
+The [complete pilot package](br/modeled-lanes-20261126/README.md) uses unchanged
+main `f60685e5` public Brotli code as baseline and a frozen combined candidate:
+compact u32 single-model costs/steps, adjacent paired DP lanes, one paired
+length-choice loop, and a per-position prefix load. Both retain the original
+q8/generic/window16 policy, candidate order, budgets and complete initial wires.
+
+Two AB/BA rounds over twelve original 64 KiB inputs retain 24 pairs/48 timed
+operations. Throughput geometric mean is **1.009892x**, NCI **1.051026x**, and
+Mozilla **0.909809x**. The unchanged 1.03x/1.20x/0.98x point gates fail; this
+combined candidate is **rejected and unmerged**. No sample is removed or
+repeated, and no vector/layout/component cause is inferred from this epoch.
+Native ReleaseSafe and actual WASI each pass 12 runner tests, including real
+scalar token/stats comparison, high unsigned-cost dictionary selection and
+single-model allocation-failure sweeps. All initial wires are byte-equal and
+decode with pinned Brotli 1.2.0. Full six-round CI, controls and requested-heap
+acceptance are not run after the failed screen.
+
+A fresh existing-ELF public q8 profile retains 3502 samples. Leaf symbol cycles
+are outer inlined-model planning **39.75%**, initial optimal parsing **19.83%**,
+and external `matchLength` **4.38%**, including provenance/SHA/IO/kernel work.
+Positive readelf line coverage is **47.5349%**; compiler line zero remains
+unattributed. This directs structural work without treating sample percentages
+as clean encoder stage time. A functionality audit also confirms ordinary
+Deflate reusable facades still lack a prepared matcher/workspace capability;
+close that gap with explicit ownership, warm allocation checks and unchanged
+wire/error/resource contracts before further isolated codec tuning.
+
+The next prepared fixed owner must retain typed matcher/token capacities and
+a stable shared Lease. Current arena-operation cap/profile scopes allocate a
+fresh control state, so retained arena backing alone does not meet zero-heap
+warm acceptance. Preserve the existing scan/tiny/full hash dispatch and table
+geometry; do not replace the full matcher with tiny tables. Validate different
+inputs inside the declared capacity with alloc/resize/remap denied after
+prepare, including profile, exact cap and inherited sticky-budget cases.
+
 ## 2026-11-26 controlled Zstd index: full L3 gain, rejected by level controls
 
 The [complete controlled-index screen](zstd/controlled-index-20261126/README.md)

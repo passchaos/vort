@@ -1,0 +1,14 @@
+{
+  "codec_so_script_test_build_execution_blocked": true,
+  "command_PATH": "/nonexistent",
+  "exit_code": 0,
+  "independent_directory_verified": true,
+  "original_artifact_access_blocked": true,
+  "schema": "vort.br.modeled-lanes.copy-verification.v1",
+  "scope": "Actual package-only point math/source/hash/profile replay from unrelated copied directory; no formal/CI/control/resource campaign or rerun",
+  "stderr": "",
+  "stdout": "{\"decision\": \"rejected\", \"gate_results\": {\"aggregate_point_at_least_1_03\": false, \"all_pilot_rows_at_least_0_98\": false, \"complete_initial_byte_wire_identity\": true, \"formal_six_rounds_and_ci\": null, \"nci_point_at_least_1_20\": false, \"public_controls\": null, \"recorded_pinned_decode_pass\": true, \"requested_heap_growth_limit\": null}, \"merge_allowed\": false, \"pilot_geomean\": 1.009891676846291, \"profile_positive_line_period_percent\": 47.53494131421675, \"verification\": \"passed\"}\n",
+  "temporary_copy_removed": true,
+  "tested_inventory_sha256": "de64fe562a4f1ed79c76027b8a3bb2e52048a4107a33362da20015d2711c3a34",
+  "utc": "2026-11-26T01:42:54.157494+00:00"
+}
