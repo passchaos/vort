@@ -23,6 +23,47 @@ def integer(value, name: str) -> int:
     return value
 
 
+# A complete proposal hit retains analysis and result shape, while every
+# scoring/search counter remains zero. Scope/mode/bucket arrays obey this too.
+PROPOSAL_REUSE_RETAINED_FIELDS = {
+    "iterations", "input_bytes", "literal_count", "proposal_reuses",
+    "proposal_lookup_ns", "active_symbols", "analysis_ns", "total_ns",
+    "suffix_tree_count", "suffix_mode", "suffix_savings_bits",
+    "up_to_16_tree_count", "up_to_16_mode", "up_to_16_savings_bits",
+    "full_tree_count", "full_mode", "full_savings_bits",
+}
+
+
+def require_zero_proposal_work(value, field: str) -> None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            require_zero_proposal_work(nested, field + "." + key)
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            require_zero_proposal_work(nested, field + "[" + str(index) + "]")
+    else:
+        require(type(value) is int and value == 0,
+                "proposal reuse performed work: " + field)
+
+
+def proposal_reuse_count(stats: dict) -> int:
+    reuses = integer(stats.get("proposal_reuses", 0), "proposal reuses")
+    require(reuses in {0, 1}, "invalid single-call proposal reuse count")
+    if reuses:
+        required = {
+            "tree_score_calls", "tree_score_uncached_calls",
+            "tree_score_cache_hits", "tree_score_cache_misses",
+            "tree_score_scope_counts", "tree_score_mode_counts",
+            "tree_score_uncached_scope_calls", "tree_score_uncached_mode_calls",
+            "suffix_payload_scores",
+        }
+        require(required <= stats.keys(), "proposal reuse missing work counters")
+        for field, value in stats.items():
+            if field not in PROPOSAL_REUSE_RETAINED_FIELDS:
+                require_zero_proposal_work(value, field)
+    return reuses
+
+
 def candidate_bytes(event: dict) -> int:
     require(event.get("error_name", "") == "", "failed candidate reference")
     stage = event["stage"]
@@ -174,6 +215,7 @@ def validate(report: dict, executable: Path | None = None, *, allow_truncated_co
                     require(event is not None and event["stage"] == "context_proposals", "context event missing")
                     require(event["origin"] == detail["origin"] and event["variant"] == detail["variant"] and event["command_count"] == detail["command_count"], "context attribution mismatch")
                     stats = detail["profile"]
+                    proposal_reuses = proposal_reuse_count(stats)
                     if "tree_score_scope_counts" in stats:
                         scopes = stats["tree_score_scope_counts"]
                         require(len(scopes) == 3, "score scopes")
@@ -193,7 +235,7 @@ def validate(report: dict, executable: Path | None = None, *, allow_truncated_co
                             require(all(m[0] == 0 for m in direct_modes), "uncached baseline counted by mode")
                             for scope in range(1, 3):
                                 require(sum(m[scope] for m in direct_modes) == direct_scopes[scope], "uncached mode sum")
-                            active = stats["literal_count"] >= 128
+                            active = stats["literal_count"] >= 128 and proposal_reuses == 0
                             require(direct_scopes[0] == int(active), "uncached baseline calls")
                             require(direct_scopes[1] == 2 * stats["suffix_payload_scores"] and direct_scopes[2] == 0, "uncached suffix calls")
                             require(all(s["requests"] == 0 for s in scopes[:2]), "default cached baseline or suffix")

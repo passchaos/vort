@@ -207,7 +207,70 @@ class EvidenceTests(unittest.TestCase):
         return report
 
     def test_restored_uncached_counts(self):
-        self.assertEqual(1, validate(self.restored_context_report())["validated_runs"])
+        report = self.restored_context_report()
+        self.assertNotIn("proposal_reuses", self.profile(report)["context_details"][0]["profile"])
+        self.assertEqual(1, validate(report)["validated_runs"])
+
+    def reused_context_report(self):
+        report = self.restored_context_report()
+        # Match a present analysis above the literal-count threshold.
+        self.path.write_bytes(b"a" * 256)
+        row = report["rows"][0]
+        row.update(input_bytes=256, input_sha256=hashlib.sha256(self.path.read_bytes()).hexdigest())
+        stats = self.profile(report)["context_details"][0]["profile"]
+
+        def zero(value):
+            if isinstance(value, dict):
+                return {key: zero(nested) for key, nested in value.items()}
+            if isinstance(value, list):
+                return [zero(nested) for nested in value]
+            return 0
+
+        stats.update({key: zero(value) for key, value in stats.items()})
+        stats.update(input_bytes=256, literal_count=128, active_symbols=1,
+                     proposal_reuses=1, analysis_ns=10, proposal_lookup_ns=5,
+                     total_ns=15, suffix_tree_count=2, suffix_mode=1,
+                     suffix_savings_bits=64)
+        return report
+
+    def test_complete_proposal_hit_retains_shape_without_scoring(self):
+        self.assertEqual(1, validate(self.reused_context_report())["validated_runs"])
+
+    def test_proposal_hit_rejects_work_in_scalars_and_nested_counters(self):
+        for field in ("tree_score_calls", "cluster_rounds", "suffix_payload_reuses", "baseline_ns",
+                      "tree_score_scope_counts", "tree_score_mode_counts"):
+            report = self.reused_context_report()
+            stats = self.profile(report)["context_details"][0]["profile"]
+            if field == "tree_score_scope_counts":
+                stats[field][2]["requests"] = 1
+            elif field == "tree_score_mode_counts":
+                stats[field][0][2]["requests"] = 1
+            else:
+                stats[field] = 1
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "proposal reuse performed work"):
+                validate(report)
+
+    def test_proposal_miss_still_requires_baseline_scoring(self):
+        report = self.restored_context_report()
+        stats = self.profile(report)["context_details"][0]["profile"]
+        stats.update(proposal_reuses=0, tree_score_uncached_calls=2, tree_score_calls=2)
+        stats["tree_score_uncached_scope_calls"][0] = 0
+        with self.assertRaisesRegex(ValueError, "uncached baseline calls"):
+            validate(report)
+
+    def test_proposal_reuse_count_is_one_integer_call(self):
+        for value in (2, -1, True, "1"):
+            report = self.reused_context_report()
+            self.profile(report)["context_details"][0]["profile"]["proposal_reuses"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate(report)
+
+    def test_proposal_hit_requires_explicit_work_counters(self):
+        for field in ("tree_score_calls", "tree_score_scope_counts", "tree_score_uncached_calls"):
+            report = self.reused_context_report()
+            del self.profile(report)["context_details"][0]["profile"][field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "proposal reuse missing work counters"):
+                validate(report)
 
     def test_wrong_uncached_counts(self):
         report = self.restored_context_report()
