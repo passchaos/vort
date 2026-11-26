@@ -1,0 +1,49 @@
+{
+  "diagnostic": {
+    "all_events_complete": true,
+    "context_prefix_truncated_runs": 18,
+    "evaluation_attempts": 1746,
+    "full_context_reuses_for_truncated_runs": null,
+    "lost_wires": 993,
+    "observed_prefix_reuses": 87,
+    "physical_wires": 1029,
+    "scope": "All normal/profile/stage times are diagnostics only, excluded from throughput gates",
+    "trace_runs": 36
+  },
+  "memory_scope": "No RSS measurement; serialized physical output bytes are not heap or memory traffic",
+  "performance_acceptance": "Not established; historical regression observation and separate diagnostics",
+  "schema": "vort.brotli.q8-main-history.package-summary.v1",
+  "timing": {
+    "actual_interval_utc": [
+      "2026-11-26T10:24:15.408945+00:00",
+      "2026-11-26T10:24:50.368971+00:00"
+    ],
+    "cases": 12,
+    "current_over_old_elapsed_geomean": 3.203170864687844,
+    "current_over_old_encoded_size_geomean": 0.9565808633658663,
+    "initial_complete_wire_identity_scope": "24 saved initial wires with original pinned libbrotli1.2.0 decode receipts; timed output length/mix only",
+    "paired_95ci": [
+      3.1842254436026094,
+      3.2222290067428885
+    ],
+    "pairs": 90,
+    "primary_pairs_per_case": 6,
+    "ratio_direction": "current elapsed / exact-old elapsed; values above1 mean current is slower",
+    "root_scheduling_scope": "Root collected HEAVY0 before launch and held other build/archive/profile heavy work through the actual35second window; snapshots do not prove continuous zero interference",
+    "source_revisions": {
+      "current": "8ccd54a59da850da724cc4d6ca79a727c659889e",
+      "old_exact": "0a673757ea6a1e88b90794ad44dce1a8a824f371"
+    },
+    "timed_calls": 180,
+    "weak_extra_pairs_per_case": 6
+  },
+  "validation": {
+    "Root_main_gate_actual_exit": 0,
+    "Root_tools_fix_commit": "bd934972",
+    "original_gate_actual_exit": 1,
+    "root_project_steps": 3,
+    "root_report_tests": 24,
+    "root_wire_count_tests": 11,
+    "tmp_adapter_tests": 6
+  }
+}

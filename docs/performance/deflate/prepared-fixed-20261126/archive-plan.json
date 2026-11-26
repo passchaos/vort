@@ -1,0 +1,15 @@
+{
+  "packages": {
+    "benchmark.tar.gz": "All small metadata/chronology, old/current probe ELF and build receipts, original inputs,99 preflight wires,198 codec decode plusPython/C proofs, samples raw/order/results/statistics and legacy failures",
+    "sources.tar.gz": "Original old-source.tar base8ccd + exact current-source overlay/removals and final-source2214; source-freeze/build/probe identities preserved",
+    "validation.tar.gz": "Initial focused native44/WASI27-6-11 evidence, first-fullTERM record, final full logs/exit, latest29-7-11 evidence only after terminal receipt"
+  },
+  "rules": [
+    "Do not hash or package live logs before explicit heavy0",
+    "No source/build/tools/Git/README/ledger modifications",
+    "Archive stopped/failed attempts unchanged and separate from final results",
+    "No native RSS, cold replacement or industry leadership claims",
+    "Offline replay reads archived bytes only, never executes producer argv/SO/codec or opens original/tmp paths"
+  ],
+  "schema": "vort.deflate.prepared-fixed.archive-plan.v1"
+}

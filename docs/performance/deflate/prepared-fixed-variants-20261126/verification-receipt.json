@@ -1,0 +1,269 @@
+{
+  "captured_origins_rechecked_after_archive": 5068,
+  "frozen_origins_unchanged": true,
+  "independent_copy": {
+    "copy_bytes_unchanged": true,
+    "copy_path": "/tmp/vort-prepared-variants-copy.2xl4ifwq/package",
+    "copy_readonly": true,
+    "original_path_access_forbidden": true,
+    "package_opened_files": [
+      "README.md",
+      "SHA256SUMS",
+      "archive-bindings.json",
+      "common.tar.gz",
+      "independent_statistics.cpython-310.pyc",
+      "independent_statistics.py",
+      "package_io.cpython-310.pyc",
+      "package_io.py",
+      "provenance.json",
+      "provenance_contracts.cpython-310.pyc",
+      "provenance_contracts.py",
+      "sample_contracts.cpython-310.pyc",
+      "sample_contracts.py",
+      "summary.json",
+      "v2-reserved-sink.tar.gz",
+      "v3-direct-bits.tar.gz",
+      "verify.py"
+    ],
+    "process_and_foreign_library_actions_forbidden": true,
+    "schema": "vort.deflate.prepared-fixed-variants.independent-copy-check.v1",
+    "stdout_sha256": "13be19cb9102a945de7397e97554d8815ea43ab6498022c5809729eda953040c",
+    "verified": true
+  },
+  "normal": {
+    "argv": [
+      "python3",
+      "-B",
+      "verify.py"
+    ],
+    "exit_code": 0,
+    "stderr_bytes": 0,
+    "stdout_sha256": "13be19cb9102a945de7397e97554d8815ea43ab6498022c5809729eda953040c"
+  },
+  "normal_and_copy_output_identical": true,
+  "schema": "vort.deflate.prepared-fixed-variants.verification-receipt.v1",
+  "scope": "Archive/hash/data-only replay; no codec, stored argv, producer, foreign reference executable/SO, build, or timing rerun",
+  "tamper_checks": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "missing raw sample",
+        "reason": "Incomplete raw or chronology capture",
+        "rejected": true
+      },
+      {
+        "case": "excluded max_candidates=12 policy",
+        "reason": "Predeclared performance policy differs",
+        "rejected": true
+      },
+      {
+        "case": "changed public wire byte",
+        "reason": "Public/golden wire bytes differ",
+        "rejected": true
+      },
+      {
+        "case": "erased V3 verifier failure",
+        "reason": "Historical verifier group-label failure differs",
+        "rejected": true
+      }
+    ]
+  },
+  "utc": "2026-11-26T10:20:51.173718+00:00",
+  "verification": {
+    "archive_members": {
+      "common.tar.gz": 19,
+      "v2-reserved-sink.tar.gz": 2517,
+      "v3-direct-bits.tar.gz": 2533
+    },
+    "historical_failures": {
+      "previous_rejected_epoch_bindings_verified": true,
+      "v3_corrected_verifier_exit_code": 0,
+      "v3_group_label_verifier_failure_preserved": true,
+      "v3_permission_failure_preserved": true,
+      "v3_successful_samples_in_failed_launch": 0
+    },
+    "schema": "vort.deflate.prepared-fixed-variants.offline-verification.v1",
+    "scope": "Package bytes only; archives not extracted; no stored argv, producer, foreign executable/SO, codec, build or timing rerun",
+    "variants": {
+      "v2-reserved-sink": {
+        "accepted": false,
+        "failed_floor_rows": [
+          {
+            "family": "prepared",
+            "paired_95ci": [
+              0.8482170746688049,
+              0.8679516500510069
+            ],
+            "role": "small_control",
+            "row": "mozilla.256",
+            "speedup_geomean": 0.8580276275040492
+          },
+          {
+            "family": "prepared",
+            "paired_95ci": [
+              0.8935375054465797,
+              0.9084312950295986
+            ],
+            "role": "small_control",
+            "row": "nci.256",
+            "speedup_geomean": 0.9014009925031369
+          },
+          {
+            "family": "prepared",
+            "paired_95ci": [
+              0.8320339362247952,
+              0.8396287332124257
+            ],
+            "role": "small_control",
+            "row": "ooffice.256",
+            "speedup_geomean": 0.8360118787871615
+          },
+          {
+            "family": "legacy",
+            "paired_95ci": [
+              0.9555123917020208,
+              0.990098903486742
+            ],
+            "role": "legacy_control",
+            "row": "mr.65536",
+            "speedup_geomean": 0.9722048650877914
+          },
+          {
+            "family": "legacy",
+            "paired_95ci": [
+              0.9612149892156657,
+              0.9926770584959675
+            ],
+            "role": "legacy_control",
+            "row": "reymont.65536",
+            "speedup_geomean": 0.9755927496702997
+          }
+        ],
+        "memory_scope": "Timing only; zero heap contracts are separate recorded tests; no measured RSS or memory-performance acceptance",
+        "preflight": {
+          "exact_wire_bytes_equal": true,
+          "external_process_records": 264,
+          "new_wires": 66,
+          "python_decode_receipts": 66,
+          "scope": "Captured strict decoder receipts checked as data; no codec was rerun",
+          "three_side_wires": 99
+        },
+        "source_and_builds": {
+          "build_elf_probe_and_codegen_bindings_verified": true,
+          "old_source_files": 2200,
+          "old_source_snapshot_verified": true,
+          "scope": "Source bytes, stored compiler receipts and codegen identity; no disassembler/compiler executed",
+          "source_before_after_equal": true,
+          "source_files": 2216,
+          "source_manifest_sha256": "95ab85d424224ada57cd3208e2565a3392feaacdf7f499c0cc54f49639be3ee6"
+        },
+        "statistics": {
+          "accepted": false,
+          "flags": {
+            "all_row_floor_pass": false,
+            "exact_wire_pass": true,
+            "paired_ci_pass": true,
+            "target_geomean_pass": true
+          },
+          "prepared_target_geomean": 1.1810077856704524,
+          "prepared_target_paired_95ci": [
+            1.1766280264326079,
+            1.1861752109592463
+          ],
+          "records": 540,
+          "rows": 45,
+          "scope": "Independent data-only ratios and deterministic paired bootstrap; no producer code evaluated",
+          "targets": 24
+        },
+        "terminal_receipts": {
+          "actual_wasi_exit_code": 0,
+          "native_tests": 30,
+          "raw_sha256": "c9404952d6f4ca92c9903cfc74ee9e0ab5ba1875f0b383fa3ee0188cc2b77aa4",
+          "sample_exit_code": 0,
+          "scope": "Recorded variant prerequisite gates; no new full-source adoption gate or memory/RSS measurement",
+          "wasm_module_hash_verified": true
+        }
+      },
+      "v3-direct-bits": {
+        "accepted": false,
+        "failed_floor_rows": [
+          {
+            "family": "legacy",
+            "paired_95ci": [
+              0.9686024157993427,
+              0.9876351204535181
+            ],
+            "role": "legacy_control",
+            "row": "mozilla.65536",
+            "speedup_geomean": 0.97768344691543
+          },
+          {
+            "family": "legacy",
+            "paired_95ci": [
+              0.9440485076606165,
+              0.9872193057747084
+            ],
+            "role": "legacy_control",
+            "row": "mr.65536",
+            "speedup_geomean": 0.9656389684105446
+          },
+          {
+            "family": "legacy",
+            "paired_95ci": [
+              0.9629297584728541,
+              0.9775704693621309
+            ],
+            "role": "legacy_control",
+            "row": "reymont.65536",
+            "speedup_geomean": 0.9706201427550728
+          }
+        ],
+        "memory_scope": "Timing only; zero heap contracts are separate recorded tests; no measured RSS or memory-performance acceptance",
+        "preflight": {
+          "exact_wire_bytes_equal": true,
+          "external_process_records": 264,
+          "new_wires": 66,
+          "python_decode_receipts": 66,
+          "scope": "Captured strict decoder receipts checked as data; no codec was rerun",
+          "three_side_wires": 99
+        },
+        "source_and_builds": {
+          "build_elf_probe_and_codegen_bindings_verified": true,
+          "old_source_files": 2200,
+          "old_source_snapshot_verified": true,
+          "scope": "Source bytes, stored compiler receipts and codegen identity; no disassembler/compiler executed",
+          "source_before_after_equal": true,
+          "source_files": 2216,
+          "source_manifest_sha256": "ee14f0e70f8ddb09f8971858edb018a3ac0369ab8b683a6a3c0b57d9a9f473e2"
+        },
+        "statistics": {
+          "accepted": false,
+          "flags": {
+            "all_row_floor_pass": false,
+            "exact_wire_pass": true,
+            "paired_ci_pass": true,
+            "target_geomean_pass": true
+          },
+          "prepared_target_geomean": 1.2566460532042603,
+          "prepared_target_paired_95ci": [
+            1.2539276432004445,
+            1.259706593295646
+          ],
+          "records": 540,
+          "rows": 45,
+          "scope": "Independent data-only ratios and deterministic paired bootstrap; no producer code evaluated",
+          "targets": 24
+        },
+        "terminal_receipts": {
+          "actual_wasi_exit_code": 0,
+          "native_tests": 30,
+          "raw_sha256": "67e9dfda4528d2d6c7843f85def1519d9f355819d5accf9ab02f406c7b162f2d",
+          "sample_exit_code": 0,
+          "scope": "Recorded variant prerequisite gates; no new full-source adoption gate or memory/RSS measurement",
+          "wasm_module_hash_verified": true
+        }
+      }
+    },
+    "verified": true
+  }
+}

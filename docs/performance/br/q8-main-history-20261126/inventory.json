@@ -1,0 +1,83 @@
+{
+  "archive_member_counts": {
+    "diagnostic.tar.gz": 81,
+    "sources.tar.gz": 4703,
+    "timing.tar.gz": 956
+  },
+  "archives": {
+    "diagnostic.tar.gz": {
+      "bytes": 5126355,
+      "sha256": "f7c0ffb41e759bdb389843f4b53f07a393b5408c77d3aed0e8765a9f334dc8ee"
+    },
+    "sources.tar.gz": {
+      "bytes": 15522979,
+      "sha256": "9420a2a5bbda9d176695e9b971579a20413b8239c5f32ac44e5f7d8f322f2658"
+    },
+    "timing.tar.gz": {
+      "bytes": 8851499,
+      "sha256": "b2fd9afc2b408ecc3b102dca6c0eebaa4eac29045fb18128186b1e582c1516c7"
+    }
+  },
+  "payload_files": {
+    "README.md": {
+      "bytes": 4946,
+      "sha256": "b19c6656af8458def34020d23dfcc24ead0998ad730205dfe1e5cf6fa891fe73"
+    },
+    "archive-bindings.json": {
+      "bytes": 1559965,
+      "sha256": "7ec54632b45962dc8b767106a6bbb55c2b9c35ac8da4ac573f17ab0612a1ccfd"
+    },
+    "diagnostic.tar.gz": {
+      "bytes": 5126355,
+      "sha256": "f7c0ffb41e759bdb389843f4b53f07a393b5408c77d3aed0e8765a9f334dc8ee"
+    },
+    "diagnostic_contracts.py": {
+      "bytes": 15555,
+      "sha256": "c4f865cdf087e8bf3e6e6dabc44dee29abc314778c72b28e3f33177f8509f7c7"
+    },
+    "independent_statistics.py": {
+      "bytes": 27168,
+      "sha256": "0711233305b1d6162059f3dbabd21dec78836b2869fb849377298fbdb6120dc5"
+    },
+    "package_io.py": {
+      "bytes": 2775,
+      "sha256": "b5a267d99ac2099ccbb0864e3f024a84ce9d0b1d6fcd863d528310b77f554998"
+    },
+    "provenance.json": {
+      "bytes": 911,
+      "sha256": "e1b2db1e7e54c0ab5257f6e4047aad26f3e71c821fb30618d3c338627faf0818"
+    },
+    "root_profile_gate.py": {
+      "bytes": 19887,
+      "sha256": "9095231b49e124632674804493af96a59b2c62f03a053e88d6fdde97360b5e08"
+    },
+    "sources.tar.gz": {
+      "bytes": 15522979,
+      "sha256": "9420a2a5bbda9d176695e9b971579a20413b8239c5f32ac44e5f7d8f322f2658"
+    },
+    "statistics_replay.py": {
+      "bytes": 3285,
+      "sha256": "7dcc9e2676d4d8bba606fc81aa7431805ef5a0dde83c09090dae2c2e61857c63"
+    },
+    "summary.json": {
+      "bytes": 1998,
+      "sha256": "20f42b89fd4827b4fc9ef8fb70992ec9d71f347e9a526ac69391e2d8c261c30b"
+    },
+    "timing.tar.gz": {
+      "bytes": 8851499,
+      "sha256": "b2fd9afc2b408ecc3b102dca6c0eebaa4eac29045fb18128186b1e582c1516c7"
+    },
+    "timing_contracts.py": {
+      "bytes": 13425,
+      "sha256": "ebbbceef03b287b76b8506ca2ba14ceb42861473c4dbea5994479bf13a9e614d"
+    },
+    "verify.py": {
+      "bytes": 2390,
+      "sha256": "60a6488a7c4cefb4de3a67d8199dd751e90b080b0af65149b6db4827923cc904"
+    }
+  },
+  "receipt_checksum_policy": "Final SHA256SUMS covers this inventory, verification-receipt and every package file except SHA256SUMS itself",
+  "schema": "vort.brotli.q8-main-history.sealed-inventory.v1",
+  "scope": "Compiled source2200+1690, preserved timing90pairs/180calls and diagnostic36trace, independent and Root gate receipts; explicit source exclusions in sources.tar.gz:source-closure-audit.json",
+  "sealed": true
+}

@@ -1,0 +1,64 @@
+{
+  "source_manifest_files": 2216,
+  "native_ReleaseSafe_tests": 30,
+  "WASI_ReleaseSafe_tests": 30,
+  "public_wire_checks": 66,
+  "external_processes": 264,
+  "source_epoch": "/tmp/vort-deflate-prepared-reserved-sink.35478nnr/performance",
+  "accepted": false,
+  "target_geomean": 1.1810077856704524,
+  "target_paired_95ci": [
+    1.1766280264326079,
+    1.1861752109592463
+  ],
+  "failed_rows": [
+    {
+      "family": "prepared",
+      "row": "mozilla.256",
+      "speedup_geomean": 0.8580276275040492,
+      "paired_95ci": [
+        0.8482170746688049,
+        0.8679516500510069
+      ]
+    },
+    {
+      "family": "prepared",
+      "row": "nci.256",
+      "speedup_geomean": 0.9014009925031369,
+      "paired_95ci": [
+        0.8935375054465797,
+        0.9084312950295986
+      ]
+    },
+    {
+      "family": "prepared",
+      "row": "ooffice.256",
+      "speedup_geomean": 0.8360118787871615,
+      "paired_95ci": [
+        0.8320339362247952,
+        0.8396287332124257
+      ]
+    },
+    {
+      "family": "legacy",
+      "row": "mr.65536",
+      "speedup_geomean": 0.9722048650877914,
+      "paired_95ci": [
+        0.9555123917020208,
+        0.990098903486742
+      ]
+    },
+    {
+      "family": "legacy",
+      "row": "reymont.65536",
+      "speedup_geomean": 0.9755927496702997,
+      "paired_95ci": [
+        0.9612149892156657,
+        0.9926770584959675
+      ]
+    }
+  ],
+  "raw_records": 540,
+  "mainline_adoption": false,
+  "scope": "Separate frozen reserved emitter screen. Original rejected source/data retained; no retries or filtering. New full source gate not complete."
+}

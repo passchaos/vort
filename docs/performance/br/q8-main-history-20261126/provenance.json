@@ -1,0 +1,15 @@
+{
+  "independent_statistics": {
+    "origin": "/tmp/vort-q8-main-ab.cHiG58/independent-verify.py",
+    "sha256": "0711233305b1d6162059f3dbabd21dec78836b2869fb849377298fbdb6120dc5",
+    "used_surface": "reduce_statistics(pairs,sizes) and data comparison helpers only; original main/verify_epoch never run"
+  },
+  "path_policy": "Captured original paths used only as string keys; no open/stat/read or process execution at original paths",
+  "root_gate": {
+    "origin": "/tmp/vort-q8-root-gate-validation.qe5zzmur/quality_profile_gate.py",
+    "sha256": "9095231b49e124632674804493af96a59b2c62f03a053e88d6fdde97360b5e08",
+    "used_surface": "validate(report) with package-memory Path adapter; original main never run"
+  },
+  "schema": "vort.brotli.q8-main-history.verifier-provenance.v1",
+  "scope_exclusions": "No new header-opportunity experiment, old sealed package edits or repo production/ledger changes"
+}

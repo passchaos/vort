@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/tmp/vort-prepared-fixed-independent-copy.5jh7knzf/verify.py",
+    "--root",
+    "/tmp/vort-prepared-fixed-independent-copy.5jh7knzf"
+  ],
+  "cwd": "/tmp",
+  "source_package": "/home/passchaos/project-z/vort/docs/performance/deflate/prepared-fixed-20261126",
+  "copy_root": "/tmp/vort-prepared-fixed-independent-copy.5jh7knzf",
+  "started_utc": "2026-11-26T06:52:42.071180+00:00",
+  "completed_utc": "2026-11-26T06:52:47.093782+00:00",
+  "exit_code": 1,
+  "scope": "Independent relocated package bytes only; no producer/codec/SO or original tmp execution"
+}

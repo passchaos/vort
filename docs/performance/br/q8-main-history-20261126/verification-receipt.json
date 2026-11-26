@@ -1,0 +1,199 @@
+{
+  "clean_copy": {
+    "copy_bytes_unchanged": true,
+    "copy_path": "/tmp/vort-q8-main-history-copy.m5kvfi8q/package",
+    "copy_readonly": true,
+    "original_path_access_forbidden": true,
+    "package_opened_files": [
+      "README.md",
+      "SHA256SUMS",
+      "archive-bindings.json",
+      "diagnostic.tar.gz",
+      "diagnostic_contracts.cpython-310.pyc",
+      "diagnostic_contracts.py",
+      "independent_statistics.cpython-310.pyc",
+      "independent_statistics.py",
+      "package_io.cpython-310.pyc",
+      "package_io.py",
+      "provenance.json",
+      "root_profile_gate.cpython-310.pyc",
+      "root_profile_gate.py",
+      "sources.tar.gz",
+      "statistics_replay.cpython-310.pyc",
+      "statistics_replay.py",
+      "summary.json",
+      "timing.tar.gz",
+      "timing_contracts.cpython-310.pyc",
+      "timing_contracts.py",
+      "verify.py"
+    ],
+    "process_and_foreign_library_actions_forbidden": true,
+    "schema": "vort.brotli.q8-main-history.independent-copy-check.v1",
+    "stdout_sha256": "05ae185e45e307b619c9bf9b827195bcddf5f93c4d7c8eb53b6307e6dc99c82b",
+    "verified": true
+  },
+  "frozen_origin_files_rechecked_after_archive": 5714,
+  "frozen_source_and_raw_bytes_unchanged": true,
+  "normal": {
+    "actual_exit_code": 0,
+    "argv": [
+      "python3",
+      "-B",
+      "verify.py"
+    ],
+    "stderr_bytes": 0,
+    "stdout_sha256": "05ae185e45e307b619c9bf9b827195bcddf5f93c4d7c8eb53b6307e6dc99c82b"
+  },
+  "normal_and_clean_copy_output_identical": true,
+  "schema": "vort.brotli.q8-main-history.verification-receipt.v1",
+  "scope": "Archive/hash and package-only data replay; no codec, foreign executable/SO, compiler, producer or timing rerun",
+  "shared_diagnostic_src_files_rechecked": 2200,
+  "tamper_checks": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "missing timed process raw",
+        "reason": "'runs/explicit16-00-dickens-current.json'",
+        "rejected": true
+      },
+      {
+        "case": "changed timed length mix",
+        "reason": "Timed length/mix contract differs",
+        "rejected": true
+      },
+      {
+        "case": "changed complete initial wire",
+        "reason": "Complete initial wire/decode receipt differs",
+        "rejected": true
+      },
+      {
+        "case": "missing diagnostic event",
+        "reason": "missing event",
+        "rejected": true
+      },
+      {
+        "case": "invalid complete proposal reuse count",
+        "reason": "invalid single-call proposal reuse count",
+        "rejected": true
+      },
+      {
+        "case": "prefix count extrapolated as full count",
+        "reason": "Context prefix/raw accounting differs",
+        "rejected": true
+      },
+      {
+        "case": "elapsed ratio direction inverted",
+        "reason": "('package matrix and deterministic CI[0].paired_geomean_ns_current_over_old', 0.31219065177700167, 3.203170864687844)",
+        "rejected": true
+      }
+    ]
+  },
+  "utc": "2026-11-26T10:38:59.902022+00:00",
+  "verification": {
+    "archive_members": {
+      "diagnostic.tar.gz": 81,
+      "sources.tar.gz": 4703,
+      "timing.tar.gz": 956
+    },
+    "diagnostic": {
+      "Root_gate_replay": true,
+      "all_events_complete": true,
+      "context_details_truncated_runs": 18,
+      "evaluation_attempts": 1746,
+      "fresh_main_initial_wire_bytes_equal_to_saved_diagnostic_gold": true,
+      "full_context_reuse_count_for_truncated_runs": null,
+      "lost_wire_materializations": 993,
+      "outer_ns": 4378976984,
+      "profile_sha256": "42a5c8596fec40d8fe5d01775d06a7e695c4b7ad39d97b3b8a5a075071398b1a",
+      "proposal_reuses_observed_prefix": 87,
+      "scope": "Diagnostics only; prefix reuse87 observed; no full-count extrapolation, memory-traffic claim or throughput acceptance",
+      "stage_exclusive_ns": {
+        "context_proposals": 1323801138,
+        "distance_parameters": 40332216,
+        "evaluate": 419874289,
+        "lazy_commands": 8277810,
+        "lazy_parse": 88435143,
+        "optimal_commands": 19623355,
+        "optimal_parse": 1000709287,
+        "other": 358166639,
+        "preferred_context": 2541660,
+        "recent_distance_scan": 17146416,
+        "selection": 5119,
+        "split_planning": 377299694,
+        "wire": 722728845
+      },
+      "successful_wire_materializations": 1029,
+      "trace_runs": 36,
+      "unaccounted_ns": 35373
+    },
+    "gate_receipts": {
+      "Root_actual_main_gate_exit": 0,
+      "original_gate_exit": 1,
+      "root_project_steps": 3,
+      "root_report_tests": 24,
+      "root_wire_count_tests": 11,
+      "scope": "Stored actual test/gate receipts and byte-identical frozen gate replay; no test/build/codec rerun",
+      "tmp_adapter_tests": 6
+    },
+    "independent_statistics": {
+      "all_12_primary_rows_slower": true,
+      "all_90_pairs_current_slower": true,
+      "host_annotation": {
+        "actual_completed_utc": "2026-11-26T10:24:50.368971+00:00",
+        "actual_span_seconds": 34.960026025772095,
+        "actual_started_utc": "2026-11-26T10:24:15.408945+00:00",
+        "benchmark_cpu": 2,
+        "governor": "powersave",
+        "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+        "inherited_summary_host_scope_unmodified": "Pending root quiet-host H0 gate before sampling; source A/B on temporarily reserved i7-10700K CPU2, not dedicated-host or competitor acceptance.",
+        "inherited_summary_statistics_scope_unmodified": "Descriptive paired bootstrap, 20000 draws, 95 percent percentile interval, stratified by AB/BA. Matrix resamples shared primary-round blocks. Small sample on a non-quiet host; not an acceptance gate or an industry ranking.",
+        "interpretation": "Root authorized after the recorded HEAVY=0 boundary and the exact old/main campaign completed on temporarily reserved development-host CPU2. Snapshots and filtered process observations do not establish continuous absence of interference. Fixed-scope historical source measurements, not industry leadership, dedicated-host acceptance or a controlled attribution to an intervening commit.",
+        "kernel": "6.8.0-79-generic",
+        "root_HEAVY_at_release": 0,
+        "root_release_utc": "2026-11-26T10:23:58.929783+00:00",
+        "root_relevant_processes_at_release": [],
+        "runner_load1_range": [
+          0.33,
+          0.69
+        ],
+        "runner_snapshot_count": 92,
+        "runner_snapshots_with_collector_matches": 0,
+        "smt_siblings": "2,10"
+      },
+      "independent_receipt_and_raw_hashes_verified": true,
+      "matrix": {
+        "geomean_encoded_bytes_current_over_old": 0.9565808633658663,
+        "lane": "explicit16",
+        "paired_geomean_ns_current_over_old": 3.203170864687844,
+        "paired_round_block_bootstrap_95pct_ci": [
+          3.184225443602609,
+          3.2222290067428885
+        ],
+        "primary_rounds": 6,
+        "rows": 12
+      },
+      "pairs": 90,
+      "ratio_direction": "current elapsed / exact-old elapsed; above1 means current is slower",
+      "scope": "Archimedes pure data reducer; no producer import/eval, codec, library or timing rerun",
+      "timed_calls": 180
+    },
+    "performance_acceptance": "Not established; historical regression observation and separate diagnostics",
+    "schema": "vort.brotli.q8-main-history.offline-verification.v1",
+    "scope": "Package bytes only, archives not extracted; no stored argv, producer, codec, foreign executable/SO, compiler or timing run",
+    "timing_capture": {
+      "analysis_actual_exit_code": 0,
+      "complete_initial_wires": 24,
+      "pairs": 90,
+      "root_HEAVY0_authorization_verified": true,
+      "sampling_actual_exit_code": 0,
+      "sampling_wall_seconds": 34.960026,
+      "scope": "Allocating public encode/mix/free; timed length/mix only; captured pinned initial-wire decode, no codec rerun",
+      "source_files": {
+        "current": 2200,
+        "old_exact": 1690
+      },
+      "timed_calls": 180
+    },
+    "verified": true
+  }
+}

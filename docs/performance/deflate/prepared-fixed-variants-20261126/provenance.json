@@ -1,0 +1,19 @@
+{
+  "frozen_input_roots": {
+    "v2-reserved-sink": "/tmp/vort-deflate-prepared-reserved-sink.35478nnr",
+    "v3-direct-bits": "/tmp/vort-deflate-prepared-direct-bits.lhcqhfdu"
+  },
+  "heavy_policy": "Archival/hash/statistical replay reported as HEAVY=1; no codec or timing reruns",
+  "historical_v3_failures": [
+    "performance/launch-failure-permissions/",
+    "performance/verification-group-name-failure/",
+    "copy-failure.json"
+  ],
+  "independent_statistics": {
+    "copy": "verbatim; original package not modified",
+    "origin": "/home/passchaos/project-z/vort/docs/performance/deflate/prepared-fixed-20261126/independent_statistics.py",
+    "sha256": "8ee4b41bce09b5758b73876071d09aec234c4b37a7b0c6a2590695a1c3508031"
+  },
+  "paths_policy": "Original paths in captured records and bindings are provenance strings only; offline verifier opens only package top-level files and archive bytes",
+  "schema": "vort.deflate.prepared-fixed-variants.provenance.v1"
+}

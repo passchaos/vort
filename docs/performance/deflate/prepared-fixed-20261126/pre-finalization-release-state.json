@@ -1,0 +1,77 @@
+{
+  "base_head": "8ccd54a59da850da724cc4d6ca79a727c659889e",
+  "benchmark_root": "/tmp/vort-deflate-prepared-bench.20261126T022046Z",
+  "decision": "rejected-performance-floor",
+  "expected_final_full_exit_receipt": "final-full-exit.json",
+  "final_full_build_mode": "Full -Doptimize=ReleaseSafe command terminal exit0; explicit per-target modes retained in full log",
+  "final_full_command": "final-full.command.json",
+  "final_full_exit_code": 0,
+  "first_full_interrupted_exit": 143,
+  "first_full_interrupted_session": 89296,
+  "formal_plan_pairs_per_row": 6,
+  "formal_plan_rows": 45,
+  "frozen_source_count": 2214,
+  "frozen_source_manifest": "final-source.json",
+  "heavy0_confirmed": true,
+  "independent_math_interface": "Root-owned independent_statistics.verify(manifest, records, expected, exact_wire_pass)",
+  "independent_statistics_owner": "Root; not edited by archive agent",
+  "latest_expected_focused_counts": [
+    29,
+    7,
+    11
+  ],
+  "latest_full_session_live": null,
+  "latest_native_budget_original_tool_payload": "latest-native-budget.original-tool-result.json",
+  "latest_native_budget_payload_source": "Existing original chunk24e5b7 response; not reconstructed from saved stdout",
+  "latest_native_build_mode": "Debug: direct zig test default, no -O argument",
+  "latest_native_evidence_status": "Completed existing command/exit metadata; packed output verification pending HEAVY0",
+  "latest_native_observed_counts": {
+    "budget": 11,
+    "matcher": 7,
+    "prepared": 29
+  },
+  "latest_native_output_capture": {
+    "budget": "Combined original tool output stored in .stdout; no independent stderr attribution",
+    "matcher": "Combined original tool output stored in .stdout; no independent stderr attribution",
+    "prepared": "Exact completed CommandExecution stdout/stderr fields"
+  },
+  "latest_native_reexecuted": false,
+  "latest_wasi_build_mode": "ReleaseSafe: -Doptimize=ReleaseSafe",
+  "latest_wasi_counts_by_suite": {
+    "budget": 11,
+    "matcher": 7,
+    "prepared": 29
+  },
+  "latest_wasi_execution_order": [
+    11,
+    7,
+    29
+  ],
+  "latest_wasi_exit_code": 0,
+  "latest_wasi_final_status": "completed-actual-exit0",
+  "latest_wasi_receipt": "latest-wasi-exit.json",
+  "latest_wasi_session": 13260,
+  "merge_allowed": false,
+  "old_wasi_counts": [
+    27,
+    6,
+    11
+  ],
+  "preflight_observed_rows": 33,
+  "preflight_observed_wires": 99,
+  "preflight_old_current_decode_processes": 198,
+  "reader_prepared_sections": [
+    "actual-probe-policy/lz77/capacity/warm/written/timer",
+    "99 C per-record full consumption and terminal status",
+    "raw order/argv/pre-enrichment chronology",
+    "sampling-release after actual final full terminal",
+    "Root independent_statistics.verify integration"
+  ],
+  "sampling_exit_code": 0,
+  "schema": "vort.deflate.prepared-fixed.archive-release.v1",
+  "scope": "All540 raw records retained, no retries/filtering. Target GM and CI pass; two small rows and all12 legacy controls fail0.98 floor. Full source candidate is not approved for production.",
+  "status": "sampling-complete-rejected-awaiting-archive-verification",
+  "timed_samples_observed": 540,
+  "validation_root": "/tmp/vort-deflate-prepared-validation.8po0jy2c",
+  "verification_not_executed": true
+}

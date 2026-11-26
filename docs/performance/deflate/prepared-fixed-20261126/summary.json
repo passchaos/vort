@@ -1,0 +1,1402 @@
+{
+  "actual_final_full_terminal": {
+    "argv": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "check",
+      "check-wasm",
+      "test-deflate-prepared-fixed",
+      "check-deflate-prepared-fixed-wasm",
+      "-Doptimize=ReleaseSafe",
+      "--summary",
+      "all"
+    ],
+    "cwd": "/home/passchaos/project-z/vort",
+    "exit_code": 0,
+    "observed_utc": "2026-11-26T05:56:48+00:00",
+    "prepared_native_ReleaseSafe_counts": {
+      "budget": 11,
+      "matcher": 7,
+      "prepared": 29
+    },
+    "schema": "vort.deflate.prepared-fixed.final-full-terminal.v1",
+    "session_id": 46721,
+    "source": "Actual tools.write_stdin terminal result chunk ce3d53; same original session, no restart",
+    "status": "completed",
+    "stderr_sha256": "00321ff09d3f458235b729d3f087f4d48bd6098b8bac18f5c1b6d4adfc471923",
+    "stdout_sha256": "977bd32d0385572c5953f7a8c6e33522b47664cc2ea4268503d0d03e4bbdff19",
+    "summary": {
+      "steps_succeeded": 428,
+      "steps_total": 428,
+      "tests_passed": 6121,
+      "tests_skipped": 2,
+      "tests_total": 6123
+    }
+  },
+  "actual_sampling_terminal": {
+    "argv": [
+      "/usr/bin/python3",
+      "/tmp/vort-deflate-prepared-bench.20261126T022046Z/campaign.py",
+      "sample"
+    ],
+    "completed_utc": "2026-11-26T06:02:56.822003+00:00",
+    "cwd": "/home/passchaos/project-z/vort",
+    "elapsed_wall_ns": 243245080831,
+    "no_outlier_filtering": true,
+    "no_retries": true,
+    "raw_path": "/tmp/vort-deflate-prepared-bench.20261126T022046Z/samples/raw.jsonl",
+    "raw_records": 540,
+    "returncode": 0,
+    "started_utc": "2026-11-26T05:58:53.577929+00:00",
+    "stderr_path": "/tmp/vort-deflate-prepared-bench.20261126T022046Z/sample.stderr",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_path": "/tmp/vort-deflate-prepared-bench.20261126T022046Z/sample.stdout",
+    "stdout_sha256": "208a8a634772fd05011bba427bcc90a77d6c4c9b8c325345560ec85297df9a6b"
+  },
+  "decision": "rejected-performance-floor",
+  "evidence_integrity_pass": true,
+  "failed_floor_rows": [
+    {
+      "family": "prepared",
+      "floor_pass": false,
+      "input_bytes": 256,
+      "pair_speedups": [
+        0.9548944449324901,
+        0.9703657769883697,
+        0.9649831742059316,
+        0.9746334122675668,
+        0.9808155293396729,
+        0.9618873090024427
+      ],
+      "paired_95ci": [
+        0.9610040589681671,
+        0.9745492497359415
+      ],
+      "role": "small_control",
+      "row": "mozilla.256",
+      "speedup_geomean": 0.9678927434344323
+    },
+    {
+      "family": "prepared",
+      "floor_pass": false,
+      "input_bytes": 256,
+      "pair_speedups": [
+        0.9928012896346843,
+        0.9913010354149521,
+        0.9365982181266084,
+        0.9930336648622199,
+        0.9960703481184955,
+        0.9445223749042481
+      ],
+      "paired_95ci": [
+        0.9560707260971877,
+        0.9936780658020274
+      ],
+      "role": "small_control",
+      "row": "nci.256",
+      "speedup_geomean": 0.9753966109363031
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9194404445472036,
+        0.9482150809153899,
+        0.951264991267655,
+        0.9464467242986886,
+        0.9471185663029866,
+        0.969842371387766
+      ],
+      "paired_95ci": [
+        0.9338565535380832,
+        0.9586694587751934
+      ],
+      "role": "legacy_control",
+      "row": "dickens.65536",
+      "speedup_geomean": 0.9469395929697791
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9473549567821954,
+        0.9677106827803064,
+        0.9885002958585506,
+        0.924434427727425,
+        0.9433594126404607,
+        0.9497911012833183
+      ],
+      "paired_95ci": [
+        0.9384849185711714,
+        0.9704605821953871
+      ],
+      "role": "legacy_control",
+      "row": "mozilla.65536",
+      "speedup_geomean": 0.9533142339827048
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9415433557492465,
+        0.9357882162377157,
+        0.9452989377429714,
+        0.9957593891156942,
+        0.9204713729226957,
+        0.9367543999976922
+      ],
+      "paired_95ci": [
+        0.9307742263013907,
+        0.967102751711833
+      ],
+      "role": "legacy_control",
+      "row": "mr.65536",
+      "speedup_geomean": 0.9456481643098004
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.8908898806832384,
+        0.9426616448475733,
+        0.9505783515618104,
+        0.9560594068710291,
+        0.9555761305337582,
+        0.907628607844729
+      ],
+      "paired_95ci": [
+        0.9121038949488534,
+        0.9527391610520444
+      ],
+      "role": "legacy_control",
+      "row": "nci.65536",
+      "speedup_geomean": 0.9335502258848738
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9666833820509111,
+        0.9745757309108287,
+        0.8772128648308383,
+        0.9492805641576728,
+        0.9443467323010117,
+        0.938600830762874
+      ],
+      "paired_95ci": [
+        0.9130938260025486,
+        0.9629441346125511
+      ],
+      "role": "legacy_control",
+      "row": "ooffice.65536",
+      "speedup_geomean": 0.941243464631752
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9552058673854497,
+        0.954992480293333,
+        0.9826497203414746,
+        0.9888233680492812,
+        0.9266390200918528,
+        0.9775711919057836
+      ],
+      "paired_95ci": [
+        0.9455166316319168,
+        0.9802056636267131
+      ],
+      "role": "legacy_control",
+      "row": "osdb.65536",
+      "speedup_geomean": 0.9640781233620045
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9844584539686948,
+        0.966393753380199,
+        0.9366691019602031,
+        0.9451402522943133,
+        0.9443628504914484,
+        0.9349624926572528
+      ],
+      "paired_95ci": [
+        0.9390700455475944,
+        0.9673282853395215
+      ],
+      "role": "legacy_control",
+      "row": "reymont.65536",
+      "speedup_geomean": 0.9518339124453592
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9399058002240657,
+        0.9472977799947535,
+        0.947424643790769,
+        0.9865862417934561,
+        0.9563677147604704,
+        0.9567175397938991
+      ],
+      "paired_95ci": [
+        0.945476629826632,
+        0.9686116527994861
+      ],
+      "role": "legacy_control",
+      "row": "samba.65536",
+      "speedup_geomean": 0.9556008718748994
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9761795699441392,
+        0.9674361740173849,
+        0.9328408223414824,
+        0.9458227321672347,
+        0.9669930129221781,
+        0.9431126535803551
+      ],
+      "paired_95ci": [
+        0.942744458579947,
+        0.9676086203779035
+      ],
+      "role": "legacy_control",
+      "row": "sao.65536",
+      "speedup_geomean": 0.9552697803863186
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9455275339386778,
+        0.9484150556256783,
+        0.9463641844465746,
+        1.0103274762675916,
+        0.9422454205771416,
+        0.9490893635090134
+      ],
+      "paired_95ci": [
+        0.9448449094890394,
+        0.9781474919297949
+      ],
+      "role": "legacy_control",
+      "row": "webster.65536",
+      "speedup_geomean": 0.9567035163244498
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        1.0138786497226453,
+        0.9473916646420697,
+        0.951806640518859,
+        0.9492325532331234,
+        0.9708667874130998,
+        0.9349798094701184
+      ],
+      "paired_95ci": [
+        0.9442728211862116,
+        0.9843962715681055
+      ],
+      "role": "legacy_control",
+      "row": "x-ray.65536",
+      "speedup_geomean": 0.9610215535790622
+    },
+    {
+      "family": "legacy",
+      "floor_pass": false,
+      "input_bytes": 65536,
+      "pair_speedups": [
+        0.9681109487487671,
+        0.9374646751930005,
+        0.9638814086903364,
+        0.9579788533077077,
+        0.9683431639758271,
+        0.945614888515836
+      ],
+      "paired_95ci": [
+        0.9469819734874871,
+        0.965787088960621
+      ],
+      "role": "legacy_control",
+      "row": "xml.65536",
+      "speedup_geomean": 0.956827966167644
+    }
+  ],
+  "final_validation": {
+    "first_full_interrupted_session": 89296,
+    "first_full_signal": "SIGTERM",
+    "full_counts": {
+      "steps_succeeded": 428,
+      "steps_total": 428,
+      "tests_passed": 6121,
+      "tests_skipped": 2,
+      "tests_total": 6123
+    },
+    "full_exit_code": 0,
+    "full_prepared_native_ReleaseSafe_counts_recorded": {
+      "budget": 11,
+      "matcher": 7,
+      "prepared": 29
+    },
+    "full_session": 46721,
+    "latest_wasi_execution_order": [
+      11,
+      7,
+      29
+    ],
+    "latest_wasi_module_hashes": {
+      "budget": "a70f97fdb0824b821073d20828b94fe6fa7af530f6f21b32bcaa982ca6f0c661",
+      "codec": "50cbcebd28bb79bba305d8f7769b589535e38b6cdf5d270bb4f52036645c81b0",
+      "matcher": "ed551b9047c9f3ccb9617d4de81c6eeaf854b0d147842f0d1668afc1d9575812"
+    },
+    "scope": "Actual same-session full terminal and stdout/stderr hashes; old focused epoch kept separate. Latest direct native tests are Debug; latest WASI and prepared full targets ReleaseSafe, while full per-target build modes remain in original log."
+  },
+  "independent_math": {
+    "accepted": false,
+    "flags": {
+      "all_row_floor_pass": false,
+      "exact_wire_pass": true,
+      "paired_ci_pass": true,
+      "target_geomean_pass": true
+    },
+    "prepared_target_geomean": 1.0833774877307885,
+    "prepared_target_paired_95ci": [
+      1.0800922060379767,
+      1.0865578298764242
+    ],
+    "records": 540,
+    "rows": 45,
+    "scope": "Independent data-only ratios and deterministic paired bootstrap; no producer code evaluated",
+    "targets": 24
+  },
+  "merge_allowed": false,
+  "native": {
+    "budget": {
+      "actual_tests": 11,
+      "build_mode": "Debug (zig test default; no -O)",
+      "capture_scope": "Combined original tool output; .stdout filename does not prove pipe attribution and empty .stderr is a placeholder",
+      "exit_code": 0,
+      "reexecuted": false
+    },
+    "matcher": {
+      "actual_tests": 7,
+      "build_mode": "Debug (zig test default; no -O)",
+      "capture_scope": "Combined original tool output; .stdout filename does not prove pipe attribution and empty .stderr is a placeholder",
+      "exit_code": 0,
+      "reexecuted": false
+    },
+    "prepared": {
+      "actual_tests": 29,
+      "build_mode": "Debug (zig test default; no -O)",
+      "capture_scope": "Exact completed event stdout/stderr fields",
+      "exit_code": 0,
+      "reexecuted": false
+    }
+  },
+  "pack_readiness": true,
+  "preflight": {
+    "C_decode_summary_recorded": true,
+    "C_individual_decode_exit_records_verified": 99,
+    "C_individual_decode_semantics": "All recorded C full input/output counts and terminal status replayed; no C binary executed",
+    "codec_decode_exit_records_verified": 198,
+    "exact_three_side_rows": 33,
+    "python_decode_checks_recorded": 99,
+    "reference_scope": "Recorded Python/C raw inflate version1.2.11 and public old/current decode; no decoder executed offline",
+    "saved_wire_bytes_verified": 99
+  },
+  "producer_math": {
+    "accepted": false,
+    "all_row_floor_pass": false,
+    "exact_wire_pass": true,
+    "gate_predeclared": {
+      "all_target_and_control_min": 0.98,
+      "exact_wire_identity": true,
+      "paired_95ci_excludes_parity": true,
+      "prepared_target_gm_min": 1.03
+    },
+    "paired_ci_pass": true,
+    "prepared_target_geomean": 1.0833774877307885,
+    "prepared_target_paired_95ci": [
+      1.0800922060379767,
+      1.0865578298764242
+    ],
+    "rows": [
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.1018177640646996,
+          1.0100728642080627,
+          0.9905885187270581,
+          1.0172913473322065,
+          1.0077580942356532,
+          1.0245465685035589
+        ],
+        "paired_95ci": [
+          1.0027686847095134,
+          1.0570487135448103
+        ],
+        "role": "target",
+        "row": "dickens.131072",
+        "speedup_geomean": 1.0247427446159754
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0857344319302917,
+          1.122099214617243,
+          1.0843250102428958,
+          1.089909308621385,
+          1.140479392692857,
+          1.0787468399364584
+        ],
+        "paired_95ci": [
+          1.0836241266626025,
+          1.1193706197507953
+        ],
+        "role": "target",
+        "row": "dickens.65536",
+        "speedup_geomean": 1.0999812461482352
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0373937464953973,
+          1.0995170691503278,
+          1.0416946464734451,
+          1.0349434213265079,
+          1.0495188530524386,
+          1.015040136564992
+        ],
+        "paired_95ci": [
+          1.0284491459234553,
+          1.069231056793194
+        ],
+        "role": "target",
+        "row": "mozilla.131072",
+        "speedup_geomean": 1.0460345203235284
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 24576,
+        "pair_speedups": [
+          0.9972036147059212,
+          1.0410075984015963,
+          1.0099258896796741,
+          0.9544970107020401,
+          0.9936188709996833,
+          1.000942843749802
+        ],
+        "paired_95ci": [
+          0.9777032426618609,
+          1.0195300117533894
+        ],
+        "role": "small_control",
+        "row": "mozilla.24576",
+        "speedup_geomean": 0.9992062808901714
+      },
+      {
+        "family": "prepared",
+        "floor_pass": false,
+        "input_bytes": 256,
+        "pair_speedups": [
+          0.9548944449324901,
+          0.9703657769883697,
+          0.9649831742059316,
+          0.9746334122675668,
+          0.9808155293396729,
+          0.9618873090024427
+        ],
+        "paired_95ci": [
+          0.9610040589681671,
+          0.9745492497359415
+        ],
+        "role": "small_control",
+        "row": "mozilla.256",
+        "speedup_geomean": 0.9678927434344323
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 32768,
+        "pair_speedups": [
+          1.1440929145293661,
+          1.1554293630752157,
+          1.1434368539814295,
+          1.153900550758637,
+          1.1142169806759137,
+          1.1344629563428772
+        ],
+        "paired_95ci": [
+          1.1289482014905368,
+          1.1510199220911457
+        ],
+        "role": "small_control",
+        "row": "mozilla.32768",
+        "speedup_geomean": 1.1408386493694238
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.087858779781116,
+          1.1051125040090832,
+          1.0985838663897352,
+          1.1059688620206265,
+          1.0780327494494095,
+          1.1372975753486427
+        ],
+        "paired_95ci": [
+          1.0881261082380727,
+          1.1181531916181566
+        ],
+        "role": "target",
+        "row": "mozilla.65536",
+        "speedup_geomean": 1.1019880026541948
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          0.9670023809065822,
+          1.0110063753165583,
+          1.0152297747734444,
+          1.0130015445457616,
+          0.9808416315094872,
+          1.037135171669748
+        ],
+        "paired_95ci": [
+          0.984464273964798,
+          1.0213954131632144
+        ],
+        "role": "target",
+        "row": "mr.131072",
+        "speedup_geomean": 1.003764173748058
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.253551438973545,
+          1.221325381914143,
+          1.1622929869497285,
+          1.1661760901847888,
+          1.1633049432006002,
+          1.1919272404453018
+        ],
+        "paired_95ci": [
+          1.1681681919852054,
+          1.2223623900575573
+        ],
+        "role": "target",
+        "row": "mr.65536",
+        "speedup_geomean": 1.1926127151012584
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0623357087898209,
+          1.0688152756296516,
+          1.0656458931214408,
+          1.0777986971863402,
+          1.0626194100208377,
+          1.0907607355567126
+        ],
+        "paired_95ci": [
+          1.0641065020288678,
+          1.0801442608762122
+        ],
+        "role": "target",
+        "row": "nci.131072",
+        "speedup_geomean": 1.071281751518248
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 24576,
+        "pair_speedups": [
+          1.0684136852369286,
+          1.062172356141886,
+          1.0512238807890117,
+          1.0755138934224007,
+          1.0730102034665296,
+          1.073116926884913
+        ],
+        "paired_95ci": [
+          1.059919021257136,
+          1.0731116402003422
+        ],
+        "role": "small_control",
+        "row": "nci.24576",
+        "speedup_geomean": 1.0672088781061118
+      },
+      {
+        "family": "prepared",
+        "floor_pass": false,
+        "input_bytes": 256,
+        "pair_speedups": [
+          0.9928012896346843,
+          0.9913010354149521,
+          0.9365982181266084,
+          0.9930336648622199,
+          0.9960703481184955,
+          0.9445223749042481
+        ],
+        "paired_95ci": [
+          0.9560707260971877,
+          0.9936780658020274
+        ],
+        "role": "small_control",
+        "row": "nci.256",
+        "speedup_geomean": 0.9753966109363031
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 32768,
+        "pair_speedups": [
+          1.4559891940723702,
+          1.4522475201811644,
+          1.434922243407633,
+          1.4488699114471508,
+          1.4742399664927182,
+          1.4508700749051426
+        ],
+        "paired_95ci": [
+          1.4437213655539043,
+          1.4629710271940266
+        ],
+        "role": "small_control",
+        "row": "nci.32768",
+        "speedup_geomean": 1.4528101881603042
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.3648443716800922,
+          1.3657404118749594,
+          1.3567614603356328,
+          1.3356331533109245,
+          1.3199530455465134,
+          1.3011201861132915
+        ],
+        "paired_95ci": [
+          1.3205687409620643,
+          1.3588834604476951
+        ],
+        "role": "target",
+        "row": "nci.65536",
+        "speedup_geomean": 1.3404572870493687
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          0.9806751388527609,
+          1.048159757354952,
+          1.0169064063209179,
+          1.0005433852886152,
+          1.052781392298052,
+          0.9962008552892443
+        ],
+        "paired_95ci": [
+          0.9951231816733225,
+          1.0371140038850806
+        ],
+        "role": "target",
+        "row": "ooffice.131072",
+        "speedup_geomean": 1.0155292677188916
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 24576,
+        "pair_speedups": [
+          1.0259007013592492,
+          1.025785621205081,
+          1.036906568330608,
+          1.031351531033118,
+          1.0619619984097883,
+          1.0212834986906558
+        ],
+        "paired_95ci": [
+          1.0252260863642217,
+          1.045771008105734
+        ],
+        "role": "small_control",
+        "row": "ooffice.24576",
+        "speedup_geomean": 1.0337779421407078
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 256,
+        "pair_speedups": [
+          0.9787382329669271,
+          0.9885706251731746,
+          0.9753892643568801,
+          0.9723708847305653,
+          0.9830880509355687,
+          0.989859212632955
+        ],
+        "paired_95ci": [
+          0.9762172281500466,
+          0.9864389346821374
+        ],
+        "role": "small_control",
+        "row": "ooffice.256",
+        "speedup_geomean": 0.9813147724123392
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 32768,
+        "pair_speedups": [
+          1.1116737041437827,
+          1.10266567620429,
+          1.1201500715596917,
+          1.0728100519387178,
+          1.114896524585355,
+          1.0986454498559028
+        ],
+        "paired_95ci": [
+          1.089827314379582,
+          1.11415656115708
+        ],
+        "role": "small_control",
+        "row": "ooffice.32768",
+        "speedup_geomean": 1.1033637872319235
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0694655629085066,
+          1.0581744411599647,
+          1.0734605891404119,
+          1.013301491567571,
+          1.0468927123375154,
+          1.0140534288877756
+        ],
+        "paired_95ci": [
+          1.0264624830085798,
+          1.064447698071078
+        ],
+        "role": "target",
+        "row": "ooffice.65536",
+        "speedup_geomean": 1.0456073935750863
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0248445456957869,
+          1.043008761164551,
+          1.0428173932786844,
+          1.0299130710482065,
+          1.0095893024036784,
+          1.028539066968105
+        ],
+        "paired_95ci": [
+          1.0205772047950799,
+          1.0383305558973095
+        ],
+        "role": "target",
+        "row": "osdb.131072",
+        "speedup_geomean": 1.0297221461455197
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0939928518245599,
+          1.1001586660738882,
+          1.061305482627294,
+          1.0550144623187256,
+          1.0990442687974082,
+          1.0815608529539134
+        ],
+        "paired_95ci": [
+          1.0668749427284543,
+          1.0956396587572377
+        ],
+        "role": "target",
+        "row": "osdb.65536",
+        "speedup_geomean": 1.0816974248138498
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          0.9867325618537459,
+          0.9630664703062745,
+          1.0404177867595996,
+          0.9956582402051493,
+          1.0224019518682486,
+          1.0398606417435614
+        ],
+        "paired_95ci": [
+          0.9848625277452864,
+          1.0297261328269092
+        ],
+        "role": "target",
+        "row": "reymont.131072",
+        "speedup_geomean": 1.0076161019582321
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.1936402129391797,
+          1.1238608740493001,
+          1.135127945749676,
+          1.1789468800934717,
+          1.1426297636265348,
+          1.094324619834128
+        ],
+        "paired_95ci": [
+          1.1182163841098767,
+          1.1713878063297547
+        ],
+        "role": "target",
+        "row": "reymont.65536",
+        "speedup_geomean": 1.1442724931956896
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0330379895820636,
+          1.01834423258765,
+          1.0348813157341794,
+          1.0576716412238019,
+          1.0188925794095676,
+          1.041136904716576
+        ],
+        "paired_95ci": [
+          1.023798386587777,
+          1.04455158977979
+        ],
+        "role": "target",
+        "row": "samba.131072",
+        "speedup_geomean": 1.0339068782186358
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0858533157595787,
+          1.1002602564124484,
+          1.1032689231877253,
+          1.1025681055500167,
+          1.1207487730927397,
+          1.1333493114858657
+        ],
+        "paired_95ci": [
+          1.0963183018573182,
+          1.1205126049832985
+        ],
+        "role": "target",
+        "row": "samba.65536",
+        "speedup_geomean": 1.1075692997230555
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0302039035467472,
+          1.0433323274002477,
+          1.0232579381517082,
+          0.9940399409492715,
+          1.033990596393095,
+          1.0453147952688884
+        ],
+        "paired_95ci": [
+          1.0132761470027511,
+          1.0402312198723243
+        ],
+        "role": "target",
+        "row": "sao.131072",
+        "speedup_geomean": 1.0282129827173176
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0571921711246572,
+          1.0279726554090727,
+          1.0724460934496314,
+          1.061468979304001,
+          1.015726003732,
+          1.0753670944363043
+        ],
+        "paired_95ci": [
+          1.0331888610536284,
+          1.0685398758546483
+        ],
+        "role": "target",
+        "row": "sao.65536",
+        "speedup_geomean": 1.0514580061314827
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0430127566224552,
+          1.0264478670853616,
+          1.02103722982137,
+          1.051454899095123,
+          1.0608165684543516,
+          1.02719635049206
+        ],
+        "paired_95ci": [
+          1.0275035700275583,
+          1.0503241459122017
+        ],
+        "role": "target",
+        "row": "webster.131072",
+        "speedup_geomean": 1.0382264390357208
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.097989790090584,
+          1.0776403229807183,
+          1.093318910315839,
+          1.071216012476536,
+          1.043558185596199,
+          1.1115974849199028
+        ],
+        "paired_95ci": [
+          1.0638374608334717,
+          1.0990749466534724
+        ],
+        "role": "target",
+        "row": "webster.65536",
+        "speedup_geomean": 1.082330871023523
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0705799109746443,
+          1.0939991437218062,
+          1.0935715909220316,
+          1.0433642069039057,
+          1.0225827541586776,
+          1.045164169350555
+        ],
+        "paired_95ci": [
+          1.0411118117329272,
+          1.081725235263396
+        ],
+        "role": "target",
+        "row": "x-ray.131072",
+        "speedup_geomean": 1.0612076376852266
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0219796137974715,
+          0.9986723444072686,
+          1.0012247057810657,
+          1.0128912103907373,
+          0.9979780886931671,
+          1.042582632343373
+        ],
+        "paired_95ci": [
+          1.0012220445506423,
+          1.0266196751142929
+        ],
+        "role": "target",
+        "row": "x-ray.65536",
+        "speedup_geomean": 1.0124304176583065
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 131072,
+        "pair_speedups": [
+          1.0834097833302405,
+          1.0947408690082543,
+          1.0854027176903314,
+          1.092339211316773,
+          1.0950396025331834,
+          1.0955584233758309
+        ],
+        "paired_95ci": [
+          1.0871582157354638,
+          1.094712134066771
+        ],
+        "role": "target",
+        "row": "xml.131072",
+        "speedup_geomean": 1.0910709184318805
+      },
+      {
+        "family": "prepared",
+        "floor_pass": true,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.3714060074199161,
+          1.396005645873781,
+          1.3853247451321031,
+          1.3537491821105474,
+          1.3737585107207466,
+          1.3756778551971027
+        ],
+        "paired_95ci": [
+          1.3655517649662134,
+          1.3859818248661468
+        ],
+        "role": "target",
+        "row": "xml.65536",
+        "speedup_geomean": 1.3759258414444764
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9194404445472036,
+          0.9482150809153899,
+          0.951264991267655,
+          0.9464467242986886,
+          0.9471185663029866,
+          0.969842371387766
+        ],
+        "paired_95ci": [
+          0.9338565535380832,
+          0.9586694587751934
+        ],
+        "role": "legacy_control",
+        "row": "dickens.65536",
+        "speedup_geomean": 0.9469395929697791
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9473549567821954,
+          0.9677106827803064,
+          0.9885002958585506,
+          0.924434427727425,
+          0.9433594126404607,
+          0.9497911012833183
+        ],
+        "paired_95ci": [
+          0.9384849185711714,
+          0.9704605821953871
+        ],
+        "role": "legacy_control",
+        "row": "mozilla.65536",
+        "speedup_geomean": 0.9533142339827048
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9415433557492465,
+          0.9357882162377157,
+          0.9452989377429714,
+          0.9957593891156942,
+          0.9204713729226957,
+          0.9367543999976922
+        ],
+        "paired_95ci": [
+          0.9307742263013907,
+          0.967102751711833
+        ],
+        "role": "legacy_control",
+        "row": "mr.65536",
+        "speedup_geomean": 0.9456481643098004
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.8908898806832384,
+          0.9426616448475733,
+          0.9505783515618104,
+          0.9560594068710291,
+          0.9555761305337582,
+          0.907628607844729
+        ],
+        "paired_95ci": [
+          0.9121038949488534,
+          0.9527391610520444
+        ],
+        "role": "legacy_control",
+        "row": "nci.65536",
+        "speedup_geomean": 0.9335502258848738
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9666833820509111,
+          0.9745757309108287,
+          0.8772128648308383,
+          0.9492805641576728,
+          0.9443467323010117,
+          0.938600830762874
+        ],
+        "paired_95ci": [
+          0.9130938260025486,
+          0.9629441346125511
+        ],
+        "role": "legacy_control",
+        "row": "ooffice.65536",
+        "speedup_geomean": 0.941243464631752
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9552058673854497,
+          0.954992480293333,
+          0.9826497203414746,
+          0.9888233680492812,
+          0.9266390200918528,
+          0.9775711919057836
+        ],
+        "paired_95ci": [
+          0.9455166316319168,
+          0.9802056636267131
+        ],
+        "role": "legacy_control",
+        "row": "osdb.65536",
+        "speedup_geomean": 0.9640781233620045
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9844584539686948,
+          0.966393753380199,
+          0.9366691019602031,
+          0.9451402522943133,
+          0.9443628504914484,
+          0.9349624926572528
+        ],
+        "paired_95ci": [
+          0.9390700455475944,
+          0.9673282853395215
+        ],
+        "role": "legacy_control",
+        "row": "reymont.65536",
+        "speedup_geomean": 0.9518339124453592
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9399058002240657,
+          0.9472977799947535,
+          0.947424643790769,
+          0.9865862417934561,
+          0.9563677147604704,
+          0.9567175397938991
+        ],
+        "paired_95ci": [
+          0.945476629826632,
+          0.9686116527994861
+        ],
+        "role": "legacy_control",
+        "row": "samba.65536",
+        "speedup_geomean": 0.9556008718748994
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9761795699441392,
+          0.9674361740173849,
+          0.9328408223414824,
+          0.9458227321672347,
+          0.9669930129221781,
+          0.9431126535803551
+        ],
+        "paired_95ci": [
+          0.942744458579947,
+          0.9676086203779035
+        ],
+        "role": "legacy_control",
+        "row": "sao.65536",
+        "speedup_geomean": 0.9552697803863186
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9455275339386778,
+          0.9484150556256783,
+          0.9463641844465746,
+          1.0103274762675916,
+          0.9422454205771416,
+          0.9490893635090134
+        ],
+        "paired_95ci": [
+          0.9448449094890394,
+          0.9781474919297949
+        ],
+        "role": "legacy_control",
+        "row": "webster.65536",
+        "speedup_geomean": 0.9567035163244498
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          1.0138786497226453,
+          0.9473916646420697,
+          0.951806640518859,
+          0.9492325532331234,
+          0.9708667874130998,
+          0.9349798094701184
+        ],
+        "paired_95ci": [
+          0.9442728211862116,
+          0.9843962715681055
+        ],
+        "role": "legacy_control",
+        "row": "x-ray.65536",
+        "speedup_geomean": 0.9610215535790622
+      },
+      {
+        "family": "legacy",
+        "floor_pass": false,
+        "input_bytes": 65536,
+        "pair_speedups": [
+          0.9681109487487671,
+          0.9374646751930005,
+          0.9638814086903364,
+          0.9579788533077077,
+          0.9683431639758271,
+          0.945614888515836
+        ],
+        "paired_95ci": [
+          0.9469819734874871,
+          0.965787088960621
+        ],
+        "role": "legacy_control",
+        "row": "xml.65536",
+        "speedup_geomean": 0.956827966167644
+      }
+    ],
+    "schema": "vort.deflate.prepared-fixed-result.v1",
+    "scope": "Matched warmed public append lifecycle at explicit hash parameters. Prepared workspace reuse only. No cold baseline replacement and no industry leadership claim.",
+    "statistics": "For each row: geometric mean of six old/new paired elapsed ratios. Target CI: paired bootstrap (20,000 deterministic draws, seed 261126) of six outer-pair geometric means across all 24 target rows. No minima/best-of selection.",
+    "target_geomean_pass": true,
+    "utc": "2026-11-26T06:02:56.814973+00:00"
+  },
+  "raw_records": 540,
+  "sampling_release": {
+    "argv": [
+      "/tmp/vort-deflate-prepared-bench.20261126T022046Z/campaign.py",
+      "sample"
+    ],
+    "artifact_hashes": {
+      "campaign_sha256": "9c053f075b58b9ef82b79603c62a9c6f41804746b5d8616ca9b9455211abdcf3",
+      "current_elf_sha256": "fe131b53c0a8ca4f42d54ccf82f9be41ff1cc15c35ae29c09aa6ab1284c4a31a",
+      "current_source_tar_sha256": "cb0aac380176d701dd9ec67614734f4ca2f9dfce718fc9319c06c6e72aa091bb",
+      "manifest_sha256": "f4874ca28181fe5e0af09b486bff4000415f270bfb30c1b0ac636009d5a7a7aa",
+      "old_elf_sha256": "30c7f24183a53c623188540bb7e09f8f482654deb05e3db57d1a722c1b33f465",
+      "old_source_tar_sha256": "9044684d1dd4e28427fea2317e6b064c0a29cf005a22742f37b465400c93aaa7",
+      "probe_sha256": "6ec778876322f58ef1b8c8a2eb3f66669f246a9f70487a88b2bad304c0519941",
+      "utc": "2026-11-26T02:31:41.027183+00:00"
+    },
+    "reference_hashes": [
+      {
+        "path": "/usr/bin/python3.10",
+        "sha256": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
+        "size": 5941864
+      },
+      {
+        "path": "/usr/lib/x86_64-linux-gnu/libz.so.1.2.11",
+        "sha256": "64c206f0146cc58bbddc4f22054436f4ff278f5a554aa3ce6921ddf7e9133370",
+        "size": 108936
+      }
+    ],
+    "root_HEAVY0": "{\n  \"utc\": \"2026-11-26T05:57:55.665311+00:00\",\n  \"full_session_id\": 46721,\n  \"full_exit_code\": 0,\n  \"full_steps\": 428,\n  \"full_tests_passed\": 6121,\n  \"frozen_source_count\": 2214,\n  \"frozen_source_verified\": true,\n  \"heavy_process_check\": \"No zig/build/vort-tests/perf/addr2line/python3/node processes were present at Root quiet inspection after full terminal\",\n  \"policy\": \"Only the predeclared benchmark may run; archive packing waits for sampling terminal\"\n}\n",
+    "utc": "2026-11-26T05:58:53.630264+00:00"
+  },
+  "schema": "vort.deflate.prepared-fixed.archive-summary.v1",
+  "scope": "Package data only; final full/native modes separate; allocation/zeroheap evidence independent of timing and native RSS",
+  "source": {
+    "base_head": "8ccd54a59da850da724cc4d6ca79a727c659889e",
+    "exact_overlay": true,
+    "final_source_files": 2214,
+    "scope": "Frozen package src/base/overlay and build probe bytes; no production/tmp/Git lookup or executable invocation"
+  },
+  "wasi": {
+    "latest_actual_execution_order": [
+      11,
+      7,
+      29
+    ],
+    "latest_build_mode": "ReleaseSafe",
+    "latest_exit_code": 0,
+    "older_execution_order": [
+      27,
+      6,
+      11
+    ],
+    "scope": "Separate source epochs; latest full build/sample terminal remains independent"
+  }
+}

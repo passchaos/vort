@@ -1,0 +1,34 @@
+{
+  "C_decode_records_verified": 99,
+  "archives": {
+    "benchmark.tar.gz": {
+      "bytes": 11631558,
+      "sha256": "505ffd6c5e13e736101e45ac6605a2a94f37a4846037605dc9b6149c7ed85a0f"
+    },
+    "sources.tar.gz": {
+      "bytes": 9871984,
+      "sha256": "2fcb6f133845a6df3c10d2fd54da3fb85d68112682ba867415bc1fe343e0f526"
+    },
+    "validation.tar.gz": {
+      "bytes": 1757778,
+      "sha256": "4706340ea9b23a6c0fbf43c90bc8d8400c054911bebfde5e39b6ad7c11789f9f"
+    }
+  },
+  "decision": "rejected-performance-floor",
+  "independent_accepted": false,
+  "members": 272,
+  "merge_allowed": false,
+  "negative_floor_rows": 14,
+  "pack_readiness": true,
+  "pairs_per_row": 6,
+  "preflight_wire_bytes_verified": 99,
+  "producer_accepted": false,
+  "public_decode_records_verified": 198,
+  "raw_records": 540,
+  "rows": 45,
+  "schema": "vort.deflate.prepared-fixed.archive-receipt.v1",
+  "scope": "Package-only exact source/ELF/byte-wire/reference/chronology/terminal and two independent statistical implementations; no codec/SO/producer argv/original tmp execution",
+  "source_files": 2214,
+  "target_rows": 24,
+  "verification_passed": true
+}

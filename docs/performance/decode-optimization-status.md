@@ -3073,3 +3073,57 @@ rejected. [Corrected scope,source,proofs and raw samples](data/brotli-nonrecent-
 are retained,including the originalpilotlabels and separate expansionbatches.
 The remaining literal-context proposal/search cost requires a larger measured
 structural improvement before claiming codec leadership.
+
+## Prepared fixed Deflate complete screen (2026-11-26)
+
+An independent prepared owner retains the original greedy/hash token and table
+geometry, stable requested-heap state and direct final fixed output. Current
+native Debug and actual WASI ReleaseSafe contract groups pass29/7/11; the final
+whole-library command passes428/428steps and6121/6123tests (two skipped),
+including the same native ReleaseSafe groups. Across33original inputs,
+old/current ordinary and prepared outputs produce99byte-equal wires, validated
+by Python/C libz1.2.11 and198old/current public decoder processes.
+
+The frozen matched warmed append campaign completes540process records over
+45rows and six alternatingAB/BApairs. Its24Silesia64/128KiB targets reach
+**1.08337749x** CI**[1.08009221,1.08655783]**, but9small controls have two
+failures (mozilla256B0.96789274x,nci256B0.97539661x) and all12ordinary64KiB
+controls fall below0.98 (group0.95179991x,weakest nci0.93355023x).
+The candidate is **rejected**, with no production adoption approved. No samples
+were retried, filtered or selected by minimum. The timer checks length mix and
+the last output SHA; full byte identity is separate untimed evidence.
+
+Read-only ELF analysis identifies a larger caller frame and loss of common
+fixed-writer/appendSlice inlining. V2 restores ordinary inlining and reaches
+target1.18100779x, but three small and two ordinary rows fail. V3 removes
+general small memcpy from the prepared emitter and reaches1.25664605x
+CI[1.25392764,1.25970659]; all nine small controls pass but ordinaryMozilla,
+mr and reymont64KiB reach0.97768345x/0.96563897x/0.97062014x. All540records
+and independent statistics/provenance verify; V3 is also rejected.
+Three embedded Work copies explain most of the enlarged caller frame, but
+source/ELF inspection does not prove the control regressions' cause.
+[Original source,contracts,raw samples and verification](deflate/prepared-fixed-20261126/README.md)
+retain the development-host scope. The prototype is safely saved in local
+stash and production source is restored to committed main. No candidate is
+adopted, and no industry-ranking claim is made.
+
+## Historical near-parity and regression scope (2026-11-26)
+
+The [comparison audit](performance-comparison-scope-20261126.md) separates
+historical low-quality decode diagnostics from the larger modern matrix.
+Modern same-range cold ratios on November12→25 are68.87→68.75% Deflate,
+76.58→79.02% Zstd and81.93→83.15% Brotli; cross-date shifts do not attribute
+code changes. The latest complete matrix binds06d8086d, not8ccd54a5.
+The historical/current q8 source A/B does show3.8338x elapsed for4.34% smaller
+wire, but ran with another collector active. The new
+[direct old/main comparison](br/q8-main-history-20261126/README.md) now completes
+90pairs/180timedcalls after all heavy workers stop:8ccd/0a elapsed3.20317086x
+CI[3.18422544,3.22222901],wire0.95658086x. All12rows and90pairs are slower on
+main, verified independently without importing the producer. This remains
+a development-host observation, not continuously interference-free or an
+industry ranking; inherited nonquiet text and the fresh Root release are
+separate artifacts. Keep repeated match/entropy planning and losing candidate
+output as measured P0 targets. The current36trace diagnostic observes1029
+physical outputs/993lost; all events are complete, while18context-detail
+prefixes remain truncated. Root's proposal-reuse-aware Python gate and24+11
+tests are committed separately asbd934972, without changing codec source.

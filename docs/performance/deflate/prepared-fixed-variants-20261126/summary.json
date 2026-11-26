@@ -1,0 +1,151 @@
+{
+  "codegen_scope": "Stored emitter codegen identity only; no performance acceptance from static disassembly",
+  "memory_scope": "Timing only; no RSS or measured memory-performance claim",
+  "raw_policy": "All successful samples retained without retries, outlier deletion or relabeling; independent_max_candidates64k12 variant excluded from this rowset",
+  "schema": "vort.deflate.prepared-fixed-variants.summary.v1",
+  "variants": {
+    "v2-reserved-sink": {
+      "accepted": false,
+      "affinity": [
+        2
+      ],
+      "build_mode": "ReleaseFast",
+      "cpu_features": "skylake+pku+sgx",
+      "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+      "failed_floor_rows": [
+        {
+          "family": "prepared",
+          "paired_95ci": [
+            0.8482170746688049,
+            0.8679516500510069
+          ],
+          "role": "small_control",
+          "row": "mozilla.256",
+          "speedup_geomean": 0.8580276275040492
+        },
+        {
+          "family": "prepared",
+          "paired_95ci": [
+            0.8935375054465797,
+            0.9084312950295986
+          ],
+          "role": "small_control",
+          "row": "nci.256",
+          "speedup_geomean": 0.9014009925031369
+        },
+        {
+          "family": "prepared",
+          "paired_95ci": [
+            0.8320339362247952,
+            0.8396287332124257
+          ],
+          "role": "small_control",
+          "row": "ooffice.256",
+          "speedup_geomean": 0.8360118787871615
+        },
+        {
+          "family": "legacy",
+          "paired_95ci": [
+            0.9555123917020208,
+            0.990098903486742
+          ],
+          "role": "legacy_control",
+          "row": "mr.65536",
+          "speedup_geomean": 0.9722048650877914
+        },
+        {
+          "family": "legacy",
+          "paired_95ci": [
+            0.9612149892156657,
+            0.9926770584959675
+          ],
+          "role": "legacy_control",
+          "row": "reymont.65536",
+          "speedup_geomean": 0.9755927496702997
+        }
+      ],
+      "legacy_controls": 12,
+      "old_commit": "8ccd54a59da850da724cc4d6ca79a727c659889e",
+      "pairs": 6,
+      "prepared_target_geomean": 1.1810077856704524,
+      "prepared_target_paired_95ci": [
+        1.1766280264326079,
+        1.1861752109592463
+      ],
+      "public_preflight_external_processes": 264,
+      "public_preflight_new_wires": 66,
+      "raw_sha256": "c9404952d6f4ca92c9903cfc74ee9e0ab5ba1875f0b383fa3ee0188cc2b77aa4",
+      "records": 540,
+      "scope": "Matched warmed public append lifecycle at explicit hash parameters. Prepared workspace reuse only. No cold baseline replacement and no industry leadership claim.",
+      "small_controls": 9,
+      "source_files": 2216,
+      "source_manifest_sha256": "95ab85d424224ada57cd3208e2565a3392feaacdf7f499c0cc54f49639be3ee6",
+      "statistical_rows": 45,
+      "target": "x86_64-linux-gnu",
+      "targets": 24,
+      "thread_policy": "single"
+    },
+    "v3-direct-bits": {
+      "accepted": false,
+      "affinity": [
+        2
+      ],
+      "build_mode": "ReleaseFast",
+      "cpu_features": "skylake+pku+sgx",
+      "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+      "failed_floor_rows": [
+        {
+          "family": "legacy",
+          "paired_95ci": [
+            0.9686024157993427,
+            0.9876351204535181
+          ],
+          "role": "legacy_control",
+          "row": "mozilla.65536",
+          "speedup_geomean": 0.97768344691543
+        },
+        {
+          "family": "legacy",
+          "paired_95ci": [
+            0.9440485076606165,
+            0.9872193057747084
+          ],
+          "role": "legacy_control",
+          "row": "mr.65536",
+          "speedup_geomean": 0.9656389684105446
+        },
+        {
+          "family": "legacy",
+          "paired_95ci": [
+            0.9629297584728541,
+            0.9775704693621309
+          ],
+          "role": "legacy_control",
+          "row": "reymont.65536",
+          "speedup_geomean": 0.9706201427550728
+        }
+      ],
+      "legacy_controls": 12,
+      "old_commit": "8ccd54a59da850da724cc4d6ca79a727c659889e",
+      "pairs": 6,
+      "prepared_target_geomean": 1.2566460532042603,
+      "prepared_target_paired_95ci": [
+        1.2539276432004445,
+        1.259706593295646
+      ],
+      "public_preflight_external_processes": 264,
+      "public_preflight_new_wires": 66,
+      "raw_sha256": "67e9dfda4528d2d6c7843f85def1519d9f355819d5accf9ab02f406c7b162f2d",
+      "records": 540,
+      "scope": "Matched warmed public append lifecycle at explicit hash parameters. Prepared workspace reuse only. No cold baseline replacement and no industry leadership claim.",
+      "small_controls": 9,
+      "source_files": 2216,
+      "source_manifest_sha256": "ee14f0e70f8ddb09f8971858edb018a3ac0369ab8b683a6a3c0b57d9a9f473e2",
+      "statistical_rows": 45,
+      "target": "x86_64-linux-gnu",
+      "targets": 24,
+      "thread_policy": "single"
+    }
+  },
+  "verdict": "Both historical performance gates rejected; archive completeness and contract replay do not change accepted=false"
+}
