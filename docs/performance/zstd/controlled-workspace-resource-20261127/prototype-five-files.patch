@@ -1,0 +1,401 @@
+diff --git a/src/zstd.zig b/src/zstd.zig
+--- a/src/zstd.zig
++++ b/src/zstd.zig
+@@ -1258,6 +1258,7 @@
+ const encode_controls = @import("zstd/encode/controls.zig");
+ const repeated_pattern = @import("zstd/encode/repeated_pattern.zig");
+ const controlled_source = @import("zstd/match/controlled_source.zig");
++const controlled_search_workspace = @import("zstd/match/controlled_search_workspace.zig");
+ const controlled_encoder = @import("zstd/encode/controlled_frame.zig");
+ const hq_parser = @import("zstd/match/hq_parser.zig");
+ const hq_codec = @import("zstd/encode/hq_codec.zig");
+@@ -2138,6 +2139,9 @@
+     }
+     pub fn clearBlockScratch(scratch: *BlockScratch) void {
+         scratch.clearRetainingCapacity();
++    }
++    pub fn searchWorkspace(scratch: *BlockScratch) *controlled_search_workspace.Workspace {
++        return &scratch.controlled_search;
+     }
+     pub fn rle(block: []const u8) bool {
+         return rleByte(block) != null;
+@@ -21285,6 +21289,7 @@
+     lazy_tokens: std.ArrayList(lz77.Token) = .empty,
+     optimal: lz77.OptimalScratch = .{},
+     single_sequence_emit: SingleSequenceEmitScratch = .{},
++    controlled_search: controlled_search_workspace.Workspace = .{},
+ 
+     fn mixedWorkspace(self: *NativeBlockEncodeScratch, allocator: std.mem.Allocator) Error!?*MixedMatchLookaheadWorkspace {
+         if (!self.heap_mixed_workspace) return null;
+@@ -21309,6 +21314,7 @@
+ 
+     fn deinit(self: *NativeBlockEncodeScratch, allocator: std.mem.Allocator) void {
+         if (self.mixed_workspace) |workspace| workspace.destroy(allocator);
++        self.controlled_search.deinit(allocator);
+         self.single_sequence_emit.deinit(allocator);
+         self.optimal.deinit(allocator);
+         self.lazy_tokens.deinit(allocator);
+diff --git a/src/zstd/encode/controlled_frame.zig b/src/zstd/encode/controlled_frame.zig
+--- a/src/zstd/encode/controlled_frame.zig
++++ b/src/zstd/encode/controlled_frame.zig
+@@ -85,7 +85,10 @@
+                 try records.ensureTotalCapacity(allocator, block.len / 5 + 8);
+             switch (selected) {
+                 .fast, .double_fast => try fast.planReuse(records, allocator, source, parameters),
+-                .greedy, .lazy, .optimal => try search.planReuse(records, allocator, source, parameters),
++                .greedy, .lazy, .optimal => if (@hasDecl(Codec, "searchWorkspace"))
++                    try search.planReuseWithWorkspace(records, allocator, source, parameters, Codec.searchWorkspace(block_scratch))
++                else
++                    try search.planReuse(records, allocator, source, parameters),
+                 .lazy2, .btlazy2, .btopt, .btultra, .btultra2 => return if (guard_block)
+                     hq_codec.Encoder(Codec).writeBlock(allocator, out, source, last, options, state, dictionary, scratch, block_scratch)
+                 else
+diff --git a/src/zstd/match/controlled_search.zig b/src/zstd/match/controlled_search.zig
+--- a/src/zstd/match/controlled_search.zig
++++ b/src/zstd/match/controlled_search.zig
+@@ -1,6 +1,7 @@
+ const std = @import("std");
+ const controls = @import("../encode/controls.zig");
+ const source_mod = @import("controlled_source.zig");
++const workspace_mod = @import("controlled_search_workspace.zig");
+ pub const Record = source_mod.Record;
+ pub const Source = source_mod.Source;
+ pub const Parameters = source_mod.Parameters;
+@@ -17,6 +18,16 @@
+ /// final adaptive FSE payload size. The frame writer owns wire offset codes.
+ /// Prefix storage is capped independently of the advertised window size.
+ pub fn planReuse(records: *std.ArrayList(Record), gpa: std.mem.Allocator, source: Source, parameters: Parameters) !void {
++    return planReuseImpl(false, records, gpa, source, parameters, null);
++}
++
++/// Reuse only index storage. Every call rebuilds the original chains and heads;
++/// no source identity, candidates, prices or parser state survives the call.
++pub fn planReuseWithWorkspace(records: *std.ArrayList(Record), gpa: std.mem.Allocator, source: Source, parameters: Parameters, workspace: *workspace_mod.Workspace) !void {
++    return planReuseImpl(true, records, gpa, source, parameters, workspace);
++}
++
++fn planReuseImpl(comptime reuse: bool, records: *std.ArrayList(Record), gpa: std.mem.Allocator, source: Source, parameters: Parameters, workspace: ?*workspace_mod.Workspace) !void {
+     if ((parameters.strategy != .greedy and parameters.strategy != .lazy and parameters.strategy != .optimal) or
+         parameters.acceleration == 0 or parameters.acceleration > controls.max_acceleration or
+         parameters.search_budget > controls.legacy_search_budget or source.window_len == 0 or
+@@ -33,14 +44,17 @@
+         profile.fast_acceleration = parameters.acceleration;
+     }
+     if (parameters.search_budget == 0 or source.block.len < minimum_match) return;
+-    var index = try Index.init(gpa, source, parameters);
+-    defer index.deinit(gpa);
++    const index = if (reuse)
++        try Index.initWithWorkspace(gpa, source, parameters, workspace.?)
++    else
++        try Index.init(gpa, source, parameters);
++    defer if (!reuse) index.deinit(gpa);
+     if (parameters.strategy == .optimal)
+         return planOptimal(records, gpa, source, parameters, index);
+     return planLinear(records, gpa, source, parameters, index);
+ }
+ 
+-const PrefixNode = struct { position: usize, previous: u32 };
++const PrefixNode = workspace_mod.PrefixNode;
+ const Index = struct {
+     prefix_head: []u32,
+     prefix_nodes: []PrefixNode,
+@@ -49,18 +63,34 @@
+     fn init(gpa: std.mem.Allocator, source: Source, parameters: Parameters) !Index {
+         const prefix_head = try gpa.alloc(u32, hash_size);
+         errdefer gpa.free(prefix_head);
+-        @memset(prefix_head, invalid);
+         const prefix_capacity = @min(source.prefixLen(), prefix_sample_limit);
+         const prefix_nodes = try gpa.alloc(PrefixNode, prefix_capacity);
+         errdefer gpa.free(prefix_nodes);
+         const block_previous = try gpa.alloc(u32, source.block.len);
+         errdefer gpa.free(block_previous);
+-        @memset(block_previous, invalid);
+         const block_head = try gpa.alloc(u32, hash_size);
+         defer gpa.free(block_head);
++        const index: Index = .{ .prefix_head = prefix_head, .prefix_nodes = prefix_nodes, .block_previous = block_previous };
++        index.fill(source, parameters, block_head);
++        return index;
++    }
++
++    fn initWithWorkspace(gpa: std.mem.Allocator, source: Source, parameters: Parameters, workspace: *workspace_mod.Workspace) !Index {
++        try workspace.prepare(gpa, @min(source.prefixLen(), prefix_sample_limit), source.block.len);
++        const index: Index = .{
++            .prefix_head = workspace.prefix_head.items,
++            .prefix_nodes = workspace.prefix_nodes.items,
++            .block_previous = workspace.block_previous.items,
++        };
++        index.fill(source, parameters, workspace.block_head.items);
++        return index;
++    }
++
++    fn fill(index: Index, source: Source, parameters: Parameters, block_head: []u32) void {
++        @memset(index.prefix_head, invalid);
++        @memset(index.block_previous, invalid);
+         @memset(block_head, invalid);
+-
+-        var index: Index = .{ .prefix_head = prefix_head, .prefix_nodes = prefix_nodes, .block_previous = block_previous };
++        const prefix_capacity = index.prefix_nodes.len;
+         var seeded: usize = 0;
+         // Leave room for segment boundaries and the last three prefix anchors.
+         const regular_limit = prefix_sample_limit - 8;
+@@ -82,10 +112,9 @@
+         for (0..source.block.len) |block_position| {
+             if (block_position + minimum_match > source.block.len or block_position % parameters.acceleration != 0) continue;
+             const key = hash(source, source.prefixLen() + block_position);
+-            block_previous[block_position] = block_head[key];
++            index.block_previous[block_position] = block_head[key];
+             block_head[key] = @intCast(block_position);
+         }
+-        return index;
+     }
+ 
+     fn seed(self: Index, source: Source, position: usize, seeded: *usize, profile: ?*controls.Profile) void {
+diff --git a/src/zstd/match/controlled_search_workspace.zig b/src/zstd/match/controlled_search_workspace.zig
+--- /dev/null
++++ b/src/zstd/match/controlled_search_workspace.zig
+@@ -0,0 +1,61 @@
++//! Reusable storage for the existing controlled-search index. Keep this owner
++//! and its arrays stationary while an Index borrows them. Preparation changes
++//! geometry only after all capacity requests succeed; Index.fill owns contents.
++const std = @import("std");
++
++pub const PrefixNode = struct { position: usize, previous: u32 };
++pub const hash_size: usize = 1 << 15;
++pub const max_prefix_capacity: usize = 65536;
++pub const max_block_len: usize = 128 * 1024;
++pub const Error = std.mem.Allocator.Error || error{ InvalidBlockPlan, IntegerOverflow };
++
++pub const Workspace = struct {
++    prefix_head: std.ArrayList(u32) = .empty,
++    prefix_nodes: std.ArrayList(PrefixNode) = .empty,
++    block_previous: std.ArrayList(u32) = .empty,
++    block_head: std.ArrayList(u32) = .empty,
++
++    pub fn init() Workspace {
++        return .{};
++    }
++
++    pub fn prepare(self: *Workspace, gpa: std.mem.Allocator, prefix_capacity: usize, block_len: usize) Error!void {
++        if (prefix_capacity > max_prefix_capacity or block_len > max_block_len) return error.InvalidBlockPlan;
++        try self.prefix_head.ensureTotalCapacityPrecise(gpa, hash_size);
++        try self.prefix_nodes.ensureTotalCapacityPrecise(gpa, prefix_capacity);
++        try self.block_previous.ensureTotalCapacityPrecise(gpa, block_len);
++        try self.block_head.ensureTotalCapacityPrecise(gpa, hash_size);
++        self.prefix_head.items.len = hash_size;
++        self.prefix_nodes.items.len = prefix_capacity;
++        self.block_previous.items.len = block_len;
++        self.block_head.items.len = hash_size;
++    }
++
++    pub fn clearRetainingCapacity(self: *Workspace) void {
++        self.prefix_head.items.len = 0;
++        self.prefix_nodes.items.len = 0;
++        self.block_previous.items.len = 0;
++        self.block_head.items.len = 0;
++    }
++
++    pub fn reset(self: *Workspace) void {
++        self.clearRetainingCapacity();
++    }
++
++    pub fn retainedRequestedBytes(self: *const Workspace) Error!usize {
++        var bytes: usize = 0;
++        inline for (.{ .{ "prefix_head", u32 }, .{ "prefix_nodes", PrefixNode }, .{ "block_previous", u32 }, .{ "block_head", u32 } }) |field| {
++            const request = std.math.mul(usize, @field(self, field[0]).capacity, @sizeOf(field[1])) catch return error.IntegerOverflow;
++            bytes = std.math.add(usize, bytes, request) catch return error.IntegerOverflow;
++        }
++        return bytes;
++    }
++
++    pub fn deinit(self: *Workspace, gpa: std.mem.Allocator) void {
++        self.prefix_head.deinit(gpa);
++        self.prefix_nodes.deinit(gpa);
++        self.block_previous.deinit(gpa);
++        self.block_head.deinit(gpa);
++        self.* = init();
++    }
++};
+diff --git a/src/zstd/match/controlled_search_workspace_tests.zig b/src/zstd/match/controlled_search_workspace_tests.zig
+--- /dev/null
++++ b/src/zstd/match/controlled_search_workspace_tests.zig
+@@ -0,0 +1,180 @@
++const std = @import("std");
++const storage = @import("controlled_search_workspace.zig");
++const a = std.testing.allocator;
++
++const Fake = struct {
++    backing: std.mem.Allocator,
++    requests: usize = 0,
++    sizes: [32]usize = undefined,
++    live: usize = 0,
++
++    fn allocator(self: *Fake) std.mem.Allocator {
++        return .{ .ptr = self, .vtable = &vtable };
++    }
++    const vtable: std.mem.Allocator.VTable = .{ .alloc = alloc, .resize = resize, .remap = remap, .free = free };
++    fn alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ra: usize) ?[*]u8 {
++        const self: *Fake = @ptrCast(@alignCast(ctx));
++        self.sizes[self.requests] = len;
++        self.requests += 1;
++        const memory = self.backing.rawAlloc(len, alignment, ra) orelse return null;
++        self.live += len;
++        return memory;
++    }
++    fn resize(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) bool {
++        return false;
++    }
++    fn remap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
++        return null;
++    }
++    fn free(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ra: usize) void {
++        const self: *Fake = @ptrCast(@alignCast(ctx));
++        self.backing.rawFree(memory, alignment, ra);
++        self.live -= memory.len;
++    }
++};
++
++fn geometry(work: *const storage.Workspace) [4]usize {
++    return .{ work.prefix_head.items.len, work.prefix_nodes.items.len, work.block_previous.items.len, work.block_head.items.len };
++}
++
++fn capacities(work: *const storage.Workspace) [4]usize {
++    return .{ work.prefix_head.capacity, work.prefix_nodes.capacity, work.block_previous.capacity, work.block_head.capacity };
++}
++
++test "controlled workspace cold requests preserve old order and precise capacity" {
++    var fake: Fake = .{ .backing = a };
++    var work = storage.Workspace.init();
++    defer work.deinit(fake.allocator());
++    try work.prepare(fake.allocator(), 11, 19);
++    try std.testing.expectEqualSlices(usize, &.{ storage.hash_size * 4, 11 * @sizeOf(storage.PrefixNode), 19 * 4, storage.hash_size * 4 }, fake.sizes[0..fake.requests]);
++    try std.testing.expectEqualDeep([4]usize{ storage.hash_size, 11, 19, storage.hash_size }, geometry(&work));
++    try std.testing.expectEqualDeep(geometry(&work), capacities(&work));
++    try std.testing.expectEqual(fake.live, try work.retainedRequestedBytes());
++    const Legacy = struct { position: usize, previous: u32 };
++    try std.testing.expectEqual(@sizeOf(Legacy), @sizeOf(storage.PrefixNode));
++    try std.testing.expectEqual(@alignOf(Legacy), @alignOf(storage.PrefixNode));
++    try std.testing.expectEqual(@offsetOf(Legacy, "previous"), @offsetOf(storage.PrefixNode, "previous"));
++    work.deinit(fake.allocator());
++    try std.testing.expectEqual(@as(usize, 0), fake.live);
++    try std.testing.expectEqual(@as(usize, 0), try work.retainedRequestedBytes());
++}
++
++test "controlled workspace zero prefix and block still retain both heads" {
++    var fake: Fake = .{ .backing = a };
++    var work: storage.Workspace = .{};
++    defer work.deinit(fake.allocator());
++    try work.prepare(fake.allocator(), 0, 0);
++    try std.testing.expectEqualSlices(usize, &.{ storage.hash_size * 4, storage.hash_size * 4 }, fake.sizes[0..fake.requests]);
++    try std.testing.expectEqualDeep([4]usize{ storage.hash_size, 0, 0, storage.hash_size }, geometry(&work));
++    try std.testing.expectEqual(@as(usize, 2 * storage.hash_size * 4), try work.retainedRequestedBytes());
++    const requests = fake.requests;
++    try work.prepare(fake.allocator(), 0, 0);
++    try std.testing.expectEqual(requests, fake.requests);
++    work.deinit(fake.allocator());
++    try std.testing.expectEqual(@as(usize, 0), fake.live);
++}
++
++test "controlled workspace warm shrink reset and regrow do not request or initialize storage" {
++    var fake: Fake = .{ .backing = a };
++    var work: storage.Workspace = .{};
++    defer work.deinit(fake.allocator());
++    try work.prepare(fake.allocator(), 8, 16);
++    work.prefix_head.items[0] = 13;
++    work.prefix_nodes.items[0] = .{ .position = 17, .previous = 29 };
++    work.block_previous.items[0] = 31;
++    work.block_head.items[0] = 37;
++    const pointers = .{ work.prefix_head.items.ptr, work.prefix_nodes.items.ptr, work.block_previous.items.ptr, work.block_head.items.ptr };
++    const requested = fake.requests;
++    const retained = try work.retainedRequestedBytes();
++    try work.prepare(fake.allocator(), 3, 5);
++    try std.testing.expectEqualDeep([4]usize{ storage.hash_size, 3, 5, storage.hash_size }, geometry(&work));
++    work.reset();
++    try std.testing.expectEqualDeep([4]usize{ 0, 0, 0, 0 }, geometry(&work));
++    try std.testing.expectEqual(retained, try work.retainedRequestedBytes());
++    try work.prepare(fake.allocator(), 8, 16);
++    try std.testing.expectEqual(requested, fake.requests);
++    try std.testing.expectEqualDeep(pointers, .{ work.prefix_head.items.ptr, work.prefix_nodes.items.ptr, work.block_previous.items.ptr, work.block_head.items.ptr });
++    try std.testing.expectEqual(@as(u32, 13), work.prefix_head.items[0]);
++    try std.testing.expectEqualDeep(storage.PrefixNode{ .position = 17, .previous = 29 }, work.prefix_nodes.items[0]);
++    try std.testing.expectEqual(@as(u32, 31), work.block_previous.items[0]);
++    try std.testing.expectEqual(@as(u32, 37), work.block_head.items[0]);
++    work.deinit(fake.allocator());
++    try std.testing.expectEqual(@as(usize, 0), fake.live);
++}
++
++test "controlled workspace four cold allocation failures retain capacity without publishing geometry" {
++    for (0..4) |ordinal| {
++        var failing = std.testing.FailingAllocator.init(a, .{ .fail_index = ordinal });
++        var fake: Fake = .{ .backing = failing.allocator() };
++        var work: storage.Workspace = .{};
++        defer work.deinit(fake.allocator());
++        try std.testing.expectError(error.OutOfMemory, work.prepare(fake.allocator(), 11, 19));
++        try std.testing.expect(failing.has_induced_failure);
++        try std.testing.expectEqualDeep([4]usize{ 0, 0, 0, 0 }, geometry(&work));
++        try std.testing.expectEqual(fake.live, try work.retainedRequestedBytes());
++        failing.fail_index = std.math.maxInt(usize);
++        failing.has_induced_failure = false;
++        try work.prepare(fake.allocator(), 11, 19);
++        try std.testing.expectEqualDeep([4]usize{ storage.hash_size, 11, 19, storage.hash_size }, geometry(&work));
++        work.deinit(fake.allocator());
++        try std.testing.expectEqual(@as(usize, 0), fake.live);
++        try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
++    }
++}
++
++test "controlled workspace grow failures preserve old logical lengths and initialized prefix" {
++    for (0..2) |ordinal| {
++        var failing = std.testing.FailingAllocator.init(a, .{});
++        var fake: Fake = .{ .backing = failing.allocator() };
++        var work: storage.Workspace = .{};
++        defer work.deinit(fake.allocator());
++        try work.prepare(fake.allocator(), 3, 5);
++        work.prefix_nodes.items[0] = .{ .position = 17, .previous = 29 };
++        work.block_previous.items[0] = 31;
++        const original = geometry(&work);
++        failing.fail_index = failing.alloc_index + ordinal;
++        try std.testing.expectError(error.OutOfMemory, work.prepare(fake.allocator(), 7, 9));
++        try std.testing.expect(failing.has_induced_failure);
++        try std.testing.expectEqualDeep(original, geometry(&work));
++        try std.testing.expectEqualDeep(storage.PrefixNode{ .position = 17, .previous = 29 }, work.prefix_nodes.items[0]);
++        try std.testing.expectEqual(@as(u32, 31), work.block_previous.items[0]);
++        try std.testing.expectEqual(fake.live, try work.retainedRequestedBytes());
++        failing.fail_index = std.math.maxInt(usize);
++        failing.has_induced_failure = false;
++        try work.prepare(fake.allocator(), 7, 9);
++        try std.testing.expectEqualDeep([4]usize{ storage.hash_size, 7, 9, storage.hash_size }, geometry(&work));
++        try std.testing.expectEqual(fake.live, try work.retainedRequestedBytes());
++        work.deinit(fake.allocator());
++        try std.testing.expectEqual(@as(usize, 0), fake.live);
++        try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
++    }
++}
++
++test "controlled workspace validates geometry before allocation and accounts boundary capacities" {
++    var fake: Fake = .{ .backing = a };
++    var work: storage.Workspace = .{};
++    defer work.deinit(fake.allocator());
++    try std.testing.expectError(error.InvalidBlockPlan, work.prepare(fake.allocator(), storage.max_prefix_capacity + 1, 0));
++    try std.testing.expectError(error.InvalidBlockPlan, work.prepare(fake.allocator(), 0, storage.max_block_len + 1));
++    try std.testing.expectEqual(@as(usize, 0), fake.requests);
++    try work.prepare(fake.allocator(), storage.max_prefix_capacity, storage.max_block_len);
++    const retained = 2 * storage.hash_size * 4 + storage.max_prefix_capacity * @sizeOf(storage.PrefixNode) + storage.max_block_len * 4;
++    try std.testing.expectEqual(retained, try work.retainedRequestedBytes());
++    try std.testing.expectEqual(fake.live, retained);
++    const original = geometry(&work);
++    try std.testing.expectError(error.InvalidBlockPlan, work.prepare(fake.allocator(), std.math.maxInt(usize), 1));
++    try std.testing.expectEqualDeep(original, geometry(&work));
++    work.deinit(fake.allocator());
++    try std.testing.expectEqual(@as(usize, 0), fake.live);
++}
++
++test "controlled workspace accounting checks multiplication and summed metadata overflow" {
++    // Synthetic capacities exercise arithmetic without allocating or freeing
++    // impossible slices; they are never offered to an Index or allocator.
++    var synthetic: storage.Workspace = .{};
++    synthetic.prefix_head.capacity = std.math.maxInt(usize);
++    try std.testing.expectError(error.IntegerOverflow, synthetic.retainedRequestedBytes());
++    synthetic.prefix_head.capacity = std.math.maxInt(usize) / 4;
++    synthetic.block_head.capacity = 1;
++    try std.testing.expectError(error.IntegerOverflow, synthetic.retainedRequestedBytes());
++}

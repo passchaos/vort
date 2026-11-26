@@ -1,0 +1,105 @@
+{
+  "started_utc": "2026-11-26T21:33:08.993601+00:00",
+  "scope": "default public L3 complete allocating frame operation requested-heap; no timing",
+  "cpu": 9,
+  "peak_ratio_max": 1.05,
+  "status": "rejected",
+  "rows": [
+    {
+      "case": "nci-64k",
+      "input_bytes": 65536,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "processes": {
+        "baseline": {
+          "ok": true,
+          "reason": "",
+          "report": "/tmp/vort-zstd-workspace-resource-yireuk68/runs/nci-64k-baseline.json",
+          "command": "/tmp/vort-zstd-workspace-resource-yireuk68/runs/nci-64k-baseline.command.json",
+          "wire": "/tmp/vort-zstd-workspace-resource-yireuk68/runs/nci-64k-baseline.wire"
+        },
+        "candidate": {
+          "ok": true,
+          "reason": "",
+          "report": "/tmp/vort-zstd-workspace-resource-yireuk68/runs/nci-64k-candidate.json",
+          "command": "/tmp/vort-zstd-workspace-resource-yireuk68/runs/nci-64k-candidate.command.json",
+          "wire": "/tmp/vort-zstd-workspace-resource-yireuk68/runs/nci-64k-candidate.wire"
+        }
+      },
+      "pass": false,
+      "errors": [
+        "candidate whole-operation requested peak exceeds baseline by5percent"
+      ],
+      "wire_equal": true,
+      "metrics": {
+        "baseline": {
+          "peak_bytes": 1468774,
+          "allocated_bytes": 1964957,
+          "freed_bytes": 1964957,
+          "alloc_attempts": 45,
+          "alloc_successes": 45,
+          "forced_growth_refusals": 8,
+          "live_after_caller_free": 0,
+          "active_allocations_after_caller_free": 0
+        },
+        "candidate": {
+          "peak_bytes": 1912513,
+          "allocated_bytes": 1964957,
+          "freed_bytes": 1964957,
+          "alloc_attempts": 45,
+          "alloc_successes": 45,
+          "forced_growth_refusals": 8,
+          "live_after_caller_free": 0,
+          "active_allocations_after_caller_free": 0
+        }
+      },
+      "peak_ratio": 1.3021152335212904,
+      "peak_delta_bytes": 443739
+    }
+  ],
+  "executables": {
+    "baseline": {
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/bin/baseline",
+      "sha256": "0ab623d9ed6f10d08add740f0befed803e940f48e5f52a385f296a0e195b35c9",
+      "bytes": 8854384,
+      "command": "/tmp/vort-zstd-workspace-resource-yireuk68/build/baseline.command.json"
+    },
+    "candidate": {
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/bin/candidate",
+      "sha256": "518d3237700d0e5ed5ac8a2a2c2e59e81def9bf6a3a3df633013c5967357ac81",
+      "bytes": 8865424,
+      "command": "/tmp/vort-zstd-workspace-resource-yireuk68/build/candidate.command.json"
+    }
+  },
+  "completed_processes": 2,
+  "planned_cases": 6,
+  "retained_block_head_overlap_bytes": 131072,
+  "retained_block_head_overlap_note": "Source-based lifetime fact:32768 u32 block_head bytes persist in candidate workspace through entropy/wire work; baseline block_head frees on Index.init return. Whole-operation peak is measured, phase contribution is not independently instrumented.",
+  "first_failed_case": "nci-64k",
+  "ended_utc": "2026-11-26T21:34:22.477302+00:00",
+  "unrun_cases": [
+    "nci-1m",
+    "nci-full",
+    "mozilla-1m",
+    "random-1m",
+    "dictionary262145-1m"
+  ],
+  "HEAVY": 0,
+  "source_verification": {
+    "utc": "2026-11-26T21:34:22.477557+00:00",
+    "baseline_frozen_source_unchanged": true,
+    "candidate_frozen_source_unchanged": true,
+    "original_five_source_files_unchanged": {
+      "src/zstd.zig": true,
+      "src/zstd/encode/controlled_frame.zig": true,
+      "src/zstd/match/controlled_search.zig": true,
+      "src/zstd/match/controlled_search_workspace.zig": true,
+      "src/zstd/match/controlled_search_workspace_tests.zig": true
+    },
+    "new_and_prior_epoch_helpers_unchanged": {
+      "public_l3_probe.zig": true,
+      "requested_allocator.zig": true,
+      "allocator_tests.zig": true
+    },
+    "git_head_after": "92204434b194bd4e87cf6349cbd6bfaac64ea5da"
+  }
+}

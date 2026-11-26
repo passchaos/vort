@@ -1,0 +1,45 @@
+{
+  "archive_member_counts": {
+    "evidence.tar.gz": 34,
+    "sources.tar.gz": 2
+  },
+  "archives": {
+    "evidence.tar.gz": {
+      "bytes": 1752417,
+      "sha256": "df5407872bcf0cc709049bb6b49fa8c068f69cbee98b0feb0ad47bd2d6b609d1"
+    },
+    "sources.tar.gz": {
+      "bytes": 7525896,
+      "sha256": "7c68e7a1bf575a798b9787debbb3fe54a1ff2b90c1fd334451844ecbbac82f19"
+    }
+  },
+  "checksum_policy": "All package files are covered by SHA256SUMS except itself",
+  "payload_files": {
+    "README.md": {
+      "bytes": 1715,
+      "sha256": "2c0a6ada2ce2520a10d2910183b8f767b95ced5b4abad29d8b2ef7dbf0ebfe1b"
+    },
+    "archive-bindings.json": {
+      "bytes": 8912,
+      "sha256": "dec9c3a177b6dbdf63620f90e2bc8e693afe5db0048742a94441b723e400fa80"
+    },
+    "evidence.tar.gz": {
+      "bytes": 1752417,
+      "sha256": "df5407872bcf0cc709049bb6b49fa8c068f69cbee98b0feb0ad47bd2d6b609d1"
+    },
+    "package_io.py": {
+      "bytes": 2115,
+      "sha256": "f5b8e68ecce23c64db8353c31888dc361fb8329dcec3f1ebb3f9ac6bf4cc8ffd"
+    },
+    "sources.tar.gz": {
+      "bytes": 7525896,
+      "sha256": "7c68e7a1bf575a798b9787debbb3fe54a1ff2b90c1fd334451844ecbbac82f19"
+    },
+    "verify.py": {
+      "bytes": 5893,
+      "sha256": "e086cc31991d92ad78364d41e3b99c401429970ed69d29e0f9f2abd7ccbb7c93"
+    }
+  },
+  "schema": "vort.brotli.known-match-graph-capacity.sealed-inventory.v1",
+  "sealed": true
+}

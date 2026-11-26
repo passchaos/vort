@@ -1,0 +1,205 @@
+{
+  "archives": {
+    "evidence.tar.gz": {
+      "bytes": 1752417,
+      "sha256": "df5407872bcf0cc709049bb6b49fa8c068f69cbee98b0feb0ad47bd2d6b609d1"
+    },
+    "sources.tar.gz": {
+      "bytes": 7525896,
+      "sha256": "7c68e7a1bf575a798b9787debbb3fe54a1ff2b90c1fd334451844ecbbac82f19"
+    }
+  },
+  "excluded": [
+    "Duplicate extracted source tree; all complete original tar bytes retained"
+  ],
+  "members": {
+    "evidence.tar.gz": {
+      "H0": {
+        "bytes": 174,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/H0",
+        "sha256": "a434acbd4e2daf25c479d38103c4e79e9302b970a4a5d2607ee4035fd8cd01cc"
+      },
+      "README.md": {
+        "bytes": 2492,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/README.md",
+        "sha256": "9f36787e76c0423b869134afce0d02d0b3e4b58f9e3917f7947e72ed482ab067"
+      },
+      "artifact-manifest.json": {
+        "bytes": 2772,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/artifact-manifest.json",
+        "sha256": "816112c9cad64a861205a79ebf8508a9803556a2436ac48c8d0b493bc790dc87"
+      },
+      "build.command.json": {
+        "bytes": 288,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/build.command.json",
+        "sha256": "ddf072f153775640c989fb56d83207e326af23115edf85e53b41788075af3c4a"
+      },
+      "build.exit.json": {
+        "bytes": 41,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/build.exit.json",
+        "sha256": "aa6d68efba5016b47c482c3d7ea2cb62a17799fc1e01a65d68e368f14f663d0a"
+      },
+      "build.stderr": {
+        "bytes": 0,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/build.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "build.stdout": {
+        "bytes": 0,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/build.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "compiler-host.json": {
+        "bytes": 1502,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/compiler-host.json",
+        "sha256": "b4875de580797e1e3b63797de7cbc22c60185ddd9881f6078f047eca0b9cf498"
+      },
+      "edge-count": {
+        "bytes": 4593600,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/edge-count",
+        "sha256": "a2bedc1502c11b5619502d833a0f60dfd9c234efed54934adf10148c2cc92f38"
+      },
+      "fixtures.json": {
+        "bytes": 4911,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/fixtures.json",
+        "sha256": "027591344e5ac913f09416ddcaf3d6c41e08240c03423acb60663ffa135d0f47"
+      },
+      "helper.zig": {
+        "bytes": 9160,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/helper.zig",
+        "sha256": "4d4aeef724ff8ae5bf0c64fef0094022df824b069193280becb3007489b3f6f4"
+      },
+      "inputs/dickens.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/dickens.65536.plain",
+        "sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293"
+      },
+      "inputs/mozilla.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/mozilla.65536.plain",
+        "sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996"
+      },
+      "inputs/mr.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/mr.65536.plain",
+        "sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651"
+      },
+      "inputs/nci.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/nci.65536.plain",
+        "sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe"
+      },
+      "inputs/ooffice.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/ooffice.65536.plain",
+        "sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825"
+      },
+      "inputs/osdb.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/osdb.65536.plain",
+        "sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125"
+      },
+      "inputs/reymont.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/reymont.65536.plain",
+        "sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22"
+      },
+      "inputs/samba.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/samba.65536.plain",
+        "sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421"
+      },
+      "inputs/sao.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/sao.65536.plain",
+        "sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee"
+      },
+      "inputs/webster.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/webster.65536.plain",
+        "sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e"
+      },
+      "inputs/x-ray.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/x-ray.65536.plain",
+        "sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8"
+      },
+      "inputs/xml.65536.plain": {
+        "bytes": 65536,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/inputs/xml.65536.plain",
+        "sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1"
+      },
+      "policy.json": {
+        "bytes": 1673,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/policy.json",
+        "sha256": "1b61720f992702ebc6011636ded480da11a0f97b5625179d17eaf73048253308"
+      },
+      "previous-fixtures.json": {
+        "bytes": 6133,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/previous-fixtures.json",
+        "sha256": "bf6c499fe1daa873efbf25e253c01d266be77e49c393115b9338812896d1f69c"
+      },
+      "runtime.command.json": {
+        "bytes": 222,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/runtime.command.json",
+        "sha256": "d6aa490d2e6a910737842e1576ace0e08e9f35ef4ff53d05704793aa130123e4"
+      },
+      "runtime.exit.json": {
+        "bytes": 41,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/runtime.exit.json",
+        "sha256": "aa6d68efba5016b47c482c3d7ea2cb62a17799fc1e01a65d68e368f14f663d0a"
+      },
+      "runtime.stderr": {
+        "bytes": 8056,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/runtime.stderr",
+        "sha256": "83380ec4606807f20345c878c5abebded356cf148430877de8a009ec9f4b3d94"
+      },
+      "runtime.stdout": {
+        "bytes": 0,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/runtime.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "source-files.json": {
+        "bytes": 358617,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/source-files.json",
+        "sha256": "19fe7cd4e4b8e86e20936317c2f7b9a1e85eda25b828c97a0820bef5a495bdab"
+      },
+      "source-freeze.json": {
+        "bytes": 571,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/source-freeze.json",
+        "sha256": "2deb9f88c8d73d8c5334f3968b77541d2d614b1092e3e583f00c941ae32c6e5f"
+      },
+      "summary.json": {
+        "bytes": 21116,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/summary.json",
+        "sha256": "bbe5565cf1f72620234a968f23f1b42fabde26775a362a43496e91fc433eb666"
+      },
+      "table.md": {
+        "bytes": 1032,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/table.md",
+        "sha256": "aac5c8015f83f9c32722be2a4914f2a03c9708fab308f486e94d586bc7a9d8c0"
+      },
+      "verify.py": {
+        "bytes": 1513,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/verify.py",
+        "sha256": "001cf1fe5ff4da3c4a625c272102779e08b1f240039d271646fdc33b0827934f"
+      }
+    },
+    "sources.tar.gz": {
+      "archive-tools/pack.py": {
+        "bytes": 2735,
+        "origin": "/tmp/vort-known-match-capacity-pack.py",
+        "sha256": "ed8ec79bd27c721744abb1f4e964190b9ae30727a5a060abc2d3785094acd427"
+      },
+      "source.tar": {
+        "bytes": 35758080,
+        "origin": "/tmp/vort-q8-known-lz-edge-count._17xaqey/source.tar",
+        "sha256": "e6a8c6502e90d081dda6fda2a670304b56fd761ca303d00205fcd694689acfa5"
+      }
+    }
+  },
+  "schema": "vort.brotli.known-match-graph-capacity.archive-bindings.v1",
+  "scope": "Actual counting evidence and independent capacity sums; no full graph, codec or timing execution",
+  "source_files": 2220,
+  "source_tree_byte_equal_to_original_tar": true
+}

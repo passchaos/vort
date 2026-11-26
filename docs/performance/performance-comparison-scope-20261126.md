@@ -4,6 +4,22 @@ Some encoding changes have made Vort slower. Historical decode parity on a
 limited workload does not establish three-codec encode/decode parity. Keep
 source regressions, competitor rankings and candidate gains distinct.
 
+Latest source status, November 27: the shared literal-model implementation
+`907b0557` and its sealed evidence in `92204434` have been pushed to main.
+Its separate complete public q8 campaign improves throughput 1.03200695x
+against its frozen recent baseline, with paired 95% CI
+[1.02860148x, 1.03542371x]. It preserves that baseline's wires and full current
+candidate policy. There is no direct `92204434 / 0a673757` timing epoch, and
+the historical 3.20317086x regression below remains unrepaired. Do not combine
+these separate-epoch ratios to report an estimated current result.
+
+Future performance reports must identify the historical source anchor, the
+recent source baseline and the competitor comparison separately. A gain over
+the recent source is only an increment; recovering earlier public latency and
+approaching the competitor's speed/size frontier require their own matched
+whole-operation evidence. Keep all current candidates, search budgets and
+quality policies when removing repeated work.
+
 ## A demonstrated encoding regression
 
 The [q8 source A/B](br/q8-source-regression-20261125/README.md) compares

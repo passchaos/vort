@@ -1,0 +1,114 @@
+{
+  "schema": "vort-zstd-controlled-workspace-resource-protocol-v1",
+  "original_epoch": "/tmp/vort-zstd-workspace-resource-yireuk68",
+  "baseline_head": "92204434b194bd4e87cf6349cbd6bfaac64ea5da",
+  "candidate_five_paths": [
+    "src/zstd.zig",
+    "src/zstd/encode/controlled_frame.zig",
+    "src/zstd/match/controlled_search.zig",
+    "src/zstd/match/controlled_search_workspace.zig",
+    "src/zstd/match/controlled_search_workspace_tests.zig"
+  ],
+  "SOURCE_READY_required_and_observed": true,
+  "api_lifecycle": "cold complete allocating default public level3 encode, including caller free; no persistent warmed context",
+  "api": "encodeFrameWithLevelAlloc(allocator,input,3)",
+  "dictionary_api": "encodeFrameWithLevelAndOptionsAndDictionaryAlloc with default FrameOptions; original raw dictionary case is planned but unrun",
+  "probe_mode": "plain",
+  "strategy_override": "auto only, no explicit controls",
+  "memory_profile_enabled": false,
+  "cap": "unlimited",
+  "allocation_policy": "requested_allocator forced-moving growth; identical helper for both frozen generations",
+  "CPU": 9,
+  "target": "x86_64-linux-gnu",
+  "features": "skylake+pku+sgx",
+  "build_mode": "ReleaseFast",
+  "timing_allowed": false,
+  "planned_order": [
+    {
+      "case": "nci-64k",
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/nci-64k.plain",
+      "bytes": 65536,
+      "sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "origin": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/fixtures/nci.full.plain:prefix65536",
+      "kind": "existing_silesia_prefix",
+      "dictionary_path": null,
+      "prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/nci-64k.plain"
+    },
+    {
+      "case": "nci-1m",
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/nci-1m.plain",
+      "bytes": 1048576,
+      "sha256": "3d234780bf0ef1a8f13459589904c5f6b0abe8da8c3e2119f20201c6bea6010d",
+      "origin": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/fixtures/nci.full.plain:prefix1048576",
+      "kind": "existing_silesia_prefix",
+      "dictionary_path": null,
+      "prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/nci-1m.plain"
+    },
+    {
+      "case": "nci-full",
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/nci-full.plain",
+      "bytes": 33553445,
+      "sha256": "fc63a31770947b8c2062d3b19ca94c00485a232bb91b502021948fee983e1635",
+      "origin": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/fixtures/nci.full.plain",
+      "kind": "full_silesia",
+      "dictionary_path": null,
+      "prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/nci-full.plain"
+    },
+    {
+      "case": "mozilla-1m",
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/mozilla-1m.plain",
+      "bytes": 1048576,
+      "sha256": "d307112d2151eef3c035e308b0478e831f6039bdd9770bb753207b02e1fd579d",
+      "origin": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/fixtures/mozilla.full.plain:prefix1048576",
+      "kind": "existing_silesia_prefix",
+      "dictionary_path": null,
+      "prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/mozilla-1m.plain"
+    },
+    {
+      "case": "random-1m",
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/random-1m.plain",
+      "bytes": 1048576,
+      "sha256": "0d17894b176e0a639fbe84f43af9fa37d77efa36518dd291fb64d6b103ba19c5",
+      "origin": "Python random.Random(0x2d798695).randbytes(1048576)",
+      "kind": "deterministic_random",
+      "dictionary_path": null,
+      "prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/random-1m.plain"
+    },
+    {
+      "case": "dictionary262145-1m",
+      "path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/dictionary262145-1m.plain",
+      "bytes": 1048680,
+      "sha256": "8e343d79691496a193ef39f972ca544c356f6fb362e0061d55181f58b11a6db6",
+      "origin": "next seeded raw dictionary262145 bytes, repeated trailing131071 bytes",
+      "kind": "public_level3_raw_dictionary",
+      "dictionary_path": "/tmp/vort-zstd-workspace-resource-yireuk68/fixtures/raw-dictionary262145.bin",
+      "prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/dictionary262145-1m.plain",
+      "dictionary_prior_epoch_path": "/tmp/vort-zstd-segment-kernel.ggk2tsh7/resource/fixtures/raw-dictionary262145.bin",
+      "dictionary_sha256": "039ceccca306134e8cd312bc4761a6efc41b08202b24e5d968937e7d90d19923",
+      "dictionary_bytes": 262145
+    }
+  ],
+  "rule": {
+    "max_peak_ratio": 1.05,
+    "exact_full_wire_required": true,
+    "caller_free_live0_required": true,
+    "allocated_equals_freed_required": true,
+    "ownership_errors0_required": true,
+    "stop_immediately_on_first_failed_row": true,
+    "no_later_cases_OOM_or_timing_after_failure": true
+  },
+  "observed": {
+    "completed_rows": 1,
+    "completed_codec_processes": 2,
+    "first_failed_case": "nci-64k",
+    "status": "rejected",
+    "unrun_cases": [
+      "nci-1m",
+      "nci-full",
+      "mozilla-1m",
+      "random-1m",
+      "dictionary262145-1m"
+    ]
+  },
+  "limits": "requested heap, excludes RSS, automatic stack, allocator metadata/page rounding and fixture I/O; no conclusions for warm lifecycle, multiblock cases, remaining five inputs, throughput or RSS"
+}

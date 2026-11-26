@@ -1,7 +1,9 @@
 # Shared literal model prototype, 2026-11-26
 
-Status: frozen source passes the declared performance, control and functional
-gates; integration commit and remote handoff are pending.
+Status: implemented in `907b0557`, with the sealed evidence package committed
+in `92204434` and pushed to remote main. The declared performance, control and
+functional gates pass; this slice does not repair the historical q8 regression
+or establish parity with the reference encoder.
 This follows the [opportunity audit](literal-model-opportunity-20261126/README.md)
 and [structural boundary](q8-structural-followup-20261126.md). It does not alter
 q8 models, candidate order, strict wire ties, distance parameters or presets.

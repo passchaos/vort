@@ -1,0 +1,28 @@
+{
+  "schema": "vort-workspace-resource-seal-v1",
+  "status": "sealed",
+  "sealed_utc": "2026-11-26T21:39:57.746182+00:00",
+  "resource_verdict": "rejected",
+  "HEAVY": 0,
+  "independent_copy_verification_actual_exit": 0,
+  "inventory_sha256": "b44565574d9a747ea9bb321b0f3febb4f0e1f2b8150cdd9da50c5683e068c903",
+  "receipt_sha256": {
+    "verification-copy.stdout": "e1b210ef0f97c08ff437398062bd8e80882d92665edee0ae8cf185a1b68a4fe7",
+    "verification-copy.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification-copy.command.json": "d53d0d96fb0742cff41b54b00001ff58bdef4374b7971fe96a06532b33ab967e",
+    "verification-copy.exit.json": "aa6d68efba5016b47c482c3d7ea2cb62a17799fc1e01a65d68e368f14f663d0a",
+    "verification-attempts/00-copy.command.json": "d53d0d96fb0742cff41b54b00001ff58bdef4374b7971fe96a06532b33ab967e",
+    "verification-attempts/00-copy.exit.json": "aa6d68efba5016b47c482c3d7ea2cb62a17799fc1e01a65d68e368f14f663d0a",
+    "verification-attempts/00-copy.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification-attempts/00-copy.stdout": "e1b210ef0f97c08ff437398062bd8e80882d92665edee0ae8cf185a1b68a4fe7"
+  },
+  "scope": "complete frozen resource/gate data package only; no new codec/test/build/timing executed; prototype not merged",
+  "archive_members_verified": 4522,
+  "source_files_verified": [
+    2217,
+    2219
+  ],
+  "cold_public_L3_rows_observed": 1,
+  "codec_processes_observed": 2,
+  "unrun_cases": 5
+}

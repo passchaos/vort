@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "9",
+    "python3",
+    "/tmp/vort-zstd-workspace-resource-package-verify-_k1ddysh/package/verify.py",
+    "--root",
+    "/tmp/vort-zstd-workspace-resource-package-verify-_k1ddysh/package"
+  ],
+  "cwd": "/tmp/vort-zstd-workspace-resource-package-verify-_k1ddysh/package",
+  "package_original_path": "/home/passchaos/project-z/vort/docs/performance/zstd/controlled-workspace-resource-20261127",
+  "package_copy_path": "/tmp/vort-zstd-workspace-resource-package-verify-_k1ddysh/package",
+  "started_utc": "2026-11-26T21:39:18.758519+00:00",
+  "ended_utc": "2026-11-26T21:39:20.342656+00:00",
+  "exit_code": 0,
+  "scope": "pure data portable-copy verification; no codec/test/build/timing"
+}

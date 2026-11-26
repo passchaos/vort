@@ -1,0 +1,18 @@
+{
+  "utc": "2026-11-26T21:34:22.477557+00:00",
+  "baseline_frozen_source_unchanged": true,
+  "candidate_frozen_source_unchanged": true,
+  "original_five_source_files_unchanged": {
+    "src/zstd.zig": true,
+    "src/zstd/encode/controlled_frame.zig": true,
+    "src/zstd/match/controlled_search.zig": true,
+    "src/zstd/match/controlled_search_workspace.zig": true,
+    "src/zstd/match/controlled_search_workspace_tests.zig": true
+  },
+  "new_and_prior_epoch_helpers_unchanged": {
+    "public_l3_probe.zig": true,
+    "requested_allocator.zig": true,
+    "allocator_tests.zig": true
+  },
+  "git_head_after": "92204434b194bd4e87cf6349cbd6bfaac64ea5da"
+}

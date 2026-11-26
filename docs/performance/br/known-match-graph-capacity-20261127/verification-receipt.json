@@ -1,0 +1,107 @@
+{
+  "extracted_frozen_source_files_rechecked": 2220,
+  "integrity_tamper": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "edge conservation changed",
+        "reason": "Original artifact fingerprint differs",
+        "rejected": true
+      },
+      {
+        "case": "one input row omitted",
+        "reason": "Original artifact fingerprint differs",
+        "rejected": true
+      },
+      {
+        "case": "capacity total lowered",
+        "reason": "Original artifact fingerprint differs",
+        "rejected": true
+      },
+      {
+        "case": "admission policy altered",
+        "reason": "Original artifact fingerprint differs",
+        "rejected": true
+      }
+    ]
+  },
+  "normal_actual_exit": 0,
+  "normal_copy_output_identical": true,
+  "original_artifact_files_rechecked": 36,
+  "original_artifacts_unchanged": true,
+  "readonly_copy": {
+    "copy_bytes_unchanged": true,
+    "copy_path": "/tmp/vort-known-match-capacity-copy.lkwlqzw8/package",
+    "copy_readonly": true,
+    "original_path_access_forbidden": true,
+    "package_opened_files": [
+      "README.md",
+      "SHA256SUMS",
+      "archive-bindings.json",
+      "evidence.tar.gz",
+      "package_io.cpython-310.pyc",
+      "package_io.py",
+      "sources.tar.gz",
+      "verify.py"
+    ],
+    "process_and_foreign_library_actions_forbidden": true,
+    "schema": "vort.brotli.known-match-capacity.independent-copy-check.v1",
+    "stdout_sha256": "22f8ffb90acdd7507a7f47acb76bfffd1bde6216ce5a647f90e838eaaaf50f39",
+    "verified": true
+  },
+  "readonly_copy_actual_exit": 0,
+  "schema": "vort.brotli.known-match-graph-capacity.final-receipt.v1",
+  "scope": "Capacity sums only, not throughput or simultaneous peak; direct graph not implemented, historical q8 regression not repaired",
+  "sealed_actual_exit": 0,
+  "semantic_tamper_after_hash_rebinding": {
+    "all_rejected": true,
+    "cases": [
+      {
+        "case": "edge conservation changed after fingerprint rebinding",
+        "reason": "Edge/run count conservation differs",
+        "rejected": true
+      },
+      {
+        "case": "one input row omitted after fingerprint rebinding",
+        "reason": "Complete12-row raw matrix differs",
+        "rejected": true
+      },
+      {
+        "case": "capacity sum lowered after fingerprint rebinding",
+        "reason": "Independent aggregate capacity sums differ",
+        "rejected": true
+      },
+      {
+        "case": "admission policy altered after fingerprint rebinding",
+        "reason": "Original edge-admission policy differs",
+        "rejected": true
+      }
+    ]
+  },
+  "stdout_sha256": "22f8ffb90acdd7507a7f47acb76bfffd1bde6216ce5a647f90e838eaaaf50f39",
+  "utc": "2026-11-26T21:35:31.582925+00:00",
+  "verification": {
+    "archive_members": {
+      "evidence.tar.gz": 34,
+      "sources.tar.gz": 2
+    },
+    "data": {
+      "capacity_scope": "Sum of12 independent input estimates; excludes owner/index/bookkeeping/remap overhead, not simultaneous peak",
+      "codec_or_timing_executed_by_verifier": false,
+      "complete_graph_allocated": false,
+      "edges": 15261027,
+      "historical_q8_elapsed_regression_repaired": false,
+      "implementation": "Direct full graph rejected before implementation because of memory growth risk; run representation remains an abstract opportunity",
+      "original_build_exit": 0,
+      "original_count_exit": 0,
+      "raw_graph_estimate_sum_bytes": 64189884,
+      "rows": 12,
+      "run_graph_estimate_sum_bytes": 52750076,
+      "source_files": 2220,
+      "throughput_measured": false
+    },
+    "schema": "vort.brotli.known-match-graph-capacity.offline-verification.v1",
+    "scope": "Package bytes only; no producer import, helper/binary execution, codec, build, foreign library or timing",
+    "verified": true
+  }
+}

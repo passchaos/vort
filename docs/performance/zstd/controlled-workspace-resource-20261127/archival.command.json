@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "9",
+    "python3",
+    "/tmp/vort-zstd-workspace-resource-yireuk68/archive_data.py"
+  ],
+  "cwd": "/home/passchaos/project-z/vort/docs/performance/zstd/controlled-workspace-resource-20261127",
+  "started_utc": "2026-11-26T21:38:26.912659+00:00",
+  "ended_utc": "2026-11-26T21:38:35.775914+00:00",
+  "exit_code": 0,
+  "HEAVY": 1,
+  "scope": "compression/hash data only",
+  "producer_source_package_path": "archival-data.py",
+  "producer_source_sha256": "749d387963cff03b35077e88ab965e0ec6556f0a431ba1d00314a7ccc5b5dd69"
+}

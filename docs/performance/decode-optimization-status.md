@@ -701,6 +701,51 @@ with 49% more).
   fusion or FSE build scatter reduction; see
   [zstd-decode-current-20261110](zstd-decode-current-20261110.md).
 
+## Complete match graph capacity and workspace lifetime screens (2026-11-27)
+
+The [four-anchor known-edge measurement](br/known-match-graph-capacity-20261127/README.md)
+freezes `92204434` and counts 15,261,027 exact valid q8 LZ edges across twelve
+independent 64 KiB inputs. Raw graph estimates sum to 64,189,884 B; the lossless
+equal-length/arithmetic-distance run representation sums to 52,750,076 B.
+These are independent per-input storage estimates, not simultaneous heap peak,
+actual allocator capacities, codec timings or predicted throughput. Direct
+complete graph storage is not implemented or adopted. The historical q8
+regression remains unrepaired.
+
+The [controlled-search workspace screen](zstd/controlled-workspace-resource-20261127/README.md)
+retains the original PrefixNode layout, hash, strides, edge order and budgets.
+Storage contracts pass native Debug and actual WASI ReleaseSafe 7/7 each; an
+earlier native 6/7 attempt and its source remain separate. Read-only integration
+review finds no supported-path correctness/ownership defect, but does not
+establish full codec correctness or resource acceptance.
+
+The predeclared cold public allocating L3 resource screen stops at its first
+failed row: NCI 64 KiB requested-heap peak rises from 1,468,774 B to 1,912,513 B
+(443,739 B, 30.21%), violating the 5% gate. Both runs exit0, wires match byte
+for byte and caller release leaves live0/allocated==freed/active0. Both have
+45 backing allocation attempts and 1,964,957 cumulative requested bytes.
+The original Index releases block_head before parsing and the other three
+arrays before entropy emission; the new owner retains all four through those
+phases. First-block retained index arrays total 524,288 B, including the
+131,072 B block_head. This explains the source lifetime difference; retained
+bytes do not equal the observed peak increase.
+
+The candidate is rejected before throughput sampling. The remaining five
+resource inputs, warm/multiblock resource matrix, codec OOM sweep and full
+codec Native/WASI gates are not run or claimed. Preserve the complete frozen
+source and actual failures, save the prototype separately and restore main
+production source. The rejected five-file prototype is saved in local Git
+stash `7e6d6b8bd3114162199dc0dfb5bc2be00d10dc5e`; production src matches HEAD.
+Future work must compare phase lifetimes before extending
+workspace ownership; no speed, RSS or industry-ranking claim follows here.
+
+The [comparison scope audit](performance-comparison-scope-20261126.md) now
+records the accepted literal-model commits and keeps the historical source
+anchor, recent-source increments and competitor comparisons distinct. Recent
+1.03200695x q8 improvement cannot be combined with a separate historical
+epoch to report current recovery. Prioritize repeated planning and candidate
+emission rather than further expanding default parser work.
+
 ## Remaining structural options
 
 1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total

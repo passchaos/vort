@@ -1,0 +1,36 @@
+{
+  "utc": "2026-11-26T21:33:32.197208+00:00",
+  "target_usize_bits": 64,
+  "hash_size": 32768,
+  "u32_bytes": 4,
+  "PrefixNode_bytes": 16,
+  "prefix_head_bytes": 131072,
+  "block_head_bytes": 131072,
+  "retained_block_head_extra_overlap_bytes": 131072,
+  "first_nci64k_workspace_requested_bytes": 524288,
+  "first_nci64k_geometry": {
+    "prefix_nodes_capacity": 0,
+    "prefix_head_capacity": 32768,
+    "block_previous_capacity": 65536,
+    "block_head_capacity": 32768
+  },
+  "multiblock_max_workspace_requested_bytes": 1835008,
+  "multiblock_geometry": {
+    "prefix_nodes_capacity": 65536,
+    "prefix_head_capacity": 32768,
+    "block_previous_capacity": 131072,
+    "block_head_capacity": 32768
+  },
+  "lifetime_before": {
+    "block_head": "freed at baseline Index.init return",
+    "prefix_head_prefix_nodes_block_previous": "freed at baseline planReuse return, before entropy emission"
+  },
+  "lifetime_after": {
+    "all_four_arrays": "retained in NativeBlockEncodeScratch.controlled_search until outer scratch deinit; entropy/wire work sees retained capacity"
+  },
+  "scope": "source-derived array and lifetime accounting; runtime whole-operation requested peak is measured separately; no phase timing or allocator tracing added",
+  "source_hashes": {
+    "candidate-source/src/zstd/match/controlled_search_workspace.zig": "c74bbd4073ccd70ce5caa14389e1e6eeeaaf7001b3fc3f38e3485fb6005e15ea",
+    "candidate-source/src/zstd/match/controlled_search.zig": "a6d6d2cef7dc7e164ffc4d5ba8089e9dad5da774054655dc601da28236d73a06"
+  }
+}

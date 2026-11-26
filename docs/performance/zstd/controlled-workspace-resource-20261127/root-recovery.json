@@ -1,0 +1,9 @@
+{
+  "utc": "2026-11-26T21:38:26.373070+00:00",
+  "prototype_stash": "7e6d6b8bd3114162199dc0dfb5bc2be00d10dc5e",
+  "stash_object_type": "commit",
+  "HEAD": "92204434b194bd4e87cf6349cbd6bfaac64ea5da",
+  "git_diff_HEAD_src": "",
+  "Root_report": "five-file prototype saved to stash; production restored; no full codec gates run; later records tests cancelled before file creation",
+  "authority_for_archived_source": "already frozen resource epoch; stash and restored worktree are contextual recovery evidence"
+}
