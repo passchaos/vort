@@ -34,6 +34,8 @@ const prepared_parameter_distance = @import("br/encoder/prepared_parameter_dista
 const parameter_pair = @import("br/encoder/parameter_pair.zig");
 const prepared_adaptive_distance = @import("br/encoder/prepared_adaptive_distance.zig");
 const prepared_literal = @import("br/encoder/prepared_literal.zig");
+const literal_model_owner = @import("br/encoder/literal_model/owner.zig");
+const literal_model_result = @import("br/encoder/literal_model/build_result.zig");
 const counting_writer = @import("br/encoder/counting_writer.zig");
 const weighted_payload = @import("br/encoder/weighted_payload.zig");
 const context_candidate_group = @import("br/encoder/context_candidate_group.zig");
@@ -5513,6 +5515,11 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     var context_proposals: literal_context_split.ProposalWorkspace = .init();
     defer context_proposals.deinit(allocator);
     var wire_options = qualityWireOptions(schedule, options, window_bits);
+    wire_options.reuse_literal_models = schedule.quality == .q8 and options.mode == .generic and
+        options.window_bits == 16 and !options.large_window and options.metadata.len == 0 and
+        options.hq == null and !options.shared_dictionary.hasSerializedStatic() and
+        try plannedSharedDictionarySize(options.shared_dictionary) == 0 and
+        schedule.optimal.command_state_max_input_len == 0;
     if (@import("br/encoder/literal_context_split/workspace_policy.zig").enabled and
         schedule.quality == .q8 and options.mode == .generic and
         !options.large_window and input.len >= 8 * 1024)
@@ -7881,6 +7888,8 @@ const CommandPlanEncodeOptions = struct {
     disable_literal_context_modeling: bool = false,
     prepared_common: ?*prepared_command_distance.Prepared = null,
     prepared_literal: ?*prepared_literal.State = null,
+    /// Literal-only models borrowed within one immutable command group.
+    shared_literal_models: ?*literal_model_owner.Owner = null,
     large_window: bool = false,
     hq_model_output: ?*@import("br/encoder/hq_codec.zig").Model = null,
     use_recent_distances: bool = false,
@@ -10661,6 +10670,8 @@ const LazyWireOptions = struct {
     shared_context_proposals: ?*literal_context_split.ProposalWorkspace = null,
     /// Borrowed only within command_candidate_group for immutable commands.
     shared_common: ?*prepared_command_distance.Prepared = null,
+    reuse_literal_models: bool = false,
+    shared_literal_models: ?*literal_model_owner.Owner = null,
     large_window: bool = false,
     try_recent_distances: bool = false,
     /// Null preserves the legacy coupling where recent-distance search also
@@ -10847,6 +10858,66 @@ var test_disable_context_proposal_workspace = false;
 var test_shared_command_candidate_groups: usize = 0;
 var test_shared_adaptive_literal_models: usize = 0;
 var test_shared_adaptive_distance_models: usize = 0;
+var test_disable_literal_model_reuse = false;
+var test_literal_model_groups: usize = 0;
+var test_literal_model_counters: literal_model_owner.Counters = .{};
+
+const LiteralModelTestCodec = struct {
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const Owner = literal_model_owner.Owner;
+    pub const Command = command_plan.Command;
+    pub const State = prepared_literal.State;
+    pub const PublicOptions = PlannedEncodeOptions;
+    pub const MemoryProfile = EncodeMemoryProfile;
+    pub const decode = decodeStreamAlloc;
+    pub const PublicResult = struct {
+        wire: []u8,
+        groups: usize,
+        counters: literal_model_owner.Counters,
+    };
+
+    pub fn encode(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, options: Options, stats: *Stats) Error![]u8 {
+        return encodeCommandPlanWithOptionsAllocRecorded(false, .{}, allocator, input, commands, null, stats, options);
+    }
+
+    pub fn prepareAdaptive(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, options: Options, state: *State, stats: *Stats) Error!usize {
+        var common = try prepared_adaptive_distance.Prepared.init(PreparedAdaptiveDistanceStrategy, allocator, commands, options);
+        defer common.deinit(allocator);
+        const reference = try prepareCountedAdaptiveDistanceLiteralRecorded(false, .{}, allocator, input, commands, stats, options, &common, state);
+        return reference.bytes;
+    }
+
+    pub fn encodePublic(allocator: std.mem.Allocator, input: []const u8, options: PublicOptions, disable_reuse: bool) Error!PublicResult {
+        const previous = test_disable_literal_model_reuse;
+        test_disable_literal_model_reuse = disable_reuse;
+        defer test_disable_literal_model_reuse = previous;
+        test_literal_model_groups = 0;
+        test_literal_model_counters = .{};
+        const wire = try encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+        return .{ .wire = wire, .groups = test_literal_model_groups, .counters = test_literal_model_counters };
+    }
+};
+
+test "br shared literal model owner contracts" {
+    _ = @import("br/encoder/literal_model/tests.zig");
+}
+
+test "br shared literal model actual writer smoke" {
+    try @import("br/encoder/literal_model/smoke_tests.zig").run(LiteralModelTestCodec);
+}
+
+test "br shared literal model writer and prepared oracles" {
+    try @import("br/encoder/literal_model/writer_tests.zig").run(LiteralModelTestCodec);
+}
+
+test "br shared literal model public gold and scope" {
+    try @import("br/encoder/literal_model/public_tests.zig").run(LiteralModelTestCodec);
+}
+
+test "br shared literal model public resources" {
+    try @import("br/encoder/literal_model/resource_tests.zig").run(LiteralModelTestCodec);
+}
 
 fn sharedCommandCandidateGroupSupported(input: []const u8, commands: []const command_plan.Command, options: LazyWireOptions) bool {
     if (comptime builtin.is_test) if (test_disable_shared_command_candidate_group) return false;
@@ -10871,9 +10942,23 @@ fn encodeFinalCommandCandidateGroupRecorded(comptime trace_enabled: bool, trace:
     if (comptime builtin.is_test) {
         if (wire_options.shared_common != null) test_shared_command_candidate_groups += 1;
     }
-    const baseline = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands, null, stats, wire_options);
+    var literal_models = literal_model_owner.Owner.init(input, commands);
+    defer literal_models.deinit(allocator);
+    var scoped_options = wire_options;
+    const disabled = if (comptime builtin.is_test) test_disable_literal_model_reuse else false;
+    if (!disabled and wire_options.reuse_literal_models and !literal_context_policy.disabled(wire_options) and
+        input.len >= 8 * 1024 and input.len <= 64 * 1024 and !commandsHaveExactEncoding(commands))
+    {
+        scoped_options.shared_literal_models = &literal_models;
+        if (comptime builtin.is_test) test_literal_model_groups += 1;
+    }
+    defer if (comptime builtin.is_test) {
+        inline for (comptime std.meta.fieldNames(literal_model_owner.Counters)) |field|
+            @field(test_literal_model_counters, field) += @field(literal_models.counters, field);
+    };
+    const baseline = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands, null, stats, scoped_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
-    if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, stats, wire_options, baseline)) |split_candidate| {
+    if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, stats, scoped_options, baseline)) |split_candidate| {
         freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
         return split_candidate;
     }
@@ -11850,6 +11935,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         null;
     var primary_options = CommandPlanEncodeOptions{
         .disable_literal_context_modeling = literal_context_policy.disabled(options),
+        .shared_literal_models = options.shared_literal_models,
         .use_recent_distances = use_recent_distances,
         .literal_context_candidate = primary_context,
         .large_window = options.large_window,
@@ -11914,6 +12000,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
                 var adaptive_stats = initial_stats;
                 const adaptive = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &adaptive_stats, .{
                     .prepared_common = primary_options.prepared_common,
+                    .shared_literal_models = options.shared_literal_models,
                     .use_recent_distances = use_recent_distances,
                     .disable_literal_context_modeling = literal_context_policy.disabled(options),
                     .literal_context_candidate = adaptive_context,
@@ -11981,6 +12068,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
     }
     var baseline_stats = initial_stats;
     const baseline = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &baseline_stats, .{
+        .shared_literal_models = options.shared_literal_models,
         .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .large_window = options.large_window,
         .window_bits = options.window_bits,
@@ -12040,7 +12128,7 @@ const PreparedContextGroupStrategy = struct {
             try literal_context_split.chooseProposals(allocator, input, commands);
     }
     pub fn plain(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *Stats, options: UserOptions) @This().Error![]u8 {
-        return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options), .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances, .distance_parameters = options.distance_parameters, .optimize_same_last_distance = options.optimize_same_last_distance });
+        return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .shared_literal_models = options.shared_literal_models, .disable_literal_context_modeling = literal_context_policy.disabled(options), .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances, .distance_parameters = options.distance_parameters, .optimize_same_last_distance = options.optimize_same_last_distance });
     }
 };
 
@@ -12163,6 +12251,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             null,
             &distance_context_stats,
             .{
+                .shared_literal_models = options.shared_literal_models,
                 .use_recent_distances = baseline.use_recent_distances,
                 .disable_literal_context_modeling = literal_context_policy.disabled(options),
                 .literal_context_candidate = baseline.literal_context_candidate,
@@ -12840,6 +12929,7 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
     const primary_options: CommandPlanEncodeOptions = .{
         // Literal block splitting disables context trees, while command and
         // distance splitting retain the winning context candidate.
+        .shared_literal_models = options.shared_literal_models,
         .use_recent_distances = baseline.use_recent_distances,
         .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .literal_context_candidate = if (literal_split == null and adaptive_literal_split == null) baseline.literal_context_candidate else null,
@@ -12878,6 +12968,7 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
         for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |alternate_context| {
             var alternate_stats = initial_stats;
             const alternate = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &alternate_stats, .{
+                .shared_literal_models = options.shared_literal_models,
                 .use_recent_distances = baseline.use_recent_distances,
                 .disable_literal_context_modeling = literal_context_policy.disabled(options),
                 .literal_context_candidate = alternate_context,
@@ -12901,6 +12992,7 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
         if (baseline.alternate_plain_literals) {
             var plain_stats = initial_stats;
             const plain = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &plain_stats, .{
+                .shared_literal_models = options.shared_literal_models,
                 .use_recent_distances = baseline.use_recent_distances,
                 .command_split = command_split,
                 .adaptive_command_split = adaptive_command_split,
@@ -13295,17 +13387,22 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
         for (used[0..candidate.tree_count]) |is_used| if (!is_used) return error.InvalidBlockPlan;
     }
 
+    var literal_model = if (options.shared_literal_models) |owner|
+        owner.lookup(input, commands, options)
+    else
+        null;
     var literal_frequencies: [256]u32 = if (options.optimize_literal_tree_wire) @splat(0) else undefined;
     var literal_seen: [4]u64 = @splat(0);
     var literal_alphabet: prepared_literal.Alphabet = undefined;
     literal_alphabet.len = 0;
     var context_frequencies: [literal_context_split.max_trees][256]u32 = undefined;
-    if (context_candidate) |candidate|
+    if (literal_model == null) if (context_candidate) |candidate|
         @memset(context_frequencies[0..candidate.tree_count], @splat(0));
     for (commands) |command| {
         if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start)
             return error.InvalidBlockPlan;
-        for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
+        const literal_bytes: []const u8 = if (literal_model == null) input[command.insert_start..][0..command.insert_len] else &.{};
+        for (literal_bytes, command.insert_start..) |literal, position| {
             if (context_candidate) |candidate| {
                 const history = literalContextHistory(input, position, options.initial_previous);
                 const context = literal_context.value(candidate.mode, history[0], history[1]);
@@ -13313,19 +13410,21 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
             } else try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
         }
     }
-    if (context_candidate == null) {
+    if (literal_model == null and context_candidate == null) {
         if (literal_alphabet.len == 0)
             try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
         try literal_alphabet.sortByFrequencies(&literal_frequencies);
     }
 
     var context_alphabets: [literal_context_split.max_trees]prepared_literal.Alphabet = undefined;
-    if (context_candidate) |candidate| for (context_alphabets[0..candidate.tree_count], context_frequencies[0..candidate.tree_count]) |*alphabet, *frequencies| {
+    if (literal_model) |model| {
+        literal_model_result.copyAlphabets(model, &literal_alphabet, &context_alphabets);
+    } else if (context_candidate) |candidate| for (context_alphabets[0..candidate.tree_count], context_frequencies[0..candidate.tree_count]) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     };
     const literal_lengths = if (context_candidate == null)
-        try chooseLiteralTreeLengths(
+        if (literal_model) |model| model.lengths[0] else try chooseLiteralTreeLengths(
             allocator,
             &literal_frequencies,
             &literal_alphabet,
@@ -13335,7 +13434,9 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
         undefined;
     var context_lengths: [literal_context_split.max_trees][256]u4 = undefined;
     if (context_candidate) |candidate| {
-        for (context_lengths[0..candidate.tree_count], context_alphabets[0..candidate.tree_count], context_frequencies[0..candidate.tree_count]) |*lengths, *alphabet, *frequencies| {
+        if (literal_model) |model| {
+            @memcpy(context_lengths[0..candidate.tree_count], model.lengths);
+        } else for (context_lengths[0..candidate.tree_count], context_alphabets[0..candidate.tree_count], context_frequencies[0..candidate.tree_count]) |*lengths, *alphabet, *frequencies| {
             lengths.* = try alphabet.codeLengths(frequencies);
         }
     }
@@ -13348,6 +13449,10 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
         context_lengths[0..candidate.tree_count]
     else
         @as(*const [1][256]u4, @ptrCast(&literal_lengths));
+    if (literal_model == null) if (options.shared_literal_models) |owner| {
+        const frequencies = if (context_candidate) |candidate| context_frequencies[0..candidate.tree_count] else @as(*const [1][256]u32, @ptrCast(&literal_frequencies));
+        literal_model = try literal_model_result.capture(owner, allocator, input, commands, options, context_candidate, frequencies, alphabets, lengths);
+    };
     stats.literal_symbol_count = if (context_candidate) |candidate| blk: {
         var count: usize = 0;
         for (context_alphabets[0..candidate.tree_count]) |alphabet| count += alphabet.len;
@@ -13378,7 +13483,9 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
         options.distance_parameters.wireAlphabetSize(.standard),
     );
     var payload_bits = common.payload_bits;
-    if (context_candidate) |candidate| {
+    if (literal_model) |model| {
+        payload_bits = try weighted_payload.add(payload_bits, model.literal_payload_bits);
+    } else if (context_candidate) |candidate| {
         for (context_frequencies[0..candidate.tree_count], alphabets, lengths) |*frequencies, *alphabet, *tree_lengths|
             payload_bits = try weighted_payload.add(
                 payload_bits,
@@ -13919,6 +14026,10 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         if (split.blockCount() == 0 or split.types.len != split.lengths.len or split.type_count < 2)
             return error.InvalidBlockPlan;
     }
+    var literal_model = if (options.shared_literal_models) |owner|
+        owner.lookup(input, commands, options)
+    else
+        null;
     var literal_frequencies: [256]u32 = if (options.optimize_literal_tree_wire) @splat(0) else undefined;
     var literal_seen: [4]u64 = @splat(0);
     var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
@@ -13927,7 +14038,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     // Fast and balanced encoding use one literal tree. Avoid clearing two
     // additional dense histograms unless a ratio candidate requests context
     // trees; the ordinary ratio path benefits too when it keeps one tree.
-    if (context_candidate != null) @memset(&literal_context_frequencies, @splat(0));
+    if (literal_model == null and context_candidate != null) @memset(&literal_context_frequencies, @splat(0));
     var literal_block_frequencies: [literal_block_split.max_regions][256]u32 = undefined;
     if (options.literal_split != null) @memset(&literal_block_frequencies, @splat(0));
     const adaptive_literal_type_count: usize = if (adaptive_literal_split) |split| split.type_count else 0;
@@ -14015,7 +14126,8 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         @memcpy(distance_frequencies[0..prepared_command_distance.distance_capacity], &cached.distance_frequencies);
         if (cache_command_symbols) command_symbols = cached.command_symbols;
         for (commands) |command| {
-            for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
+            const literal_bytes: []const u8 = if (literal_model == null) input[command.insert_start..][0..command.insert_len] else &.{};
+            for (literal_bytes, command.insert_start..) |literal, position| {
                 try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
                 if (context_candidate) |candidate| {
                     const history = literalContextHistory(input, position, options.initial_previous);
@@ -14065,7 +14177,8 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                 }
                 adaptive_command_block_frequencies.?[split.types[adaptive_command_block_index]][encoding.symbol] += 1;
             } else try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
-            for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
+            const literal_bytes: []const u8 = if (literal_model == null) input[command.insert_start..][0..command.insert_len] else &.{};
+            for (literal_bytes, command.insert_start..) |literal, position| {
                 if (options.literal_split) |split| {
                     literal_block_frequencies[split.blockIndex(literal_index)][literal] += 1;
                     literal_index += 1;
@@ -14166,7 +14279,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     // Brotli still carries a literal tree when dictionary commands cover the
     // entire meta-block. A deterministic unused symbol keeps that tree legal
     // without adding payload bits.
-    if (options.literal_split == null and adaptive_literal_split == null and literal_alphabet.len == 0)
+    if (literal_model == null and options.literal_split == null and adaptive_literal_split == null and literal_alphabet.len == 0)
         try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
     if (options.literal_split) |split| {
         for (0..split.regionCount() - 1) |boundary_index|
@@ -14241,11 +14354,15 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         null;
     defer if (adaptive_distance_block_alphabets) |alphabets| allocator.free(alphabets);
     var distance_alphabet: command_plan.PrefixAlphabetFor(distance_capacity) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
-    if (options.literal_split == null and adaptive_literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
-    if (context_candidate) |candidate| for (literal_context_alphabets[0..candidate.tree_count], literal_context_frequencies[0..candidate.tree_count]) |*alphabet, *frequencies| {
-        if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
-        try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
-    };
+    if (literal_model) |model| {
+        literal_model_result.copyAlphabets(model, &literal_alphabet, &literal_context_alphabets);
+    } else {
+        if (options.literal_split == null and adaptive_literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
+        if (context_candidate) |candidate| for (literal_context_alphabets[0..candidate.tree_count], literal_context_frequencies[0..candidate.tree_count]) |*alphabet, *frequencies| {
+            if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
+            try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
+        };
+    }
     if (options.literal_split) |split| for (literal_block_alphabets[0..split.typeCount()], literal_block_frequencies[0..split.typeCount()]) |*alphabet, *frequencies|
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     if (adaptive_literal_block_alphabets) |alphabets| for (alphabets, adaptive_literal_block_frequencies.?) |*alphabet, *frequencies|
@@ -14339,15 +14456,23 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = if (options.literal_split == null and adaptive_literal_split == null)
-        try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
+        if (literal_model) |model| model.lengths[0] else try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
     else
         undefined;
     const literal_context_lengths = if (context_candidate != null) blk: {
         var lengths: [literal_context_split.max_trees][256]u4 = undefined;
         const tree_count = context_candidate.?.tree_count;
-        for (lengths[0..tree_count], literal_context_alphabets[0..tree_count], literal_context_frequencies[0..tree_count]) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
+        if (literal_model) |model| {
+            @memcpy(lengths[0..tree_count], model.lengths);
+        } else for (lengths[0..tree_count], literal_context_alphabets[0..tree_count], literal_context_frequencies[0..tree_count]) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
+    if (literal_model == null) if (options.shared_literal_models) |owner| {
+        const alphabets = if (context_candidate) |candidate| literal_context_alphabets[0..candidate.tree_count] else @as(*const [1]prepared_literal.Alphabet, @ptrCast(&literal_alphabet));
+        const lengths = if (context_candidate) |candidate| literal_context_lengths[0..candidate.tree_count] else @as(*const [1][256]u4, @ptrCast(&literal_lengths));
+        const frequencies = if (context_candidate) |candidate| literal_context_frequencies[0..candidate.tree_count] else @as(*const [1][256]u32, @ptrCast(&literal_frequencies));
+        literal_model = try literal_model_result.capture(owner, allocator, input, commands, options, context_candidate, frequencies, alphabets, lengths);
+    };
     const literal_block_lengths = if (options.literal_split) |split| blk: {
         var lengths: [literal_block_split.max_regions][256]u4 = undefined;
         for (lengths[0..split.typeCount()], literal_block_alphabets[0..split.typeCount()], literal_block_frequencies[0..split.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
@@ -14558,7 +14683,9 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             payload_bits = try weighted_payload.add(payload_bits, cached.payload_extra_bits);
         }
         if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
-        if (context_candidate) |candidate| {
+        if (literal_model) |model| {
+            payload_bits = try weighted_payload.add(payload_bits, model.literal_payload_bits);
+        } else if (context_candidate) |candidate| {
             for (literal_context_frequencies[0..candidate.tree_count], alphabets, tree_lengths) |*frequencies, *alphabet, *lengths|
                 payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(256, frequencies, alphabet, lengths, false));
         } else payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(256, &literal_frequencies, &literal_alphabet, &literal_lengths, false));

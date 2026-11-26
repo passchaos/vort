@@ -3172,3 +3172,29 @@ follows. The source is saved in Git stash
 bytecode; all 2,211 frozen source assets match, and production source is restored
 to committed main. Further context/nonrecent work requires a fresh epoch and
 must account for the already rejected nonrecent prepared-context extension.
+
+## Shared q8 literal models pass adoption gates (2026-11-27)
+
+The [shared literal model slice](br/shared-literal-model-20261126.md) retains
+complete active alphabets/lengths and pure literal costs within immutable
+preferred/final command groups. It preserves all current models, parser
+budgets, candidate order and wire ties. The frozen 12-row public allocating
+q8/generic/explicit-window16 matrix completes 90 pairs / 180 calls:
+throughput GM 1.0320069538939025x, paired95CI
+[1.0286014769465641, 1.0354237056386224], all row floors and exact initial wires
+pass. Independent full/raw/source replay reproduces the result without
+producer import. q4/q11-cap8/ratio and all twelve4KiB controls pass their
+point-estimate floors; small NCI is0.98538827044x with CI lower0.97854051942,
+which does not guarantee a0.98 confidence bound. No sample is removed or retried.
+
+Native/WASI model and wire oracles, 625/658 complete induced OOM sweeps with
+active retries, exact-D/D-minus-one and cleanup pass. Mozilla/Xray peak requested
+heap is unchanged, while allocation counts and cumulative bytes increase;
+the full public timing includes that cost. Whole-library `test check check-wasm`
+completes414/414steps and6068/6070tests (two skipped), actualexit0. Diagnostic
+`failed command` lines are retained alongside that authoritative successful
+summary; the exact Zstd WASM rerun also passes84/84 without changing the binary.
+This is a supported source improvement under its declared lane, not three-codec
+industry leadership or proof that the historical q8 regression is repaired.
+Full provenance, raw observations and intermediate failures are retained in
+[the evidence package](br/shared-literal-model-20261126/README.md).
