@@ -35,6 +35,7 @@ const parameter_pair = @import("br/encoder/parameter_pair.zig");
 const prepared_adaptive_distance = @import("br/encoder/prepared_adaptive_distance.zig");
 const prepared_literal = @import("br/encoder/prepared_literal.zig");
 const literal_model_owner = @import("br/encoder/literal_model/owner.zig");
+const split_plan_reuse = @import("br/encoder/split_plan_reuse.zig");
 const literal_model_result = @import("br/encoder/literal_model/build_result.zig");
 const counting_writer = @import("br/encoder/counting_writer.zig");
 const weighted_payload = @import("br/encoder/weighted_payload.zig");
@@ -5561,6 +5562,21 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         break :blk try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     };
     defer command_stream.deinit(allocator);
+    // These commands remain immutable and live through all distance-parameter
+    // candidates. Retain completed split plans only until that family ends.
+    var split_plans = SplitPlanOwner.init(input, command_stream.commands, 64 * 1024);
+    defer split_plans.deinit(allocator);
+    const disable_split_reuse = if (comptime builtin.is_test)
+        test_disable_split_plan_reuse or test_materialize_context_primary
+    else
+        false;
+    if (!disable_split_reuse and wire_options.reuse_literal_models and
+        !literal_context_policy.disabled(wire_options) and
+        input.len >= 8 * 1024 and input.len <= 64 * 1024 and command_stream.commands.len != 0)
+    {
+        wire_options.shared_split_plans = &split_plans;
+        if (comptime builtin.is_test) test_split_plan_groups += 1;
+    }
     var stats: encoder_stats.PlannedEncodeStats = .{};
     var best = if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input))
         try encodeStoredStreamRecorded(trace_enabled, trace, allocator, input, stream_options)
@@ -5766,10 +5782,12 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         // the frozen legacy wires, where the forced-recent baseline can still
         // be the unique winner.
         const skip_search_without_alternative = input.len >= 64 * 1024;
-        var split_alternative: ?encoder_distance.Parameters = null;
+        var split_choice: parameter_pair.Choice = .unsearched;
         if (prepared_pair_supported) {
             if (comptime builtin.is_test) test_parameter_pair_path_calls += 1;
-            if (try parameter_pair.against(ParameterPairStrategy, trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &distance_stats, distance_options, best)) |candidate| {
+            const result = try parameter_pair.againstWithChoice(ParameterPairStrategy, trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &distance_stats, distance_options, best);
+            split_choice = result.choice;
+            if (result.wire) |candidate| {
                 freeQualityRecorded(trace_enabled, trace, allocator, best);
                 best = candidate;
             }
@@ -5778,12 +5796,13 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
             // when a non-default parameter set exists. With no alternative the
             // baseline never beat the existing best on the measured large-block
             // corpus, so skip its full-wire materialization.
-            split_alternative = try chooseDistanceParameterAlternativeAlloc(
+            const alternative = try chooseDistanceParameterAlternativeAlloc(
                 allocator,
                 command_stream.commands,
                 distance_options,
             );
-            if (split_alternative) |alternative_parameters| {
+            split_choice = .{ .searched = alternative };
+            if (alternative) |alternative_parameters| {
                 const legacy_distance_candidate = try encodeCommandPlanWithDistanceParametersAllocRecorded(
                     trace_enabled,
                     trace.withOrigin(.lazy),
@@ -5813,14 +5832,18 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         }
         // Both the legacy and prepared-pair parameter paths must see the same
         // split-aware candidate so their complete wires stay comparable.
-        if (prepared_pair_supported or !skip_search_without_alternative or split_alternative != null) {
+        const has_alternative = switch (split_choice) {
+            .unsearched => false,
+            .searched => |alternative| alternative != null,
+        };
+        if (prepared_pair_supported or !skip_search_without_alternative or has_alternative) {
             const distance_candidate = try encodeDistanceParameterSearchWithSplitsAllocRecorded(
                 trace_enabled,
                 trace.withOrigin(.lazy),
                 allocator,
                 input,
                 command_stream.commands,
-                split_alternative,
+                split_choice,
                 &distance_stats,
                 wire_options,
                 distance_options,
@@ -5828,6 +5851,13 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
         }
     }
+
+    if (comptime builtin.is_test) if (wire_options.shared_split_plans != null) {
+        inline for (comptime std.meta.fieldNames(SplitPlanOwner.Counters)) |field|
+            @field(test_split_plan_counters, field) += @field(split_plans.counters, field);
+    };
+    split_plans.deinit(allocator);
+    wire_options.shared_split_plans = null;
 
     // The repcode-aware command-state candidate is the quality win on
     // text-like blocks; gate it by content so binary blocks keep the 8 KiB
@@ -7293,7 +7323,7 @@ fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
     allocator: std.mem.Allocator,
     input: []const u8,
     commands: []const command_plan.Command,
-    precomputed_alternative: ?encoder_distance.Parameters,
+    precomputed_choice: parameter_pair.Choice,
     stats: *encoder_stats.PlannedEncodeStats,
     wire_options: LazyWireOptions,
     distance_options: CommandPlanEncodeOptions,
@@ -7314,15 +7344,14 @@ fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
     );
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
 
-    const alternative_parameters = precomputed_alternative orelse
-        (try chooseDistanceParameterAlternativeAlloc(
-            allocator,
-            commands,
-            distance_options,
-        ) orelse {
-            stats.* = baseline_stats;
-            return baseline;
-        });
+    const chosen_alternative = switch (precomputed_choice) {
+        .unsearched => try chooseDistanceParameterAlternativeAlloc(allocator, commands, distance_options),
+        .searched => |alternative| alternative,
+    };
+    const alternative_parameters = chosen_alternative orelse {
+        stats.* = baseline_stats;
+        return baseline;
+    };
     var alternative_options = wire_options;
     alternative_options.distance_parameters = alternative_parameters;
     alternative_options.optimize_same_last_distance = false;
@@ -10672,6 +10701,8 @@ const LazyWireOptions = struct {
     shared_common: ?*prepared_command_distance.Prepared = null,
     reuse_literal_models: bool = false,
     shared_literal_models: ?*literal_model_owner.Owner = null,
+    /// Borrowed while the original quality command stream remains immutable.
+    shared_split_plans: ?*SplitPlanOwner = null,
     large_window: bool = false,
     try_recent_distances: bool = false,
     /// Null preserves the legacy coupling where recent-distance search also
@@ -10917,6 +10948,67 @@ test "br shared literal model public gold and scope" {
 
 test "br shared literal model public resources" {
     try @import("br/encoder/literal_model/resource_tests.zig").run(LiteralModelTestCodec);
+}
+
+const SplitPlanReuseTestCodec = struct {
+    pub const PublicOptions = PlannedEncodeOptions;
+    pub const MemoryProfile = EncodeMemoryProfile;
+    pub const Counters = SplitPlanOwner.Counters;
+    pub const Owner = SplitPlanOwner;
+    pub const Command = command_plan.Command;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const WireOptions = LazyWireOptions;
+    pub const decode = decodeStreamAlloc;
+    pub const PublicResult = struct {
+        wire: []u8,
+        groups: usize,
+        counters: Counters,
+    };
+
+    pub fn encodePublic(allocator: std.mem.Allocator, input: []const u8, options: PublicOptions, disable_reuse: bool) Error!PublicResult {
+        const previous = test_disable_split_plan_reuse;
+        test_disable_split_plan_reuse = disable_reuse;
+        defer test_disable_split_plan_reuse = previous;
+        test_split_plan_groups = 0;
+        test_split_plan_counters = .{};
+        const wire = try encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+        return .{ .wire = wire, .groups = test_split_plan_groups, .counters = test_split_plan_counters };
+    }
+
+    pub fn buildCommands(allocator: std.mem.Allocator, input: []const u8) Error!command_plan.Plan {
+        const plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+            .window_len = 32768,
+            .max_chain = 16,
+            .nice_len = 128,
+            .max_candidates = 1,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        defer plan.deinit(allocator);
+        return command_plan.buildAlloc(allocator, input, plan.tokens);
+    }
+
+    pub fn encodeLower(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, options: WireOptions, owner: ?*Owner, stats: *Stats) Error![]u8 {
+        var scoped = options;
+        scoped.shared_split_plans = owner;
+        return encodeLazyCommandPlanAllocRecorded(false, .{}, allocator, input, commands, stats, scoped);
+    }
+};
+
+test "br shared split planning owner contracts" {
+    _ = @import("br/encoder/split_plan_reuse_tests.zig");
+}
+
+test "Brotli parameter choice witness contracts" {
+    _ = @import("br/encoder/parameter_choice_tests.zig");
+}
+
+test "br shared split planning public wire and resource contracts" {
+    try @import("br/encoder/split_plan_reuse_public_tests.zig").run(SplitPlanReuseTestCodec);
+}
+
+test "br shared split planning joint writer oracle" {
+    try @import("br/encoder/split_plan_reuse_joint_tests.zig").run(SplitPlanReuseTestCodec);
 }
 
 fn sharedCommandCandidateGroupSupported(input: []const u8, commands: []const command_plan.Command, options: LazyWireOptions) bool {
@@ -12151,38 +12243,74 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
     else
         literal_block_split.Proposals{};
     const literal_split = literal_splits.three orelse literal_splits.two;
-    var adaptive_literal = if (options.try_adaptive_literal_split)
-        try chooseAdaptiveLiteralSplitAlloc(allocator, input, commands)
-    else
-        null;
-    defer if (adaptive_literal) |plan| plan.deinit(allocator);
-    var joint_literal = if (adaptive_literal != null and literal_context_policy.allowed(options, options.try_joint_literal_contexts))
-        literal_joint_context_split.chooseAlloc(allocator, input, commands, adaptive_literal.?, .{}) catch |err| switch (err) {
+    var adaptive_literal_owned = true;
+    var adaptive_literal: ?block_split_plan.Plan = if (options.try_adaptive_literal_split) blk: {
+        if (options.shared_split_plans) |owner| if (owner.getLiteral(input, commands)) |cached| {
+            adaptive_literal_owned = false;
+            break :blk cached.plan;
+        };
+        const plan = try chooseAdaptiveLiteralSplitAlloc(allocator, input, commands);
+        if (options.shared_split_plans) |owner| if (owner.publishLiteral(input, commands, plan)) {
+            adaptive_literal_owned = false;
+        };
+        break :blk plan;
+    } else null;
+    defer if (adaptive_literal_owned) if (adaptive_literal) |plan| plan.deinit(allocator);
+    var joint_literal_owned = true;
+    var joint_literal: ?literal_entropy_plan.Plan = if (adaptive_literal != null and literal_context_policy.allowed(options, options.try_joint_literal_contexts)) blk: {
+        if (options.shared_split_plans) |owner| if (owner.getJoint(input, commands, adaptive_literal.?)) |cached| {
+            joint_literal_owned = false;
+            break :blk cached.plan;
+        };
+        const plan = literal_joint_context_split.chooseAlloc(allocator, input, commands, adaptive_literal.?, .{}) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
             error.IntegerOverflow => return error.IntegerOverflow,
             else => return error.InvalidBlockPlan,
-        }
-    else
-        null;
-    defer if (joint_literal) |plan| plan.deinit(allocator);
-    var symbol_splits = try chooseCommandAndDistanceSplitsAlloc(
-        allocator,
-        commands,
-        baseline.use_recent_distances,
-        options.try_command_split,
-        options.try_adaptive_command_split,
-        options.try_distance_split,
-        options.try_adaptive_distance_split,
-        options.distance_split_min_commands,
-        .{
+        };
+        if (options.shared_split_plans) |owner| if (owner.publishJoint(input, commands, adaptive_literal.?, plan)) {
+            joint_literal_owned = false;
+        };
+        break :blk plan;
+    } else null;
+    defer if (joint_literal_owned) if (joint_literal) |plan| plan.deinit(allocator);
+    const split_key: SplitPlanOwner.Key = .{
+        .use_recent_distances = baseline.use_recent_distances,
+        .try_command_split = options.try_command_split,
+        .try_adaptive_command_split = options.try_adaptive_command_split,
+        .try_distance_split = options.try_distance_split,
+        .try_adaptive_distance_split = options.try_adaptive_distance_split,
+        .distance_split_min_commands = options.distance_split_min_commands,
+        .wire_context = .{
             .large_window = options.large_window,
             .window_bits = options.window_bits,
             .compound_dictionary_size = options.compound_dictionary_size,
             .initial_output_pos = options.initial_output_pos,
             .starting_last_distances = options.starting_last_distances,
         },
-    );
-    defer symbol_splits.deinit(allocator);
+    };
+    var symbol_splits_owned = true;
+    var symbol_splits = blk: {
+        if (options.shared_split_plans) |owner| if (owner.getSymbols(input, commands, split_key)) |cached| {
+            symbol_splits_owned = false;
+            break :blk cached;
+        };
+        const plans = try chooseCommandAndDistanceSplitsAlloc(
+            allocator,
+            commands,
+            baseline.use_recent_distances,
+            options.try_command_split,
+            options.try_adaptive_command_split,
+            options.try_distance_split,
+            options.try_adaptive_distance_split,
+            options.distance_split_min_commands,
+            split_key.wire_context,
+        );
+        if (options.shared_split_plans) |owner| if (owner.publishSymbols(input, commands, split_key, plans)) {
+            symbol_splits_owned = false;
+        };
+        break :blk plans;
+    };
+    defer if (symbol_splits_owned) symbol_splits.deinit(allocator);
     const distance_splits = symbol_splits.distance;
     const distance_split = distance_splits.three orelse distance_splits.two;
     const command_split = symbol_splits.command.three orelse symbol_splits.command.two;
@@ -13016,19 +13144,11 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
     return selected;
 }
 
-const EntropySymbolSplits = struct {
-    command: command_block_split.Proposals = .{},
-    adaptive_command: ?block_split_plan.Plan = null,
-    distance: distance_block_split.Proposals = .{},
-    adaptive_distance: ?block_split_plan.Plan = null,
-
-    fn deinit(self: *EntropySymbolSplits, allocator: std.mem.Allocator) void {
-        if (self.adaptive_command) |plan| plan.deinit(allocator);
-        self.adaptive_command = null;
-        if (self.adaptive_distance) |plan| plan.deinit(allocator);
-        self.adaptive_distance = null;
-    }
-};
+const EntropySymbolSplits = split_plan_reuse.SymbolPlans;
+const SplitPlanOwner = split_plan_reuse.Owner(PlannedWireContext);
+var test_disable_split_plan_reuse = false;
+var test_split_plan_groups: usize = 0;
+var test_split_plan_counters: SplitPlanOwner.Counters = .{};
 
 const SplitSymbolProjectionStrategy = struct {
     pub const Context = PlannedWireContext;
