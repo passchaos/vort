@@ -72,25 +72,34 @@ pub const Lease = struct {
         }
     }
     pub fn configure(self: Lease, limit: ?usize, profile: ?*EncodeMemoryProfile) Error!void {
+        return self.configureWithExisting(limit, profile, 0);
+    }
+    /// Adopt caller-owned capacity and configure its policy as one admission.
+    /// No policy or live charge changes when admission fails. Borrowed leases
+    /// keep the parent's authority, including when the requested fields are null.
+    pub fn configureWithExisting(self: Lease, limit: ?usize, profile: ?*EncodeMemoryProfile, seed_existing: usize) Error!void {
         const s = self.state orelse {
-            if (limit != null or profile != null) return error.InvalidBlockPlan;
+            if (limit != null or profile != null or seed_existing != 0) return error.InvalidBlockPlan;
             return;
         };
         s.enter();
         defer s.leave();
         if (!self.coordinator) {
             if ((limit != null and limit != s.limit) or (profile != null and profile != s.profile)) return error.InvalidBlockPlan;
-            return;
         }
         const occupied = std.math.add(usize, s.live, s.reserved) catch return error.IntegerOverflow;
-        if (occupied > (limit orelse std.math.maxInt(usize))) {
+        const adopted = std.math.add(usize, occupied, seed_existing) catch return error.IntegerOverflow;
+        const effective_limit = if (self.coordinator) limit else s.limit;
+        if (adopted > (effective_limit orelse std.math.maxInt(usize))) {
             s.hit_limit = true;
             s.last_failure_was_limit = true;
             return error.WorkingMemoryLimitExceeded;
         }
-        s.limit = limit;
-        s.profile = profile;
-        s.reportLocked();
+        if (self.coordinator) {
+            s.limit = limit;
+            s.profile = profile;
+        }
+        s.replaceLocked(0, seed_existing);
     }
     pub fn setLimit(self: Lease, limit: ?usize) Error!void {
         const s = self.state orelse {

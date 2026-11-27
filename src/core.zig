@@ -66,6 +66,23 @@ pub const StepResult = struct {
     };
 };
 
+/// A streaming failure can follow already committed input or output. Returning
+/// its progress with the error lets callers resume the unconsumed suffix without
+/// modifying diagnostic storage inside the encoder or a rejected caller borrow.
+pub fn StepOutcome(comptime ErrorSet: type) type {
+    return union(enum) {
+        result: StepResult,
+        failure: struct { err: ErrorSet, progress: Progress },
+
+        pub fn unwrap(self: @This()) ErrorSet!StepResult {
+            return switch (self) {
+                .result => |value| value,
+                .failure => |value| value.err,
+            };
+        }
+    };
+}
+
 /// How incremental frame decoders retain encoded data. Block streaming is the
 /// normal bounded-memory mode; prevalidated_frame preserves the established
 /// complete-frame preflight/direct paths and their validation timing.
