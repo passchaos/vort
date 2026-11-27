@@ -4,14 +4,27 @@ Some encoding changes have made Vort slower. Historical decode parity on a
 limited workload does not establish three-codec encode/decode parity. Keep
 source regressions, competitor rankings and candidate gains distinct.
 
-Latest source status, November 27: the shared literal-model implementation
-`907b0557` and its sealed evidence in `92204434` have been pushed to main.
-Its separate complete public q8 campaign improves throughput 1.03200695x
-against its frozen recent baseline, with paired 95% CI
-[1.02860148x, 1.03542371x]. It preserves that baseline's wires and full current
-candidate policy. There is no direct `92204434 / 0a673757` timing epoch, and
-the historical 3.20317086x regression below remains unrepaired. Do not combine
-these separate-epoch ratios to report an estimated current result.
+Latest measured main snapshot, November 27: `d5d9d8aa`. Its Brotli production
+source is unchanged from the accepted split-plan reuse commit `11effbb7`.
+The later `323b0fca` push adds independent core/resource functionality and
+functional evidence documentation; its Brotli production bytes remain the
+same. Rejected experiments below are not part of that push.
+The [completed split-plan report](br/original-command-split-plans-20261127.md)
+retains independent direct epochs against both exact historical `0a673757`
+and pinned libbrotli 1.2.0. The twelve 64 KiB Silesia prefixes use public
+allocating q8/generic/explicit-window16 calls, symmetric warmup, and continuous
+encode/mix/free. Every primary row is slower in both direct comparisons.
+
+| Direct comparison | Vort/comparator elapsed GM and paired 95% CI | Wire size GM |
+| --- | ---: | ---: |
+| Historical `0a673757` | **3.09177140x** [3.07488268x, 3.11067898x] | 0.95658086x |
+| libbrotli 1.2.0 | **59.71010376x** [59.37622975x, 60.03145136x] | 0.94388652x |
+
+Each comparison retains its own 90 pairs and raw evidence. These are fixed
+settings comparisons, not a matched compressed-size frontier or a complete
+industry ranking. The recent split-plan gain does not repair the historical
+regression. The older 3.20317086x observation below remains a historical
+source epoch; do not combine separate-epoch ratios into a current result.
 
 Future performance reports must identify the historical source anchor, the
 recent source baseline and the competitor comparison separately. A gain over
@@ -19,6 +32,16 @@ the recent source is only an increment; recovering earlier public latency and
 approaching the competitor's speed/size frontier require their own matched
 whole-operation evidence. Keep all current candidates, search budgets and
 quality policies when removing repeated work.
+
+The November 27 [deferred-preferred experiment](br/deferred-preferred-20261127.md)
+has now completed three new independent 72-pair campaigns. It improves
+throughput by only **1.47%** against `d5d9d8aa`, with identical initial wires,
+and fails the fixed 3% adoption gate. Direct candidate elapsed is
+**3.03792451x** [3.03149779x, 3.04452556x] historical `0a673757` and
+**58.78339105x** [58.26196532x, 59.48442520x] libbrotli 1.2.0, with respective
+wire GMs 0.95658086x and 0.94388652x. The candidate remains isolated and is
+not main. These results neither erase the confirmed main regression above
+nor establish historical recovery or equal-ratio competitor parity.
 
 ## A demonstrated encoding regression
 

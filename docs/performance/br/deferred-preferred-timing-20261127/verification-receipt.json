@@ -1,0 +1,30 @@
+{
+  "command_shape": [
+    "python3",
+    "-I",
+    "-B",
+    "-O",
+    "/package/verify.py"
+  ],
+  "local_HEAVY": 0,
+  "no_codec_build_library_load_timing_or_RSS": true,
+  "observed_original": {
+    "actual_exit_code": 0,
+    "stderr": "",
+    "stdout": "{\n  \"adoption_allowed\": false,\n  \"bootstrap_replayed_data_only\": true,\n  \"codec_build_C_library_or_timing_executed\": false,\n  \"controls_timed\": false,\n  \"industryLeadership\": false,\n  \"original_paths_used_as_archive_keys_only\": true,\n  \"outcomes\": {\n    \"history\": {\n      \"CI\": [\n        0.328458402305607,\n        0.329869941820901\n      ],\n      \"GM\": 0.3291721028616591,\n      \"actual_pairs\": 72,\n      \"actual_timed_calls\": 144,\n      \"elapsed\": 3.037924512151837,\n      \"primary_gate_pass\": false,\n      \"wire_ratio\": 0.9565808633658663\n    },\n    \"primary\": {\n      \"CI\": [\n        1.0099682532435628,\n        1.0194976585450588\n      ],\n      \"GM\": 1.0147036801576106,\n      \"actual_pairs\": 72,\n      \"actual_timed_calls\": 144,\n      \"elapsed\": 0.9855093852075842,\n      \"primary_gate_pass\": false,\n      \"wire_ratio\": 1.0\n    },\n    \"reference\": {\n      \"CI\": [\n        0.016811123190692084,\n        0.017163856291638163\n      ],\n      \"GM\": 0.017011607907199966,\n      \"actual_pairs\": 72,\n      \"actual_timed_calls\": 144,\n      \"elapsed\": 58.78339105010536,\n      \"primary_gate_pass\": false,\n      \"wire_ratio\": 0.9438865172371007\n    }\n  },\n  \"performance_acceptance\": false,\n  \"status\": \"pass\"\n}\n"
+  },
+  "observed_relocated": {
+    "actual_exit_code": 0,
+    "stderr": "",
+    "stdout": "{\n  \"adoption_allowed\": false,\n  \"bootstrap_replayed_data_only\": true,\n  \"codec_build_C_library_or_timing_executed\": false,\n  \"controls_timed\": false,\n  \"industryLeadership\": false,\n  \"original_paths_used_as_archive_keys_only\": true,\n  \"outcomes\": {\n    \"history\": {\n      \"CI\": [\n        0.328458402305607,\n        0.329869941820901\n      ],\n      \"GM\": 0.3291721028616591,\n      \"actual_pairs\": 72,\n      \"actual_timed_calls\": 144,\n      \"elapsed\": 3.037924512151837,\n      \"primary_gate_pass\": false,\n      \"wire_ratio\": 0.9565808633658663\n    },\n    \"primary\": {\n      \"CI\": [\n        1.0099682532435628,\n        1.0194976585450588\n      ],\n      \"GM\": 1.0147036801576106,\n      \"actual_pairs\": 72,\n      \"actual_timed_calls\": 144,\n      \"elapsed\": 0.9855093852075842,\n      \"primary_gate_pass\": false,\n      \"wire_ratio\": 1.0\n    },\n    \"reference\": {\n      \"CI\": [\n        0.016811123190692084,\n        0.017163856291638163\n      ],\n      \"GM\": 0.017011607907199966,\n      \"actual_pairs\": 72,\n      \"actual_timed_calls\": 144,\n      \"elapsed\": 58.78339105010536,\n      \"primary_gate_pass\": false,\n      \"wire_ratio\": 0.9438865172371007\n    }\n  },\n  \"performance_acceptance\": false,\n  \"status\": \"pass\"\n}\n"
+  },
+  "original_samples_and_summaries_unchanged": true,
+  "schema": "vort.br.deferred-preferred-timing.verification-receipt.v1",
+  "tampered_capture_refusal": {
+    "actual_exit_code": 1,
+    "stderr": "Verification failed: SHA-256 mismatch: capture.json\n",
+    "stdout": ""
+  },
+  "verified_utc": "2026-11-27T15:57:30.999060+00:00",
+  "verifier_sha256": "bd61cf835cf10ff4063d182f71a556d5b114da602e3b815f04e3998817ef56d5"
+}

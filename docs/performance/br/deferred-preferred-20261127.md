@@ -1,9 +1,9 @@
 # Deferred preferred emission, 2026-11-27
 
-Status: isolated implementation; focused Native/WASI and full native Brotli
-regression gates pass. Performance acceptance remains pending.
-Baseline is `d5d9d8aa`. No throughput, historical recovery or industry ranking
-has been measured for this candidate.
+Status: rejected performance experiment; do not adopt into main. Focused
+Native/WASI and full native Brotli regression gates pass, but the complete
+primary timing misses the predeclared 3% throughput gate. Baseline is
+`d5d9d8aa`; the isolated implementation is saved as `5d9d82bb`.
 
 The [portable focused functional evidence package](deferred-preferred-functional-20261127/README.md) preserves every terminated failed and passed attempt. Its offline verifier passes from an unrelated directory and rejects corrupted or missing evidence. This report describes the isolated source, which has not been adopted into main.
 
@@ -54,7 +54,7 @@ V3 compilation also passed 9/9, but functional execution remained 39/40.
 The next failure is the nondefault window17/npostfix1/ndirect_high2 case with
 `optimize_same_last_distance=true` and non-exact commands. The existing wide
 writer deliberately rejects this combination; its parameter producers
-normalize the unsupported flag to false. Pending V4 tests retain the original
+normalize the unsupported flag to false. V4 tests retain the original
 exact-error case and add the same wide parameters under the producer's legal
 normalization. No production gap or pointer-fallback cause is claimed from
 this observation.
@@ -99,12 +99,44 @@ reference24), with a separate pinned libbrotli1.2.0 streaming decoder for every
 wire. Each complete wire/output, source/ELF identity, library version/maps, EOF,
 full consumption and plaintext SHA passed. The original warm session53686
 terminated with exit0 and zero timed samples. Saved-artifact replay and
-versioned readiness promotion are being finalized; no throughput, RSS or
-historical recovery result is inferred from this untimed gate.
+versioned readiness promotion subsequently passed, binding all 1,663 ready
+members and retaining the original v1 identities. These warmups supply wire,
+build and decoder evidence; they are separate from the timed results below.
 
-## Remaining gates
+## Measured rejection and historical comparison
 
-Complete integration checks, then obtain independent current-source A/B, direct
-historical-anchor and pinned libbrotli comparisons with unchanged public
-lifecycle and codec policy. The three-codec industry-best objective remains
-unfulfilled; this slice only removes one identified source of repeated work.
+Three independent campaigns each completed all 12 rows x 6 paired rounds,
+72 pairs / 144 children, with actual exit0. They use all twelve Silesia
+64 KiB prefixes, q8/generic/explicit window16, ReleaseFast,
+`skylake+pku+sgx`, an Intel Core i7-10700K, CPU2 affinity and one codec thread.
+Every process performs one owning allocating encode/free warmup followed by
+the registered public encode/length-mix/free call. Complete initial wires and
+pinned libbrotli 1.2.0 streaming decode were verified outside the timer;
+timed outputs check length/mix. All original calls are retained. Independent
+raw audit precedes the 20,000 shared paired-round-block bootstrap draws.
+
+| Direct scope | Point GM and paired 95% CI | Candidate/comparator wire GM |
+| --- | ---: | ---: |
+| Throughput against `d5d9d8aa` | **1.01470368x** [1.00996825x, 1.01949766x] | 1.00000000x |
+| Elapsed against historical `0a673757` | **3.03792451x** [3.03149779x, 3.04452556x] | 0.95658086x |
+| Elapsed against libbrotli 1.2.0 | **58.78339105x** [58.26196532x, 59.48442520x] | 0.94388652x |
+
+Every primary row passes the 0.98 point floor, but the 1.47% aggregate gain
+falls below the fixed 3% gate. `primary_gate_pass=false`; the candidate is
+rejected. The predeclared 63-row control campaign was not launched, and no
+resource acceptance is inferred. Running more controls cannot repair this
+failed primary gate. Historical and reference rows are direct independent
+diagnostics, not products of ratios from different epochs and not an
+equal-compressed-size frontier or industry ranking. They confirm that this
+experiment does not recover the historical q8 latency.
+
+The [portable timed evidence](deferred-preferred-timing-20261127/README.md)
+preserves the three original campaigns and their bindings. The authoritative
+values above come from the frozen reducer's `summary.json` files and original
+per-call nanoseconds, superseding approximate values in transient handoffs.
+
+Remaining generic final-split literal candidates still repeat entropy planning
+and materialize losing wires. The next performance slice must address that
+larger shared planning boundary while retaining candidate families, quality,
+search budgets, deterministic ties and complete output. The three-codec
+industry-best objective remains unfulfilled.
