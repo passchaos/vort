@@ -1,0 +1,21 @@
+{
+  "CI": null,
+  "HEAVY": 0,
+  "adoption_allowed": false,
+  "archive_bytes": 89415680,
+  "archive_members": 5860,
+  "archive_sha256": "199e2e050316ffc5e9abe52a14d9c9ba37142776c8dadc48d09e3aaaeed86fe4",
+  "created_utc": "2026-11-27T16:14:00.759827+00:00",
+  "current_root_source_pass_not_claimed": true,
+  "equal_row_GM": 0.9317892012110397,
+  "export_actual_exit_code": 0,
+  "formal_release_allowed": false,
+  "new_codec_or_build_or_sampling_or_RSS_executed": false,
+  "no_commit": true,
+  "only_new_directory_written": "/home/passchaos/project-z/vort/docs/performance/deflate/stream-resources-diagnostic-20261128",
+  "originals_unchanged_checked": 5860,
+  "portable_actual_exit_code": 0,
+  "schema": "vort.deflate.diagnostic-rejection.package-final-receipt.v1",
+  "verify_actual_exit_code": 0,
+  "weak_row_count": 27
+}

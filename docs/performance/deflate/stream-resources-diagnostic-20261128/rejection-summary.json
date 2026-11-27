@@ -1,0 +1,24 @@
+{
+  "CI": null,
+  "adoption_allowed": false,
+  "all_rows": 54,
+  "children": 216,
+  "equal_row_GM": 0.9317892012110397,
+  "formal_release_allowed": false,
+  "historical_SOURCE_READY_scope": "Functionally passed old Beb snapshot only; does not certify subsequent default-repair production source",
+  "new_codec_or_sampling_or_RSS_executed": false,
+  "output_quantum_GMs": {
+    "1": 0.8398396767086921,
+    "17": 0.969626986992003,
+    "4096": 0.9934635470049255
+  },
+  "pairs": 108,
+  "performance_acceptance": false,
+  "rows_below_0_98": 27,
+  "schema": "vort.deflate.stream-resource-diagnostic.rejection.v1",
+  "scope": "Original frozen Beb candidate versus Git d5 baseline; fixed54-row two-round diagnostic",
+  "worst_rows": {
+    "gzip-fixed-out1-structured": 0.567995709635456,
+    "zlib-fixed-out1-structured": 0.56836710628815
+  }
+}

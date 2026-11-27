@@ -1,0 +1,44 @@
+{
+  "Deflate_diagnostic_cannot_enable_merge": false,
+  "codec_build_producer_import_or_replay_executed": false,
+  "data_only_statistics": {
+    "pilot": {
+      "CI_independently_recomputed": false,
+      "adoption_allowed": false,
+      "all_row_point_floor_0_98": false,
+      "bootstrap_draws": 0,
+      "no_retry_or_filtered_sample": true,
+      "pairs": 24,
+      "point_GM": 1.0477891348148398,
+      "processes": 48,
+      "recomputed_CI": null,
+      "recorded_CI": null,
+      "row_GMs": {
+        "dickens": 1.0478751737483307,
+        "mozilla": 1.0200228068420385,
+        "mr": 1.0424135671689043,
+        "nci": 1.2444189023456351,
+        "ooffice": 0.9754890473549731,
+        "osdb": 1.0761887491559479,
+        "reymont": 1.0640447280025997,
+        "samba": 1.0096627937577727,
+        "sao": 1.0364223680545572,
+        "webster": 1.0644083894143226,
+        "x-ray": 1.0046170618257273,
+        "xml": 1.0103408251890094
+      },
+      "state": "completed"
+    }
+  },
+  "full_gate_passed": true,
+  "inventory_sha_verified": true,
+  "phase_states": {
+    "controls": "not_run",
+    "formal": "not_run",
+    "pilot": "completed",
+    "reference": "not_run"
+  },
+  "portable_without_original_tmp": true,
+  "schema": "vort.codec.final-evidence-verification.v1",
+  "whole_gate_state": "passed"
+}

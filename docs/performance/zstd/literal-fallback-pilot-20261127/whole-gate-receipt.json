@@ -1,0 +1,33 @@
+{
+  "actual_exit_code": 0,
+  "derived_data_only": true,
+  "issued_by": "/root",
+  "not_new_gate_or_timing_release": true,
+  "original_whole_library": {
+    "receipt": {
+      "path": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/receipt.json",
+      "sha256": "7377b1a39d3ee3e19474455a1af3b0b6df025ec7a908be35c642e171a93e2d0b"
+    },
+    "source_after": {
+      "path": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/source-after.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "source_before": {
+      "path": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/source-before.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "stderr": {
+      "path": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/stderr.log",
+      "sha256": "0cb5f0081d1ad55da141ccb6b6bedac6dae7080331fc6083118611b8edfcb064"
+    },
+    "stdout": {
+      "path": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "schema": "vort.codec.whole-gate-data-adapter.v1",
+  "source_current_at_original_gate": true,
+  "source_manifest_sha256": "beb79f99ed3809717dee3d3a3438247f835c45f012bfbb3aeab6cab6e6b0955f",
+  "state": "passed",
+  "test_check_check_wasm_all_accepted": true
+}

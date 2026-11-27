@@ -1,0 +1,9 @@
+{
+  "all_selected_original_bytes_and_SHA_match_archive": true,
+  "current_root_source_pass_not_claimed": true,
+  "new_codec_or_build_or_sampling_or_RSS_executed": false,
+  "original_epoch_modified": false,
+  "schema": "vort.deflate.diagnostic-rejection.original-preservation.v1",
+  "selected_originals_checked_after_export": 5860,
+  "source_scope": "Old epoch frozen sources/candidate and original candidate registry; current root repair source never substituted"
+}

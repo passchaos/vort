@@ -1,0 +1,46 @@
+{
+  "CI": null,
+  "H0": true,
+  "actual_exits": {
+    "independent_point_recheck": 0,
+    "original_verifier": 0
+  },
+  "archive_sha256": "fbd4a6c773936cda916ca1e683dbe10450a94e01c16147c5fdea0c9463a4ab70",
+  "bootstrap_executed": false,
+  "codec_C_library_build_timing_RSS_executed": false,
+  "evidence_manifest_sha256": "11c46a9785ef370816878d1ba25d799ab3f360bb94c41ad8fae65e1d25e7ce1c",
+  "failed_rows_below_0_98": {
+    "ooffice": 0.9754890473549731
+  },
+  "formal_authorized": false,
+  "new_samples_added": false,
+  "original_epoch_production_parent_reports_modified": false,
+  "performance_acceptance": false,
+  "primary_GM": 1.0477891348148398,
+  "schema": "vort.zstd.literal-fallback-pilot.archive-verification.v1",
+  "status": "verified_rejected_pilot",
+  "stream_sha256": {
+    "point-recheck.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "point-recheck.stdout.json": "00de332288cb593027f90ab21e975125af83579e7c6b07a0edc7477297059557",
+    "verification-original.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification-original.stdout.json": "8b87471769bf4f3d2b649122579328af34c0090bdcc6c27bcda615506c375aeb"
+  },
+  "target_gate_pass": false,
+  "verification_commands": [
+    [
+      "python3",
+      "-B",
+      "/home/passchaos/project-z/vort/docs/performance/zstd/literal-fallback-pilot-20261127/verify-evidence.py",
+      "--package",
+      "/home/passchaos/project-z/vort/docs/performance/zstd/literal-fallback-pilot-20261127"
+    ],
+    [
+      "python3",
+      "-B",
+      "/home/passchaos/project-z/vort/docs/performance/zstd/literal-fallback-pilot-20261127/point-recheck.py",
+      "--package",
+      "/home/passchaos/project-z/vort/docs/performance/zstd/literal-fallback-pilot-20261127"
+    ]
+  ],
+  "working_directory": "/tmp"
+}

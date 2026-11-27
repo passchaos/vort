@@ -43,6 +43,17 @@ wire GMs 0.95658086x and 0.94388652x. The candidate remains isolated and is
 not main. These results neither erase the confirmed main regression above
 nor establish historical recovery or equal-ratio competitor parity.
 
+The fresh Zstd [literal-fallback pilot](zstd/literal-fallback-plan-20261127.md)
+completes its 24 pairs with 1.04778913x throughput GM, but ooffice is
+0.97548905x and fails the fixed 0.98 floor. The Deflate
+[default stream-resource diagnostic](deflate/stream-resources-20261127.md)
+completes 108 pairs on November 28 with 0.93178920x equal-row throughput GM
+and 27/54 row points below 0.98. The weakest zlib/gzip Fixed structured
+4 KiB output1 rows are about 0.568x. Both are unadopted source increments;
+their two-round screens have no CI and cannot authorize formal acceptance.
+These observations expose current experimental costs without relabeling
+them as performance of the pushed main source.
+
 ## A demonstrated encoding regression
 
 The [q8 source A/B](br/q8-source-regression-20261125/README.md) compares

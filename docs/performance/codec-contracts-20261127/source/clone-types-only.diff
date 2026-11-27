@@ -1,0 +1,15 @@
+--- old/src/tests/deflate_clone/encoder.zig
++++ fresh/src/tests/deflate_clone/encoder.zig
+@@ -56,7 +56,11 @@
+ }
+ 
+ fn branch(comptime D: type, comptime E: type, allocator: std.mem.Allocator, comptime kind: Kind) !void {
+-    try std.testing.expectEqual(std.mem.Allocator.Error, E.CloneError);
++    const ExpectedCloneError = if (E == D.RawDeflateIncrementalStoredEncoder)
++        std.mem.Allocator.Error
++    else
++        error{ OutOfMemory, IntegerOverflow, InvalidBlockPlan, WorkingMemoryLimitExceeded };
++    try std.testing.expectEqual(ExpectedCloneError, E.CloneError);
+     var source = init(E, allocator);
+     var source_alive = true;
+     defer if (source_alive) source.deinit();

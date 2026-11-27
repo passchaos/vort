@@ -1,0 +1,86 @@
+{
+  "excluded_pending_evidence_claimed_passed": false,
+  "local_HEAVY": 0,
+  "negative_cases": {
+    "missing_final_gate_under_rebuilt_outer_inventory": {
+      "actual_exit_code": 1,
+      "stderr": "Verification failed: Missing required gate or package artifact: evidence/whole-final/stdout.log\n",
+      "stdout": ""
+    },
+    "tampered_payload_under_rebuilt_outer_inventory": {
+      "actual_exit_code": 1,
+      "stderr": "Verification failed: Original capture identity differs: evidence/whole-final/stdout.log\n",
+      "stdout": ""
+    },
+    "tampered_payload_vs_original_SHA256SUMS": {
+      "actual_exit_code": 1,
+      "stderr": "Verification failed: SHA-256 mismatch: evidence/whole-final/stdout.log\n",
+      "stdout": ""
+    }
+  },
+  "observed_utc": "2026-11-27T12:43:11.109143+00:00",
+  "original_package_data_replay": {
+    "clone_contract": {
+      "after_sha256": "28bbb4e85e5f6a51fa59a1fd74618a5e37d760169ea645c381e4e94c58719f2b",
+      "before_sha256": "d43945449094e52abe436afeae3371fa172ad73e2dfdf67fed9269f65796432b",
+      "fixed_best_count": 6,
+      "fixed_best_error_set": [
+        "IntegerOverflow",
+        "InvalidBlockPlan",
+        "OutOfMemory",
+        "WorkingMemoryLimitExceeded"
+      ],
+      "stored_error_set": [
+        "OutOfMemory"
+      ],
+      "test_source": "src/tests/deflate_clone/encoder.zig"
+    },
+    "codec_build_timing_or_original_paths_used": false,
+    "frozen_files_verified": 2267,
+    "gates": {
+      "clone-native": {
+        "actual_exit_code": 0,
+        "source_files_selected": 30,
+        "summary": "9/9 steps succeeded; 104/104 tests passed"
+      },
+      "clone-wasi": {
+        "actual_exit_code": 0,
+        "source_files_selected": 30,
+        "summary": "9/9 steps succeeded"
+      },
+      "whole-final": {
+        "actual_exit_code": 0,
+        "source_files_selected": 30,
+        "summary": "419/419 steps succeeded; 6108/6110 tests passed (2 skipped)"
+      },
+      "whole-initial": {
+        "actual_exit_code": 1,
+        "source_files_selected": 29,
+        "summary": "417/419 steps succeeded (1 failed); 6107/6110 tests passed (2 skipped, 1 failed)"
+      }
+    },
+    "inventory_files": 28,
+    "manifest_sha256": "beb79f99ed3809717dee3d3a3438247f835c45f012bfbb3aeab6cab6e6b0955f",
+    "performance_or_pending_warm_matrix_validated": false,
+    "schema": "vort.codec-contracts-20261127.offline-verification.v1",
+    "status": "pass"
+  },
+  "read_only_verifier_no_build_codec_timing_or_statistics": true,
+  "relocated_data_replay": {
+    "actual_exit_code": 0,
+    "copy_uses_no_original_wires_or_source_tree": true,
+    "same_output_as_original_package": true
+  },
+  "schema": "vort.codec-contracts-20261127.verification-receipt.v1",
+  "verification_invocation": {
+    "argv": [
+      "python3",
+      "-I",
+      "-B",
+      "-O",
+      "verify.py"
+    ],
+    "working_directory": "package directory or unrelated copied package directory"
+  },
+  "verifier_sha256": "11de8fdd68ae5ae946281592b1048070c174d411613c532209589c3e06ea912a"
+}

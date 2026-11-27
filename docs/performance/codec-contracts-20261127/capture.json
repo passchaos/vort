@@ -1,0 +1,136 @@
+{
+  "baseline_git": "d5d9d8aab3d91d34003e25d3e2c6a3fda6b51388",
+  "capture_scope": "only prior and final completed whole-library gates, narrow clone gates and source registry/overlay; throughput, resources and formal warm-wire matrices excluded",
+  "final_frozen_source_overlay": {
+    "bytes": 7572540,
+    "file": "source-overlay.tar.gz",
+    "files": 2267,
+    "manifest": "source/candidate-after-clone.json",
+    "metadata_scope": "Member source bytes and inventory match the frozen manifest; tar owner/mode/mtime normalized. No worktree, caches, generated executable, or build outputs.",
+    "original_frozen_root": "/tmp/vort-deflate-stream-after-clone-types._u2f_kn5/sources/candidate",
+    "sha256": "784c97da3b2a2bf8b232f71857df72109d4e17aeeac0cf047357b4a1408a89e5"
+  },
+  "original_files_copied_byte_for_byte": {
+    "evidence/clone-native/receipt.json": {
+      "bytes": 344,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-native/receipt.json",
+      "sha256": "9cc15880059745966631d70b3c19a25679148b2d6ef854e74d872dd442bf1435"
+    },
+    "evidence/clone-native/source-after.json": {
+      "bytes": 3547,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-native/source-after.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "evidence/clone-native/source-before.json": {
+      "bytes": 3547,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-native/source-before.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "evidence/clone-native/stderr.log": {
+      "bytes": 826,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-native/stderr.log",
+      "sha256": "9b244f48f00b8008ab10380cebdce399ccdf30ad2bd7f3332ec9ea9e768439f6"
+    },
+    "evidence/clone-native/stdout.log": {
+      "bytes": 0,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-native/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "evidence/clone-wasi/receipt.json": {
+      "bytes": 349,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-wasi/receipt.json",
+      "sha256": "3d5fb880df5468b3e333c1c577e75fd5ec09cb3bb0c367b91b986991e58c608f"
+    },
+    "evidence/clone-wasi/source-after.json": {
+      "bytes": 3547,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-wasi/source-after.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "evidence/clone-wasi/source-before.json": {
+      "bytes": 3547,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-wasi/source-before.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "evidence/clone-wasi/stderr.log": {
+      "bytes": 831,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-wasi/stderr.log",
+      "sha256": "2728396347263a0852252a7a04e3300f166b13f589a34de522edf4f94d17209c"
+    },
+    "evidence/clone-wasi/stdout.log": {
+      "bytes": 0,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/clone-type-wasi/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "evidence/whole-final/receipt.json": {
+      "bytes": 362,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/receipt.json",
+      "sha256": "7377b1a39d3ee3e19474455a1af3b0b6df025ec7a908be35c642e171a93e2d0b"
+    },
+    "evidence/whole-final/source-after.json": {
+      "bytes": 3547,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/source-after.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "evidence/whole-final/source-before.json": {
+      "bytes": 3547,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/source-before.json",
+      "sha256": "0a7f5c2c3232a76b9436d6e5f2e5e917640baeec33255b170ae5d473e85f2dae"
+    },
+    "evidence/whole-final/stderr.log": {
+      "bytes": 148637,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/stderr.log",
+      "sha256": "0cb5f0081d1ad55da141ccb6b6bedac6dae7080331fc6083118611b8edfcb064"
+    },
+    "evidence/whole-final/stdout.log": {
+      "bytes": 0,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library-after-clone-types/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "evidence/whole-initial/receipt.json": {
+      "bytes": 359,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library/receipt.json",
+      "sha256": "de992d95a24c58a1fc6a0de9f30c10cd7e29462455fbd2bae8f5125ce1b0f40f"
+    },
+    "evidence/whole-initial/source-after.json": {
+      "bytes": 3438,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library/source-after.json",
+      "sha256": "8e63eabe992005d7cc79a8c2b4e79115308b4bbe4f5c38b870c4aae10ae1a07d"
+    },
+    "evidence/whole-initial/source-before.json": {
+      "bytes": 3438,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library/source-before.json",
+      "sha256": "8e63eabe992005d7cc79a8c2b4e79115308b4bbe4f5c38b870c4aae10ae1a07d"
+    },
+    "evidence/whole-initial/stderr.log": {
+      "bytes": 150233,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library/stderr.log",
+      "sha256": "683d8e4e78a5ebc0fca8be66849170442589c496081c3c11201f21cc30229075"
+    },
+    "evidence/whole-initial/stdout.log": {
+      "bytes": 0,
+      "origin": "/tmp/vort-encoder-contract-integration.44n9_fus/whole-library/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/candidate-after-clone.json": {
+      "bytes": 250029,
+      "origin": "/tmp/vort-deflate-stream-after-clone-types._u2f_kn5/candidate-source-manifest.json",
+      "sha256": "beb79f99ed3809717dee3d3a3438247f835c45f012bfbb3aeab6cab6e6b0955f"
+    },
+    "source/candidate-before-clone.json": {
+      "bytes": 250029,
+      "origin": "/tmp/vort-deflate-default-stream-nonreg.7vos4it7/candidate-source-manifest.json",
+      "sha256": "336ed33932ffcbf49d666eefe13fd926d72f29207002cfe4c423e38504de8813"
+    },
+    "source/clone-types-only.diff": {
+      "bytes": 691,
+      "origin": "/tmp/vort-deflate-stream-after-clone-types._u2f_kn5/prior-whole-failure/clone-types-only.diff",
+      "sha256": "ec3df3bf75e3aea08c38cc16b78351ee0d355d21bfa0103543209a79183302c4"
+    },
+    "source/encoder-before-clone.zig": {
+      "bytes": 9803,
+      "origin": "/tmp/vort-deflate-default-stream-nonreg.7vos4it7/sources/candidate/src/tests/deflate_clone/encoder.zig",
+      "sha256": "d43945449094e52abe436afeae3371fa172ad73e2dfdf67fed9269f65796432b"
+    }
+  },
+  "schema": "vort.codec-contracts-20261127.capture.v1"
+}

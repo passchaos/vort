@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "6,7",
+    "zig",
+    "build",
+    "-j2",
+    "test-deflate-clone",
+    "-Doptimize=ReleaseSafe",
+    "--summary",
+    "all"
+  ],
+  "cwd": "/home/passchaos/project-z/vort",
+  "actual_exit_code": 0,
+  "started_unix": 1795764202.8242614,
+  "ended_unix": 1795764238.1310873,
+  "source_unchanged": true
+}

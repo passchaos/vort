@@ -7,3 +7,8 @@ src/br/encoder/literal_model/testdata/*.plain binary
 
 # Original test/compiler logs retain byte-identical whitespace and checksums.
 /docs/performance/br/deferred-preferred-functional-20261127/evidence/**/*.log binary
+/docs/performance/zstd/literal-fallback-pilot-20261127/*.log binary
+/docs/performance/codec-contracts-20261127/evidence/**/*.log binary
+/docs/performance/codec-contracts-20261127/source/clone-types-only.diff binary
+/docs/performance/deflate/stream-resources-diagnostic-20261128/*.log binary
+/docs/performance/deflate/stream-resources-diagnostic-20261128/row-points.csv binary

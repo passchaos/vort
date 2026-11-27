@@ -1,0 +1,354 @@
+{
+  "archive": {
+    "bytes": 89415680,
+    "path": "epoch-data.tar",
+    "sha256": "199e2e050316ffc5e9abe52a14d9c9ba37142776c8dadc48d09e3aaaeed86fe4"
+  },
+  "codec_or_build_or_sampling_or_RSS_executed": false,
+  "members": 5860,
+  "original_files_modified": false,
+  "result": {
+    "CI": null,
+    "actual_provenance": {
+      "affinity_cpu_count": 1,
+      "benchmark_threads": 1,
+      "codec_thread_policy": "single",
+      "cpu_affinity": "2",
+      "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+      "optimize": "ReleaseFast",
+      "provenance_version": 1,
+      "target_abi": "gnu",
+      "target_arch": "x86_64",
+      "target_cpu": "skylake+pku+sgx",
+      "target_os": "linux",
+      "zig_version": "0.16.0"
+    },
+    "adoption_allowed": false,
+    "all_row_point_floors_pass": false,
+    "bootstrap_draws": 0,
+    "child_actual_exit_codes_all_zero": true,
+    "children": 216,
+    "diagnostic_output_full_gate_passed": false,
+    "equal_row_GM": 0.9317892012110397,
+    "external_decode_scope": "Original108 retained pass booleans bound to saved wire/input; no new decode or EOF/tail claim",
+    "formal_release_allowed": false,
+    "independent_whole_functional_gate_passed": true,
+    "new_codec_or_build_or_sampling_or_RSS_executed": false,
+    "original_timed_body_unchanged_except_output_paths": true,
+    "original_v1_precodec_failure_preserved": true,
+    "pairs": 108,
+    "raw_pair_speedups": {
+      "gzip-best-out1-empty": [
+        0.8588279601846593,
+        0.8595536486707662
+      ],
+      "gzip-best-out1-opaque": [
+        0.9304504751702544,
+        0.9906427847176267
+      ],
+      "gzip-best-out1-structured": [
+        0.6572972336804045,
+        0.6586803692056579
+      ],
+      "gzip-best-out17-empty": [
+        0.9494709536487133,
+        0.7023433177902474
+      ],
+      "gzip-best-out17-opaque": [
+        1.0070935782159636,
+        0.9950797318955865
+      ],
+      "gzip-best-out17-structured": [
+        0.9109096498619031,
+        0.9065850856641701
+      ],
+      "gzip-best-out4096-empty": [
+        0.8492161733307857,
+        0.9435230763459639
+      ],
+      "gzip-best-out4096-opaque": [
+        1.0187286430085931,
+        0.9992127473061457
+      ],
+      "gzip-best-out4096-structured": [
+        0.9505175582857696,
+        0.948113465084618
+      ],
+      "gzip-fixed-out1-empty": [
+        0.7592679157707177,
+        0.6886315300341358
+      ],
+      "gzip-fixed-out1-opaque": [
+        0.9874405800671632,
+        0.956595717067592
+      ],
+      "gzip-fixed-out1-structured": [
+        0.559815888123167,
+        0.5762950516568847
+      ],
+      "gzip-fixed-out17-empty": [
+        1.0024278506132962,
+        1.0029382534675713
+      ],
+      "gzip-fixed-out17-opaque": [
+        1.0045779900727796,
+        0.9864537978767781
+      ],
+      "gzip-fixed-out17-structured": [
+        0.8209355051584113,
+        0.8714200403095375
+      ],
+      "gzip-fixed-out4096-empty": [
+        0.9983300256546783,
+        1.0653575398295665
+      ],
+      "gzip-fixed-out4096-opaque": [
+        1.0452523056048326,
+        0.9706871396514267
+      ],
+      "gzip-fixed-out4096-structured": [
+        0.9302035358787699,
+        0.9422576969708033
+      ],
+      "raw-best-out1-empty": [
+        1.0009199589270863,
+        1.478323841956902
+      ],
+      "raw-best-out1-opaque": [
+        0.9905442960156448,
+        0.9854461941844046
+      ],
+      "raw-best-out1-structured": [
+        0.8916412315731195,
+        0.8804776763252185
+      ],
+      "raw-best-out17-empty": [
+        0.9821130395182918,
+        1.0324018217193291
+      ],
+      "raw-best-out17-opaque": [
+        1.0441285850218587,
+        1.0236816116362848
+      ],
+      "raw-best-out17-structured": [
+        1.1038500428580962,
+        0.9105135778160637
+      ],
+      "raw-best-out4096-empty": [
+        0.9340022030777325,
+        1.0449526980046775
+      ],
+      "raw-best-out4096-opaque": [
+        1.002142735755404,
+        1.0317882690874614
+      ],
+      "raw-best-out4096-structured": [
+        0.9233920010963578,
+        0.9585012603038354
+      ],
+      "raw-fixed-out1-empty": [
+        1.036219000030655,
+        0.9970333612017585
+      ],
+      "raw-fixed-out1-opaque": [
+        0.9043701027018939,
+        0.9923575251483987
+      ],
+      "raw-fixed-out1-structured": [
+        0.7811971903662328,
+        0.8438328626647771
+      ],
+      "raw-fixed-out17-empty": [
+        1.1303953778180582,
+        1.1318983463608154
+      ],
+      "raw-fixed-out17-opaque": [
+        1.0149337880745064,
+        0.9688465689728062
+      ],
+      "raw-fixed-out17-structured": [
+        0.9175666838856856,
+        0.9257442618867866
+      ],
+      "raw-fixed-out4096-empty": [
+        1.1273553662380376,
+        1.1508987351135438
+      ],
+      "raw-fixed-out4096-opaque": [
+        0.9674558474831394,
+        1.0254049418938123
+      ],
+      "raw-fixed-out4096-structured": [
+        0.93721735594118,
+        1.0316190587503287
+      ],
+      "zlib-best-out1-empty": [
+        0.9202000007027431,
+        0.9201154466705306
+      ],
+      "zlib-best-out1-opaque": [
+        0.9843955359196093,
+        0.9271084011207322
+      ],
+      "zlib-best-out1-structured": [
+        0.5812537899320578,
+        0.6649813554148918
+      ],
+      "zlib-best-out17-empty": [
+        0.9460707166089602,
+        1.0339234668139998
+      ],
+      "zlib-best-out17-opaque": [
+        0.9572658575015874,
+        1.033094104935126
+      ],
+      "zlib-best-out17-structured": [
+        0.8917666324962378,
+        0.9331385510355236
+      ],
+      "zlib-best-out4096-empty": [
+        1.0209684528682073,
+        1.0083193679674407
+      ],
+      "zlib-best-out4096-opaque": [
+        1.0055845081422259,
+        1.001814796734563
+      ],
+      "zlib-best-out4096-structured": [
+        0.9442359290382184,
+        0.9693587678130862
+      ],
+      "zlib-fixed-out1-empty": [
+        1.0998304180632628,
+        0.5883018376548335
+      ],
+      "zlib-fixed-out1-opaque": [
+        0.964687504215266,
+        0.9527634778761507
+      ],
+      "zlib-fixed-out1-structured": [
+        0.5677520106934192,
+        0.5689828682699363
+      ],
+      "zlib-fixed-out17-empty": [
+        1.0441736089684255,
+        1.0785199721139198
+      ],
+      "zlib-fixed-out17-opaque": [
+        0.9712672007421351,
+        1.0037613378978905
+      ],
+      "zlib-fixed-out17-structured": [
+        0.8891678932036404,
+        0.9155488018635611
+      ],
+      "zlib-fixed-out4096-empty": [
+        1.0271047923013685,
+        1.1273482201630463
+      ],
+      "zlib-fixed-out4096-opaque": [
+        0.9974721393757394,
+        0.9901581879193037
+      ],
+      "zlib-fixed-out4096-structured": [
+        0.946284696532946,
+        0.9947985920381374
+      ]
+    },
+    "rounds": 2,
+    "row_GMs": {
+      "gzip-best-out1-empty": 0.8591907278114653,
+      "gzip-best-out1-opaque": 0.9600750229875266,
+      "gzip-best-out1-structured": 0.657988438012756,
+      "gzip-best-out17-empty": 0.8166116456009598,
+      "gzip-best-out17-opaque": 1.0010686329143013,
+      "gzip-best-out17-structured": 0.9087447952821367,
+      "gzip-best-out4096-empty": 0.8951285138703885,
+      "gzip-best-out4096-opaque": 1.0089235085674622,
+      "gzip-best-out4096-structured": 0.9493147506544346,
+      "gzip-fixed-out1-empty": 0.7230877032165729,
+      "gzip-fixed-out1-opaque": 0.9718957916109047,
+      "gzip-fixed-out1-structured": 0.567995709635456,
+      "gzip-fixed-out17-empty": 1.0026830195636858,
+      "gzip-fixed-out17-opaque": 0.9954746473771764,
+      "gzip-fixed-out17-structured": 0.8458011888125206,
+      "gzip-fixed-out4096-empty": 1.031299384305768,
+      "gzip-fixed-out4096-opaque": 1.0072799862707558,
+      "gzip-fixed-out4096-structured": 0.936211216249425,
+      "raw-best-out1-empty": 1.2164225578196233,
+      "raw-best-out1-opaque": 0.9879919567889647,
+      "raw-best-out1-structured": 0.8860418724254832,
+      "raw-best-out17-empty": 1.0069435391981976,
+      "raw-best-out17-opaque": 1.0338545510228652,
+      "raw-best-out17-structured": 1.0025320203839578,
+      "raw-best-out4096-empty": 0.9879211112474464,
+      "raw-best-out4096-opaque": 1.0168574721678754,
+      "raw-best-out4096-structured": 0.9407828637923522,
+      "raw-fixed-out1-empty": 1.0164373628225642,
+      "raw-fixed-out1-opaque": 0.9473428507860576,
+      "raw-fixed-out1-structured": 0.8119112398855056,
+      "raw-fixed-out17-empty": 1.1311466124628449,
+      "raw-fixed-out17-opaque": 0.9916224676309824,
+      "raw-fixed-out17-structured": 0.9216464031859836,
+      "raw-fixed-out4096-empty": 1.139066225039977,
+      "raw-fixed-out4096-opaque": 0.9960090396543987,
+      "raw-fixed-out4096-structured": 0.9832859637869911,
+      "zlib-best-out1-empty": 0.9201577227154196,
+      "zlib-best-out1-opaque": 0.9553226530219072,
+      "zlib-best-out1-structured": 0.6217096855197469,
+      "zlib-best-out17-empty": 0.9890221004444447,
+      "zlib-best-out17-opaque": 0.9944574974530377,
+      "zlib-best-out17-structured": 0.9122180788108551,
+      "zlib-best-out4096-empty": 1.0146241989578044,
+      "zlib-best-out4096-opaque": 1.0036978826439407,
+      "zlib-best-out4096-structured": 0.9567148878831834,
+      "zlib-fixed-out1-empty": 0.804383152518314,
+      "zlib-fixed-out1-opaque": 0.9587069529213817,
+      "zlib-fixed-out1-structured": 0.56836710628815,
+      "zlib-fixed-out17-empty": 1.0612078456300242,
+      "zlib-fixed-out17-opaque": 0.9873806079082496,
+      "zlib-fixed-out17-structured": 0.9022619349602087,
+      "zlib-fixed-out4096-empty": 1.076059830828139,
+      "zlib-fixed-out4096-opaque": 0.9938084352752663,
+      "zlib-fixed-out4096-structured": 0.9702384674801401
+    },
+    "rows": 54,
+    "rows_below_0_98": [
+      "raw-fixed-out1-structured",
+      "raw-fixed-out1-opaque",
+      "raw-fixed-out17-structured",
+      "raw-best-out1-structured",
+      "raw-best-out4096-structured",
+      "zlib-fixed-out1-structured",
+      "zlib-fixed-out1-opaque",
+      "zlib-fixed-out1-empty",
+      "zlib-fixed-out17-structured",
+      "zlib-fixed-out4096-structured",
+      "zlib-best-out1-structured",
+      "zlib-best-out1-opaque",
+      "zlib-best-out1-empty",
+      "zlib-best-out17-structured",
+      "zlib-best-out4096-structured",
+      "gzip-fixed-out1-structured",
+      "gzip-fixed-out1-opaque",
+      "gzip-fixed-out1-empty",
+      "gzip-fixed-out17-structured",
+      "gzip-fixed-out4096-structured",
+      "gzip-best-out1-structured",
+      "gzip-best-out1-opaque",
+      "gzip-best-out1-empty",
+      "gzip-best-out17-structured",
+      "gzip-best-out17-empty",
+      "gzip-best-out4096-structured",
+      "gzip-best-out4096-empty"
+    ],
+    "schema": "vort.deflate.diagnostic-rejection.data-verification.v1",
+    "source_counts": {
+      "baseline": 2250,
+      "candidate": 2267
+    },
+    "v2_metadata_only_fix_preserved": true,
+    "warm_records": 108,
+    "weak_row_count": 27
+  }
+}

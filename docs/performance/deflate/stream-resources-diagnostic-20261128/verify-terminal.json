@@ -1,0 +1,17 @@
+{
+  "actual_exit_code": 0,
+  "argv": [
+    "/usr/bin/python3",
+    "-B",
+    "/home/passchaos/project-z/vort/docs/performance/deflate/stream-resources-diagnostic-20261128/verify-evidence.py",
+    "--package",
+    "/home/passchaos/project-z/vort/docs/performance/deflate/stream-resources-diagnostic-20261128"
+  ],
+  "completed_utc": "2026-11-27T16:10:22.364739+00:00",
+  "new_codec_or_build_or_sampling_or_RSS_executed": false,
+  "started_utc": "2026-11-27T16:10:21.662877+00:00",
+  "stderr": "verify-error.log",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout": "verify-output.json",
+  "stdout_sha256": "7e7234fa4d008734d382bdca75959ed9b8923b8ce8ba801b926898f1ba3e088d"
+}
