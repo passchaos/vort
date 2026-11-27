@@ -1,9 +1,11 @@
 # Original-command split planning reuse, 2026-11-27
 
-Status: accepted against the predeclared functional, primary and control gates.
-Independent primary/control/history/reference replay passed. Integration and
-remote handoff are in progress. Baseline source is `742f4663`. This increment
-does not establish codec parity or leadership.
+Status: implemented in `11effbb7` after passing the predeclared functional,
+primary and control gates. Independent primary/control/history/reference
+replay passed. The implementation is pushed to remote main; the portable
+evidence package is being sealed for a separate documentation commit.
+Baseline source is `742f4663`.
+This increment does not establish codec parity or leadership.
 
 The quality encoder repeatedly plans the same original immutable commands
 while comparing its initial lazy group, forced-recent parameter baseline and
@@ -149,3 +151,8 @@ Initial source and validation roots are `/tmp/vort-br-split-plan-reuse-gate.93ef
 `/tmp/vort-br-split-integration-3c_ti_ax`. The new benchmark epoch is
 `/tmp/vort-br-original-command-split-reuse-ab.egqd38jr`. These are live working
 evidence roots; a completed portable archive is required for final handoff.
+
+After pulling remote main with rebase, focused choice/owner contracts pass
+22/22 each and the real joint writer oracle passes31/31; all seven selected
+source hashes still equal the successful whole-library gate. These are
+post-rebase checks, not a repeated full Debug run or a new benchmark epoch.

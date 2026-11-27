@@ -1,0 +1,68 @@
+{
+  "schema": "vort.original-command-split-plans.portable-seal.v1",
+  "accepted_source_commit": "11effbb7f1344897736a9de50b0f65f9c0d77b20",
+  "implementation_pushed_main": true,
+  "package_docs_commit": "pending Root",
+  "accepted": true,
+  "goal_active": true,
+  "industry_leadership": false,
+  "HEAVY": 0,
+  "artifact_count": 19127,
+  "archive_sha256": "66dde6e8301edb2d907933407ad5fe048b9be21ae468b4ac17ba1ad0b8f12a6c",
+  "archive_bytes": 185506284,
+  "parts": [
+    {
+      "path": "evidence.tar.xz.part001",
+      "bytes": 67108864,
+      "sha256": "dc0780f54e1fd9fa2bb53e9b31afc017bfb5eadaef0122167b6a67437de84ca8"
+    },
+    {
+      "path": "evidence.tar.xz.part002",
+      "bytes": 67108864,
+      "sha256": "b3b4f5c5324261dadc408a3b2d70deb0b7680cc4fa4fa3369849b3c6c1f0af86"
+    },
+    {
+      "path": "evidence.tar.xz.part003",
+      "bytes": 51288556,
+      "sha256": "9e455685f3b1127fa1d5eeee631d8a5055504487112665a2af4d7b4342b68dd5"
+    }
+  ],
+  "manifest_sha256": "e1f18df61d1a4daf5e7d19ef5e84bb002c784371189c5b6c824f3a26909abddc",
+  "staged_verifier_actual_exit": 0,
+  "fresh_extracted_verifier_actual_exit": 0,
+  "portable_verifier_origin": "freshly extracted data/scripts/verify.py, sealed inline Root release; no original /tmp required",
+  "source_epochs_not_relabelled": true,
+  "all_copied_source_epoch_manifests_verified": [
+    {
+      "epoch": "owner-initial-compile-fail",
+      "files": 2220,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "owner-intermediate",
+      "files": 2220,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "owner-final",
+      "files": 2220,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "choice-final",
+      "files": 141,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "public-frozen",
+      "files": 2223,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "final-candidate",
+      "files": 2223,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    }
+  ],
+  "temporary_duplicate_policy": "Complete bytes remain in verified archive parts; uncompressed staging and verification extraction are removed"
+}

@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "python3",
+    "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/.portable-check/data/scripts/verify.py",
+    "--manifest",
+    "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/.portable-check/data/manifest.json"
+  ],
+  "cwd": "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/.portable-check",
+  "scope": "portable verification from freshly extracted payload; sealed inline release, no original /tmp needed"
+}

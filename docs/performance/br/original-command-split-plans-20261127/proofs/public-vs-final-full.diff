@@ -1,0 +1,19 @@
+--- public-frozen/src/br.zig
++++ final-candidate/src/br.zig
+@@ -10999,8 +10999,16 @@
+     _ = @import("br/encoder/split_plan_reuse_tests.zig");
+ }
+ 
++test "Brotli parameter choice witness contracts" {
++    _ = @import("br/encoder/parameter_choice_tests.zig");
++}
++
+ test "br shared split planning public wire and resource contracts" {
+     try @import("br/encoder/split_plan_reuse_public_tests.zig").run(SplitPlanReuseTestCodec);
++}
++
++test "br shared split planning joint writer oracle" {
++    try @import("br/encoder/split_plan_reuse_joint_tests.zig").run(SplitPlanReuseTestCodec);
+ }
+ 
+ fn sharedCommandCandidateGroupSupported(input: []const u8, commands: []const command_plan.Command, options: LazyWireOptions) bool {

@@ -1,0 +1,29 @@
+{
+  "schema": "vort.original-command-split-plans.archive-envelope.v1",
+  "archive": "evidence.tar.xz",
+  "bytes": 185506284,
+  "sha256": "66dde6e8301edb2d907933407ad5fe048b9be21ae468b4ac17ba1ad0b8f12a6c",
+  "manifest": "portable-manifest.json",
+  "HEAVY": 0,
+  "root_release": "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/archive-release.json",
+  "parts": [
+    {
+      "path": "evidence.tar.xz.part001",
+      "bytes": 67108864,
+      "sha256": "dc0780f54e1fd9fa2bb53e9b31afc017bfb5eadaef0122167b6a67437de84ca8"
+    },
+    {
+      "path": "evidence.tar.xz.part002",
+      "bytes": 67108864,
+      "sha256": "b3b4f5c5324261dadc408a3b2d70deb0b7680cc4fa4fa3369849b3c6c1f0af86"
+    },
+    {
+      "path": "evidence.tar.xz.part003",
+      "bytes": 51288556,
+      "sha256": "9e455685f3b1127fa1d5eeee631d8a5055504487112665a2af4d7b4342b68dd5"
+    }
+  ],
+  "archive_file_present": false,
+  "reconstruct_with": "scripts/join_archive.py --output /tmp/evidence.tar.xz",
+  "manifest_sha256": "e1f18df61d1a4daf5e7d19ef5e84bb002c784371189c5b6c824f3a26909abddc"
+}

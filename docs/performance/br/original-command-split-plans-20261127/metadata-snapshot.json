@@ -1,0 +1,147 @@
+{
+  "schema": "vort.original-command-split-plans.metadata-snapshot.v1",
+  "captured_utc": "2026-11-26T22:41:08.153746+00:00",
+  "phase": "static-preparation",
+  "HEAVY": 0,
+  "final_verdict_claimed": false,
+  "gates": [
+    {
+      "group": "owner",
+      "path": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/native-ready.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "owner",
+      "path": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/wasi-build.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "owner",
+      "path": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/wasi-run.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "choice",
+      "path": "/tmp/vort-parameter-choice-validation.jy3hhavn/native-3.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "choice",
+      "path": "/tmp/vort-parameter-choice-validation.jy3hhavn/wasi-build-2.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "choice",
+      "path": "/tmp/vort-parameter-choice-validation.jy3hhavn/wasi-run-2.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "public",
+      "path": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/native-build.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "public",
+      "path": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/native-run.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "public",
+      "path": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/wasi-build.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "public",
+      "path": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/wasi-run.exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "integration",
+      "path": "/tmp/vort-br-split-integration-3c_ti_ax/attempt-1/exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "integration",
+      "path": "/tmp/vort-br-split-integration-3c_ti_ax/joint-native/exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "integration",
+      "path": "/tmp/vort-br-split-integration-3c_ti_ax/joint-wasi/build-exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "integration",
+      "path": "/tmp/vort-br-split-integration-3c_ti_ax/joint-wasi/run-exit.json",
+      "state": "terminal",
+      "actual_exit": 0
+    },
+    {
+      "group": "integration",
+      "path": "/tmp/vort-br-split-integration-3c_ti_ax/whole-library/exit.json",
+      "state": "running-or-pending",
+      "actual_exit": null
+    }
+  ],
+  "public": {
+    "native": {
+      "tests_passed": 35,
+      "sweep": {
+        "actual_successful_ordinals": 681,
+        "observed_OutOfMemory": 681,
+        "active_retries": 681,
+        "retry_groups": 681,
+        "retry_getter_hits": 2724,
+        "allocated": 31523467002,
+        "freed": 31523467002
+      }
+    },
+    "wasi": {
+      "tests_passed": 35,
+      "sweep": {
+        "actual_successful_ordinals": 688,
+        "observed_OutOfMemory": 688,
+        "active_retries": 688,
+        "retry_groups": 688,
+        "retry_getter_hits": 2752,
+        "allocated": 27224046037,
+        "freed": 27224046037
+      }
+    }
+  },
+  "performance_status_receipt": {
+    "root": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr",
+    "status_receipt": "execution-status.json",
+    "observed_timed_samples_at_preparation": 0,
+    "formal_sampling_released_at_preparation": false,
+    "performance_claimed": false
+  },
+  "performance_observed_metadata": {
+    "HEAVY": 0,
+    "all_encode_and_decode_calls": 156,
+    "builds_run": 5,
+    "codec_calls": 78,
+    "codec_calls_scope": "owning encoder warmup calls; pinned decode calls counted separately",
+    "formal_sampling_released": false,
+    "owning_encoder_warmup_calls": 78,
+    "pinned_initial_decode_calls": 78,
+    "preflight_completed": true,
+    "terminal": true,
+    "timed_samples": 0
+  },
+  "source_payload_scanned": false,
+  "archive_compressed": false
+}

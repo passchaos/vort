@@ -1,0 +1,181 @@
+{
+  "schema": "vort.original-command-split-plans.package-plan.v1",
+  "phase": "sealed",
+  "HEAVY": 0,
+  "archive_released": true,
+  "whole_gate": {
+    "state": "terminal",
+    "session_id": 6933,
+    "root": "/tmp/vort-br-split-integration-3c_ti_ax/whole-library",
+    "command": "command.json",
+    "stdout": "stdout.log",
+    "stderr": "stderr.log",
+    "exit": "exit.json",
+    "success_claimed": true,
+    "actual_exit": 0,
+    "coverage": {
+      "actual_exit": 0,
+      "steps_succeeded": 414,
+      "steps_total": 414,
+      "tests_passed": 6085,
+      "tests_total": 6087,
+      "tests_skipped": 2,
+      "source_unchanged": true,
+      "receipt": "/tmp/vort-br-split-integration-3c_ti_ax/whole-library/exit.json",
+      "warnings_preserved": "Actual stderr is retained unchanged; failed-command warnings do not override the terminal exit."
+    }
+  },
+  "performance": {
+    "root": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr",
+    "status_receipt": "execution-status.json",
+    "observed_timed_samples_at_preparation": 0,
+    "formal_sampling_released_at_preparation": false,
+    "performance_claimed": false,
+    "phase_roots": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/followup-epochs",
+    "formal_verdict": "accepted by preregistered all-row gate; primary-six remains disclosed secondary below 3%",
+    "independent_formal": "/tmp/vort-q8-formal-independent.2XiBFF",
+    "independent_followups": "/tmp/vort-q8-followup-independent.zOVZYk"
+  },
+  "exclusions": {
+    "directory_names": [
+      ".zig-cache",
+      "cache",
+      "global-cache",
+      "wasi-cache",
+      "__pycache__"
+    ],
+    "generated_suffixes": [
+      ".pyc"
+    ],
+    "scope": "Caches are excluded only after compiled ELF/object bindings are independently recovered into explicit included paths."
+  },
+  "groups": [
+    {
+      "id": "owner",
+      "root": "/tmp/vort-br-split-plan-reuse-gate.93efvyav",
+      "source_epochs": [
+        "owner-initial-compile-fail",
+        "owner-intermediate",
+        "owner-final"
+      ],
+      "retain": "all non-cache files and source trees; prior failures and final Native/WASI 10/10",
+      "final_exits": [
+        "native-ready.exit.json",
+        "wasi-build.exit.json",
+        "wasi-run.exit.json"
+      ],
+      "expected_tests": 10,
+      "artifact_gaps": [
+        "Original standalone Native unit ELF/object were not explicitly preserved. Do not reconstruct an original binary hash or rebuild; final whole-current test ELF can cover these same unit file SHAs. Any cache/debug-path recovery must be labeled recovered."
+      ]
+    },
+    {
+      "id": "choice",
+      "root": "/tmp/vort-parameter-choice-validation.jy3hhavn",
+      "source_epochs": [
+        "choice-final",
+        "choice-prior-source-versions"
+      ],
+      "retain": "src, all before-* sources, manifests, actual failure and corrected Native/WASI outputs, wasm, runner",
+      "final_exits": [
+        "native-3.exit.json",
+        "wasi-build-2.exit.json",
+        "wasi-run-2.exit.json"
+      ],
+      "expected_tests": 12,
+      "artifact_gaps": [
+        "Earlier per-file before-* captures are not automatically a complete earlier src epoch."
+      ]
+    },
+    {
+      "id": "choice-first-freeze",
+      "root": "/tmp/vort-parameter-choice-validation.v1wylerh",
+      "source_epochs": [
+        "choice-first-freeze"
+      ],
+      "retain": "entire existing source-only freeze, without claiming it produced final 12/12"
+    },
+    {
+      "id": "public",
+      "root": "/tmp/vort-br-split-plan-public-gate-ydifd4lx",
+      "source_epochs": [
+        "public-frozen"
+      ],
+      "retain": "SOURCE, native ELF, wasm, record objects, raw logs, all true exits, SHA manifests, full 681/688 OOM sweeps and retries, unchanged fixtures/wires",
+      "final_exits": [
+        "native-build.exit.json",
+        "native-run.exit.json",
+        "wasi-build.exit.json",
+        "wasi-run.exit.json"
+      ],
+      "expected_tests": 35,
+      "expected_sweep_ordinals": {
+        "native": 681,
+        "wasi": 688
+      }
+    },
+    {
+      "id": "integration",
+      "root": "/tmp/vort-br-split-integration-3c_ti_ax",
+      "source_epochs": [
+        "integration-selected-source-bindings"
+      ],
+      "retain": "missing-testFile failures, parameter pair and joint gates, all whole-gate logs including actual terminal exit once available",
+      "final_exits": [
+        "attempt-1/exit.json",
+        "joint-native/exit.json",
+        "joint-wasi/build-exit.json",
+        "joint-wasi/run-exit.json",
+        "whole-library/exit.json"
+      ],
+      "reported_counts": {
+        "parameter_pair_native": 27,
+        "parameter_pair_wasi": "not run or claimed",
+        "joint_native": 31,
+        "joint_wasi": 31
+      },
+      "artifact_gaps": [
+        "Whole-gate complete src/build/object binding must be explicit; selected source hashes alone are not a full-tree identity."
+      ]
+    },
+    {
+      "id": "performance",
+      "root": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr",
+      "source_epochs": [
+        "final-candidate",
+        "historical-comparators"
+      ],
+      "retain": "all frozen source epochs, ELF/object/reference libraries, harness/scripts, raw samples, complete wires, controls, build failures, primary verdict, source bindings",
+      "status": "preflight terminal, formal samples zero at preparation; later verdict pending",
+      "final_exits": []
+    },
+    {
+      "id": "formal-independent",
+      "root": "/tmp/vort-q8-formal-independent.2XiBFF",
+      "source_epochs": [
+        "final-candidate"
+      ],
+      "retain": "Complete independent formal/pilot data verifier and actual receipt; no new sampling",
+      "final_exits": []
+    },
+    {
+      "id": "followup-independent",
+      "root": "/tmp/vort-q8-followup-independent.zOVZYk",
+      "source_epochs": [
+        "final-candidate",
+        "historical-comparators"
+      ],
+      "retain": "Complete controls/history/reference independent verifier and receipt; all original scope limits",
+      "final_exits": []
+    }
+  ],
+  "additional_paths": [],
+  "required_before_archive": [
+    "Root archive-release with final verdict and closed timing window",
+    "All required final gate exits terminal, including whole-gate",
+    "Account for missing historical standalone Native ELF explicitly; resolve current whole-gate ELF/object and reference library bindings from existing artifacts without rebuilding.",
+    "Retain every failed verdict and original receipt unchanged",
+    "Audit public vs final source epochs; never relabel them identical",
+    "Run pure-data manifest audit before archive compression"
+  ]
+}

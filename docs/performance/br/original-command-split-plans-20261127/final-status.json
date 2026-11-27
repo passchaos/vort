@@ -1,0 +1,61 @@
+{
+  "schema": "vort.original-command-split-plans.final-status.v1",
+  "phase": "sealed",
+  "HEAVY": 0,
+  "timing_windows_closed": true,
+  "active_sampling_or_builds": false,
+  "formal_and_followup_epochs": {
+    "full90": {
+      "HEAVY": 0,
+      "archive_jobs_active": 0,
+      "codec_jobs_active": 0,
+      "completed_pairs": 90,
+      "completed_processes": 180,
+      "hash_jobs_active": 0,
+      "phase": "full90",
+      "terminal": true,
+      "terminal_utc": "2026-11-27T00:16:50.895275+00:00"
+    },
+    "controls": {
+      "HEAVY": 0,
+      "archive_jobs_active": 0,
+      "codec_jobs_active": 0,
+      "completed_pairs": 90,
+      "completed_processes": 180,
+      "hash_jobs_active": 0,
+      "phase": "controls",
+      "terminal": true,
+      "terminal_utc": "2026-11-27T00:28:25.954033+00:00"
+    },
+    "history0a": {
+      "HEAVY": 0,
+      "archive_jobs_active": 0,
+      "codec_jobs_active": 0,
+      "completed_pairs": 90,
+      "completed_processes": 180,
+      "hash_jobs_active": 0,
+      "phase": "history0a",
+      "terminal": true,
+      "terminal_utc": "2026-11-27T00:29:57.938775+00:00"
+    },
+    "reference": {
+      "HEAVY": 0,
+      "archive_jobs_active": 0,
+      "codec_jobs_active": 0,
+      "completed_pairs": 90,
+      "completed_processes": 180,
+      "hash_jobs_active": 0,
+      "phase": "reference",
+      "terminal": true,
+      "terminal_utc": "2026-11-27T00:31:00.797355+00:00"
+    }
+  },
+  "static_preparation_snapshot": "metadata-snapshot.json is intentionally retained as the earlier pre-release snapshot",
+  "whole_gate_actual_exit": 0,
+  "accepted": true,
+  "goal_active": true,
+  "industry_leadership": false,
+  "archive_compression_complete": true,
+  "portable_verification_complete": true,
+  "package_docs_commit": "pending Root"
+}

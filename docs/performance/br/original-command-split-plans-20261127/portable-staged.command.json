@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "python3",
+    "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/scripts/verify.py",
+    "--release",
+    "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/archive-release.json",
+    "--manifest",
+    "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/data/manifest.json"
+  ],
+  "cwd": "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127",
+  "scope": "data-only verification; no codec/build/timing"
+}

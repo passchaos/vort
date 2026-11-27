@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Portable original-command-split-plans evidence manifest",
+  "type": "object",
+  "required": [
+    "schema",
+    "phase",
+    "release",
+    "artifacts",
+    "source_scope_proof",
+    "limitations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vort.original-command-split-plans.portable-manifest.v1"
+    },
+    "phase": {
+      "const": "assembled-after-root-release"
+    },
+    "release": {
+      "type": "object"
+    },
+    "source_scope_proof": {
+      "type": "object"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "logical_path",
+          "origin_path",
+          "kind",
+          "sha256",
+          "bytes",
+          "scope"
+        ],
+        "properties": {
+          "logical_path": {
+            "type": "string"
+          },
+          "origin_path": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "symlink-metadata"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scope": {
+            "type": "string"
+          },
+          "link_target": {
+            "type": "string"
+          },
+          "recovered": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

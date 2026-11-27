@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Root release for deferred original-command-split-plan archive",
+  "type": "object",
+  "required": [
+    "schema",
+    "issued_by",
+    "archive_released",
+    "timing_window_closed",
+    "final_verdict"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vort.original-command-split-plans.archive-release.v1"
+    },
+    "issued_by": {
+      "const": "/root"
+    },
+    "archive_released": {
+      "const": true
+    },
+    "timing_window_closed": {
+      "const": true
+    },
+    "final_verdict": {
+      "type": "object",
+      "required": [
+        "status",
+        "record"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted",
+            "rejected",
+            "partial"
+          ]
+        },
+        "record": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "extra_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "recovered": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "artifact_gaps_resolved": {
+      "type": "boolean"
+    }
+  }
+}

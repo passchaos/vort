@@ -1,0 +1,57 @@
+{
+  "schema": "vort.original-command-split-plans.primary-verdict.v1",
+  "issued_by": "/root",
+  "recorded_by": "/root/prepared_workspace_budget",
+  "authorization_source": "Explicit Root final archive NEW_TASK, followed by accepted source commit message; all timing windows closed and no live sampling/build.",
+  "accepted": true,
+  "goal_active": true,
+  "industry_leadership": false,
+  "historical_regression_fixed": false,
+  "accepted_source_commit": "11effbb7f1344897736a9de50b0f65f9c0d77b20",
+  "semantic_baseline_commit": "742f4663d914cd2814f2c1267572a00e7b18bfbf",
+  "candidate_frozen_source_manifest_sha256": "371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+  "decision_scope": "Accepted by the gate fixed before sampling. Independent verification does not itself adopt or claim industry best.",
+  "formal": {
+    "receipt": "/tmp/vort-q8-formal-independent.2XiBFF/receipt.json",
+    "preregistered_gate_pass": true,
+    "all_matrix_GM": 1.0312916722332623,
+    "CI": [
+      1.0297344815763332,
+      1.0327249356711294
+    ],
+    "primary_six_secondary_GM": 1.0292433572443302,
+    "primary_six_secondary_below_1_03": true,
+    "all_requested_samples_used": true
+  },
+  "followups": {
+    "receipt": "/tmp/vort-q8-followup-independent.zOVZYk/receipt.json",
+    "total_pairs": 270,
+    "total_processes": 540,
+    "total_raw_calls": 15984,
+    "controls_min_row": "small-xml",
+    "controls_min_point": 0.9951913215955942,
+    "controls_min_CI": [
+      0.9831635967699703,
+      1.005717893541047
+    ],
+    "history_candidate_elapsed_ratio": 3.0917714010799577,
+    "history_candidate_wire_ratio": 0.9565808633658663,
+    "reference_candidate_elapsed_ratio": 59.710103763936324,
+    "reference_candidate_wire_ratio": 0.9438865172371007,
+    "reference_version": "1.2.0",
+    "scope": "Matched owning continuous encode/lengthmix/free callbacks and one symmetric warmup, cold per-call context. Fixed source, corpus and requested options only. No matched-quality frontier, cross-epoch speed arithmetic, industry ranking, fresh codec run, producer import or removed samples. Preflight decode and runtime guards are verified recorded assertions, not invoked."
+  },
+  "whole_gate": {
+    "actual_exit": 0,
+    "steps_succeeded": 414,
+    "steps_total": 414,
+    "tests_passed": 6085,
+    "tests_total": 6087,
+    "tests_skipped": 2,
+    "source_unchanged": true,
+    "receipt": "/tmp/vort-br-split-integration-3c_ti_ax/whole-library/exit.json",
+    "warnings_preserved": "Actual stderr is retained unchanged; failed-command warnings do not override the terminal exit."
+  },
+  "diagnostics_scope": "Three live Debug one-second diagnostics show test progression only, not throughput/ROI or inference that earlier tests passed. Earlier ptrace refusal is not a codec/runtime failure.",
+  "original_owner_native_elf": "Not explicitly preserved; final current whole-test ELF covers same unit source hashes, without inventing old standalone binary identity."
+}

@@ -1,0 +1,99 @@
+{
+  "schema": "vort.original-command-split-plans.archive-release.v1",
+  "issued_by": "/root",
+  "recorded_by": "/root/prepared_workspace_budget",
+  "authorization_source": "Explicit Root final archive NEW_TASK, followed by accepted source commit message; all timing windows closed and no live sampling/build.",
+  "archive_released": true,
+  "timing_window_closed": true,
+  "final_verdict": {
+    "status": "accepted",
+    "record": "/home/passchaos/project-z/vort/docs/performance/br/original-command-split-plans-20261127/primary-verdict.json"
+  },
+  "extra_artifacts": [
+    {
+      "id": "whole-current-native-test",
+      "path": "/home/passchaos/project-z/vort/.zig-cache/o/51aa7bc099e0727f00767585ffcb42cb/vort-tests",
+      "scope": "Actual final whole Debug test ELF; diagnostic SHA binding, not historical standalone Owner ELF",
+      "expected_sha256": "97fa02e0ceecdfe6095fef2ba7d4d11413be21f33ff93edfd85ffa9c3c7af1c1",
+      "recovered": false
+    },
+    {
+      "id": "baseline742-source",
+      "path": "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/sources/current",
+      "scope": "Actual baseline742 compiled project snapshot from existing p9 build equality receipts; source identity stays separate from accepted commit"
+    },
+    {
+      "id": "historical0a-source",
+      "path": "/tmp/vort-q8-main-ab.cHiG58/sources/old_exact",
+      "scope": "Actual historical comparator compiled source snapshot; separate historical epoch"
+    },
+    {
+      "id": "reference-libbrotlienc.so.1.2.0",
+      "path": "/tmp/vort-brotli-exp.fR1axN/libbrotlienc.so.1.2.0",
+      "scope": "Pinned libbrotli 1.2.0 runtime library; actual version/hash maps verified independently",
+      "expected_sha256": "14b6068470820450dd5169953b4e38bb3e0a9e031442b27d8ab735ae17e060a6",
+      "recovered": false
+    },
+    {
+      "id": "reference-libbrotlidec.so.1.2.0",
+      "path": "/tmp/vort-brotli-exp.fR1axN/libbrotlidec.so.1.2.0",
+      "scope": "Pinned libbrotli 1.2.0 runtime library; actual version/hash maps verified independently",
+      "expected_sha256": "1621037a89296fbd1b4be3ee44affc97082b607829604d6bc3f64b0d8cc272cc",
+      "recovered": false
+    },
+    {
+      "id": "reference-libbrotlicommon.so.1.2.0",
+      "path": "/tmp/vort-brotli-exp.fR1axN/libbrotlicommon.so.1.2.0",
+      "scope": "Pinned libbrotli 1.2.0 runtime library; actual version/hash maps verified independently",
+      "expected_sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7",
+      "recovered": false
+    },
+    {
+      "id": "reference-build-CMakeCache",
+      "path": "/tmp/vort-brotli-exp.fR1axN/CMakeCache.txt",
+      "scope": "Original reference build metadata; not a claim that live upstream source is a frozen compiled-source epoch",
+      "expected_sha256": "0dfd53b3aaac873446f97cb0b8d206d31663edb9cf65ce65fa54edfc3d58474d",
+      "recovered": false
+    },
+    {
+      "id": "reference-build-compile_commands",
+      "path": "/tmp/vort-brotli-exp.fR1axN/compile_commands.json",
+      "scope": "Original reference build metadata; not a claim that live upstream source is a frozen compiled-source epoch",
+      "expected_sha256": "517c0042293bc3fca864d544b597aa47834e7b112c0b0d90dc661c287a791560",
+      "recovered": false
+    },
+    {
+      "id": "baseline742-probe.zig",
+      "path": "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/probe.zig",
+      "scope": "Original existing comparator harness/source/build receipt; no new build or codec run"
+    },
+    {
+      "id": "baseline742-provenance.zig",
+      "path": "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/provenance.zig",
+      "scope": "Original existing comparator harness/source/build receipt; no new build or codec run"
+    },
+    {
+      "id": "baseline742-build-results.json",
+      "path": "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/build-results.json",
+      "scope": "Original existing comparator harness/source/build receipt; no new build or codec run"
+    },
+    {
+      "id": "historical0a-probe.zig",
+      "path": "/tmp/vort-q8-main-ab.cHiG58/probe.zig",
+      "scope": "Original existing comparator harness/source/build receipt; no new build or codec run"
+    },
+    {
+      "id": "historical0a-provenance.zig",
+      "path": "/tmp/vort-q8-main-ab.cHiG58/provenance.zig",
+      "scope": "Original existing comparator harness/source/build receipt; no new build or codec run"
+    },
+    {
+      "id": "historical0a-build-results.json",
+      "path": "/tmp/vort-q8-main-ab.cHiG58/build-results.json",
+      "scope": "Original existing comparator harness/source/build receipt; no new build or codec run"
+    }
+  ],
+  "historical_owner_native_elf_gap": "explicitly not retained; not filled by fabricated recovery",
+  "goal_active": true,
+  "industry_leadership": false
+}

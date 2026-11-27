@@ -1,0 +1,14 @@
+{
+  "schema": "vort.original-command-split-plans.scope-audit.v1",
+  "source_trees_byte_identical": false,
+  "changed_paths": [
+    "src/br.zig"
+  ],
+  "br_source_hashes": {
+    "public": "4148471c8878360242edc5494405d3e836324c713752eaf22f9a2f89b0754524",
+    "final": "8a06c147383b72b28ca89362a2c9ace98318d33506b0ab42d0936a085bdc2eb7"
+  },
+  "non_test_tokens_equal": true,
+  "tokenization": "small lexical scanner removes top-level tests, whitespace and line comments; not a Zig semantic parser",
+  "scope": "only non-test br.zig token identity; no binary/layout/whole-source identity claim"
+}

@@ -1,0 +1,223 @@
+{
+  "schema": "vort.original-command-split-plans.portable-source-mappings.v1",
+  "source_epochs": {
+    "schema": "vort.original-command-split-plans.source-epochs.v1",
+    "source_trees_are_distinct": true,
+    "epochs": [
+      {
+        "id": "owner-initial-compile-fail",
+        "root": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/source",
+        "manifest": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/source-files.json",
+        "result_scope": "original compile failure, not final owner"
+      },
+      {
+        "id": "owner-intermediate",
+        "root": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/source-final",
+        "manifest": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/source-final-files.json",
+        "result_scope": "intermediate Native owner pass before final counters"
+      },
+      {
+        "id": "owner-final",
+        "root": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/source-ready",
+        "manifest": "/tmp/vort-br-split-plan-reuse-gate.93efvyav/source-ready-files.json",
+        "result_scope": "final Native and actual WASI owner 10/10"
+      },
+      {
+        "id": "choice-final",
+        "root": "/tmp/vort-parameter-choice-validation.jy3hhavn/src",
+        "manifest": "/tmp/vort-parameter-choice-validation.jy3hhavn/source-manifest-3.json",
+        "result_scope": "final Native-3 and actual WASI-2 12/12; per-file earlier captures retain their own original scopes"
+      },
+      {
+        "id": "choice-first-freeze",
+        "root": "/tmp/vort-parameter-choice-validation.v1wylerh/src",
+        "manifest": null,
+        "result_scope": "source-only first freeze; no final run association inferred"
+      },
+      {
+        "id": "public-frozen",
+        "root": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/SOURCE",
+        "manifest": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/source-before.json",
+        "result_scope": "public Native/WASI 35/35 and all 681/688 OOM/retry points"
+      },
+      {
+        "id": "final-candidate",
+        "root": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/sources/candidate",
+        "manifest": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/candidate-source-files.json",
+        "result_scope": "final candidate with joint/Choice declarations; benchmark build/untimed preflight, samples zero at preparation"
+      },
+      {
+        "id": "integration-selected-source-bindings",
+        "root": null,
+        "manifest": "/tmp/vort-br-split-integration-3c_ti_ax/whole-library/command.json",
+        "result_scope": "Root gate selected source hashes only; full compiled source binding must be supplied"
+      },
+      {
+        "id": "choice-prior-source-versions",
+        "root": "/tmp/vort-parameter-choice-validation.jy3hhavn",
+        "manifest": [
+          "source-manifest.json",
+          "source-manifest-2.json"
+        ],
+        "result_scope": "Before-* per-file captures and prior original logs; not automatically a reconstructed complete old src epoch"
+      },
+      {
+        "id": "historical-comparators",
+        "root": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/assets",
+        "manifest": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/preparation-manifest.json",
+        "result_scope": "Pinned historical ELF/object/source equality receipts; any complete old source or external library root must be supplied as an explicit release extra artifact"
+      },
+      {
+        "id": "baseline742-compiled-snapshot",
+        "root": "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/sources/current",
+        "manifest": null,
+        "result_scope": "Actual p9 snapshot, existing all-tracked-src equality receipt vs semantic742; distinct from final candidate and11effbb7 accepted commit"
+      },
+      {
+        "id": "historical0a-compiled-snapshot",
+        "root": "/tmp/vort-q8-main-ab.cHiG58/sources/old_exact",
+        "manifest": null,
+        "result_scope": "Existing historical direct producer build snapshot; not a matched-quality frontier"
+      }
+    ],
+    "public_vs_final": {
+      "proof_kind": "comparison of already recorded SHA manifests; no source payload hashing during static preparation",
+      "public_files": 2223,
+      "final_files": 2223,
+      "different_paths": [
+        "src/br.zig"
+      ],
+      "recorded_changes": {
+        "src/br.zig": {
+          "public": "4148471c8878360242edc5494405d3e836324c713752eaf22f9a2f89b0754524",
+          "final": "8a06c147383b72b28ca89362a2c9ace98318d33506b0ab42d0936a085bdc2eb7"
+        }
+      },
+      "existing_diff": "proofs/public-vs-final-test-declarations.diff",
+      "production_modules_equal_by_recorded_sha": {
+        "src/br/encoder/split_plan_reuse.zig": true,
+        "src/br/encoder/parameter_pair.zig": true
+      },
+      "claim": "These source epochs are not byte-identical. The retained recorded br.zig diff changes test declarations/imports; strict non-test source comparison remains a deferred archive audit."
+    },
+    "whole_gate_vs_final_candidate": {
+      "selected_bindings": {
+        "src/br.zig": {
+          "whole_gate_recorded": "8a06c147383b72b28ca89362a2c9ace98318d33506b0ab42d0936a085bdc2eb7",
+          "final_manifest": "8a06c147383b72b28ca89362a2c9ace98318d33506b0ab42d0936a085bdc2eb7",
+          "equal": true
+        },
+        "src/br/encoder/parameter_pair.zig": {
+          "whole_gate_recorded": "e3143f596384e05781012c93653e3f39f7f03e4a84c781cd605c442ea97d1cf4",
+          "final_manifest": "e3143f596384e05781012c93653e3f39f7f03e4a84c781cd605c442ea97d1cf4",
+          "equal": true
+        },
+        "src/br/encoder/parameter_choice_tests.zig": {
+          "whole_gate_recorded": "8b02c68385fdf7feac08c05d50f7d26fa26b7a9863d9bb8673e710a750ca6e78",
+          "final_manifest": "8b02c68385fdf7feac08c05d50f7d26fa26b7a9863d9bb8673e710a750ca6e78",
+          "equal": true
+        },
+        "src/br/encoder/split_plan_reuse.zig": {
+          "whole_gate_recorded": "9b706225b3a6f11d1c375688693dce6558f306fc030d999fcb051deb7642bd97",
+          "final_manifest": "9b706225b3a6f11d1c375688693dce6558f306fc030d999fcb051deb7642bd97",
+          "equal": true
+        },
+        "src/br/encoder/split_plan_reuse_tests.zig": {
+          "whole_gate_recorded": "dada12ddf22a8d123261e1fff2b93a3e0d8620fd2e8e6068a3ae58ee224661ea",
+          "final_manifest": "dada12ddf22a8d123261e1fff2b93a3e0d8620fd2e8e6068a3ae58ee224661ea",
+          "equal": true
+        },
+        "src/br/encoder/split_plan_reuse_public_tests.zig": {
+          "whole_gate_recorded": "addb1174e148cbc0c9879abdd5336e74225b5664ba1234f2fd416ad5684a3e61",
+          "final_manifest": "addb1174e148cbc0c9879abdd5336e74225b5664ba1234f2fd416ad5684a3e61",
+          "equal": true
+        },
+        "src/br/encoder/split_plan_reuse_joint_tests.zig": {
+          "whole_gate_recorded": "82ba2858cf7e0271ed6f666a6802f4179cd4cb5fbeaf1aace5a69a6abbf18f86",
+          "final_manifest": "82ba2858cf7e0271ed6f666a6802f4179cd4cb5fbeaf1aace5a69a6abbf18f86",
+          "equal": true
+        }
+      },
+      "all_recorded_selected_hashes_match": true,
+      "full_tree_identity_claimed": false
+    },
+    "limitations": [
+      "Original commands/cwds remain literal; portable mapping supplements them without rewriting raw receipts.",
+      "Source-only, per-file recovery, selected-source binding and complete-tree freezes must remain distinguishable.",
+      "No prior failure is converted to success; no running whole gate is called complete."
+    ],
+    "accepted_source_commit": "11effbb7f1344897736a9de50b0f65f9c0d77b20",
+    "semantic_baseline_commit": "742f4663d914cd2814f2c1267572a00e7b18bfbf",
+    "candidate_snapshot_manifest_sha256": "371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2"
+  },
+  "source_scope_proof": {
+    "schema": "vort.original-command-split-plans.scope-audit.v1",
+    "source_trees_byte_identical": false,
+    "changed_paths": [
+      "src/br.zig"
+    ],
+    "br_source_hashes": {
+      "public": "4148471c8878360242edc5494405d3e836324c713752eaf22f9a2f89b0754524",
+      "final": "8a06c147383b72b28ca89362a2c9ace98318d33506b0ab42d0936a085bdc2eb7"
+    },
+    "non_test_tokens_equal": true,
+    "tokenization": "small lexical scanner removes top-level tests, whitespace and line comments; not a Zig semantic parser",
+    "scope": "only non-test br.zig token identity; no binary/layout/whole-source identity claim"
+  },
+  "source_copy_verification": [
+    {
+      "epoch": "owner-initial-compile-fail",
+      "files": 2220,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "owner-intermediate",
+      "files": 2220,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "owner-final",
+      "files": 2220,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "choice-final",
+      "files": 141,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "public-frozen",
+      "files": 2223,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    },
+    {
+      "epoch": "final-candidate",
+      "files": 2223,
+      "scope": "copied bytes match that epoch's own recorded source manifest"
+    }
+  ],
+  "portable_root_mapping": {
+    "/tmp/vort-br-split-plan-reuse-gate.93efvyav": "raw/owner",
+    "/tmp/vort-parameter-choice-validation.jy3hhavn": "raw/choice",
+    "/tmp/vort-parameter-choice-validation.v1wylerh": "raw/choice-first-freeze",
+    "/tmp/vort-br-split-plan-public-gate-ydifd4lx": "raw/public",
+    "/tmp/vort-br-split-integration-3c_ti_ax": "raw/integration",
+    "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr": "raw/performance",
+    "/tmp/vort-q8-formal-independent.2XiBFF": "raw/formal-independent",
+    "/tmp/vort-q8-followup-independent.zOVZYk": "raw/followup-independent",
+    "/home/passchaos/project-z/vort/.zig-cache/o/51aa7bc099e0727f00767585ffcb42cb/vort-tests": "extra/whole-current-native-test/vort-tests",
+    "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/sources/current": "extra/baseline742-source",
+    "/tmp/vort-q8-main-ab.cHiG58/sources/old_exact": "extra/historical0a-source",
+    "/tmp/vort-brotli-exp.fR1axN/libbrotlienc.so.1.2.0": "extra/reference-libbrotlienc.so.1.2.0/libbrotlienc.so.1.2.0",
+    "/tmp/vort-brotli-exp.fR1axN/libbrotlidec.so.1.2.0": "extra/reference-libbrotlidec.so.1.2.0/libbrotlidec.so.1.2.0",
+    "/tmp/vort-brotli-exp.fR1axN/libbrotlicommon.so.1.2.0": "extra/reference-libbrotlicommon.so.1.2.0/libbrotlicommon.so.1.2.0",
+    "/tmp/vort-brotli-exp.fR1axN/CMakeCache.txt": "extra/reference-build-CMakeCache/CMakeCache.txt",
+    "/tmp/vort-brotli-exp.fR1axN/compile_commands.json": "extra/reference-build-compile_commands/compile_commands.json",
+    "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/probe.zig": "extra/baseline742-probe.zig/probe.zig",
+    "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/provenance.zig": "extra/baseline742-provenance.zig/provenance.zig",
+    "/tmp/vort-br-shared-literal-model-ab.p9wbbc7q/build-results.json": "extra/baseline742-build-results.json/build-results.json",
+    "/tmp/vort-q8-main-ab.cHiG58/probe.zig": "extra/historical0a-probe.zig/probe.zig",
+    "/tmp/vort-q8-main-ab.cHiG58/provenance.zig": "extra/historical0a-provenance.zig/provenance.zig",
+    "/tmp/vort-q8-main-ab.cHiG58/build-results.json": "extra/historical0a-build-results.json/build-results.json"
+  }
+}

@@ -746,6 +746,51 @@ anchor, recent-source increments and competitor comparisons distinct. Recent
 epoch to report current recovery. Prioritize repeated planning and candidate
 emission rather than further expanding default parser work.
 
+## Original-command q8 split planning reuse accepted (2026-11-27)
+
+The [accepted planning slice](br/original-command-split-plans-20261127.md)
+is implemented in `11effbb7`. It transfers completed adaptive literal and
+symbol split plans across the original immutable command stream's parameter
+candidate groups, retains successful null results and forwards the completed
+parameter choice witness. The 64 KiB admission includes metadata and owned
+payload; refusal preserves the ordinary plan and all candidates. The owner
+retires before later optimal/feedback work. Existing models, parser budgets,
+candidate order and strict wire ties remain unchanged.
+
+Native/actual WASI owner 10/10, choice witness 12/12, joint producer/writer
+31/31 and public contracts 35/35 each pass. Existing native parameter-pair
+integration passes27/27. Requested heap for Mozilla/Xray is unchanged in the
+matched same-source disabled/enabled comparisons; each saves42 allocation
+attempts. These comparisons already contain the choice-witness change and
+are not historical-source resource measurements. Native681 and WASI688
+backing OOM points plus their same-number active retries, exact-peak,
+peak-minus-one quota refusal and unlimited recovery all pass. The final
+`test/check/check-wasm` command returns actualexit0, 414/414steps and
+6085/6087tests with two skips; the main Debug test runtime is109minutes.
+Diagnostic `failed command` text does not override the final successful exit.
+
+The independent24pair pilot is1.0361849975x with CI null. The separate90pair
+formal protocol predeclares equal-row geometric means across all samples:
+1.0312916722x, paired95CI[1.0297344816,1.0327249357], every row at least0.98.
+The six-primary-round secondary estimate is1.0292433572x, below1.03, and is
+disclosed. Independent raw/source replay reproduces the complete statistics
+and all20000shared-round bootstrap samples without producer import or sample
+filtering. The narrow matrix interval reflects observed round covariance.
+All15 public/small controls pass their individual0.98point gates; weakest
+smallXML0.9951913216x CI[0.9831635968,1.0057178935]. Matched probe ELF text
+grows0.697216%, which is not isolated codec text or a stack measurement.
+
+Two further independently reduced90pair epochs compare the frozen candidate
+directly. Against exact0a673757, elapsed is3.0917714011x
+CI[3.0748826832,3.1106789832], wire0.9565808634x, with all12rows slower.
+Against pinnedlibbrotli1.2.0, elapsed is59.7101037639x
+CI[59.3762297490,60.0314513566], wire0.9438865172x. The matched owning
+q8/generic/explicit-window16 scope does not prove an equal-ratio frontier or
+industry ranking. This current-source increment passes its declared gates;
+the historical regression and overall reference performance gap remain
+unresolved. Prioritize larger repeated planning/assignment/wire costs, and
+retain the historical and reference anchors in subsequent reports.
+
 ## Remaining structural options
 
 1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total

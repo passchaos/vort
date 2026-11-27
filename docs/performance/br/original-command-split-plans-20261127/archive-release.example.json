@@ -1,0 +1,12 @@
+{
+  "schema": "vort.original-command-split-plans.archive-release.v1",
+  "issued_by": "/root",
+  "archive_released": false,
+  "timing_window_closed": false,
+  "final_verdict": {
+    "status": "pending",
+    "record": null
+  },
+  "extra_artifacts": [],
+  "artifact_gaps_resolved": false
+}
