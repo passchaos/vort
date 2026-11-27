@@ -1,0 +1,101 @@
+build-br-deferred-preferred
++- install vort-br-deferred-preferred-wasm-tests
+   +- compile test vort-br-deferred-preferred-wasm-tests ReleaseSafe wasm32-wasi 6 errors
+src/br.zig:11070:39: error: invalid left-hand side to assignment
+        if (comptime builtin.is_test) if (std.meta.activeTag(preferred.artifact) == .prepared_frame_view) test_deferred_preferred_split_winners += 1;
+                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/command_group_selection.zig:21:13: error: invalid left-hand side to assignment
+            if (@hasField(T, field)) @field(result, field) = @field(plan, field);
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/command_candidate_group.zig:17:34: error: expected type 'br.encoder.quality_profile.Disabled', found '@TypeOf(.{})'
+    return S.encodeFinal(traced, trace, allocator, input, commands, stats, shared_options);
+                                 ^~~~~
+src/br/encoder/quality_profile.zig:206:22: note: struct declared here
+pub const Disabled = struct {
+                     ^~~~~~
+src/br.zig:11034:106: note: parameter type declared here
+fn encodeFinalCommandCandidateGroupRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
+                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+referenced by:
+    encodeGroup: src/br.zig:46397:82
+    run__anon_18739: src/br/encoder/deferred_preferred_tests.zig:55:42
+    1 reference(s) hidden; use '-freference-trace=3' to see all references
+src/br/encoder/prepared_command_distance.zig:49:36: error: no field named 'window_bits' in struct 'br.DeferredPreferredTestCodec.capacityMissGroup__struct_19638'
+            .window_bits = options.window_bits,
+                                   ^~~~~~~~~~~
+src/br.zig:46420:63: note: struct declared here
+        var common = prepared_command_distance.Prepared.init(.{ .use_recent_distances = true }, commands);
+                                                             ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/prepared_command_distance.zig:49:36: error: no field named 'window_bits' in struct 'br.DeferredPreferredTestCodec.failureCheckpoint__struct_19995'
+            .window_bits = options.window_bits,
+                                   ^~~~~~~~~~~
+src/br.zig:46479:63: note: struct declared here
+        var common = prepared_command_distance.Prepared.init(.{ .use_recent_distances = true }, commands);
+                                                             ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/prepared_command_distance.zig:49:36: error: no field named 'window_bits' in struct 'br.DeferredPreferredTestCodec.viewKeys__struct_19901'
+            .window_bits = options.window_bits,
+                                   ^~~~~~~~~~~
+src/br.zig:46447:63: note: struct declared here
+        var common = prepared_command_distance.Prepared.init(.{ .use_recent_distances = true }, commands);
+                                                             ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+error: 6 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test --stack 8388608 .zig-cache/o/2787dd6f99401ad2285b19a24efaf33b/vort-br-record-optimal-wasm-check.o -fsingle-threaded -OReleaseSafe -target wasm32-wasi -mcpu baseline -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/tmp/vort-q8-deferred-preferred-20261127/src/br.zig --test-filter "Brotli deferred preferred" --test-filter "command group selection" --test-filter "entropy wire selection" --test-filter "Brotli context primary" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-deferred-preferred-wasm-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+build-br-deferred-preferred
++- install vort-br-deferred-preferred-tests
+   +- compile test vort-br-deferred-preferred-tests ReleaseSafe native 6 errors
+src/br.zig:11070:39: error: invalid left-hand side to assignment
+        if (comptime builtin.is_test) if (std.meta.activeTag(preferred.artifact) == .prepared_frame_view) test_deferred_preferred_split_winners += 1;
+                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/command_group_selection.zig:21:13: error: invalid left-hand side to assignment
+            if (@hasField(T, field)) @field(result, field) = @field(plan, field);
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/command_candidate_group.zig:17:34: error: expected type 'br.encoder.quality_profile.Disabled', found '@TypeOf(.{})'
+    return S.encodeFinal(traced, trace, allocator, input, commands, stats, shared_options);
+                                 ^~~~~
+src/br/encoder/quality_profile.zig:206:22: note: struct declared here
+pub const Disabled = struct {
+                     ^~~~~~
+src/br.zig:11034:106: note: parameter type declared here
+fn encodeFinalCommandCandidateGroupRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
+                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+referenced by:
+    encodeGroup: src/br.zig:46397:82
+    run__anon_38978: src/br/encoder/deferred_preferred_tests.zig:55:42
+    1 reference(s) hidden; use '-freference-trace=3' to see all references
+src/br/encoder/prepared_command_distance.zig:49:36: error: no field named 'window_bits' in struct 'br.DeferredPreferredTestCodec.capacityMissGroup__struct_39860'
+            .window_bits = options.window_bits,
+                                   ^~~~~~~~~~~
+src/br.zig:46420:63: note: struct declared here
+        var common = prepared_command_distance.Prepared.init(.{ .use_recent_distances = true }, commands);
+                                                             ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/prepared_command_distance.zig:49:36: error: no field named 'window_bits' in struct 'br.DeferredPreferredTestCodec.failureCheckpoint__struct_40210'
+            .window_bits = options.window_bits,
+                                   ^~~~~~~~~~~
+src/br.zig:46479:63: note: struct declared here
+        var common = prepared_command_distance.Prepared.init(.{ .use_recent_distances = true }, commands);
+                                                             ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br/encoder/prepared_command_distance.zig:49:36: error: no field named 'window_bits' in struct 'br.DeferredPreferredTestCodec.viewKeys__struct_40116'
+            .window_bits = options.window_bits,
+                                   ^~~~~~~~~~~
+src/br.zig:46447:63: note: struct declared here
+        var common = prepared_command_distance.Prepared.init(.{ .use_recent_distances = true }, commands);
+                                                             ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+error: 6 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/cee0eb16a8535f7964c7dcc97f70a69d/vort-br-record-optimal.o -OReleaseSafe -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/tmp/vort-q8-deferred-preferred-20261127/src/br.zig --test-filter "Brotli deferred preferred" --test-filter "command group selection" --test-filter "entropy wire selection" --test-filter "Brotli context primary" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-deferred-preferred-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 4/9 steps succeeded (2 failed)
+build-br-deferred-preferred transitive failure
++- install vort-br-deferred-preferred-tests transitive failure
+|  +- compile test vort-br-deferred-preferred-tests ReleaseSafe native 6 errors
+|     +- WriteFile success
+|     +- compile obj vort-br-record-optimal ReleaseSafe native success 11s MaxRSS:368M
+|     +- compile obj vort-br-record-optimal ReleaseSafe native (reused)
++- install vort-br-deferred-preferred-wasm-tests transitive failure
+   +- compile test vort-br-deferred-preferred-wasm-tests ReleaseSafe wasm32-wasi 6 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-wasm-check ReleaseSafe wasm32-wasi success 830ms MaxRSS:148M
+      +- compile obj vort-br-record-optimal-wasm-check ReleaseSafe wasm32-wasi (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/506fcf1150d17de648cfdac183ce914a/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /tmp/vort-q8-deferred-preferred-20261127 .zig-cache /home/passchaos/.cache/zig --seed 0x277359ae -Z698b61e1dc5e3d13 -j2 build-br-deferred-preferred -Doptimize=ReleaseSafe --summary all

@@ -1,0 +1,49 @@
+{
+  "artifacts": {
+    "native": {
+      "path": "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-tests",
+      "sha256": "dfc65af9ac81ed3562036243f40c01a240691fa9f21982263868aa76f8552482"
+    },
+    "wasi": {
+      "path": "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-wasm-tests.wasm",
+      "sha256": "32ca711cdd54cba5ba37a18218cc0fc69a658c1091e70587b57bd5822f8ed20a"
+    }
+  },
+  "build_receipt": "build-only-v5/receipt.json",
+  "build_receipt_sha256": "cde65cc83df107ad5c760d9ecbb145f9186b3332a1a7042e0e654bc7dbcd5852",
+  "commands": {
+    "native": [
+      "taskset",
+      "-c",
+      "6,7",
+      "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-tests"
+    ],
+    "wasi": [
+      "taskset",
+      "-c",
+      "6,7",
+      "node",
+      "/tmp/vort-q8-deferred-preferred-20261127/tools/br/deferred_preferred_wasm_gate.js",
+      "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-wasm-tests.wasm"
+    ]
+  },
+  "concurrent_untimed_functional_authorized": true,
+  "execution_cpus": [
+    6,
+    7
+  ],
+  "functional_quota_contracts": true,
+  "global_heavy_terminal": false,
+  "issued_by": "/root",
+  "issued_utc": "2026-11-27T13:47:49.109966+00:00",
+  "label": "functional-v5",
+  "preserved_original_failure_results_sha256": "4fb6b43ce352162128e730efedf1c6ffc567d2e0526125de85919fba97d16df5",
+  "purpose": "isolated-functional-tests-only",
+  "released": true,
+  "resource_benchmark_released": false,
+  "runner_sha256": "88275342e5b327df23f4220d91211685f83c605f6f5242c0ef4c8645fa00cc63",
+  "schema": "vort.br.deferred-preferred.functional-release.v1",
+  "source_manifest": "source-frozen-build-v5.json",
+  "source_manifest_sha256": "dd21162bfc7912cbc932781c9ccafd6ea7e2017b5d62037e11cdd7645b629eaf",
+  "timing_released": false
+}

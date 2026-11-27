@@ -1,0 +1,18 @@
+{
+  "native": {
+    "path": "/tmp/vort-q8-deferred-preferred-validation-20261127/functional-v3-preserved/artifact-native.elf",
+    "sha256": "c5aeded54838db0500077848a520341780d8ea4244afac94a51683f1f744742d"
+  },
+  "src/br.zig": {
+    "path": "/tmp/vort-q8-deferred-preferred-validation-20261127/functional-v3-preserved/src/br.zig",
+    "sha256": "5be3bdcf48908b8d2f84e3e590c1efaec1528533a852e98fd5ee63ac18bdb98d"
+  },
+  "src/br/encoder/deferred_preferred_tests.zig": {
+    "path": "/tmp/vort-q8-deferred-preferred-validation-20261127/functional-v3-preserved/src/br/encoder/deferred_preferred_tests.zig",
+    "sha256": "2a81bb042b37972b252c572305d277a492ef4e1fcbfa822bac9207fd7e2d05a6"
+  },
+  "wasi": {
+    "path": "/tmp/vort-q8-deferred-preferred-validation-20261127/functional-v3-preserved/artifact-wasi.wasm",
+    "sha256": "b7eae638edc3e7561371ff2493daa5dfe3ed4a6be3b04022429966d51a851c1c"
+  }
+}

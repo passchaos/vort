@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "6,7",
+    "zig",
+    "build",
+    "-j2",
+    "build-br-deferred-preferred",
+    "-Doptimize=ReleaseSafe",
+    "--summary",
+    "all"
+  ],
+  "codec_execution_released": false,
+  "compiler_cpus": [
+    6,
+    7
+  ],
+  "concurrent_untimed_build_authorized": true,
+  "global_heavy_terminal": false,
+  "issued_by": "/root",
+  "issued_utc": "2026-11-27T13:43:08.993243+00:00",
+  "label": "build-only-v4",
+  "original_failed_build_receipt_sha256": "69f279ffd212f7c0dae5b4034ea4bb4f90d66928b637b89599d8db33cf68963f",
+  "original_functional_failure_results_sha256": "8f5a155a98f1899da3a2ea99c27886cc2502ce3b521fa300299984f0354826d0",
+  "plan_sha256": "aad95abde7484a74643d5ceec21cb71d9cde97105ef393bb896334fa0d2f1099",
+  "purpose": "isolated-compile-only",
+  "released": true,
+  "repaired_files": [
+    "src/br/encoder/deferred_preferred_tests.zig",
+    "src/br.zig"
+  ],
+  "runner_sha256": "2b5aa5622c216574a7116b329ead63ece9590cd7c4da7118416e3eda055f496c",
+  "schema": "vort.br.deferred-preferred.build-release.v1",
+  "source_files": 2257,
+  "source_manifest": "source-frozen-build-v4.json",
+  "source_manifest_sha256": "7b65820bd87c29b37cc21d4b0d2b5867781064ab067c3c7c731bbef445d7a9a8",
+  "source_root": "/tmp/vort-q8-deferred-preferred-20261127",
+  "static_reviewed_test_sha256": "b93e9d8b31eb757abc56afce1268d54dfd793ddfc5d98f7ee47cf9853283aa93",
+  "timing_released": false
+}

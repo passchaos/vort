@@ -1,0 +1,64 @@
+{
+  "baseline_git": "d5d9d8aab3d91d34003e25d3e2c6a3fda6b51388",
+  "execution_released": false,
+  "historical_recovery_claim": false,
+  "industry_best_claim": false,
+  "issued_by": "/root",
+  "performance_acceptance": false,
+  "required_before_execution": [
+    "Root original Deflate540 terminal0 and global no active codec/build job",
+    "Production and tests frozen by Gibbs/Turing; Root build and runner formatting/JSsyntax accepted",
+    "Complete src/build/build.zig/build.zig.zon and runner SHA freeze",
+    "Fresh Root release for exact stage; retain first actual failure/source/stdout/stderr"
+  ],
+  "required_oracles": [
+    "Legacy and deferred full group wires and semantic stats",
+    "Prepared winner and real split winner",
+    "Strict same-size/plain ties and actual owned accepted-then-replaced cleanup",
+    "Model/owner miss and full key validation",
+    "Physical OOM/quota cleanup and old errorStats checkpoints",
+    "Actual Native and WASI execution with nonzero test count"
+  ],
+  "schema": "vort.br.deferred-preferred.validation-plan.v1",
+  "source_root": "/tmp/vort-q8-deferred-preferred-20261127",
+  "stages": {
+    "broader": [
+      "taskset",
+      "-c",
+      "0-15",
+      "zig",
+      "build",
+      "-j2",
+      "test-br",
+      "-Doptimize=ReleaseSafe",
+      "--summary",
+      "all"
+    ],
+    "build": [
+      "taskset",
+      "-c",
+      "6,7",
+      "zig",
+      "build",
+      "-j2",
+      "build-br-deferred-preferred",
+      "-Doptimize=ReleaseSafe",
+      "--summary",
+      "all"
+    ],
+    "focused": [
+      "taskset",
+      "-c",
+      "0-15",
+      "zig",
+      "build",
+      "-j2",
+      "test-br-deferred-preferred",
+      "test-br-deferred-preferred-wasm",
+      "-Doptimize=ReleaseSafe",
+      "--summary",
+      "all"
+    ]
+  },
+  "timing_released": false
+}

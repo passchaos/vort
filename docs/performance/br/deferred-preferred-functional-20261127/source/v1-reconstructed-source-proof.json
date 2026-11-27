@@ -1,0 +1,12 @@
+{
+  "src/br.zig": {
+    "bytes": 2779723,
+    "method": "Inverse only six compiler fixes; exact hash verified against original source-frozen-build-v1 manifest",
+    "sha256": "0ea931d71f039630c6462a962695591eae8ef988efab03407d52330c69b51bf4"
+  },
+  "src/br/encoder/command_group_selection.zig": {
+    "bytes": 2956,
+    "method": "Inverse only six compiler fixes; exact hash verified against original source-frozen-build-v1 manifest",
+    "sha256": "516094ea6ffc6339cac66de05d755f6eb213871a400792ea53c27b3ce8045afd"
+  }
+}

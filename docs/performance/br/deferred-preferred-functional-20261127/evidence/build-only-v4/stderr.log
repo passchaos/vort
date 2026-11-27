@@ -1,0 +1,39 @@
+build-br-deferred-preferred
++- install vort-br-deferred-preferred-wasm-tests
+   +- compile test vort-br-deferred-preferred-wasm-tests ReleaseSafe wasm32-wasi 1 errors
+src/br/encoder/deferred_preferred_tests.zig:151:38: error: operator == not allowed for type 'error{InvalidBlockPlan}!?anyerror'
+    try std.testing.expect(errors[0] == error.InvalidBlockPlan);
+                           ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    run__anon_18736: src/br/encoder/deferred_preferred_tests.zig:122:37
+    test.Brotli deferred preferred public wire and error checkpoints: src/br.zig:46570:63
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test --stack 8388608 .zig-cache/o/2787dd6f99401ad2285b19a24efaf33b/vort-br-record-optimal-wasm-check.o -fsingle-threaded -OReleaseSafe -target wasm32-wasi -mcpu baseline -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/tmp/vort-q8-deferred-preferred-20261127/src/br.zig --test-filter "Brotli deferred preferred" --test-filter "command group selection" --test-filter "entropy wire selection" --test-filter "Brotli context primary" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-deferred-preferred-wasm-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+build-br-deferred-preferred
++- install vort-br-deferred-preferred-tests
+   +- compile test vort-br-deferred-preferred-tests ReleaseSafe native 1 errors
+src/br/encoder/deferred_preferred_tests.zig:151:38: error: operator == not allowed for type 'error{InvalidBlockPlan}!?anyerror'
+    try std.testing.expect(errors[0] == error.InvalidBlockPlan);
+                           ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    run__anon_39058: src/br/encoder/deferred_preferred_tests.zig:122:37
+    test.Brotli deferred preferred public wire and error checkpoints: src/br.zig:46570:63
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/cee0eb16a8535f7964c7dcc97f70a69d/vort-br-record-optimal.o -OReleaseSafe -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/tmp/vort-q8-deferred-preferred-20261127/src/br.zig --test-filter "Brotli deferred preferred" --test-filter "command group selection" --test-filter "entropy wire selection" --test-filter "Brotli context primary" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-deferred-preferred-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 4/9 steps succeeded (2 failed)
+build-br-deferred-preferred transitive failure
++- install vort-br-deferred-preferred-tests transitive failure
+|  +- compile test vort-br-deferred-preferred-tests ReleaseSafe native 1 errors
+|     +- WriteFile cached
+|     +- compile obj vort-br-record-optimal ReleaseSafe native cached 8ms MaxRSS:41M
+|     +- compile obj vort-br-record-optimal ReleaseSafe native (reused)
++- install vort-br-deferred-preferred-wasm-tests transitive failure
+   +- compile test vort-br-deferred-preferred-wasm-tests ReleaseSafe wasm32-wasi 1 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-wasm-check ReleaseSafe wasm32-wasi cached 7ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal-wasm-check ReleaseSafe wasm32-wasi (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/506fcf1150d17de648cfdac183ce914a/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /tmp/vort-q8-deferred-preferred-20261127 .zig-cache /home/passchaos/.cache/zig --seed 0xa5a20c4d -Ze594b60fc1ad9576 -j2 build-br-deferred-preferred -Doptimize=ReleaseSafe --summary all

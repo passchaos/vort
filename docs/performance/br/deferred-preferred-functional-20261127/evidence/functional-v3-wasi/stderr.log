@@ -1,0 +1,161 @@
+1/40 br.test_0...OK
+2/40 br.test.Brotli context primary count decision and ownership contracts...primary_count success_cases=52 fault_configs=16 paired_paths=136
+OK
+3/40 br.test.Brotli context primary cold count preparation contracts...context primary phase: parity
+context primary fixture input=1 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=2 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=3 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=4 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=5 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=18 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=20 commands=1 command_alphabet=1 distance_alphabet=1
+context primary fixture input=37 commands=2 command_alphabet=2 distance_alphabet=1
+context primary fixture input=40 commands=2 command_alphabet=1 distance_alphabet=2
+context primary fixture input=57 commands=3 command_alphabet=3 distance_alphabet=1
+context primary fixture input=60 commands=3 command_alphabet=1 distance_alphabet=3
+context primary fixture input=78 commands=4 command_alphabet=4 distance_alphabet=1
+context primary fixture input=80 commands=4 command_alphabet=1 distance_alphabet=4
+context primary fixture input=303 commands=16 command_alphabet=13 distance_alphabet=1
+context primary fixture input=160 commands=8 command_alphabet=1 distance_alphabet=8
+context primary fixture input=3489 commands=160 command_alphabet=79 distance_alphabet=1
+context primary fixture input=235 commands=33 command_alphabet=23 distance_alphabet=11
+context primary fixture input=1134 commands=161 command_alphabet=23 distance_alphabet=21
+context primary phase: resources
+context primary allocation sweep: count_allocations=0, count_oom=0, late_common_ready_oom=0, emit_oom=3
+context primary phase: capture
+context primary phase: public q8
+context primary public input=8192 recent_max=76 count_attempted=1 count_successful=1
+context primary public input=8192 recent_max=82 count_attempted=1 count_successful=1
+context primary public input=8192 recent_max=82 count_attempted=1 count_successful=1
+context primary public input=8192 recent_max=23 count_attempted=1 count_successful=1
+context primary public input=16384 recent_max=151 count_attempted=1 count_successful=1
+context primary public input=16384 recent_max=163 count_attempted=1 count_successful=1
+context primary public input=16384 recent_max=162 count_attempted=1 count_successful=1
+context primary public input=16384 recent_max=34 count_attempted=1 count_successful=1
+context primary public input=16384 recent_max=56 count_attempted=2 count_successful=2
+context primary public input=16384 recent_max=154 count_attempted=4 count_successful=4
+context primary public input=16384 recent_max=538 count_attempted=6 count_successful=6
+context primary public input=32768 recent_max=1061 count_attempted=6 count_successful=6
+context primary real oracle: count_allocations=0, count_oom=0, late_common_ready_oom=0, emit_oom=3, public_cold_successes=26
+OK
+4/40 br.test.Brotli deferred preferred public wire and error checkpoints...deferred_preferred_public case=mozilla wire=13924 views=9 late_emits=0 physical_split_winners=9
+deferred_preferred_public case=xray wire=41180 views=3 late_emits=0 physical_split_winners=3
+deferred_preferred_public case=nci wire=4206 views=8 late_emits=8 physical_split_winners=0
+deferred_preferred_public case=xml wire=4407 views=8 late_emits=8 physical_split_winners=0
+deferred_preferred_group input_kind=0 group_kind=preferred_only bytes=1063 views=1 late=1 split=0
+deferred_preferred_group input_kind=0 group_kind=adaptive_literal_and_joint bytes=943 views=1 late=0 split=1
+deferred_preferred_group input_kind=1 group_kind=preferred_only bytes=1416 views=1 late=1 split=0
+deferred_preferred_group input_kind=1 group_kind=adaptive_literal_and_joint bytes=1416 views=1 late=1 split=0
+deferred_preferred_group input_kind=2 group_kind=preferred_only bytes=2622 views=1 late=1 split=0
+deferred_preferred_group input_kind=2 group_kind=adaptive_literal_and_joint bytes=2178 views=1 late=0 split=1
+deferred_preferred_stage owner-absent begin
+deferred_preferred_stage owner-absent passed bytes=1063 counters=.{ .views = 0, .late_emits = 0, .split_winners = 0 }
+deferred_preferred_stage capacity-miss begin
+deferred_preferred_capacity stage=prefill disabled=true index=0 models_len=1 state_ready=true counters=.{ .hits = 0, .misses = 1, .builds = 1, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 1 }
+deferred_preferred_capacity stage=prefill disabled=true index=1 models_len=2 state_ready=true counters=.{ .hits = 0, .misses = 2, .builds = 2, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 2 }
+deferred_preferred_capacity stage=prefill disabled=true index=2 models_len=3 state_ready=true counters=.{ .hits = 0, .misses = 3, .builds = 3, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 3 }
+deferred_preferred_capacity stage=prefill disabled=true index=3 models_len=4 state_ready=true counters=.{ .hits = 0, .misses = 4, .builds = 4, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 4 }
+deferred_preferred_capacity stage=prefill disabled=true index=4 models_len=5 state_ready=true counters=.{ .hits = 0, .misses = 5, .builds = 5, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 5 }
+deferred_preferred_capacity stage=builder-full-refusal disabled=true models_len=5 requests=0 owner_counters_unchanged=true counters=.{ .hits = 0, .misses = 5, .builds = 5, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 5 }
+deferred_preferred_capacity stage=group-return disabled=true bytes=1063 models_len=5 counters=.{ .hits = 0, .misses = 10, .builds = 5, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 5 } deferred=.{ .views = 0, .late_emits = 0, .split_winners = 0 }
+deferred_preferred_capacity stage=prefill disabled=false index=0 models_len=1 state_ready=true counters=.{ .hits = 0, .misses = 1, .builds = 1, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 1 }
+deferred_preferred_capacity stage=prefill disabled=false index=1 models_len=2 state_ready=true counters=.{ .hits = 0, .misses = 2, .builds = 2, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 2 }
+deferred_preferred_capacity stage=prefill disabled=false index=2 models_len=3 state_ready=true counters=.{ .hits = 0, .misses = 3, .builds = 3, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 3 }
+deferred_preferred_capacity stage=prefill disabled=false index=3 models_len=4 state_ready=true counters=.{ .hits = 0, .misses = 4, .builds = 4, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 4 }
+deferred_preferred_capacity stage=prefill disabled=false index=4 models_len=5 state_ready=true counters=.{ .hits = 0, .misses = 5, .builds = 5, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 5 }
+deferred_preferred_capacity stage=builder-full-refusal disabled=false models_len=5 requests=0 owner_counters_unchanged=true counters=.{ .hits = 0, .misses = 5, .builds = 5, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 5 }
+deferred_preferred_capacity stage=group-return disabled=false bytes=1063 models_len=5 counters=.{ .hits = 0, .misses = 10, .builds = 5, .capacity_misses = 0, .memory_misses = 0, .captured_trees = 5 } deferred=.{ .views = 0, .late_emits = 0, .split_winners = 0 }
+deferred_preferred_stage capacity-miss passed old=0 new=0 counters=.{ .views = 0, .late_emits = 0, .split_winners = 0 }
+deferred_preferred_stage nonrecent-plain begin
+deferred_preferred_stage nonrecent-plain passed
+deferred_preferred_stage parameters window=15 npostfix=0 ndirect_high=0 begin
+deferred_preferred_stage parameters window=17 npostfix=1 ndirect_high=2 begin
+FAIL (InvalidBlockPlan)
+5/40 br.test.Brotli deferred preferred context controller ownership...OK
+6/40 br.encoder.literal_context_split.test_0...OK
+7/40 br.encoder.command_group_selection.test.command group selection preferred artifact ownership...OK
+8/40 br.encoder.entropy_wire_selection.test.entropy wire selection borrowed baseline and owned winner contracts...entropy_selection selection_cases=64 failure_frontiers=12 traced_cases=1
+OK
+9/40 br.encoder.total_budget.test_0...OK
+10/40 br.encoder.total_budget.tests.test_0...OK
+11/40 br.encoder.hq_options.test_0...OK
+12/40 br.encoder.distance.test_0...OK
+13/40 br.encoder.literal_context_split.workspace.test_0...OK
+14/40 br.encoder.hq_types.test_0...OK
+15/40 br.encoder.literal_context_policy.test_0...OK
+16/40 lz77.test_0...OK
+17/40 lz77.test_1...OK
+18/40 br.encoder.code_length_rle.test_0...OK
+19/40 br.encoder.stored_bit_bound.test_0...OK
+20/40 br.encoder.fixed_split.length_code.test_0...OK
+21/40 br.encoder.scoped_static_dictionary.test_0...OK
+22/40 br.encoder.static_dictionary_matcher.test_0...OK
+23/40 br.encoder.histogram_model.log_q8.test_0...OK
+24/40 br.encoder.joint_context.kernels.test_0...OK
+25/40 br.encoder.hq_dictionary.test_0...OK
+26/40 br.encoder.hq_tree.test_0...OK
+27/40 br.encoder.hq_codec.alias.test_0...OK
+28/40 br.incremental.stored.encoder.test_0...OK
+29/40 bitstream.test_0...OK
+30/40 io.requested_heap_budget.test_0...OK
+31/40 br.encoder.hq_parser.test_0...OK
+32/40 br.encoder.hq_parser.command_storage.test_0...OK
+33/40 br.encoder.hq_parser.tests.test_0...OK
+34/40 br.encoder.joint_context.kernels_tests.test_0...OK
+35/40 br.incremental.copy_decoder.test_0...OK
+36/40 br.incremental.owned_copy_decoder.test_0...OK
+37/40 tests.br_total_memory_contracts.test_0...OK
+38/40 br.encoder.stored_memory_owner.test_0...OK
+39/40 br.encoder.stored_memory_reuse.test_0...OK
+40/40 br.encoder.hq_tree_oracle_tests.test_0...OK
+39 passed; 0 skipped; 1 failed.
+node:internal/assert/utils:146
+  throw error;
+  ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at Object.<anonymous> (/tmp/vort-q8-deferred-preferred-20261127/tools/br/deferred_preferred_wasm_gate.js:18:12)
+    at Module._compile (node:internal/modules/cjs/loader:1956:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:2096:10)
+    at Module.load (node:internal/modules/cjs/loader:1678:32)
+    at Module._load (node:internal/modules/cjs/loader:1470:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:33:47 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.10.0
+node:internal/assert/utils:146
+  throw error;
+  ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at Object.<anonymous> (/tmp/vort-q8-deferred-preferred-20261127/tools/br/deferred_preferred_wasm_gate.js:30:12)
+    at Module._compile (node:internal/modules/cjs/loader:1956:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:2096:10)
+    at Module.load (node:internal/modules/cjs/loader:1678:32)
+    at Module._load (node:internal/modules/cjs/loader:1470:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:33:47 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.10.0

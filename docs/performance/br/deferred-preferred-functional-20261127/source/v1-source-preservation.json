@@ -1,0 +1,12 @@
+{
+  "src/br.zig": {
+    "expected_v1_sha256": "0ea931d71f039630c6462a962695591eae8ef988efab03407d52330c69b51bf4",
+    "observed_sha256": "51175350fd6f006fb893b891b9ff7a5dc6cb58ceb5f618c5b977b34daa76bd77",
+    "exact_v1_source_saved": false
+  },
+  "src/br/encoder/command_group_selection.zig": {
+    "expected_v1_sha256": "516094ea6ffc6339cac66de05d755f6eb213871a400792ea53c27b3ce8045afd",
+    "observed_sha256": "bbf12370753e65cc65bb4234a9e57e54a06d59dac0ac11f3cbb81b18fe78c8e4",
+    "exact_v1_source_saved": false
+  }
+}

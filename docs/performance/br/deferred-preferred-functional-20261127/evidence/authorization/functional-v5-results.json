@@ -1,0 +1,47 @@
+{
+  "completed": true,
+  "stages": [
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "6,7",
+        "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-tests"
+      ],
+      "cwd": "/tmp/vort-q8-deferred-preferred-20261127",
+      "ended_unix": 1795787272.911146,
+      "release_sha256": "be76dd53e75c68494c82675295147e193fa628b2f09078285694887a51651f8f",
+      "source_manifest_sha256": "dd21162bfc7912cbc932781c9ccafd6ea7e2017b5d62037e11cdd7645b629eaf",
+      "source_unchanged": true,
+      "started_unix": 1795787270.0404205,
+      "stderr_sha256": "6725a95f42b1d69c43ef4ff97d9e4066621900ce8fe71f64a7e36665d0c0a3a3",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": "native",
+      "throughput_or_RSS_measurement": false
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "6,7",
+        "node",
+        "/tmp/vort-q8-deferred-preferred-20261127/tools/br/deferred_preferred_wasm_gate.js",
+        "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-wasm-tests.wasm"
+      ],
+      "cwd": "/tmp/vort-q8-deferred-preferred-20261127",
+      "ended_unix": 1795787276.1430988,
+      "release_sha256": "be76dd53e75c68494c82675295147e193fa628b2f09078285694887a51651f8f",
+      "source_manifest_sha256": "dd21162bfc7912cbc932781c9ccafd6ea7e2017b5d62037e11cdd7645b629eaf",
+      "source_unchanged": true,
+      "started_unix": 1795787273.0365858,
+      "stderr_sha256": "add43d95dcae5bfbbe6ca86edc688c5df7c9c4aebe3c43d4d26c02bc8d10b999",
+      "stdout_sha256": "8e5f84b7f714d8014dc92f1f36a907217fc2fe37d55dbcd4a96e526b70d0227f",
+      "target": "wasi",
+      "throughput_or_RSS_measurement": false
+    }
+  ],
+  "success": true,
+  "throughput_or_resource_benchmark": false
+}

@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "6,7",
+    "zig",
+    "build",
+    "-j2",
+    "build-br-deferred-preferred",
+    "-Doptimize=ReleaseSafe",
+    "--summary",
+    "all"
+  ],
+  "codec_execution_released": false,
+  "compiler_cpus": [
+    6,
+    7
+  ],
+  "concurrent_untimed_build_authorized": true,
+  "global_heavy_terminal": false,
+  "issued_by": "/root",
+  "issued_utc": "2026-11-27T13:13:44.254753+00:00",
+  "plan_sha256": "aad95abde7484a74643d5ceec21cb71d9cde97105ef393bb896334fa0d2f1099",
+  "purpose": "isolated-compile-only",
+  "released": true,
+  "schema": "vort.br.deferred-preferred.build-release.v1",
+  "source_files": 2257,
+  "source_manifest": "source-frozen-build-v1.json",
+  "source_manifest_sha256": "a5a9d0b9bf0c519578f250147b9c237c80e976cdd2e868b63ef892c2e8259093",
+  "source_root": "/tmp/vort-q8-deferred-preferred-20261127",
+  "static_reviewed_test_sha256": "b93e9d8b31eb757abc56afce1268d54dfd793ddfc5d98f7ee47cf9853283aa93",
+  "timing_released": false
+}

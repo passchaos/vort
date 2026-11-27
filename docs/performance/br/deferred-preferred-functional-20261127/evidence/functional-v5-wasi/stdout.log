@@ -1,0 +1,1 @@
+{"target":"wasm32-wasi","node_version":"v26.10.0","wasm_sha256":"32ca711cdd54cba5ba37a18218cc0fc69a658c1091e70587b57bd5822f8ed20a","tests_passed":40,"exit_code":0,"stack_limit_bytes":8388608,"measured_stack":false}

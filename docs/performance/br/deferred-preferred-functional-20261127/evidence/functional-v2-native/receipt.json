@@ -1,0 +1,19 @@
+{
+  "actual_exit_code": 1,
+  "argv": [
+    "taskset",
+    "-c",
+    "6,7",
+    "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-tests"
+  ],
+  "cwd": "/tmp/vort-q8-deferred-preferred-20261127",
+  "ended_unix": 1795785726.5773952,
+  "release_sha256": "f5962b7eb90088e4dd24491a707e51daabf54ccc15532e67cc24617b9b664e90",
+  "source_manifest_sha256": "d191786db04e960755ed88389d555094ecd19ac47c0448b4d2ad38f47c99ea99",
+  "source_unchanged": true,
+  "started_unix": 1795785724.0421796,
+  "stderr_sha256": "6b8f555ad8a9c8c8b9dc87fffa24887fde5e1ba73ac65c4c71c7749c974db1e7",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "target": "native",
+  "throughput_or_RSS_measurement": false
+}

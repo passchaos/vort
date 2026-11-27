@@ -1,0 +1,105 @@
+{
+  "HEAVY": 0,
+  "actual_observed_utc": "2026-11-27T14:02:28.010917+00:00",
+  "actual_result": {
+    "additional_wasi_js_sha256": "49c5f1cbe6c3181f2658fd5babd8df922dce6ca025ac0c02443a0731b8a773f9",
+    "broader_gate_validated": false,
+    "codec_build_producer_or_original_paths_executed": false,
+    "focused_gates": {
+      "build-only-v1": {
+        "actual_exit_code": 1,
+        "summary": "Build Summary: 4/9 steps succeeded (2 failed)"
+      },
+      "build-only-v2": {
+        "actual_exit_code": 0,
+        "summary": "Build Summary: 9/9 steps succeeded"
+      },
+      "build-only-v3": {
+        "actual_exit_code": 0,
+        "summary": "Build Summary: 9/9 steps succeeded"
+      },
+      "build-only-v4": {
+        "actual_exit_code": 1,
+        "summary": "Build Summary: 4/9 steps succeeded (2 failed)"
+      },
+      "build-only-v5": {
+        "actual_exit_code": 0,
+        "summary": "Build Summary: 9/9 steps succeeded"
+      },
+      "functional-v2-native": {
+        "actual_exit_code": 1,
+        "tests_observed": 40,
+        "tests_passed": 39
+      },
+      "functional-v2-wasi": {
+        "actual_exit_code": 1,
+        "tests_observed": 40,
+        "tests_passed": 39
+      },
+      "functional-v3-native": {
+        "actual_exit_code": 1,
+        "tests_observed": 40,
+        "tests_passed": 39
+      },
+      "functional-v3-wasi": {
+        "actual_exit_code": 1,
+        "tests_observed": 40,
+        "tests_passed": 39
+      },
+      "functional-v5-native": {
+        "actual_exit_code": 0,
+        "tests_observed": 40,
+        "tests_passed": 40
+      },
+      "functional-v5-wasi": {
+        "actual_exit_code": 0,
+        "tests_observed": 40,
+        "tests_passed": 40
+      }
+    },
+    "historical_changed_members": 8,
+    "industryLeadership": false,
+    "inventory_files": 81,
+    "memoryGate": false,
+    "performance_acceptance": false,
+    "schema": "vort.br.deferred-preferred.offline-verification.v1",
+    "status": "pass",
+    "v1_two_reconstructed_members_are_not_original_copies": true,
+    "v5_source_members": 2257,
+    "v5_source_registry_sha256": "dd21162bfc7912cbc932781c9ccafd6ea7e2017b5d62037e11cdd7645b629eaf"
+  },
+  "broader_performance_RSS_or_memory_gate_credited": false,
+  "codec_build_profile_statistics_timing_executed": false,
+  "negative_controls": {
+    "missing_v5_wasi_gate_rebuilt_inventory": {
+      "actual_exit_code": 1,
+      "stderr": "Verification failed: Missing required focused-gate/package artifact: evidence/functional-v5-wasi/receipt.json\n",
+      "stdout": ""
+    },
+    "tampered_payload_original_checksums": {
+      "actual_exit_code": 1,
+      "stderr": "Verification failed: SHA-256 mismatch: evidence/functional-v5-wasi/stdout.log\n",
+      "stdout": ""
+    },
+    "tampered_payload_rebuilt_outer_inventory": {
+      "actual_exit_code": 1,
+      "stderr": "Verification failed: Original byte capture identity differs: evidence/functional-v5-wasi/stdout.log\n",
+      "stdout": ""
+    }
+  },
+  "read_only_verifier": true,
+  "relocated": {
+    "actual_exit_code": 0,
+    "cwd": "unrelated temporary copy; no archive expansion",
+    "exact_match_to_direct_output": true
+  },
+  "schema": "vort.br.deferred-preferred-focussed.verification-receipt.v1",
+  "verification_argv": [
+    "python3",
+    "-I",
+    "-B",
+    "-O",
+    "verify.py"
+  ],
+  "verifier_sha256": "7e19b484aeeca8f346c1936f1082c5cf56d3836b8d85fdb02bfc91e9a882ae44"
+}

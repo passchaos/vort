@@ -1,0 +1,21 @@
+{
+  "actual_exit_code": 1,
+  "argv": [
+    "taskset",
+    "-c",
+    "6,7",
+    "node",
+    "/tmp/vort-q8-deferred-preferred-20261127/tools/br/deferred_preferred_wasm_gate.js",
+    "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-wasm-tests.wasm"
+  ],
+  "cwd": "/tmp/vort-q8-deferred-preferred-20261127",
+  "ended_unix": 1795785729.5629792,
+  "release_sha256": "f5962b7eb90088e4dd24491a707e51daabf54ccc15532e67cc24617b9b664e90",
+  "source_manifest_sha256": "d191786db04e960755ed88389d555094ecd19ac47c0448b4d2ad38f47c99ea99",
+  "source_unchanged": true,
+  "started_unix": 1795785726.7029874,
+  "stderr_sha256": "d0509c640b248cdf082cb3523f2c0a7aa20bc53ca854ba2419debc01e92970a7",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "target": "wasi",
+  "throughput_or_RSS_measurement": false
+}

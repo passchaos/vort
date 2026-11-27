@@ -4,3 +4,6 @@ src/br/encoder/literal_model/testdata/*.plain binary
 # Frozen diffs retain their exact context markers, including blank-line spaces.
 /docs/performance/zstd/controlled-workspace-resource-20261127/prototype-five-files.patch binary
 /docs/performance/br/original-command-split-plans-20261127/proofs/*.diff binary
+
+# Original test/compiler logs retain byte-identical whitespace and checksums.
+/docs/performance/br/deferred-preferred-functional-20261127/evidence/**/*.log binary

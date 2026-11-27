@@ -1,0 +1,28 @@
+{
+  "actual_exit_code": 0,
+  "argv": [
+    "taskset",
+    "-c",
+    "6,7",
+    "zig",
+    "build",
+    "-j2",
+    "build-br-deferred-preferred",
+    "-Doptimize=ReleaseSafe",
+    "--summary",
+    "all"
+  ],
+  "codec_execution": false,
+  "cwd": "/tmp/vort-q8-deferred-preferred-20261127",
+  "ended_unix": 1795785560.5287855,
+  "identity_helper_sha256": "c0e20ac7d0f8c7d60352b7fd36ba2e567bb56322c093af2e8f15cbfa4052199f",
+  "launch_error": null,
+  "release_sha256": "0b76964f52ff48a60dc3f6a387f9c66af02e51be2bd0edd9ef2a3c08f361812e",
+  "runner_sha256": "2b5aa5622c216574a7116b329ead63ece9590cd7c4da7118416e3eda055f496c",
+  "source_manifest_sha256": "d191786db04e960755ed88389d555094ecd19ac47c0448b4d2ad38f47c99ea99",
+  "source_unchanged": true,
+  "started_unix": 1795785487.855811,
+  "stderr_sha256": "ff5fb50d5b6d440b357e190ee2ceea648ea4e9b1fd78cc32c351625546d1147c",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "timing_execution": false
+}

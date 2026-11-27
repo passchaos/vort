@@ -1,0 +1,49 @@
+{
+  "artifacts": {
+    "native": {
+      "path": "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-tests",
+      "sha256": "c5aeded54838db0500077848a520341780d8ea4244afac94a51683f1f744742d"
+    },
+    "wasi": {
+      "path": "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-wasm-tests.wasm",
+      "sha256": "b7eae638edc3e7561371ff2493daa5dfe3ed4a6be3b04022429966d51a851c1c"
+    }
+  },
+  "build_receipt": "build-only-v3/receipt.json",
+  "build_receipt_sha256": "a25d5b3fa05a60d3b76e74caef81ca5a9e31548905cd9d21e42ce7ea1046528a",
+  "commands": {
+    "native": [
+      "taskset",
+      "-c",
+      "6,7",
+      "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-tests"
+    ],
+    "wasi": [
+      "taskset",
+      "-c",
+      "6,7",
+      "node",
+      "/tmp/vort-q8-deferred-preferred-20261127/tools/br/deferred_preferred_wasm_gate.js",
+      "/tmp/vort-q8-deferred-preferred-20261127/zig-out/bin/vort-br-deferred-preferred-wasm-tests.wasm"
+    ]
+  },
+  "concurrent_untimed_functional_authorized": true,
+  "execution_cpus": [
+    6,
+    7
+  ],
+  "functional_quota_contracts": true,
+  "global_heavy_terminal": false,
+  "issued_by": "/root",
+  "issued_utc": "2026-11-27T13:35:00.796850+00:00",
+  "label": "functional-v3",
+  "preserved_original_failure_results_sha256": "4fb6b43ce352162128e730efedf1c6ffc567d2e0526125de85919fba97d16df5",
+  "purpose": "isolated-functional-tests-only",
+  "released": true,
+  "resource_benchmark_released": false,
+  "runner_sha256": "88275342e5b327df23f4220d91211685f83c605f6f5242c0ef4c8645fa00cc63",
+  "schema": "vort.br.deferred-preferred.functional-release.v1",
+  "source_manifest": "source-frozen-build-v3.json",
+  "source_manifest_sha256": "15ec471070715e1e936e1f40849a6bf6ecded01f8b4987defd783c6af4ac90f7",
+  "timing_released": false
+}
