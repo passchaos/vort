@@ -1,7 +1,7 @@
 # Deferred preferred emission, 2026-11-27
 
-Status: isolated implementation; focused Native/WASI gates pass, broader
-regression and performance acceptance remain pending.
+Status: isolated implementation; focused Native/WASI and full native Brotli
+regression gates pass. Performance acceptance remains pending.
 Baseline is `d5d9d8aa`. No throughput, historical recovery or industry ranking
 has been measured for this candidate.
 
@@ -70,7 +70,11 @@ normalized wide-parameter complete wires/Stats/decode, the full owner refusal,
 strict returned/wire/evaluate association, three independent view-key guards,
 both physical OOM checkpoints with allocation/free balance, and exact-cap,
 cap-minus-one and resumed public encoding. The V4 source and failure log remain
-preserved. Full Brotli regression is now running on the same frozen source.
+preserved. Full Brotli regression subsequently returned actual exit0 with
+5/5 steps and1754/1755 tests passed (one skipped), on the same unchanged frozen
+source. Its original receipt and complete logs are retained separately under
+`broader-v5` in the validation epoch; diagnostic `failed command` text does not
+override that terminal exit and summary.
 
 The final complete2,257-file source/runner registry is
 `dd21162bfc7912cbc932781c9ccafd6ea7e2017b5d62037e11cdd7645b629eaf`.
@@ -90,8 +94,7 @@ subsequent quiet window.
 
 ## Remaining gates
 
-Run broader Brotli and complete integration checks. Then obtain independent
-current-source A/B, direct
+Complete integration checks, then obtain independent current-source A/B, direct
 historical-anchor and pinned libbrotli comparisons with unchanged public
 lifecycle and codec policy. The three-codec industry-best objective remains
 unfulfilled; this slice only removes one identified source of repeated work.
