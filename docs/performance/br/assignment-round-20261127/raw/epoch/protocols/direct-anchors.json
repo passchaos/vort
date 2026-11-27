@@ -1,0 +1,44 @@
+{
+  "Root_new_independent_release_required": true,
+  "all_releases_false": true,
+  "anchors": [
+    {
+      "ELF": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+      "ELF_sha256": "963d97be637f36036a829660937c26a80e4bcc7546a44cb7a903de82baf4eb84",
+      "actual_receipt": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate.receipt.json",
+      "actual_receipt_sha256": "d649ccd5976c526abc61a4ff1e1d9a4b8c000de8d42e6c9b9f66314eca84442e",
+      "fresh_direct_candidate_pairing_required": true,
+      "name": "recent46d",
+      "new_candidate_initial_wire_and_anchor_wire_independent_decode_required": true,
+      "new_epoch_owning_warm1_timed1_same_target_argv_lifecycle_required": true
+    },
+    {
+      "ELF": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/assets/historical0a/probe.elf",
+      "ELF_sha256": "21bcca13f3f620d115db0ceb2ecc881a2e51876bf01eda413029870d9b4aebac",
+      "actual_receipt": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/assets/historical0a/actual-build.json",
+      "actual_receipt_sha256": "d51df298f1d6f410365ebe590616d05dee685d0c6c1ca247454095eaeb558809",
+      "fresh_direct_candidate_pairing_required": true,
+      "name": "historical0a",
+      "new_candidate_initial_wire_and_anchor_wire_independent_decode_required": true,
+      "new_epoch_owning_warm1_timed1_same_target_argv_lifecycle_required": true
+    },
+    {
+      "ELF": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/reference",
+      "ELF_sha256": "73e8c62c4818ea41cdf506abb2ccd2930194018959a2ae706a77e12d8eeb89a9",
+      "actual_receipt": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/reference.receipt.json",
+      "actual_receipt_sha256": "fe03f21983f42eb539fd35289422dd0457730d2c4996372c3ac61477352c1052",
+      "fresh_direct_candidate_pairing_required": true,
+      "name": "reference120",
+      "new_candidate_initial_wire_and_anchor_wire_independent_decode_required": true,
+      "new_epoch_owning_warm1_timed1_same_target_argv_lifecycle_required": true
+    }
+  ],
+  "no_cross_epoch_ratio_multiplication": true,
+  "no_nominal_quality_ratio_frontier_assumption": true,
+  "old_timed_samples_not_copied_or_used": true,
+  "reference_API": "Runtime.encodeWithOptionsAlloc with same Init.gpa/owning warm1/continuous encode-mix-free",
+  "reference_actual_closure_receipt": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/libbrotli-direct/runtime-validation.json",
+  "reference_actual_version": "1.2.0",
+  "reference_library_paths_and_three_SHA_receipt": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/libbrotli-direct/library-paths.json",
+  "same_primary_probe_for_recent_and_historical": true
+}

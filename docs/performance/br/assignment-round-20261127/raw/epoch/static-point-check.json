@@ -1,0 +1,10 @@
+{
+  "HEAVY": 0,
+  "all_new_release_examples_false": true,
+  "formal_primary_common6_invariant_synthetic_point_check_passed": true,
+  "no_bootstrap_executed": true,
+  "no_codec_or_timing_executed": true,
+  "secondary_extra_cannot_enable_primary_gate": true,
+  "synthetic_primary": 1.029,
+  "synthetic_secondary": 1.0489652681120933
+}

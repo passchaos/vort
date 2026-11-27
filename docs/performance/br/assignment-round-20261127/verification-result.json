@@ -1,0 +1,12 @@
+{
+  "codec_build_producer_or_bootstrap_executed": false,
+  "no_retry_or_drop": true,
+  "original_raw_unchanged": true,
+  "portable_relocated_actual_exit_code": 0,
+  "portable_relocated_stderr": "",
+  "portable_relocated_stdout": "{\n  \"CI\": null,\n  \"baseline_source_files_reconstructed\": 2222,\n  \"build_stages\": 4,\n  \"candidate_over_baseline_elapsed_GM\": 1.138756904721027,\n  \"candidate_source_files\": 2226,\n  \"codec_build_or_producer_execution\": false,\n  \"full_gate_passed\": false,\n  \"no_retry_or_drop\": true,\n  \"old_package_hash_checked\": false,\n  \"pilot_pairs\": 24,\n  \"pilot_processes\": 48,\n  \"point_screen_pass\": false,\n  \"preflight_processes\": 84,\n  \"primary_GM\": 0.878150548070644,\n  \"rows_below_0_98\": 12,\n  \"verified\": true\n}\n",
+  "tamper_copy_actual_exit_code": 1,
+  "tamper_copy_stderr": "Traceback (most recent call last):\n  File \"/tmp/vort-assignment-negative-portable.xscbcdwv/relocated/verify.py\", line 171, in <module>\n    print(json.dumps(verify(args.package.resolve(), args.old_package), indent=2, sort_keys=True))\n  File \"/tmp/vort-assignment-negative-portable.xscbcdwv/relocated/verify.py\", line 53, in verify\n    need(file.is_file() and file.stat().st_size == item[\"bytes\"] and sha(file) == item[\"sha256\"], \"package file changed: \" + name)\n  File \"/tmp/vort-assignment-negative-portable.xscbcdwv/relocated/verify.py\", line 14, in need\n    raise ValueError(message)\nValueError: package file changed: raw/epoch/pilot/runs/00-dickens-candidate.json\n",
+  "temporary_relocated_package": "/tmp/vort-assignment-negative-portable.xscbcdwv/relocated",
+  "verified_utc": "2026-11-27T01:52:59.037037+00:00"
+}

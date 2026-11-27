@@ -1,0 +1,16 @@
+{
+  "HEAVY": 0,
+  "README_sha256": "dd917370e13635b65ed3de1ea042da22af8e62fa31ec46b207a77b124c93f9ed",
+  "all_local_archive_hash_verifier_jobs_terminal_on_return": true,
+  "candidate_rejected": true,
+  "candidate_source_archive_sha256": "03425c778d47bbd601e50b3636d237370d1c456e989909ff7c268fed8665a388",
+  "file_manifest_sha256": "8bce566565090f91b2520f554571581ffab2a58a4797505a7d84a4486706befc",
+  "full_gate_passed": false,
+  "gitattributes_sha256": "fc7afe62708dcf380a93f5ad3d5234dd66aec7e469e0738a4fd896a5aad6f62e",
+  "new_runtime_archive_sha256": "f64ea0a83679264345d2ffdd5d3d8c001ac48db26872ff5b483c34e0fdbc38aa",
+  "no_followup_phase_released": true,
+  "old_package_link_sha256": "934364968ce0a1c55172229a6ba5bb2885b44e23c75baf23f43772fda181f7f1",
+  "portable_verifier_sha256": "6bc7e54876abfd3880e13579e2b309ee080d04129d0096636f968f6557f64b83",
+  "sealed_utc": "2026-11-27T01:56:34.209544+00:00",
+  "verification_result_sha256": "2b09103facce1f3cfd0997aa2e7d4b97297d218294a54a45687b828d6fdcb178"
+}

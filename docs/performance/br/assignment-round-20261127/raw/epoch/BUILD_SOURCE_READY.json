@@ -1,0 +1,27 @@
+{
+  "BUILD_SOURCE_READY": true,
+  "Root_authorization": "Freeze current final complete src; actual Git46d source for same generic907 harness; build/reuse primary/generic including small/ref; untimed initial wires and external decode only. Pilot waits narrow Native/WASI, public Native/WASI, exact/resource/preflight and fresh Root HEAVY0. Merge additionally requires final test/check/check-wasm.",
+  "actual_WASI_public_final_received": false,
+  "baseline_actual_git_export_tree": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/sources/baseline46d",
+  "baseline_actual_git_revision": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+  "baseline_actual_git_src_files": 2222,
+  "baseline_export_matches_old_actual371_snapshot": true,
+  "build_and_untimed_preflight_only": true,
+  "candidate_live_frozen_before_after_equal": true,
+  "candidate_revision": "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+  "candidate_source_manifest": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/candidate-source-files.json",
+  "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+  "candidate_src_tree": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/sources/candidate",
+  "epoch_root": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha",
+  "final_source_file_SHA": {
+    "src/br/encoder/assignment/phase.zig": "17af683db986bc1468cc56b40a754c225db95e4d2d84e225593154e6e0d22945",
+    "src/br/encoder/assignment/phase_public_tests.zig": "b9faf060d293d1b9fa61b36c1f2ea3e627cd9df236e25ad02d683f8642d68161",
+    "src/br/encoder/assignment/phase_tests.zig": "5c3fac625ed4057285a742611f4d74a4773959f4ddd9f574cbff318f38f1b655",
+    "src/br/encoder/assignment_costs.zig": "649d0ea76ff18322c0656fcf7e384baf5a1e08edc55f23969293de89026bc0d3"
+  },
+  "full_gate_passed": false,
+  "generic_probe_sha256": "9074b92ffc43f49ce3186e9339c88e0b88f602e77d78ea84f52320fa73c4ed11",
+  "issued_by": "/root",
+  "issued_utc": "2026-11-27T01:29:26.752821+00:00",
+  "sampling_released": false
+}

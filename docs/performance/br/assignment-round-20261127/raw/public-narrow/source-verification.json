@@ -1,0 +1,22 @@
+{
+  "utc": "2026-11-27T01:29:53.851383+00:00",
+  "original_failed_SOURCE_unchanged": true,
+  "successful_SOURCE_unchanged": true,
+  "source_files": 2226,
+  "only_test_harness_changed_between_attempts": [
+    "src/br/encoder/assignment/phase_public_tests.zig"
+  ],
+  "selected_original_sources_still_match_successful_SOURCE": {
+    "src/br.zig": true,
+    "src/br/encoder/assignment_costs.zig": true,
+    "src/br/encoder/literal_context_profile.zig": true,
+    "src/br/encoder/literal_context_split.zig": true,
+    "src/br/encoder/assignment/phase.zig": true,
+    "src/br/encoder/assignment/phase_tests.zig": true,
+    "src/br/encoder/assignment/phase_public_tests.zig": true
+  },
+  "record_objects_unchanged": {
+    "record-native.o": true,
+    "record-wasi.o": true
+  }
+}

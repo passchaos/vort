@@ -1,0 +1,7 @@
+{
+  "path": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/bin/assignment-public-tests-attempt-1.wasm",
+  "sha256": "87ed771e0144abe1437a207b4e8989cb2bed9b9c3686df26c4feadd59358defc",
+  "bytes": 10773422,
+  "stack_bytes": 16777216,
+  "stack_scope": "test harness only"
+}

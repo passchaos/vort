@@ -1,0 +1,10 @@
+{
+  "HEAVY": 0,
+  "actual_exit_code": 0,
+  "decision": "rejected, no further phase released",
+  "full_gate_passed": false,
+  "kind": "Root supplied actual terminal attestation; original tool session stdout is not synthesized",
+  "pairs": 24,
+  "processes": 48,
+  "session": 95717
+}

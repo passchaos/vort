@@ -1,0 +1,122 @@
+[
+  {
+    "case": "dickens",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/dickens.4096.plain",
+    "bytes": 4096,
+    "sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/dickens.65536.plain",
+    "original_64k_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "mozilla",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/mozilla.4096.plain",
+    "bytes": 4096,
+    "sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mozilla.65536.plain",
+    "original_64k_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "mr",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/mr.4096.plain",
+    "bytes": 4096,
+    "sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mr.65536.plain",
+    "original_64k_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "nci",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/nci.4096.plain",
+    "bytes": 4096,
+    "sha256": "ba4b093b246232b6fca2836587cee3afb07f8b243a01e549a5afca66559bd8b1",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/nci.65536.plain",
+    "original_64k_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "ooffice",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/ooffice.4096.plain",
+    "bytes": 4096,
+    "sha256": "e5c705e97c5069fd0e0f58a98dc73c6103f4cb2ad8097c64c82534e701a8326a",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/ooffice.65536.plain",
+    "original_64k_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "osdb",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/osdb.4096.plain",
+    "bytes": 4096,
+    "sha256": "d7d2353e029d7745a76dfa82a69084ad3896c16dd07eb7397916a2f2838ec38c",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/osdb.65536.plain",
+    "original_64k_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "reymont",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/reymont.4096.plain",
+    "bytes": 4096,
+    "sha256": "849382ed7bd61eddf344a7ab603377c5bc5cfcc6a4ae6a2dc3d62936bbaea7ba",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/reymont.65536.plain",
+    "original_64k_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "samba",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/samba.4096.plain",
+    "bytes": 4096,
+    "sha256": "12ba8dcff0666f96815a671f3940d6cda6407e8227d336e9009c12f630fb5ec6",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/samba.65536.plain",
+    "original_64k_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "sao",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/sao.4096.plain",
+    "bytes": 4096,
+    "sha256": "92e08af9eee68c2457011bc93bee210576ba580a9692b659d552919be74b75cb",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/sao.65536.plain",
+    "original_64k_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "webster",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/webster.4096.plain",
+    "bytes": 4096,
+    "sha256": "0f1c23dda964a6e7ef0ce5ab7440d320ab99b2925c7d3a910c30803462718e6b",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/webster.65536.plain",
+    "original_64k_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "x-ray",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/x-ray.4096.plain",
+    "bytes": 4096,
+    "sha256": "6873e82888ca6fe7f1a60bd40f8cdbb087e0ce2f0bdfd48de8685604815c6901",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/x-ray.65536.plain",
+    "original_64k_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  },
+  {
+    "case": "xml",
+    "path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/small-controls/fixtures/xml.4096.plain",
+    "bytes": 4096,
+    "sha256": "69395e24d385f078cc45aaf0cc440a900b739f02a2a6415acd246cde64384742",
+    "original_64k_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/xml.65536.plain",
+    "original_64k_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+    "offset": 0,
+    "source": "first4096 bytes of this epoch frozen original fixed Silesia64k fixture"
+  }
+]

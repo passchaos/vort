@@ -1,0 +1,9 @@
+{
+  "utc": "2026-11-27T01:24:51.707905+00:00",
+  "SOURCE": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1",
+  "changed_from_attempt0": [
+    "src/br/encoder/assignment/phase_public_tests.zig"
+  ],
+  "reason": "test-harness comptime field classification quota only; no codec behavior or protocol change",
+  "owned_test_sha256": "b9faf060d293d1b9fa61b36c1f2ea3e627cd9df236e25ad02d683f8642d68161"
+}

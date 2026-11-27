@@ -1,0 +1,11 @@
+{
+  "HEAVY": 0,
+  "all_local_work_terminal": true,
+  "external_decodes": 84,
+  "full_gate_passed": false,
+  "no_active_build_codec_hash_archive_jobs_on_return": true,
+  "owning_warmups": 84,
+  "phase": "build-preflight-pilot-preparation-terminal",
+  "sampling_released": false,
+  "timed_samples": 0
+}

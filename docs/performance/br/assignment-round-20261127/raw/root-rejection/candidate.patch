@@ -1,0 +1,947 @@
+diff --git a/src/br.zig b/src/br.zig
+index 65f02027..fa869ad2 100644
+--- a/src/br.zig
++++ b/src/br.zig
+@@ -11011,6 +11011,10 @@ test "br shared split planning joint writer oracle" {
+     try @import("br/encoder/split_plan_reuse_joint_tests.zig").run(SplitPlanReuseTestCodec);
+ }
+ 
++test "br assignment phase public wire profile and resource contracts" {
++    try @import("br/encoder/assignment/phase_public_tests.zig").run(@This());
++}
++
+ fn sharedCommandCandidateGroupSupported(input: []const u8, commands: []const command_plan.Command, options: LazyWireOptions) bool {
+     if (comptime builtin.is_test) if (test_disable_shared_command_candidate_group) return false;
+     return !literal_context_policy.disabled(options) and input.len >= 8 * 1024 and input.len <= 64 * 1024 and commands.len <= 64 * 1024 and
+diff --git a/src/br/encoder/assignment_costs.zig b/src/br/encoder/assignment_costs.zig
+index 4964f57f..3f3ed973 100644
+--- a/src/br/encoder/assignment_costs.zig
++++ b/src/br/encoder/assignment_costs.zig
+@@ -15,6 +15,7 @@ pub fn choose(sparse: anytype, costs: *const Costs, tree_count: usize) Choice {
+     while (tree + lanes <= tree_count) : (tree += lanes) {
+         var totals: @Vector(lanes, u64) = @splat(0);
+         for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency| {
++            if (frequency == 0) continue;
+             const row: @Vector(lanes, u16) = costs[symbol][tree..][0..lanes].*;
+             const widened: @Vector(lanes, u64) = @intCast(row);
+             totals += @as(@Vector(lanes, u64), @splat(frequency)) * widened;
+@@ -26,8 +27,10 @@ pub fn choose(sparse: anytype, costs: *const Costs, tree_count: usize) Choice {
+     }
+     while (tree < tree_count) : (tree += 1) {
+         var cost: u64 = 0;
+-        for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency|
++        for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency| {
++            if (frequency == 0) continue;
+             cost += @as(u64, frequency) * costs[symbol][tree];
++        }
+         if (cost < best.cost) best = .{ .tree = tree, .cost = cost };
+     }
+     return best;
+@@ -39,13 +42,29 @@ fn reference(sparse: *const Fixture, costs: *const Costs, tree_count: usize) Cho
+     var best: Choice = .{ .tree = 0, .cost = std.math.maxInt(u64) };
+     for (0..tree_count) |tree| {
+         var cost: u64 = 0;
+-        for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency|
++        for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency| {
++            if (frequency == 0) continue;
+             cost += @as(u64, frequency) * costs[symbol][tree];
++        }
+         if (cost < best.cost) best = .{ .tree = tree, .cost = cost };
+     }
+     return best;
+ }
+ 
++test "assignment zero frequencies do not read inactive price rows" {
++    var sparse: Fixture = undefined;
++    sparse.len = 2;
++    sparse.symbols[0] = 2;
++    sparse.frequencies[0] = 17;
++    sparse.symbols[1] = 5;
++    sparse.frequencies[1] = 0;
++    for (1..max_trees + 1) |count| {
++        var costs: Costs = undefined;
++        @memset(costs[2][0..count], 19);
++        try std.testing.expectEqualDeep(Choice{ .tree = 0, .cost = 323 }, choose(&sparse, &costs, count));
++    }
++}
++
+ test "assignment grouped integer costs match independent scalar and strict ties" {
+     var costs: Costs = undefined;
+     var sparse: Fixture = undefined;
+diff --git a/src/br/encoder/literal_context_profile.zig b/src/br/encoder/literal_context_profile.zig
+index 66f95eb3..adeee61a 100644
+--- a/src/br/encoder/literal_context_profile.zig
++++ b/src/br/encoder/literal_context_profile.zig
+@@ -53,6 +53,9 @@ pub const Profile = struct {
+     cluster_tree_scores_pruned: usize = 0,
+     assignment_contexts: usize = 0,
+     assignment_comparisons: usize = 0,
++    assignment_narrow_contexts: usize = 0,
++    assignment_wide_contexts: usize = 0,
++    assignment_light_contexts: usize = 0,
+     score_cache_hits: usize = 0,
+     score_cache_misses: usize = 0,
+     tree_score_cache_hits: usize = 0,
+@@ -172,6 +175,9 @@ pub const Profile = struct {
+             "cluster_tree_scores_pruned",
+             "assignment_contexts",
+             "assignment_comparisons",
++            "assignment_narrow_contexts",
++            "assignment_wide_contexts",
++            "assignment_light_contexts",
+             "score_cache_hits",
+             "score_cache_misses",
+             "tree_score_cache_hits",
+@@ -249,6 +255,17 @@ test "literal context partial pruning map counts accumulate across samples" {
+     try std.testing.expectEqual(@as(usize, 8), total.cluster_tree_scores_pruned);
+ }
+ 
++test "literal context assignment phase counters accumulate without changing scores" {
++    var total: Profile = .{};
++    total.addSample(.{ .assignment_contexts = 7, .assignment_narrow_contexts = 4, .assignment_wide_contexts = 1, .assignment_light_contexts = 2 });
++    total.addSample(.{ .assignment_contexts = 4, .assignment_narrow_contexts = 4 });
++    try std.testing.expectEqual(@as(usize, 11), total.assignment_contexts);
++    try std.testing.expectEqual(@as(usize, 8), total.assignment_narrow_contexts);
++    try std.testing.expectEqual(@as(usize, 1), total.assignment_wide_contexts);
++    try std.testing.expectEqual(@as(usize, 2), total.assignment_light_contexts);
++    try std.testing.expectEqual(@as(u64, 0), total.full_savings_bits);
++}
++
+ pub const Timer = struct {
+     io: std.Io,
+     profile: *Profile,
+diff --git a/src/br/encoder/literal_context_split.zig b/src/br/encoder/literal_context_split.zig
+index 283d0db7..7c686433 100644
+--- a/src/br/encoder/literal_context_split.zig
++++ b/src/br/encoder/literal_context_split.zig
+@@ -11,6 +11,18 @@ const literal_entropy = @import("literal_entropy.zig");
+ const literal_context_bounds = @import("literal_context_bounds.zig");
+ const literal_alphabet = @import("literal_alphabet.zig");
+ const assignment_costs = @import("assignment_costs.zig");
++const assignment_phase = @import("assignment/phase.zig");
++
++/// The ordinary grouped chooser remains the test oracle for the phase kernel.
++pub var test_disable_assignment_phase = false;
++
++test "literal context assignment phase integer differentials" {
++    _ = @import("assignment/phase_tests.zig");
++}
++
++fn assignmentPhaseEnabled() bool {
++    return if (@import("builtin").is_test) !test_disable_assignment_phase else true;
++}
+ const cluster_partial_score = @import("cluster_partial_score.zig");
+ 
+ const min_literal_count: usize = 128;
+@@ -741,16 +753,28 @@ fn clusterContexts(
+     for (0..cluster_iterations) |_| {
+         const prepare_start = if (profiled) profiler.now() else {};
+         var symbol_costs: if (prune) assignment_costs.Costs else [max_trees][256]u16 = undefined;
+-        if (comptime prune)
++        const max_active_price: u16 = if (comptime prune)
+             prepareAssignmentCostsTransposed(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs)
+-        else
++        else blk: {
+             prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs);
++            break :blk 0;
++        };
+         if (profiled) profiler.profile.cluster_prepare_ns +%= profiler.elapsedNs(prepare_start);
+         const assignment_start = if (profiled) profiler.now() else {};
++        const use_phase = prune and assignmentPhaseEnabled();
++        var phase_choices: [64]assignment_phase.Choice = undefined;
++        if (comptime prune) if (use_phase) {
++            const phase = assignment_phase.chooseAll(sparse_contexts, populated[0..populated_count], &symbol_costs, requested_tree_count, max_active_price, &phase_choices);
++            if (comptime profiled) {
++                profiler.profile.assignment_narrow_contexts += phase.narrow_contexts;
++                profiler.profile.assignment_wide_contexts += phase.wide_contexts;
++                profiler.profile.assignment_light_contexts += phase.light_contexts;
++            }
++        };
+         var changed = false;
+         for (populated[0..populated_count]) |context| {
+             const best_tree = if (comptime prune)
+-                assignment_costs.choose(&sparse_contexts[context], &symbol_costs, requested_tree_count).tree
++                if (use_phase) phase_choices[context].tree else assignment_costs.choose(&sparse_contexts[context], &symbol_costs, requested_tree_count).tree
+             else blk: {
+                 var best_tree: usize = 0;
+                 var best_cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[0]);
+@@ -979,15 +1003,18 @@ fn prepareAssignmentCostsTransposed(
+     tree_count: usize,
+     active_symbols: *const ActiveSymbols,
+     costs: *assignment_costs.Costs,
+-) void {
++) u16 {
++    var maximum: u16 = 0;
+     for (tree_histograms[0..tree_count], tree_totals[0..tree_count], 0..) |*tree, tree_total, tree_index| {
+         const model_log = fastLog2Q8(tree_total + 256);
+         for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
+             const symbol_cost = model_log - assignmentLog2Q8(tree[symbol] + 1);
+             std.debug.assert(symbol_cost <= std.math.maxInt(u16));
+             costs[symbol][tree_index] = @intCast(symbol_cost);
++            maximum = @max(maximum, @as(u16, @intCast(symbol_cost)));
+         }
+     }
++    return maximum;
+ }
+ 
+ fn assignmentCostPrepared(context: *const [256]u32, symbol_costs: *const [256]u16) u64 {
+@@ -1412,10 +1439,14 @@ test "literal context prepared assignment costs match reference" {
+     var active_symbols: ActiveSymbols = undefined;
+     buildActiveSymbols(&context, &active_symbols);
+     prepareAssignmentCosts(&trees, &totals, 4, &active_symbols, &costs);
+-    prepareAssignmentCostsTransposed(&trees, &totals, 4, &active_symbols, &transposed);
++    const maximum = prepareAssignmentCostsTransposed(&trees, &totals, 4, &active_symbols, &transposed);
++    var expected_maximum: u16 = 0;
+     for (active_symbols.symbols[0..active_symbols.len]) |symbol|
+-        for (0..4) |tree|
++        for (0..4) |tree| {
+             try std.testing.expectEqual(costs[tree][symbol], transposed[symbol][tree]);
++            expected_maximum = @max(expected_maximum, costs[tree][symbol]);
++        };
++    try std.testing.expectEqual(expected_maximum, maximum);
+     var contexts: ContextHistograms = @splat(@splat(0));
+     contexts[0] = context;
+     var sparse_contexts: SparseContexts = undefined;
+diff --git a/src/br/encoder/assignment/phase.zig b/src/br/encoder/assignment/phase.zig
+new file mode 100644
+index 00000000..d599f6e4
+--- /dev/null
++++ b/src/br/encoder/assignment/phase.zig
+@@ -0,0 +1,106 @@
++//! Exact round assignment with four sparse contexts sharing each price row.
++//! max_active_price must bound every initialized active tree price. Sparse
++//! totals are ignored; real frequency sums certify unsigned 32-bit arithmetic.
++const std = @import("std");
++const reference = @import("../assignment_costs.zig");
++
++pub const Choice = reference.Choice;
++pub const Costs = reference.Costs;
++pub const Stats = struct { narrow_contexts: usize = 0, wide_contexts: usize = 0, light_contexts: usize = 0 };
++const contexts_per_tile = 4;
++const trees_per_group = 8;
++const Prices = @Vector(trees_per_group, u32);
++
++pub noinline fn chooseAll(sparse_contexts: anytype, populated: []const u8, costs: *const Costs, tree_count: usize, max_active_price: u16, choices: *[64]Choice) Stats {
++    std.debug.assert(tree_count != 0 and tree_count <= reference.max_trees and populated.len <= 64);
++    var stats: Stats = .{};
++    if (max_active_price == 0) {
++        for (populated) |context| {
++            std.debug.assert(context < choices.len);
++            choices[context] = .{ .tree = 0, .cost = 0 };
++        }
++        stats.narrow_contexts = populated.len;
++        return stats;
++    }
++    var position: usize = 0;
++    while (position < populated.len) {
++        if (tree_count < trees_per_group or populated.len - position < contexts_per_tile) {
++            for (populated[position..]) |context| {
++                std.debug.assert(context < choices.len);
++                choices[context] = reference.choose(&sparse_contexts[context], costs, tree_count);
++                stats.light_contexts += 1;
++            }
++            break;
++        }
++        const contexts = populated[position..][0..contexts_per_tile];
++        position += contexts_per_tile;
++        var safe: [contexts_per_tile]bool = undefined;
++        var safe_count: usize = 0;
++        for (contexts, 0..) |context, slot| {
++            std.debug.assert(context < choices.len);
++            const sparse = &sparse_contexts[context];
++            std.debug.assert(sparse.len <= 256);
++            var total: u64 = 0;
++            for (sparse.frequencies[0..sparse.len]) |frequency| total += frequency;
++            safe[slot] = total <= std.math.maxInt(u32) and total * max_active_price <= std.math.maxInt(u32);
++            if (safe[slot]) {
++                safe_count += 1;
++                stats.narrow_contexts += 1;
++            } else {
++                choices[context] = reference.choose(sparse, costs, tree_count);
++                stats.wide_contexts += 1;
++            }
++        }
++        if (safe_count == 0) continue;
++
++        var frequencies: [256][contexts_per_tile]u32 = @splat(@splat(0));
++        var symbols: [256]u8 = undefined;
++        var symbol_count: usize = 0;
++        var seen: [4]u64 = @splat(0);
++        for (contexts, safe, 0..) |context, enabled, slot| {
++            if (!enabled) continue;
++            const sparse = &sparse_contexts[context];
++            for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency| {
++                if (frequency == 0) continue;
++                frequencies[symbol][slot] += frequency;
++                const bucket = symbol / 64;
++                const bit = @as(u64, 1) << @as(u6, @intCast(symbol % 64));
++                if (seen[bucket] & bit == 0) {
++                    seen[bucket] |= bit;
++                    symbols[symbol_count] = symbol;
++                    symbol_count += 1;
++                }
++            }
++        }
++        var best_costs: [contexts_per_tile]u32 = @splat(std.math.maxInt(u32));
++        var best_trees: [contexts_per_tile]usize = @splat(0);
++        var tree: usize = 0;
++        while (tree < tree_count) : (tree += trees_per_group) {
++            const active = @min(trees_per_group, tree_count - tree);
++            var totals: [contexts_per_tile]Prices = @splat(@splat(0));
++            for (symbols[0..symbol_count]) |symbol| {
++                var row: [trees_per_group]u16 = @splat(0);
++                @memcpy(row[0..active], costs[symbol][tree..][0..active]);
++                const prices: Prices = @intCast(@as(@Vector(trees_per_group, u16), row));
++                for (0..contexts_per_tile) |slot| {
++                    if (!safe[slot]) continue;
++                    totals[slot] += @as(Prices, @splat(frequencies[symbol][slot])) * prices;
++                }
++            }
++            for (0..contexts_per_tile) |slot| {
++                if (!safe[slot]) continue;
++                const values: [trees_per_group]u32 = totals[slot];
++                for (values[0..active], 0..) |cost, lane| {
++                    if (cost < best_costs[slot]) {
++                        best_costs[slot] = cost;
++                        best_trees[slot] = tree + lane;
++                    }
++                }
++            }
++        }
++        for (contexts, safe, 0..) |context, enabled, slot| {
++            if (enabled) choices[context] = .{ .tree = best_trees[slot], .cost = best_costs[slot] };
++        }
++    }
++    return stats;
++}
+diff --git a/src/br/encoder/assignment/phase_tests.zig b/src/br/encoder/assignment/phase_tests.zig
+new file mode 100644
+index 00000000..b45a7e1a
+--- /dev/null
++++ b/src/br/encoder/assignment/phase_tests.zig
+@@ -0,0 +1,270 @@
++const std = @import("std");
++const phase = @import("phase.zig");
++const Sparse = struct { symbols: [256]u8, frequencies: [256]u32, len: usize, total: u32 };
++const Contexts = [64]Sparse;
++const sentinel: phase.Choice = .{ .tree = 99, .cost = 999 };
++const a = std.testing.allocator;
++
++fn oracle(sparse: *const Sparse, costs: *const phase.Costs, tree_count: usize) phase.Choice {
++    var best: phase.Choice = .{ .tree = 0, .cost = std.math.maxInt(u64) };
++    for (0..tree_count) |tree| {
++        var sum: u64 = 0;
++        for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency| {
++            if (frequency != 0) sum += @as(u64, frequency) * costs[symbol][tree];
++        }
++        if (sum < best.cost) best = .{ .tree = tree, .cost = sum };
++    }
++    return best;
++}
++
++fn prices(costs: *phase.Costs, tree_count: usize) u16 {
++    costs.* = undefined;
++    var maximum: u16 = 0;
++    for (0..256) |symbol| for (0..tree_count) |tree| {
++        const value: u16 = @intCast((symbol * 17 + tree * 31) % 251);
++        costs[symbol][tree] = value;
++        maximum = @max(maximum, value);
++    };
++    return maximum;
++}
++
++fn fill(contexts: *Contexts) void {
++    const lengths = [_]usize{ 0, 1, 3, 8, 31, 64, 127, 256 };
++    for (contexts, 0..) |*sparse, context| {
++        sparse.len = lengths[context % lengths.len];
++        sparse.total = 0; // Deliberately unrelated to the initialized frequencies.
++        for (0..sparse.len) |index| {
++            sparse.symbols[index] = @intCast(255 - index);
++            sparse.frequencies[index] = @intCast(1 + (context + index) % 7);
++        }
++    }
++}
++
++fn compare(contexts: *const Contexts, populated: []const u8, costs: *const phase.Costs, tree_count: usize, maximum: u16) !phase.Stats {
++    var actual: [64]phase.Choice = @splat(sentinel);
++    const stats = phase.chooseAll(contexts, populated, costs, tree_count, maximum, &actual);
++    var written: [64]bool = @splat(false);
++    for (populated) |context| {
++        written[context] = true;
++        try std.testing.expectEqualDeep(oracle(&contexts[context], costs, tree_count), actual[context]);
++        try std.testing.expect(actual[context].tree < tree_count);
++    }
++    for (written, actual) |expected_write, choice| {
++        if (!expected_write) try std.testing.expectEqualDeep(sentinel, choice);
++    }
++    try std.testing.expectEqual(populated.len, stats.narrow_contexts + stats.wide_contexts + stats.light_contexts);
++    return stats;
++}
++
++test "assignment phase all active tree counts match independent u64 sparse oracle" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    fill(contexts);
++    var populated: [64]u8 = undefined;
++    for (&populated, 0..) |*context, index| context.* = @intCast(index);
++    for (1..65) |tree_count| {
++        const maximum = prices(costs, tree_count);
++        const stats = try compare(contexts, &populated, costs, tree_count, maximum);
++        try std.testing.expectEqual(@as(usize, 0), stats.wide_contexts);
++        try std.testing.expectEqual(@as(usize, if (tree_count < 8) 64 else 0), stats.light_contexts);
++        try std.testing.expectEqual(@as(usize, if (tree_count >= 8) 64 else 0), stats.narrow_contexts);
++    }
++}
++
++test "assignment phase all populated counts preserve inactive choices and light tile tails" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    fill(contexts);
++    const maximum = prices(costs, 17);
++    var populated: [64]u8 = undefined;
++    for (&populated, 0..) |*context, index| context.* = @intCast(63 - index);
++    for (0..65) |count| {
++        const stats = try compare(contexts, populated[0..count], costs, 17, maximum);
++        try std.testing.expectEqual(count % 4, stats.light_contexts);
++        try std.testing.expectEqual(count - count % 4, stats.narrow_contexts);
++        try std.testing.expectEqual(@as(usize, 0), stats.wide_contexts);
++    }
++}
++
++test "assignment phase u32 product boundary and unsigned large costs activate exact wide fallback" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    costs.* = undefined;
++    @memset(costs[5][0..17], 2);
++    costs[5][9] = 1;
++    for (contexts[0..4]) |*sparse| {
++        sparse.len = 1;
++        sparse.symbols[0] = 5;
++        sparse.total = 0;
++    }
++    contexts[0].frequencies[0] = std.math.maxInt(u32) / 2;
++    contexts[1].frequencies[0] = std.math.maxInt(u32) / 2 + 1;
++    contexts[2].len = 2;
++    contexts[2].symbols[1] = 5;
++    contexts[2].frequencies[0] = std.math.maxInt(u32);
++    contexts[2].frequencies[1] = 1;
++    contexts[3].frequencies[0] = 1_300_000_000;
++    const stats = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, 17, 2);
++    try std.testing.expectEqual(@as(usize, 2), stats.narrow_contexts);
++    try std.testing.expectEqual(@as(usize, 2), stats.wide_contexts);
++    try std.testing.expect(oracle(&contexts[3], costs, 17).cost < std.math.maxInt(i32));
++    try std.testing.expect(@as(u64, contexts[3].frequencies[0]) * costs[5][0] > std.math.maxInt(i32));
++}
++
++test "assignment phase exact u32 maximum and duplicate frequencies remain safe" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    costs.* = undefined;
++    @memset(costs[2][0..8], 1);
++    for (contexts[0..4], 0..) |*sparse, index| {
++        sparse.len = 2;
++        sparse.symbols[0] = 2;
++        sparse.symbols[1] = 2;
++        sparse.frequencies[0] = std.math.maxInt(u32) - @as(u32, @intCast(index));
++        sparse.frequencies[1] = @intCast(index);
++        sparse.total = 1;
++    }
++    const stats = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, 8, 1);
++    try std.testing.expectEqual(@as(usize, 4), stats.narrow_contexts);
++    try std.testing.expectEqual(@as(usize, 0), stats.wide_contexts);
++    try std.testing.expectEqual(@as(u64, std.math.maxInt(u32)), oracle(&contexts[0], costs, 8).cost);
++}
++
++test "assignment phase mixed duplicate symbols and poisoned inactive rows preserve exact costs" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    costs.* = undefined;
++    for ([_]usize{ 2, 3 }) |symbol| {
++        @memset(costs[symbol][0..9], 19);
++        costs[symbol][8] = 3;
++    }
++    const populated = [_]u8{ 2, 5, 7, 9 };
++    for (populated) |context| {
++        const sparse = &contexts[context];
++        sparse.len = 4;
++        sparse.symbols[0..4].* = .{ 3, 2, 3, 3 };
++        sparse.frequencies[0..4].* = .{ 100, 400, 100, 800 };
++        sparse.total = std.math.maxInt(u32);
++    }
++    contexts[7].frequencies[0] = std.math.maxInt(u32);
++    const stats = try compare(contexts, &populated, costs, 9, 19);
++    try std.testing.expectEqual(@as(usize, 3), stats.narrow_contexts);
++    try std.testing.expectEqual(@as(usize, 1), stats.wide_contexts);
++}
++
++test "assignment phase strict ties keep the earliest tree across vector groups and tails" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    for (contexts[0..4], 0..) |*sparse, index| {
++        sparse.len = 1;
++        sparse.symbols[0] = 255;
++        sparse.frequencies[0] = @intCast(index + 1);
++        sparse.total = 0;
++    }
++    for ([_]usize{ 8, 9, 15, 16, 17, 31, 32, 63, 64 }) |count| {
++        costs.* = undefined;
++        @memset(costs[255][0..count], 19);
++        costs[255][2] = 3;
++        costs[255][count - 1] = 3;
++        _ = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, count, 19);
++        try std.testing.expectEqual(@as(usize, 2), oracle(&contexts[0], costs, count).tree);
++    }
++}
++
++test "assignment phase maximum frequency and price products retain u64 oracle range" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    @memset(costs, @splat(std.math.maxInt(u16)));
++    for (contexts[0..4]) |*sparse| {
++        sparse.len = 256;
++        sparse.total = 0;
++        for (0..256) |index| {
++            sparse.symbols[index] = @intCast(index);
++            sparse.frequencies[index] = std.math.maxInt(u32);
++        }
++    }
++    const stats = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, 64, std.math.maxInt(u16));
++    try std.testing.expectEqual(@as(usize, 4), stats.wide_contexts);
++    try std.testing.expectEqual(@as(u64, 256) * std.math.maxInt(u32) * std.math.maxInt(u16), oracle(&contexts[0], costs, 64).cost);
++}
++
++test "assignment phase valid zero price bound chooses tree zero without trusting total or packing" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    for (contexts, 0..) |*sparse, index| {
++        sparse.len = if (index % 2 == 0) 256 else 0;
++        sparse.total = std.math.maxInt(u32);
++        for (0..sparse.len) |symbol| {
++            sparse.symbols[symbol] = 3;
++            sparse.frequencies[symbol] = std.math.maxInt(u32);
++        }
++    }
++    for (1..65) |count| {
++        costs.* = undefined;
++        @memset(costs[3][0..count], 0);
++        const stats = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, count, 0);
++        try std.testing.expectEqual(@as(usize, 4), stats.narrow_contexts);
++        try std.testing.expectEqual(@as(usize, 0), stats.wide_contexts + stats.light_contexts);
++    }
++}
++
++test "assignment phase light and wide skip zero frequency poisoned price rows" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    costs.* = undefined;
++    @memset(costs[3][0..7], 5);
++    costs[3][4] = 3;
++    for (contexts[0..4]) |*sparse| {
++        sparse.len = 3;
++        sparse.symbols[0..3].* = .{ 3, 200, 3 };
++        sparse.frequencies[0..3].* = .{ 8, 0, 7 };
++        sparse.total = 1;
++    }
++    const light = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, 7, 5);
++    try std.testing.expectEqual(@as(usize, 4), light.light_contexts);
++    @memset(costs[3][0..9], 5);
++    costs[3][8] = 3;
++    for (contexts[0..4]) |*sparse| sparse.frequencies[0..3].* = .{ std.math.maxInt(u32), 0, 1 };
++    const wide = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, 9, 5);
++    try std.testing.expectEqual(@as(usize, 4), wide.wide_contexts);
++    try std.testing.expectEqual(@as(usize, 0), wide.narrow_contexts + wide.light_contexts);
++}
++
++test "assignment phase conservative price bound keeps exact narrow and wide decisions" {
++    const contexts = try a.create(Contexts);
++    defer a.destroy(contexts);
++    const costs = try a.create(phase.Costs);
++    defer a.destroy(costs);
++    costs.* = undefined;
++    @memset(costs[9][0..15], 2);
++    costs[9][11] = 1;
++    const frequencies = [_]u32{ 100_000, 65_537, 65_538, 1 };
++    for (contexts[0..4], frequencies) |*sparse, frequency| {
++        sparse.len = 1;
++        sparse.symbols[0] = 9;
++        sparse.frequencies[0] = frequency;
++        sparse.total = 0;
++    }
++    const stats = try compare(contexts, &.{ 0, 1, 2, 3 }, costs, 15, std.math.maxInt(u16));
++    try std.testing.expectEqual(@as(usize, 2), stats.narrow_contexts);
++    try std.testing.expectEqual(@as(usize, 2), stats.wide_contexts);
++    try std.testing.expectEqual(@as(usize, 11), oracle(&contexts[0], costs, 15).tree);
++}
+diff --git a/src/br/encoder/assignment/phase_public_tests.zig b/src/br/encoder/assignment/phase_public_tests.zig
+new file mode 100644
+index 00000000..06eb80b0
+--- /dev/null
++++ b/src/br/encoder/assignment/phase_public_tests.zig
+@@ -0,0 +1,349 @@
++//! Same-source public grouped-u64 versus tile assignment contracts.
++const std = @import("std");
++const contexts = @import("../literal_context_split.zig");
++const a = std.testing.allocator;
++const Fixture = struct { name: []const u8, input: []const u8, wire: []const u8 };
++const fixtures = [_]Fixture{
++    .{ .name = "mozilla", .input = @embedFile("../literal_model/testdata/mozilla-64k.plain"), .wire = @embedFile("../literal_model/testdata/mozilla-64k.br") },
++    .{ .name = "xray", .input = @embedFile("../literal_model/testdata/xray-64k.plain"), .wire = @embedFile("../literal_model/testdata/xray-64k.br") },
++    .{ .name = "nci", .input = @embedFile("../literal_model/testdata/nci-64k.plain"), .wire = @embedFile("../literal_model/testdata/nci-64k.br") },
++    .{ .name = "xml", .input = @embedFile("../literal_model/testdata/xml-64k.plain"), .wire = @embedFile("../literal_model/testdata/xml-64k.br") },
++};
++
++fn encode(comptime Br: type, allocator: std.mem.Allocator, input: []const u8, options: Br.PlannedEncodeOptions, disabled: bool) ![]u8 {
++    const previous = contexts.test_disable_assignment_phase;
++    contexts.test_disable_assignment_phase = disabled;
++    defer contexts.test_disable_assignment_phase = previous;
++    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
++}
++
++fn profileEncode(comptime Br: type, input: []const u8, options: Br.PlannedEncodeOptions, profile: *Br.QualityQ8Profile, disabled: bool) ![]u8 {
++    const previous = contexts.test_disable_assignment_phase;
++    contexts.test_disable_assignment_phase = disabled;
++    defer contexts.test_disable_assignment_phase = previous;
++    return Br.benchmarkQualityProfileAlloc(a, input, std.testing.io, options, profile);
++}
++
++pub fn run(comptime Br: type) !void {
++    const previous = contexts.test_disable_assignment_phase;
++    var narrow: usize = 0;
++    for (fixtures, 0..) |fixture, i| {
++        try std.testing.expectEqual(@as(usize, 65536), fixture.input.len);
++        try wirePair(Br, fixture.name, fixture.input, .{ .quality = 8, .window_bits = 16 }, fixture.wire);
++        const count = try profilePair(Br, fixture.name, fixture.input, .{ .quality = 8, .window_bits = 16 }, fixture.wire);
++        if (i < 2) narrow += count;
++    }
++    try std.testing.expect(narrow > 0);
++    for ([_]usize{ 1, 0, 3, 1 }) |i|
++        try wirePair(Br, "repeated-after-other-input", fixtures[i].input, .{ .quality = 8, .window_bits = 16 }, fixtures[i].wire);
++    try otherCallers(Br);
++    // Every screen completes before any quota or injected backing failure.
++    var peaks: [2]usize = undefined;
++    var sites: [2][3]usize = undefined;
++    for (fixtures[0..2], 0..) |fixture, i| {
++        const screen = try resources(Br, fixture);
++        peaks[i] = screen.peak;
++        sites[i] = screen.sites;
++    }
++    for (fixtures[0..2], 0..) |fixture, i| {
++        try quota(Br, fixture, peaks[i]);
++        try backingFailures(Br, fixture, sites[i]);
++    }
++    try std.testing.expectEqual(previous, contexts.test_disable_assignment_phase);
++}
++
++fn decode(comptime Br: type, input: []const u8, wire: []const u8) !void {
++    const plain = try Br.decodeStreamAlloc(a, wire);
++    defer a.free(plain);
++    try std.testing.expectEqualSlices(u8, input, plain);
++}
++
++fn wirePair(comptime Br: type, label: []const u8, input: []const u8, options: Br.PlannedEncodeOptions, gold: ?[]const u8) !void {
++    const old = try encode(Br, a, input, options, true);
++    defer a.free(old);
++    const tile = try encode(Br, a, input, options, false);
++    defer a.free(tile);
++    try std.testing.expectEqualSlices(u8, old, tile);
++    if (gold) |wire| try std.testing.expectEqualSlices(u8, wire, tile);
++    try decode(Br, input, old);
++    try decode(Br, input, tile);
++    std.debug.print("assignment_public stage=wire case={s} input_bytes={d} wire_bytes={d}\n", .{ label, input.len, tile.len });
++}
++
++fn classField(comptime name: []const u8) bool {
++    return std.mem.eql(u8, name, "assignment_narrow_contexts") or std.mem.eql(u8, name, "assignment_wide_contexts") or std.mem.eql(u8, name, "assignment_light_contexts");
++}
++
++fn semanticEqual(old: anytype, tile: @TypeOf(old)) !void {
++    inline for (std.meta.fields(@TypeOf(old))) |field| {
++        if (comptime !std.mem.endsWith(u8, field.name, "_ns") and !classField(field.name))
++            try std.testing.expectEqualDeep(@field(old, field.name), @field(tile, field.name));
++    }
++}
++
++fn zero(value: anytype) !void {
++    switch (@typeInfo(@TypeOf(value))) {
++        .int => try std.testing.expectEqual(@as(@TypeOf(value), 0), value),
++        .array => for (value) |element| try zero(element),
++        .@"struct" => inline for (std.meta.fields(@TypeOf(value))) |field| try zero(@field(value, field.name)),
++        else => @compileError("unexpected proposal work counter type"),
++    }
++}
++
++fn retainedShape(comptime name: []const u8) bool {
++    inline for (.{ "iterations", "input_bytes", "literal_count", "proposal_reuses", "active_symbols", "suffix_tree_count", "suffix_mode", "suffix_savings_bits", "up_to_16_tree_count", "up_to_16_mode", "up_to_16_savings_bits", "full_tree_count", "full_mode", "full_savings_bits" }) |field|
++        if (comptime std.mem.eql(u8, name, field)) return true;
++    return false;
++}
++
++fn cachedZeroWork(profile: contexts.Profile) !void {
++    @setEvalBranchQuota(20000);
++    if (profile.proposal_reuses == 0) return;
++    try std.testing.expectEqual(@as(usize, 1), profile.proposal_reuses);
++    inline for (std.meta.fields(contexts.Profile)) |field| {
++        if (comptime !std.mem.endsWith(u8, field.name, "_ns") and !retainedShape(field.name))
++            try zero(@field(profile, field.name));
++    }
++}
++
++fn profilePair(comptime Br: type, label: []const u8, input: []const u8, options: Br.PlannedEncodeOptions, gold: ?[]const u8) !usize {
++    var old: Br.QualityQ8Profile = .{};
++    var tile: Br.QualityQ8Profile = .{};
++    const old_wire = try profileEncode(Br, input, options, &old, true);
++    defer a.free(old_wire);
++    const tile_wire = try profileEncode(Br, input, options, &tile, false);
++    defer a.free(tile_wire);
++    try std.testing.expectEqualSlices(u8, old_wire, tile_wire);
++    if (gold) |wire| try std.testing.expectEqualSlices(u8, wire, tile_wire);
++    try decode(Br, input, tile_wire);
++    inline for (.{ "event_count", "events_total", "events_truncated", "wire_attempts", "evaluation_attempts", "parameter_pairs", "parameter_counted_candidates", "parameter_physical_emits", "parameter_skipped_pair_emits", "wire_attempt_coverage_complete", "returned_wire_bytes", "returned_wire_event_id", "context_detail_count", "context_details_truncated" }) |field|
++        try std.testing.expectEqualDeep(@field(old, field), @field(tile, field));
++    try std.testing.expectEqualStrings("", old.error_name);
++    try std.testing.expectEqualStrings("", tile.error_name);
++    for (old.recordedEvents(), tile.recordedEvents()) |left, right| try semanticEqual(left, right);
++    var narrow: usize = 0;
++    var cache_hits: usize = 0;
++    for (old.recordedContextDetails(), tile.recordedContextDetails()) |left, right| {
++        try std.testing.expectEqualDeep(left.event_id, right.event_id);
++        try std.testing.expectEqualDeep(left.origin, right.origin);
++        try std.testing.expectEqualDeep(left.variant, right.variant);
++        try std.testing.expectEqualDeep(left.command_count, right.command_count);
++        try semanticEqual(left.profile, right.profile);
++        const stats = right.profile;
++        try std.testing.expectEqual(@as(usize, 0), left.profile.assignment_narrow_contexts + left.profile.assignment_wide_contexts + left.profile.assignment_light_contexts);
++        try std.testing.expectEqual(stats.assignment_contexts, stats.assignment_narrow_contexts + stats.assignment_wide_contexts + stats.assignment_light_contexts);
++        try cachedZeroWork(left.profile);
++        try cachedZeroWork(stats);
++        narrow += stats.assignment_narrow_contexts;
++        cache_hits += stats.proposal_reuses;
++        std.debug.print("assignment_public stage=context case={s} contexts={d} comparisons={d} rounds={d} narrow={d} wide={d} light={d} proposal_reuses={d} shape={d}/{d}/{d}\n", .{
++            label, stats.assignment_contexts, stats.assignment_comparisons, stats.cluster_rounds, stats.assignment_narrow_contexts, stats.assignment_wide_contexts, stats.assignment_light_contexts, stats.proposal_reuses, stats.suffix_tree_count, stats.up_to_16_tree_count, stats.full_tree_count,
++        });
++    }
++    std.debug.print("assignment_public stage=profile case={s} narrow={d} actual_proposal_cache_hits={d} times_not_compared=true\n", .{ label, narrow, cache_hits });
++    return narrow;
++}
++
++fn otherCallers(comptime Br: type) !void {
++    const input = fixtures[0].input[0..4096];
++    for ([_]u4{ 4, 6, 10, 11 }) |quality| {
++        var options: Br.PlannedEncodeOptions = .{ .quality = quality, .window_bits = 16 };
++        if (quality >= 10) options.command_state_max_input_kib = 8;
++        try wirePair(Br, "other-quality-pruned-caller", input, options, null);
++        _ = try profilePair(Br, "other-quality-pruned-caller", input, options, null);
++    }
++    try wirePair(Br, "ratio", input, .{ .level = .ratio, .window_bits = 16 }, null);
++    for ([_]u5{ 10, 16, 22 }) |window|
++        try wirePair(Br, "window", input, .{ .quality = 8, .window_bits = window }, null);
++    try wirePair(Br, "metadata", input, .{ .quality = 8, .window_bits = 16, .metadata = "assignment phase" }, null);
++    const repetitive = [_]u8{'R'} ** 4096;
++    try wirePair(Br, "repetitive", &repetitive, .{ .quality = 8, .window_bits = 16 }, null);
++    var opaque_bytes: [4096]u8 = undefined;
++    var state: u32 = 0x924a11ce;
++    for (&opaque_bytes) |*byte| {
++        state ^= state << 13;
++        state ^= state >> 17;
++        state ^= state << 5;
++        byte.* = @truncate(state);
++    }
++    try wirePair(Br, "opaque", &opaque_bytes, .{ .quality = 8, .window_bits = 16 }, null);
++}
++
++/// Requested heap only. Fixed request provenance storage uses no codec heap.
++const Ledger = struct {
++    const Request = struct { ordinal: usize, len: usize, ra: usize };
++    failing: std.testing.FailingAllocator,
++    requests: [4096]Request = undefined,
++    live: usize = 0,
++    peak: usize = 0,
++    peak_ordinal: usize = 0,
++    active: usize = 0,
++    attempts: usize = 0,
++    growth_refusals: usize = 0,
++    fn init(fail_index: usize) Ledger {
++        return .{ .failing = .init(a, .{ .fail_index = fail_index }) };
++    }
++    fn allocator(self: *Ledger) std.mem.Allocator {
++        return .{ .ptr = self, .vtable = &vtable };
++    }
++    fn balanced(self: *const Ledger) !void {
++        try std.testing.expectEqual(@as(usize, 0), self.live);
++        try std.testing.expectEqual(@as(usize, 0), self.active);
++        try std.testing.expectEqual(self.failing.allocated_bytes, self.failing.freed_bytes);
++    }
++    const vtable: std.mem.Allocator.VTable = .{ .alloc = alloc, .resize = resize, .remap = remap, .free = free };
++    fn alloc(raw: *anyopaque, len: usize, alignment: std.mem.Alignment, ra: usize) ?[*]u8 {
++        const self: *Ledger = @ptrCast(@alignCast(raw));
++        self.attempts += 1;
++        const ordinal = self.failing.alloc_index;
++        const pointer = self.failing.allocator().rawAlloc(len, alignment, ra) orelse return null;
++        std.debug.assert(ordinal < self.requests.len);
++        self.requests[ordinal] = .{ .ordinal = ordinal, .len = len, .ra = ra };
++        self.live += len;
++        self.active += 1;
++        if (self.live > self.peak) {
++            self.peak = self.live;
++            self.peak_ordinal = ordinal;
++        }
++        return pointer;
++    }
++    fn resize(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, len: usize, ra: usize) bool {
++        const self: *Ledger = @ptrCast(@alignCast(raw));
++        if (len > memory.len) {
++            self.growth_refusals += 1;
++            return false;
++        }
++        if (!self.failing.allocator().rawResize(memory, alignment, len, ra)) return false;
++        self.live -= memory.len - len;
++        return true;
++    }
++    fn remap(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, len: usize, ra: usize) ?[*]u8 {
++        const self: *Ledger = @ptrCast(@alignCast(raw));
++        if (len > memory.len) {
++            self.growth_refusals += 1;
++            return null;
++        }
++        const pointer = self.failing.allocator().rawRemap(memory, alignment, len, ra) orelse return null;
++        self.live -= memory.len - len;
++        return pointer;
++    }
++    fn free(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ra: usize) void {
++        const self: *Ledger = @ptrCast(@alignCast(raw));
++        self.failing.allocator().rawFree(memory, alignment, ra);
++        self.live -= memory.len;
++        self.active -= 1;
++    }
++};
++
++fn success(comptime Br: type, fixture: Fixture, ledger: *Ledger, profile: *Br.EncodeMemoryProfile, cap: ?usize, disabled: bool) !void {
++    const wire = try encode(Br, ledger.allocator(), fixture.input, .{ .quality = 8, .window_bits = 16, .memory_profile = profile, .max_total_working_memory = cap }, disabled);
++    defer ledger.allocator().free(wire);
++    try std.testing.expectEqualSlices(u8, fixture.wire, wire);
++    try std.testing.expect(profile.available);
++    try std.testing.expectEqual(cap, profile.limit);
++    try std.testing.expectEqual(@as(usize, 0), profile.live_requested_bytes);
++    try std.testing.expectEqual(profile.peak_requested_bytes, ledger.peak);
++    if (cap) |limit| try std.testing.expect(profile.peak_requested_bytes <= limit);
++    try std.testing.expectEqual(wire.len, ledger.live);
++    try std.testing.expectEqual(@as(usize, 1), ledger.active);
++    try std.testing.expect(!ledger.failing.has_induced_failure);
++}
++
++fn observe(comptime Br: type, label: []const u8, fixture: Fixture, ledger: *const Ledger, profile: Br.EncodeMemoryProfile) void {
++    std.debug.print("assignment_resource stage={s} corpus={s} limit={?d} peak={d} allocator_peak={d} live={d} profile_live={d} active={d} attempts={d} ordinals={d} allocated={d} freed={d} moving_refusals={d}\n", .{
++        label, fixture.name, profile.limit, profile.peak_requested_bytes, ledger.peak, ledger.live, profile.live_requested_bytes, ledger.active, ledger.attempts, ledger.failing.alloc_index, ledger.failing.allocated_bytes, ledger.failing.freed_bytes, ledger.growth_refusals,
++    });
++}
++
++fn resources(comptime Br: type, fixture: Fixture) !struct { peak: usize, sites: [3]usize } {
++    var old = Ledger.init(std.math.maxInt(usize));
++    var old_profile: Br.EncodeMemoryProfile = .{};
++    try success(Br, fixture, &old, &old_profile, null, true);
++    try old.balanced();
++    observe(Br, "grouped-u64", fixture, &old, old_profile);
++    var tile = Ledger.init(std.math.maxInt(usize));
++    var tile_profile: Br.EncodeMemoryProfile = .{};
++    try success(Br, fixture, &tile, &tile_profile, null, false);
++    try tile.balanced();
++    observe(Br, "tile", fixture, &tile, tile_profile);
++    if (@as(u128, tile.peak) * 100 > @as(u128, old.peak) * 105) return error.ResourceScreenRejected;
++    try std.testing.expectEqual(old.peak, tile.peak);
++    try std.testing.expectEqual(old.attempts, tile.attempts);
++    try std.testing.expectEqual(old.failing.alloc_index, tile.failing.alloc_index);
++    try std.testing.expectEqual(old.failing.allocated_bytes, tile.failing.allocated_bytes);
++    try std.testing.expectEqual(old.growth_refusals, tile.growth_refusals);
++    for (old.requests[0..old.failing.alloc_index], tile.requests[0..tile.failing.alloc_index]) |left, right|
++        try std.testing.expectEqual(left.len, right.len);
++    // These are measured request sites, not historical N or claimed semantic
++    // header/transfer stages. Their actual failure stack supplies provenance.
++    const sites = [3]usize{ 0, tile.peak_ordinal, tile.failing.alloc_index - 1 };
++    for (sites) |site| {
++        const request = tile.requests[site];
++        std.debug.print("assignment_resource stage=selected-actual-site corpus={s} ordinal={d} request_len={d} caller_ra={x} phase_label_unproven=true\n", .{ fixture.name, request.ordinal, request.len, request.ra });
++    }
++    return .{ .peak = tile.peak, .sites = sites };
++}
++
++fn quota(comptime Br: type, fixture: Fixture, peak: usize) !void {
++    var exact = Ledger.init(std.math.maxInt(usize));
++    var profile: Br.EncodeMemoryProfile = .{};
++    try success(Br, fixture, &exact, &profile, peak, false);
++    try exact.balanced();
++    observe(Br, "exactpeak", fixture, &exact, profile);
++    var retry = Ledger.init(std.math.maxInt(usize));
++    profile = .{};
++    try failure(Br, fixture, &retry, &profile, peak - 1, error.WorkingMemoryLimitExceeded);
++    try retry.balanced();
++    try std.testing.expectEqual(@as(usize, 0), profile.live_requested_bytes);
++    try std.testing.expect(profile.available);
++    try std.testing.expectEqual(@as(?usize, peak - 1), profile.limit);
++    try std.testing.expect(profile.peak_requested_bytes <= peak - 1);
++    try std.testing.expectEqual(profile.peak_requested_bytes, retry.peak);
++    try std.testing.expect(!retry.failing.has_induced_failure);
++    observe(Br, "peakminus1", fixture, &retry, profile);
++    profile = .{};
++    try success(Br, fixture, &retry, &profile, null, false);
++    try retry.balanced();
++    observe(Br, "quota-unlimited-retry", fixture, &retry, profile);
++}
++
++fn failure(comptime Br: type, fixture: Fixture, ledger: *Ledger, profile: *Br.EncodeMemoryProfile, cap: ?usize, expected: anyerror) !void {
++    if (encode(Br, ledger.allocator(), fixture.input, .{ .quality = 8, .window_bits = 16, .memory_profile = profile, .max_total_working_memory = cap }, false)) |wire| {
++        ledger.allocator().free(wire);
++        observe(Br, "unexpected-success", fixture, ledger, profile.*);
++        try ledger.balanced();
++        return error.TestUnexpectedResult;
++    } else |err| {
++        if (err != expected) std.debug.print("assignment_resource unexpected_error={s} expected={s}\n", .{ @errorName(err), @errorName(expected) });
++        try std.testing.expect(err == expected);
++    }
++}
++
++fn backingFailures(comptime Br: type, fixture: Fixture, sites: [3]usize) !void {
++    var tested: usize = 0;
++    for (sites, 0..) |ordinal, i| {
++        var duplicate = false;
++        for (sites[0..i]) |previous| duplicate = duplicate or previous == ordinal;
++        if (duplicate) continue;
++        var ledger = Ledger.init(ordinal);
++        var profile: Br.EncodeMemoryProfile = .{};
++        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
++        try std.testing.expect(ledger.failing.has_induced_failure);
++        try std.testing.expectEqual(ordinal, ledger.failing.alloc_index);
++        try std.testing.expectEqual(@as(usize, 0), profile.live_requested_bytes);
++        try ledger.balanced();
++        std.debug.print("assignment_resource stage=actual-backing-OOM corpus={s} ordinal={d} semantic_phase_not_assumed=true\n", .{ fixture.name, ordinal });
++        if (comptime std.debug.sys_can_stack_trace) {
++            const trace = ledger.failing.getStackTrace();
++            std.debug.dumpStackTrace(&trace);
++        }
++        ledger.failing.fail_index = std.math.maxInt(usize);
++        ledger.failing.has_induced_failure = false;
++        profile = .{};
++        try success(Br, fixture, &ledger, &profile, null, false);
++        try ledger.balanced();
++        observe(Br, "backing-unlimited-retry", fixture, &ledger, profile);
++        tested += 1;
++    }
++    std.debug.print("assignment_resource stage=sampled-OOM-complete corpus={s} actual_unique_sites={d} full_sweep_repeated=false\n", .{ fixture.name, tested });
++}

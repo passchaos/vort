@@ -1,0 +1,17 @@
+{
+  "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+  "epoch_root": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha",
+  "full_gate_passed": false,
+  "global_heavy_terminal": true,
+  "issued_by": "/root",
+  "issued_utc": "2026-11-27T01:42:25.994270+00:00",
+  "narrow_gates_accepted": true,
+  "phase": "pilot",
+  "protocol_sha256": "cee180bcdeace5b60df5f7d6065426c45dbfa23306b3175331649738ab73eee0",
+  "purpose": "diagnostic-only",
+  "readiness_seal_sha256": "319586a2de3dda155df34ccf16bf9ae10206c618b9d5d1c9cca8307013e996f2",
+  "release_id": "root-diagnostic-pilot-d7e32b25-43d8-48ef-9a0c-bb3d82fc164a",
+  "released": true,
+  "sampler_sha256": "2506d19b6717dedd7ffd7de4461b3333e853663e8fdb0b4b10fa30264145ffa1",
+  "schema": "vort.brotli.round4ctx.pilot-release.v1"
+}

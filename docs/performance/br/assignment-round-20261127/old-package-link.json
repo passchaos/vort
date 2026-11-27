@@ -1,0 +1,85 @@
+{
+  "archive_bytes": 185506284,
+  "committed_revision": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+  "exact_members": [
+    {
+      "bytes": 12452632,
+      "kind": "file",
+      "logical_path": "raw/performance/bin/candidate",
+      "origin_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+      "recovered": false,
+      "scope": "all frozen source epochs, ELF/object/reference libraries, harness/scripts, raw samples, complete wires, controls, build failures, primary verdict, source bindings",
+      "sha256": "963d97be637f36036a829660937c26a80e4bcc7546a44cb7a903de82baf4eb84"
+    },
+    {
+      "bytes": 4364472,
+      "kind": "file",
+      "logical_path": "raw/performance/bin/reference",
+      "origin_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/reference",
+      "recovered": false,
+      "scope": "all frozen source epochs, ELF/object/reference libraries, harness/scripts, raw samples, complete wires, controls, build failures, primary verdict, source bindings",
+      "sha256": "73e8c62c4818ea41cdf506abb2ccd2930194018959a2ae706a77e12d8eeb89a9"
+    },
+    {
+      "bytes": 54568,
+      "kind": "file",
+      "logical_path": "raw/performance/build/candidate-record.o",
+      "origin_path": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate-record.o",
+      "recovered": false,
+      "scope": "all frozen source epochs, ELF/object/reference libraries, harness/scripts, raw samples, complete wires, controls, build failures, primary verdict, source bindings",
+      "sha256": "e9a1b0dea35c4d331660d1bb53019448491f090120fa99c1a1b6f6f014261b99"
+    },
+    {
+      "bytes": 864608,
+      "kind": "file",
+      "logical_path": "extra/reference-libbrotlienc.so.1.2.0/libbrotlienc.so.1.2.0",
+      "origin_path": "/tmp/vort-brotli-exp.fR1axN/libbrotlienc.so.1.2.0",
+      "recovered": false,
+      "scope": "Pinned libbrotli 1.2.0 runtime library; actual version/hash maps verified independently",
+      "sha256": "14b6068470820450dd5169953b4e38bb3e0a9e031442b27d8ab735ae17e060a6"
+    },
+    {
+      "bytes": 60304,
+      "kind": "file",
+      "logical_path": "extra/reference-libbrotlidec.so.1.2.0/libbrotlidec.so.1.2.0",
+      "origin_path": "/tmp/vort-brotli-exp.fR1axN/libbrotlidec.so.1.2.0",
+      "recovered": false,
+      "scope": "Pinned libbrotli 1.2.0 runtime library; actual version/hash maps verified independently",
+      "sha256": "1621037a89296fbd1b4be3ee44affc97082b607829604d6bc3f64b0d8cc272cc"
+    },
+    {
+      "bytes": 147920,
+      "kind": "file",
+      "logical_path": "extra/reference-libbrotlicommon.so.1.2.0/libbrotlicommon.so.1.2.0",
+      "origin_path": "/tmp/vort-brotli-exp.fR1axN/libbrotlicommon.so.1.2.0",
+      "recovered": false,
+      "scope": "Pinned libbrotli 1.2.0 runtime library; actual version/hash maps verified independently",
+      "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+    }
+  ],
+  "joined_archive_sha256": "66dde6e8301edb2d907933407ad5fe048b9be21ae468b4ac17ba1ad0b8f12a6c",
+  "old185MB_payload_not_copied": true,
+  "parts": [
+    {
+      "bytes": 67108864,
+      "git_blob_46d": "6b6339baa9cad1b29ef2d3004fdd1d7fe4556e39",
+      "path": "evidence.tar.xz.part001",
+      "sha256": "dc0780f54e1fd9fa2bb53e9b31afc017bfb5eadaef0122167b6a67437de84ca8"
+    },
+    {
+      "bytes": 67108864,
+      "git_blob_46d": "b0b98884af68078bde043fc0ebddc7bb2cbf200d",
+      "path": "evidence.tar.xz.part002",
+      "sha256": "b3b4f5c5324261dadc408a3b2d70deb0b7680cc4fa4fa3369849b3c6c1f0af86"
+    },
+    {
+      "bytes": 51288556,
+      "git_blob_46d": "81efb18e12588a125a58663acb4b7d9d8f985b12",
+      "path": "evidence.tar.xz.part003",
+      "sha256": "9e455685f3b1127fa1d5eeee631d8a5055504487112665a2af4d7b4342b68dd5"
+    }
+  ],
+  "portable_manifest_git_blob": "d40f788defd78cc346b5c02485c03a79ab2b20cf",
+  "portable_manifest_sha256": "e1f18df61d1a4daf5e7d19ef5e84bb002c784371189c5b6c824f3a26909abddc",
+  "repository_relative_package": "docs/performance/br/original-command-split-plans-20261127"
+}

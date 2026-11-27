@@ -1,0 +1,24 @@
+{
+  "Root_releases_pilot_only_after_preflight_and_allHeavy0": true,
+  "accepted_for_pilot_diagnostic_prerequisites": true,
+  "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+  "exact_gold_profile_multicaller_cache_zero_work": true,
+  "final7_source_SHAs": {
+    "src/br.zig": "5129d50b45211dfe7187fbcedf8a674b7b7892349fba7b4d96dce5704dc66678",
+    "src/br/encoder/assignment/phase.zig": "17af683db986bc1468cc56b40a754c225db95e4d2d84e225593154e6e0d22945",
+    "src/br/encoder/assignment/phase_public_tests.zig": "b9faf060d293d1b9fa61b36c1f2ea3e627cd9df236e25ad02d683f8642d68161",
+    "src/br/encoder/assignment/phase_tests.zig": "5c3fac625ed4057285a742611f4d74a4773959f4ddd9f574cbff318f38f1b655",
+    "src/br/encoder/assignment_costs.zig": "649d0ea76ff18322c0656fcf7e384baf5a1e08edc55f23969293de89026bc0d3",
+    "src/br/encoder/literal_context_profile.zig": "d44bf6eb3e7e88e2674532c859f1af6d0411178aeac5a2cec2c9cf461050c697",
+    "src/br/encoder/literal_context_split.zig": "6e5ddbb1caaa6389f3b8b86f408f6db52231bc412f953f5cb93ed5c7722deccc"
+  },
+  "fulltest_check_check_wasm_run": false,
+  "issued_by": "/root",
+  "merge_acceptance": false,
+  "narrow_kernel_Native_actualWASI": "11/11 each",
+  "public_Native_actualWASI": "35/35 each",
+  "real_priceMax_producer": "22/22",
+  "received_utc": "2026-11-27T01:32:24.650791+00:00",
+  "resource_heap_requested_stream_quota_6site_OOM_retries": true,
+  "sampling_released": false
+}

@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "9",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/bin/assignment-native-tests-attempt-1"
+  ],
+  "cwd": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1",
+  "started_utc": "2026-11-27T01:25:57.854371+00:00",
+  "ended_utc": "2026-11-27T01:26:10.089937+00:00",
+  "exit_code": 0,
+  "terminal": true
+}

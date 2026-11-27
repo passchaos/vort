@@ -1,0 +1,10 @@
+{
+  "candidate_not_merged": true,
+  "formal": "not released, not run",
+  "full_gate_passed": false,
+  "historical_direct": "not released, not run",
+  "no_retry": true,
+  "public_controls_timed": "not released, not run",
+  "reference_direct": "not released, not run",
+  "small_controls_timed": "not released, not run"
+}

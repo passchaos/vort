@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "9",
+    "zig",
+    "test",
+    "src/br.zig",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/objects/record-wasi.o",
+    "-lc",
+    "-target",
+    "wasm32-wasi",
+    "-fsingle-threaded",
+    "-O",
+    "ReleaseSafe",
+    "--test-filter",
+    "br assignment phase public wire profile and resource contracts",
+    "--test-no-exec",
+    "--stack",
+    "16777216",
+    "-femit-bin=/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/bin/assignment-public-tests-attempt-1.wasm",
+    "--cache-dir",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/cache/wasi",
+    "--global-cache-dir",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/global-cache"
+  ],
+  "cwd": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1",
+  "started_utc": "2026-11-27T01:27:05.119430+00:00",
+  "ended_utc": "2026-11-27T01:28:17.944493+00:00",
+  "exit_code": 0,
+  "terminal": true
+}

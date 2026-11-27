@@ -1,0 +1,29 @@
+{
+  "CI": null,
+  "adoption_allowed": false,
+  "all_primary_row_point_floors_pass": false,
+  "all_sample_equal_row_GM_secondary": 0.878150548070644,
+  "completed": true,
+  "full_gate_passed": false,
+  "merge_eligible": false,
+  "pairs": 24,
+  "point_screen_pass": false,
+  "primary_GM": 0.878150548070644,
+  "primary_row_GMs": {
+    "dickens": 0.9270789752097345,
+    "mozilla": 0.77930678298445,
+    "mr": 0.9184578748797009,
+    "nci": 0.9476947699494219,
+    "ooffice": 0.809235676398786,
+    "osdb": 0.7511927227610559,
+    "reymont": 0.9353923720257478,
+    "samba": 0.9313858070999423,
+    "sao": 0.810042687499829,
+    "webster": 0.8899957345268685,
+    "x-ray": 0.9390657470569896,
+    "xml": 0.9326810280282649
+  },
+  "processes": 48,
+  "purpose": "diagnostic-only",
+  "secondary_can_enable_acceptance": false
+}

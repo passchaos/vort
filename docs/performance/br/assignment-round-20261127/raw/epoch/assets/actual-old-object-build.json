@@ -1,0 +1,43 @@
+{
+  "actual_exit_code": 0,
+  "argv": [
+    "taskset",
+    "-c",
+    "1",
+    "zig",
+    "build-obj",
+    "-O",
+    "ReleaseFast",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu",
+    "skylake+pku+sgx",
+    "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/sources/candidate/src/br/encoder/record_optimal_object.zig",
+    "-femit-bin=/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate-record.o"
+  ],
+  "cache_environment": {
+    "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/global-cache",
+    "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/local-cache"
+  },
+  "candidate_revision": "original-command-split-reuse:371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+  "completed_utc": "2026-11-26T22:17:18.737213+00:00",
+  "elapsed_seconds": 1.3091173919383436,
+  "output": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate-record.o",
+  "output_sha256": "e9a1b0dea35c4d331660d1bb53019448491f090120fa99c1a1b6f6f014261b99",
+  "source_after": {
+    "candidate_source_manifest_sha256": "371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+    "files": 2223,
+    "frozen_and_live_sources_equal": true
+  },
+  "source_before": {
+    "candidate_source_manifest_sha256": "371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+    "files": 2223,
+    "frozen_and_live_sources_equal": true
+  },
+  "stage": "candidate-record",
+  "started_utc": "2026-11-26T22:17:17.428098+00:00",
+  "stderr": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate-record.stderr",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate-record.stdout",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

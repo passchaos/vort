@@ -1,0 +1,560 @@
+{
+  "status": "pass",
+  "HEAVY": 0,
+  "scope": "same-source grouped-u64 test oracle vs tiled assignment, no benchmark timing claims",
+  "successful_SOURCE": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1",
+  "source_files": 2226,
+  "owned_test_sha256": "b9faf060d293d1b9fa61b36c1f2ea3e627cd9df236e25ad02d683f8642d68161",
+  "original_attempt0": {
+    "Native_compile_exit": 1,
+    "codec_run_started": false,
+    "reason": "test harness field classification exceeded default1000 comptime backwards branches",
+    "preserved": true
+  },
+  "harness_fix": "@setEvalBranchQuota(20000) only; protocol/production unchanged",
+  "targets": {
+    "native": {
+      "build_actual_exit": 0,
+      "run_actual_exit": 0,
+      "tests_passed": 35,
+      "profile_rows": [
+        {
+          "case": "mozilla",
+          "actual_narrow_contexts": 38984,
+          "actual_proposal_cache_hits": 3,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "xray",
+          "actual_narrow_contexts": 27468,
+          "actual_proposal_cache_hits": 3,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "nci",
+          "actual_narrow_contexts": 16760,
+          "actual_proposal_cache_hits": 2,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "xml",
+          "actual_narrow_contexts": 21520,
+          "actual_proposal_cache_hits": 2,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 0,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 4
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 0,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 6
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 34192,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 10
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 45480,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 11
+        }
+      ],
+      "resource_rows": {
+        "mozilla": {
+          "grouped-u64": {
+            "peak": 5115910,
+            "allocator_peak": 5115910,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 681,
+            "ordinals": 681,
+            "allocated": 30505144,
+            "freed": 30505144,
+            "moving_refusals": 218
+          },
+          "tile": {
+            "peak": 5115910,
+            "allocator_peak": 5115910,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 681,
+            "ordinals": 681,
+            "allocated": 30505144,
+            "freed": 30505144,
+            "moving_refusals": 218
+          },
+          "peak_ratio": 1.0,
+          "allocation_request_lengths_all_equal": true
+        },
+        "xray": {
+          "grouped-u64": {
+            "peak": 8168439,
+            "allocator_peak": 8168439,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 978,
+            "ordinals": 978,
+            "allocated": 55586279,
+            "freed": 55586279,
+            "moving_refusals": 486
+          },
+          "tile": {
+            "peak": 8168439,
+            "allocator_peak": 8168439,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 978,
+            "ordinals": 978,
+            "allocated": 55586279,
+            "freed": 55586279,
+            "moving_refusals": 486
+          },
+          "peak_ratio": 1.0,
+          "allocation_request_lengths_all_equal": true
+        }
+      },
+      "OOM_sites": {
+        "mozilla": [
+          0,
+          395,
+          680
+        ],
+        "xray": [
+          0,
+          669,
+          977
+        ]
+      },
+      "quota_exact_successes": 2,
+      "quota_peakminus1_refusals": 2,
+      "quota_unlimited_retries": 2,
+      "OOM_unlimited_retries": 6,
+      "full_OOM_sweep_repeated": false
+    },
+    "wasi": {
+      "build_actual_exit": 0,
+      "run_actual_exit": 0,
+      "tests_passed": 35,
+      "profile_rows": [
+        {
+          "case": "mozilla",
+          "actual_narrow_contexts": 38984,
+          "actual_proposal_cache_hits": 3,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "xray",
+          "actual_narrow_contexts": 27468,
+          "actual_proposal_cache_hits": 3,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "nci",
+          "actual_narrow_contexts": 16760,
+          "actual_proposal_cache_hits": 2,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "xml",
+          "actual_narrow_contexts": 21520,
+          "actual_proposal_cache_hits": 2,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 0,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 4
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 0,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 6
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 34192,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 10
+        },
+        {
+          "case": "other-quality-pruned-caller",
+          "actual_narrow_contexts": 45480,
+          "actual_proposal_cache_hits": 0,
+          "semantic_counts_equal": true,
+          "old_three_classes_zero": true,
+          "new_three_class_sum_matches_assignment_contexts": true,
+          "cache_hits_have_zero_scorer_work": true,
+          "time_fields_compared": false,
+          "quality_from_fixed_test_loop_order": 11
+        }
+      ],
+      "resource_rows": {
+        "mozilla": {
+          "grouped-u64": {
+            "peak": 4430770,
+            "allocator_peak": 4430770,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 688,
+            "ordinals": 688,
+            "allocated": 26033300,
+            "freed": 26033300,
+            "moving_refusals": 222
+          },
+          "tile": {
+            "peak": 4430770,
+            "allocator_peak": 4430770,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 688,
+            "ordinals": 688,
+            "allocated": 26033300,
+            "freed": 26033300,
+            "moving_refusals": 222
+          },
+          "peak_ratio": 1.0,
+          "allocation_request_lengths_all_equal": true
+        },
+        "xray": {
+          "grouped-u64": {
+            "peak": 7398019,
+            "allocator_peak": 7398019,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 993,
+            "ordinals": 993,
+            "allocated": 48103594,
+            "freed": 48103594,
+            "moving_refusals": 488
+          },
+          "tile": {
+            "peak": 7398019,
+            "allocator_peak": 7398019,
+            "live": 0,
+            "profile_live": 0,
+            "active": 0,
+            "attempts": 993,
+            "ordinals": 993,
+            "allocated": 48103594,
+            "freed": 48103594,
+            "moving_refusals": 488
+          },
+          "peak_ratio": 1.0,
+          "allocation_request_lengths_all_equal": true
+        }
+      },
+      "OOM_sites": {
+        "mozilla": [
+          0,
+          402,
+          687
+        ],
+        "xray": [
+          0,
+          678,
+          992
+        ]
+      },
+      "quota_exact_successes": 2,
+      "quota_peakminus1_refusals": 2,
+      "quota_unlimited_retries": 2,
+      "OOM_unlimited_retries": 6,
+      "full_OOM_sweep_repeated": false
+    }
+  },
+  "actual_wasi_runner": {
+    "schema": "vort-wasi-tests-v1",
+    "status": "ok",
+    "utc": "2026-11-27T01:28:32.663Z",
+    "pointer_bits": 32,
+    "node_version": "v26.10.0",
+    "execution": "Zig test runner through WASI _start",
+    "results": [
+      {
+        "label": "assignment-phase-public",
+        "test_filter": "br assignment phase public wire profile and resource contracts",
+        "wasm_path": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/bin/assignment-public-tests-attempt-1.wasm",
+        "wasm_sha256": "87ed771e0144abe1437a207b4e8989cb2bed9b9c3686df26c4feadd59358defc",
+        "wasm_bytes": 10773422,
+        "exit_code": 0,
+        "imports": [
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "args_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "args_sizes_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "environ_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "environ_sizes_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "clock_res_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "clock_time_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_fdstat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_filestat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_filestat_set_size",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_filestat_set_times",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_pread",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_prestat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_prestat_dir_name",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_pwrite",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_read",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_seek",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_write",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_create_directory",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_filestat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_filestat_set_times",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_link",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_open",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_readlink",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_remove_directory",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_rename",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_symlink",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_unlink_file",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "proc_exit",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "random_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "poll_oneoff",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_sync",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_close",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_readdir",
+            "kind": "function"
+          }
+        ]
+      }
+    ]
+  },
+  "WASI_stack_scope": {
+    "bytes": 16777216,
+    "scope": "single-threaded ReleaseSafe test harness only"
+  },
+  "source_verification": {
+    "utc": "2026-11-27T01:29:53.851383+00:00",
+    "original_failed_SOURCE_unchanged": true,
+    "successful_SOURCE_unchanged": true,
+    "source_files": 2226,
+    "only_test_harness_changed_between_attempts": [
+      "src/br/encoder/assignment/phase_public_tests.zig"
+    ],
+    "selected_original_sources_still_match_successful_SOURCE": {
+      "src/br.zig": true,
+      "src/br/encoder/assignment_costs.zig": true,
+      "src/br/encoder/literal_context_profile.zig": true,
+      "src/br/encoder/literal_context_split.zig": true,
+      "src/br/encoder/assignment/phase.zig": true,
+      "src/br/encoder/assignment/phase_tests.zig": true,
+      "src/br/encoder/assignment/phase_public_tests.zig": true
+    },
+    "record_objects_unchanged": {
+      "record-native.o": true,
+      "record-wasi.o": true
+    }
+  }
+}

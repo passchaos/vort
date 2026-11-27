@@ -1,0 +1,18 @@
+{
+  "baseline_files": 2222,
+  "baseline_overrides": [
+    "src/br.zig",
+    "src/br/encoder/assignment_costs.zig",
+    "src/br/encoder/literal_context_profile.zig",
+    "src/br/encoder/literal_context_split.zig"
+  ],
+  "baseline_registry": "raw/epoch/baseline46d-source-files.json",
+  "candidate_archive": "payload/candidate-src.tar.xz",
+  "candidate_files": 2226,
+  "candidate_registry": "raw/epoch/candidate-source-files.json",
+  "raw_receipts_unmodified": true,
+  "recorded_epoch_root": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha",
+  "recorded_legacy_root": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr",
+  "runtime_archive": "payload/new-runtime.tar.xz",
+  "source_restoration": "Candidate is complete. Baseline takes only its registered paths from candidate, replaces these four files with raw/baseline-overrides, and omits candidate-only files."
+}

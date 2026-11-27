@@ -1,0 +1,11 @@
+src/br/encoder/assignment/phase_public_tests.zig:94:12: error: evaluation exceeded 1000 backwards branches
+    inline for (.{ "iterations", "input_bytes", "literal_count", "proposal_reuses", "active_symbols", "suffix_tree_count", "suffix_mode", "suffix_savings_bits", "up_to_16_tree_count", "up_to_16_mode", "up_to_16_savings_bits", "full_tree_count", "full_mode", "full_savings_bits" }) |field|
+    ~~~~~~~^~~
+src/br/encoder/assignment/phase_public_tests.zig:94:12: note: use @setEvalBranchQuota() to raise the branch limit from 1000
+src/br/encoder/assignment/phase_public_tests.zig:103:81: note: called at comptime here
+        if (comptime !std.mem.endsWith(u8, field.name, "_ns") and !retainedShape(field.name))
+                                                                   ~~~~~~~~~~~~~^~~~~~~~~~~~
+referenced by:
+    profilePair__anon_33821: src/br/encoder/assignment/phase_public_tests.zig:134:27
+    run__anon_33320: src/br/encoder/assignment/phase_public_tests.zig:33:38
+    1 reference(s) hidden; use '-freference-trace=3' to see all references

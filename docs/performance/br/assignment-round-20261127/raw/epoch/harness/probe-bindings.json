@@ -1,0 +1,32 @@
+{
+  "allocator": "std.process.Init.gpa",
+  "build_mode": "ReleaseFast",
+  "cap_explicit": "q11-cap8 only",
+  "cpu": "skylake+pku+sgx",
+  "libc_linked_future": true,
+  "main_probe_byte_identical_to_actual_old_build_probe": true,
+  "main_probe_sha256": "346ed5e94e295f9222bb8ff775103265d3f8da5d248c343804a9210c7645c821",
+  "main_probe_sha_matches_old_sealed_build_binding": true,
+  "new_control_probe": "harness/public-options-probe.zig",
+  "new_control_probe_sha256": "9074b92ffc43f49ce3186e9339c88e0b88f602e77d78ea84f52320fa73c4ed11",
+  "not_using_preallocated_output": true,
+  "original_continuous_timer_body_byte_equal": true,
+  "other_input_bytes": 65536,
+  "prepared_only_not_compiled": true,
+  "provenance_sha256": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+  "q11_explicit_command_state_cap_kib": 8,
+  "q8_input_bytes": 4096,
+  "quality_options": [
+    "q4",
+    "q6",
+    "q10-default",
+    "q11-default",
+    "q11-cap8",
+    "ratio",
+    "q8"
+  ],
+  "ratio_level": "ratio",
+  "ratio_quality": null,
+  "target": "x86_64-linux-gnu",
+  "warmup_per_process": 1
+}

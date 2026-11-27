@@ -1,0 +1,31 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "9",
+    "zig",
+    "test",
+    "src/br.zig",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/objects/record-native.o",
+    "-lc",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu",
+    "skylake+pku+sgx",
+    "-O",
+    "ReleaseSafe",
+    "--test-filter",
+    "br assignment phase public wire profile and resource contracts",
+    "--test-no-exec",
+    "-femit-bin=/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/bin/assignment-native-tests",
+    "--cache-dir",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/cache/native",
+    "--global-cache-dir",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/global-cache"
+  ],
+  "cwd": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE",
+  "started_utc": "2026-11-27T01:23:19.212375+00:00",
+  "ended_utc": "2026-11-27T01:23:27.049879+00:00",
+  "exit_code": 1,
+  "terminal": true
+}

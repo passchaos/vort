@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "9",
+    "node",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/wasi_test_gate.js",
+    "assignment-phase-public",
+    "br assignment phase public wire profile and resource contracts",
+    "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/bin/assignment-public-tests-attempt-1.wasm"
+  ],
+  "cwd": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1",
+  "started_utc": "2026-11-27T01:28:17.966645+00:00",
+  "ended_utc": "2026-11-27T01:28:32.678015+00:00",
+  "exit_code": 0,
+  "terminal": true
+}

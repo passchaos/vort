@@ -1,0 +1,141 @@
+1/35 br.test_0...OK
+2/35 br.test.br assignment phase public wire profile and resource contracts...assignment_public stage=wire case=mozilla input_bytes=65536 wire_bytes=13924
+assignment_public stage=context case=mozilla contexts=15113 comparisons=190899 rounds=239 narrow=7684 wide=0 light=7429 proposal_reuses=0 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=15488 comparisons=194308 rounds=243 narrow=7936 wide=0 light=7552 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=mozilla contexts=15425 comparisons=194119 rounds=242 narrow=7936 wide=0 light=7489 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=mozilla contexts=15425 comparisons=192656 rounds=242 narrow=7684 wide=0 light=7741 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=mozilla contexts=15552 comparisons=193920 rounds=244 narrow=7744 wide=0 light=7808 proposal_reuses=0 shape=2/6/6
+assignment_public stage=profile case=mozilla narrow=38984 actual_proposal_cache_hits=3 times_not_compared=true
+assignment_public stage=wire case=xray input_bytes=65536 wire_bytes=41180
+assignment_public stage=context case=xray contexts=10180 comparisons=126698 rounds=214 narrow=5516 wide=0 light=4664 proposal_reuses=0 shape=2/10/10
+assignment_public stage=context case=xray contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/10/10
+assignment_public stage=context case=xray contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/10/10
+assignment_public stage=context case=xray contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/10/10
+assignment_public stage=context case=xray contexts=10362 comparisons=127658 rounds=213 narrow=5524 wide=0 light=4838 proposal_reuses=0 shape=2/8/14
+assignment_public stage=context case=xray contexts=10246 comparisons=126986 rounds=210 narrow=5476 wide=0 light=4770 proposal_reuses=0 shape=2/8/14
+assignment_public stage=context case=xray contexts=10246 comparisons=126778 rounds=210 narrow=5476 wide=0 light=4770 proposal_reuses=0 shape=2/8/14
+assignment_public stage=context case=xray contexts=10246 comparisons=126778 rounds=210 narrow=5476 wide=0 light=4770 proposal_reuses=0 shape=2/8/14
+assignment_public stage=profile case=xray narrow=27468 actual_proposal_cache_hits=3 times_not_compared=true
+assignment_public stage=wire case=nci input_bytes=65536 wire_bytes=4206
+assignment_public stage=context case=nci contexts=6123 comparisons=56548 rounds=197 narrow=2700 wide=0 light=3423 proposal_reuses=0 shape=0/2/2
+assignment_public stage=context case=nci contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=0/2/2
+assignment_public stage=context case=nci contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=0/2/2
+assignment_public stage=context case=nci contexts=6108 comparisons=57328 rounds=199 narrow=2844 wide=0 light=3264 proposal_reuses=0 shape=0/2/2
+assignment_public stage=context case=nci contexts=5916 comparisons=56516 rounds=190 narrow=2812 wide=0 light=3104 proposal_reuses=0 shape=2/3/3
+assignment_public stage=context case=nci contexts=5927 comparisons=56604 rounds=191 narrow=2820 wide=0 light=3107 proposal_reuses=0 shape=2/3/3
+assignment_public stage=context case=nci contexts=5897 comparisons=55671 rounds=191 narrow=2772 wide=0 light=3125 proposal_reuses=0 shape=2/5/5
+assignment_public stage=context case=nci contexts=5950 comparisons=56419 rounds=192 narrow=2812 wide=0 light=3138 proposal_reuses=0 shape=2/3/3
+assignment_public stage=profile case=nci narrow=16760 actual_proposal_cache_hits=2 times_not_compared=true
+assignment_public stage=wire case=xml input_bytes=65536 wire_bytes=4407
+assignment_public stage=context case=xml contexts=7547 comparisons=77758 rounds=193 narrow=3608 wide=0 light=3939 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=xml contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/6/6
+assignment_public stage=context case=xml contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/6/6
+assignment_public stage=context case=xml contexts=7122 comparisons=75081 rounds=187 narrow=3480 wide=0 light=3642 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=xml contexts=7261 comparisons=75583 rounds=188 narrow=3608 wide=0 light=3653 proposal_reuses=0 shape=2/11/11
+assignment_public stage=context case=xml contexts=7466 comparisons=76497 rounds=194 narrow=3584 wide=0 light=3882 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=xml contexts=7420 comparisons=77078 rounds=190 narrow=3688 wide=0 light=3732 proposal_reuses=0 shape=2/10/10
+assignment_public stage=context case=xml contexts=7372 comparisons=75854 rounds=190 narrow=3552 wide=0 light=3820 proposal_reuses=0 shape=2/8/8
+assignment_public stage=profile case=xml narrow=21520 actual_proposal_cache_hits=2 times_not_compared=true
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=41180
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=13924
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=4407
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=41180
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1229
+assignment_public stage=profile case=other-quality-pruned-caller narrow=0 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1224
+assignment_public stage=profile case=other-quality-pruned-caller narrow=0 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1180
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10766 comparisons=123576 rounds=207 narrow=5400 wide=0 light=5366 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=128892 rounds=218 narrow=6048 wide=0 light=5467 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=129384 rounds=218 narrow=6064 wide=0 light=5451 proposal_reuses=0 shape=0/0/0
+assignment_public stage=profile case=other-quality-pruned-caller narrow=34192 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1180
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10766 comparisons=123576 rounds=207 narrow=5400 wide=0 light=5366 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=128892 rounds=218 narrow=6048 wide=0 light=5467 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=129384 rounds=218 narrow=6064 wide=0 light=5451 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10915 comparisons=123571 rounds=215 narrow=5644 wide=0 light=5271 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10915 comparisons=123571 rounds=215 narrow=5644 wide=0 light=5271 proposal_reuses=0 shape=0/0/0
+assignment_public stage=profile case=other-quality-pruned-caller narrow=45480 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=ratio input_bytes=4096 wire_bytes=1234
+assignment_public stage=wire case=window input_bytes=4096 wire_bytes=1213
+assignment_public stage=wire case=window input_bytes=4096 wire_bytes=1196
+assignment_public stage=wire case=window input_bytes=4096 wire_bytes=1196
+assignment_public stage=wire case=metadata input_bytes=4096 wire_bytes=1214
+assignment_public stage=wire case=repetitive input_bytes=4096 wire_bytes=12
+assignment_public stage=wire case=opaque input_bytes=4096 wire_bytes=4100
+assignment_resource stage=grouped-u64 corpus=mozilla limit=null peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=688 ordinals=688 allocated=26033300 freed=26033300 moving_refusals=222
+assignment_resource stage=tile corpus=mozilla limit=null peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=688 ordinals=688 allocated=26033300 freed=26033300 moving_refusals=222
+assignment_resource stage=selected-actual-site corpus=mozilla ordinal=0 request_len=40 caller_ra=0 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=mozilla ordinal=402 request_len=159972 caller_ra=0 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=mozilla ordinal=687 request_len=15994 caller_ra=0 phase_label_unproven=true
+assignment_resource stage=grouped-u64 corpus=xray limit=null peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=993 ordinals=993 allocated=48103594 freed=48103594 moving_refusals=488
+assignment_resource stage=tile corpus=xray limit=null peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=993 ordinals=993 allocated=48103594 freed=48103594 moving_refusals=488
+assignment_resource stage=selected-actual-site corpus=xray ordinal=0 request_len=40 caller_ra=0 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=xray ordinal=678 request_len=842184 caller_ra=0 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=xray ordinal=992 request_len=48011 caller_ra=0 phase_label_unproven=true
+assignment_resource stage=exactpeak corpus=mozilla limit=4430770 peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=688 ordinals=688 allocated=26033300 freed=26033300 moving_refusals=222
+assignment_resource stage=peakminus1 corpus=mozilla limit=4430769 peak=4416298 allocator_peak=4416298 live=0 profile_live=0 active=0 attempts=402 ordinals=402 allocated=16716914 freed=16716914 moving_refusals=136
+assignment_resource stage=quota-unlimited-retry corpus=mozilla limit=null peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=1090 ordinals=1090 allocated=42750214 freed=42750214 moving_refusals=358
+assignment_resource stage=actual-backing-OOM corpus=mozilla ordinal=0 semantic_phase_not_assumed=true
+assignment_resource stage=backing-unlimited-retry corpus=mozilla limit=null peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=689 ordinals=688 allocated=26033300 freed=26033300 moving_refusals=222
+assignment_resource stage=actual-backing-OOM corpus=mozilla ordinal=402 semantic_phase_not_assumed=true
+assignment_resource stage=backing-unlimited-retry corpus=mozilla limit=null peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=1091 ordinals=1090 allocated=42750214 freed=42750214 moving_refusals=358
+assignment_resource stage=actual-backing-OOM corpus=mozilla ordinal=687 semantic_phase_not_assumed=true
+assignment_resource stage=backing-unlimited-retry corpus=mozilla limit=null peak=4430770 allocator_peak=4430770 live=0 profile_live=0 active=0 attempts=1376 ordinals=1375 allocated=52050606 freed=52050606 moving_refusals=444
+assignment_resource stage=sampled-OOM-complete corpus=mozilla actual_unique_sites=3 full_sweep_repeated=false
+assignment_resource stage=exactpeak corpus=xray limit=7398019 peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=993 ordinals=993 allocated=48103594 freed=48103594 moving_refusals=488
+assignment_resource stage=peakminus1 corpus=xray limit=7398018 peak=6930055 allocator_peak=6930055 live=0 profile_live=0 active=0 attempts=678 ordinals=678 allocated=39568288 freed=39568288 moving_refusals=330
+assignment_resource stage=quota-unlimited-retry corpus=xray limit=null peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=1671 ordinals=1671 allocated=87671882 freed=87671882 moving_refusals=818
+assignment_resource stage=actual-backing-OOM corpus=xray ordinal=0 semantic_phase_not_assumed=true
+assignment_resource stage=backing-unlimited-retry corpus=xray limit=null peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=994 ordinals=993 allocated=48103594 freed=48103594 moving_refusals=488
+assignment_resource stage=actual-backing-OOM corpus=xray ordinal=678 semantic_phase_not_assumed=true
+assignment_resource stage=backing-unlimited-retry corpus=xray limit=null peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=1672 ordinals=1671 allocated=87671882 freed=87671882 moving_refusals=818
+assignment_resource stage=actual-backing-OOM corpus=xray ordinal=992 semantic_phase_not_assumed=true
+assignment_resource stage=backing-unlimited-retry corpus=xray limit=null peak=7398019 allocator_peak=7398019 live=0 profile_live=0 active=0 attempts=1986 ordinals=1985 allocated=96159177 freed=96159177 moving_refusals=976
+assignment_resource stage=sampled-OOM-complete corpus=xray actual_unique_sites=3 full_sweep_repeated=false
+OK
+3/35 br.encoder.literal_context_split.test_0...OK
+4/35 br.encoder.total_budget.test_0...OK
+5/35 br.encoder.hq_options.test_0...OK
+6/35 br.encoder.distance.test_0...OK
+7/35 lz77.test_0...OK
+8/35 lz77.test_1...OK
+9/35 br.encoder.literal_context_split.workspace.test_0...OK
+10/35 br.encoder.hq_types.test_0...OK
+11/35 br.encoder.literal_context_policy.test_0...OK
+12/35 br.encoder.code_length_rle.test_0...OK
+13/35 br.encoder.scoped_static_dictionary.test_0...OK
+14/35 br.encoder.static_dictionary_matcher.test_0...OK
+15/35 br.encoder.stored_bit_bound.test_0...OK
+16/35 br.encoder.fixed_split.length_code.test_0...OK
+17/35 br.encoder.histogram_model.log_q8.test_0...OK
+18/35 br.encoder.joint_context.kernels.test_0...OK
+19/35 bitstream.test_0...OK
+20/35 br.encoder.hq_dictionary.test_0...OK
+21/35 br.encoder.hq_tree.test_0...OK
+22/35 br.encoder.hq_codec.alias.test_0...OK
+23/35 br.incremental.stored.encoder.test_0...OK
+24/35 io.requested_heap_budget.test_0...OK
+25/35 br.encoder.hq_parser.test_0...OK
+26/35 br.encoder.hq_parser.command_storage.test_0...OK
+27/35 br.incremental.copy_decoder.test_0...OK
+28/35 br.incremental.owned_copy_decoder.test_0...OK
+29/35 tests.br_total_memory_contracts.test_0...OK
+30/35 br.encoder.stored_memory_owner.test_0...OK
+31/35 br.encoder.stored_memory_reuse.test_0...OK
+32/35 br.encoder.hq_tree_oracle_tests.test_0...OK
+33/35 br.encoder.hq_parser.tests.test_0...OK
+34/35 br.encoder.joint_context.kernels_tests.test_0...OK
+35/35 br.encoder.total_budget.tests.test_0...OK
+All 35 tests passed.
+(node:3226618) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

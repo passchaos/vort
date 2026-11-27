@@ -1,0 +1,63 @@
+{
+  "actual_exit_code": 0,
+  "argv": [
+    "taskset",
+    "-c",
+    "1",
+    "zig",
+    "build-exe",
+    "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate-record.o",
+    "-lc",
+    "-O",
+    "ReleaseFast",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu",
+    "skylake+pku+sgx",
+    "--dep",
+    "vort_br",
+    "--dep",
+    "provenance",
+    "-Mroot=/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/harness/probe.zig",
+    "-O",
+    "ReleaseFast",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu",
+    "skylake+pku+sgx",
+    "-Mvort_br=/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/sources/candidate/src/br.zig",
+    "-O",
+    "ReleaseFast",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu",
+    "skylake+pku+sgx",
+    "-Mprovenance=/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/harness/provenance.zig",
+    "-femit-bin=/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate"
+  ],
+  "cache_environment": {
+    "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/global-cache",
+    "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/local-cache"
+  },
+  "candidate_revision": "original-command-split-reuse:371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+  "completed_utc": "2026-11-26T22:19:15.742250+00:00",
+  "elapsed_seconds": 90.42378605902195,
+  "output": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+  "output_sha256": "963d97be637f36036a829660937c26a80e4bcc7546a44cb7a903de82baf4eb84",
+  "source_after": {
+    "candidate_source_manifest_sha256": "371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+    "files": 2223,
+    "frozen_and_live_sources_equal": true
+  },
+  "source_before": {
+    "candidate_source_manifest_sha256": "371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+    "files": 2223,
+    "frozen_and_live_sources_equal": true
+  },
+  "stage": "candidate",
+  "started_utc": "2026-11-26T22:17:45.318467+00:00",
+  "stderr": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate.stderr",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/build/candidate.stdout",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

@@ -1,0 +1,319 @@
+1/35 br.test_0...OK
+2/35 br.test.br assignment phase public wire profile and resource contracts...assignment_public stage=wire case=mozilla input_bytes=65536 wire_bytes=13924
+assignment_public stage=context case=mozilla contexts=15113 comparisons=190899 rounds=239 narrow=7684 wide=0 light=7429 proposal_reuses=0 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/2/2
+assignment_public stage=context case=mozilla contexts=15488 comparisons=194308 rounds=243 narrow=7936 wide=0 light=7552 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=mozilla contexts=15425 comparisons=194119 rounds=242 narrow=7936 wide=0 light=7489 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=mozilla contexts=15425 comparisons=192656 rounds=242 narrow=7684 wide=0 light=7741 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=mozilla contexts=15552 comparisons=193920 rounds=244 narrow=7744 wide=0 light=7808 proposal_reuses=0 shape=2/6/6
+assignment_public stage=profile case=mozilla narrow=38984 actual_proposal_cache_hits=3 times_not_compared=true
+assignment_public stage=wire case=xray input_bytes=65536 wire_bytes=41180
+assignment_public stage=context case=xray contexts=10180 comparisons=126698 rounds=214 narrow=5516 wide=0 light=4664 proposal_reuses=0 shape=2/10/10
+assignment_public stage=context case=xray contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/10/10
+assignment_public stage=context case=xray contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/10/10
+assignment_public stage=context case=xray contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/10/10
+assignment_public stage=context case=xray contexts=10362 comparisons=127658 rounds=213 narrow=5524 wide=0 light=4838 proposal_reuses=0 shape=2/8/14
+assignment_public stage=context case=xray contexts=10246 comparisons=126986 rounds=210 narrow=5476 wide=0 light=4770 proposal_reuses=0 shape=2/8/14
+assignment_public stage=context case=xray contexts=10246 comparisons=126778 rounds=210 narrow=5476 wide=0 light=4770 proposal_reuses=0 shape=2/8/14
+assignment_public stage=context case=xray contexts=10246 comparisons=126778 rounds=210 narrow=5476 wide=0 light=4770 proposal_reuses=0 shape=2/8/14
+assignment_public stage=profile case=xray narrow=27468 actual_proposal_cache_hits=3 times_not_compared=true
+assignment_public stage=wire case=nci input_bytes=65536 wire_bytes=4206
+assignment_public stage=context case=nci contexts=6123 comparisons=56548 rounds=197 narrow=2700 wide=0 light=3423 proposal_reuses=0 shape=0/2/2
+assignment_public stage=context case=nci contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=0/2/2
+assignment_public stage=context case=nci contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=0/2/2
+assignment_public stage=context case=nci contexts=6108 comparisons=57328 rounds=199 narrow=2844 wide=0 light=3264 proposal_reuses=0 shape=0/2/2
+assignment_public stage=context case=nci contexts=5916 comparisons=56516 rounds=190 narrow=2812 wide=0 light=3104 proposal_reuses=0 shape=2/3/3
+assignment_public stage=context case=nci contexts=5927 comparisons=56604 rounds=191 narrow=2820 wide=0 light=3107 proposal_reuses=0 shape=2/3/3
+assignment_public stage=context case=nci contexts=5897 comparisons=55671 rounds=191 narrow=2772 wide=0 light=3125 proposal_reuses=0 shape=2/5/5
+assignment_public stage=context case=nci contexts=5950 comparisons=56419 rounds=192 narrow=2812 wide=0 light=3138 proposal_reuses=0 shape=2/3/3
+assignment_public stage=profile case=nci narrow=16760 actual_proposal_cache_hits=2 times_not_compared=true
+assignment_public stage=wire case=xml input_bytes=65536 wire_bytes=4407
+assignment_public stage=context case=xml contexts=7547 comparisons=77758 rounds=193 narrow=3608 wide=0 light=3939 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=xml contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/6/6
+assignment_public stage=context case=xml contexts=0 comparisons=0 rounds=0 narrow=0 wide=0 light=0 proposal_reuses=1 shape=2/6/6
+assignment_public stage=context case=xml contexts=7122 comparisons=75081 rounds=187 narrow=3480 wide=0 light=3642 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=xml contexts=7261 comparisons=75583 rounds=188 narrow=3608 wide=0 light=3653 proposal_reuses=0 shape=2/11/11
+assignment_public stage=context case=xml contexts=7466 comparisons=76497 rounds=194 narrow=3584 wide=0 light=3882 proposal_reuses=0 shape=2/6/6
+assignment_public stage=context case=xml contexts=7420 comparisons=77078 rounds=190 narrow=3688 wide=0 light=3732 proposal_reuses=0 shape=2/10/10
+assignment_public stage=context case=xml contexts=7372 comparisons=75854 rounds=190 narrow=3552 wide=0 light=3820 proposal_reuses=0 shape=2/8/8
+assignment_public stage=profile case=xml narrow=21520 actual_proposal_cache_hits=2 times_not_compared=true
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=41180
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=13924
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=4407
+assignment_public stage=wire case=repeated-after-other-input input_bytes=65536 wire_bytes=41180
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1229
+assignment_public stage=profile case=other-quality-pruned-caller narrow=0 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1224
+assignment_public stage=profile case=other-quality-pruned-caller narrow=0 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1180
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10766 comparisons=123576 rounds=207 narrow=5400 wide=0 light=5366 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=128892 rounds=218 narrow=6048 wide=0 light=5467 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=129384 rounds=218 narrow=6064 wide=0 light=5451 proposal_reuses=0 shape=0/0/0
+assignment_public stage=profile case=other-quality-pruned-caller narrow=34192 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=other-quality-pruned-caller input_bytes=4096 wire_bytes=1180
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11064 comparisons=124571 rounds=216 narrow=5560 wide=0 light=5504 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10766 comparisons=123576 rounds=207 narrow=5400 wide=0 light=5366 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=128892 rounds=218 narrow=6048 wide=0 light=5467 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=11515 comparisons=129384 rounds=218 narrow=6064 wide=0 light=5451 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10915 comparisons=123571 rounds=215 narrow=5644 wide=0 light=5271 proposal_reuses=0 shape=0/0/0
+assignment_public stage=context case=other-quality-pruned-caller contexts=10915 comparisons=123571 rounds=215 narrow=5644 wide=0 light=5271 proposal_reuses=0 shape=0/0/0
+assignment_public stage=profile case=other-quality-pruned-caller narrow=45480 actual_proposal_cache_hits=0 times_not_compared=true
+assignment_public stage=wire case=ratio input_bytes=4096 wire_bytes=1234
+assignment_public stage=wire case=window input_bytes=4096 wire_bytes=1213
+assignment_public stage=wire case=window input_bytes=4096 wire_bytes=1196
+assignment_public stage=wire case=window input_bytes=4096 wire_bytes=1196
+assignment_public stage=wire case=metadata input_bytes=4096 wire_bytes=1214
+assignment_public stage=wire case=repetitive input_bytes=4096 wire_bytes=12
+assignment_public stage=wire case=opaque input_bytes=4096 wire_bytes=4100
+assignment_resource stage=grouped-u64 corpus=mozilla limit=null peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=681 ordinals=681 allocated=30505144 freed=30505144 moving_refusals=218
+assignment_resource stage=tile corpus=mozilla limit=null peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=681 ordinals=681 allocated=30505144 freed=30505144 moving_refusals=218
+assignment_resource stage=selected-actual-site corpus=mozilla ordinal=0 request_len=80 caller_ra=13a4200 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=mozilla ordinal=395 request_len=159972 caller_ra=13ae155 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=mozilla ordinal=680 request_len=15994 caller_ra=12cfe2d phase_label_unproven=true
+assignment_resource stage=grouped-u64 corpus=xray limit=null peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=978 ordinals=978 allocated=55586279 freed=55586279 moving_refusals=486
+assignment_resource stage=tile corpus=xray limit=null peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=978 ordinals=978 allocated=55586279 freed=55586279 moving_refusals=486
+assignment_resource stage=selected-actual-site corpus=xray ordinal=0 request_len=80 caller_ra=13a4200 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=xray ordinal=669 request_len=844140 caller_ra=13aeaf8 phase_label_unproven=true
+assignment_resource stage=selected-actual-site corpus=xray ordinal=977 request_len=49341 caller_ra=12001e1 phase_label_unproven=true
+assignment_resource stage=exactpeak corpus=mozilla limit=5115910 peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=681 ordinals=681 allocated=30505144 freed=30505144 moving_refusals=218
+assignment_resource stage=peakminus1 corpus=mozilla limit=5115909 peak=5073754 allocator_peak=5073754 live=0 profile_live=0 active=0 attempts=395 ordinals=395 allocated=19195214 freed=19195214 moving_refusals=132
+assignment_resource stage=quota-unlimited-retry corpus=mozilla limit=null peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=1076 ordinals=1076 allocated=49700358 freed=49700358 moving_refusals=350
+assignment_resource stage=actual-backing-OOM corpus=mozilla ordinal=0 semantic_phase_not_assumed=true
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/total_entry.zig:35:44: 0x13a41ff in owned__anon_449707 (test)
+    var lease = try total_budget.Lease.init(backing, options.max_total_working_memory, options.memory_profile, 0);
+                                           ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:17:50: 0x122f8be in encode__anon_33566 (test)
+    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+                                                 ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:330:20: 0x12315b9 in backingFailures__anon_38382 (test)
+        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
+                   ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/compiler/test_runner.zig:291:25: 0x11c5fb9 in mainTerminal (test)
+        if (test_fn.func()) |_| {
+                        ^
+../sysdeps/nptl/libc_start_call_main.h:58:16: 0x7361e7c29d8f in __libc_start_call_main (../sysdeps/x86/libc-start.c)
+../csu/libc-start.c:392:3: 0x7361e7c29e3f in __libc_start_main_impl (../sysdeps/x86/libc-start.c)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S:120: 0x1173729 in ??? (/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S)
+	call *__libc_start_main@GOTPCREL(%rip)
+
+assignment_resource stage=backing-unlimited-retry corpus=mozilla limit=null peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=682 ordinals=681 allocated=30505144 freed=30505144 moving_refusals=218
+assignment_resource stage=actual-backing-OOM corpus=mozilla ordinal=395 semantic_phase_not_assumed=true
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:6161:65: 0x13ae154 in encodeQualityOptimalCandidateAllocRecorded__anon_449956 (test)
+        break :blk try lz77.optimalPlanAllocWithCostModelBounded(allocator, input, .{
+                                                                ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5876:59: 0x13ac592 in encodePlannedStreamQualityWithOptionsAllocRecorded__anon_449839 (test)
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, options.binary_command_state, command_state_ceiling, schedule.dictionary)) |candidate| {
+                                                          ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5487:62: 0x13a469e in encodePlannedStreamQualityWithOptionsAlloc (test)
+    return encodePlannedStreamQualityWithOptionsAllocRecorded(false, .{}, allocator, input, options);
+                                                             ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/total_entry.zig:38:24: 0x13a431c in owned__anon_449707 (test)
+    const wire = encode(allocator, input, withoutMemoryOptions(options)) catch |err| {
+                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:17:50: 0x122f8be in encode__anon_33566 (test)
+    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+                                                 ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:330:20: 0x12315b9 in backingFailures__anon_38382 (test)
+        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
+                   ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/compiler/test_runner.zig:291:25: 0x11c5fb9 in mainTerminal (test)
+        if (test_fn.func()) |_| {
+                        ^
+../sysdeps/nptl/libc_start_call_main.h:58:16: 0x7361e7c29d8f in __libc_start_call_main (../sysdeps/x86/libc-start.c)
+../csu/libc-start.c:392:3: 0x7361e7c29e3f in __libc_start_main_impl (../sysdeps/x86/libc-start.c)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S:120: 0x1173729 in ??? (/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S)
+	call *__libc_start_main@GOTPCREL(%rip)
+
+assignment_resource stage=backing-unlimited-retry corpus=mozilla limit=null peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=1077 ordinals=1076 allocated=49700358 freed=49700358 moving_refusals=350
+assignment_resource stage=actual-backing-OOM corpus=mozilla ordinal=680 semantic_phase_not_assumed=true
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/array_list.zig:606:48: 0x12cfe2c in initCapacity (test)
+            try self.ensureTotalCapacityPrecise(gpa, num);
+                                               ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:12684:64: 0x12ca8a2 in encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded__anon_383714 (test)
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+                                                               ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:11057:53: 0x12c4df0 in encodeFinalCommandCandidateGroupRecorded__anon_383424 (test)
+    if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, stats, scoped_options, baseline)) |split_candidate| {
+                                                    ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/command_candidate_group.zig:17:25: 0x12c55d8 in encode__anon_383421 (test)
+    return S.encodeFinal(traced, trace, allocator, input, commands, stats, shared_options);
+                        ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:10883:72: 0x12c472f in encodeLazyCommandPlanAllocRecorded__anon_383169 (test)
+        return @import("br/encoder/command_candidate_group.zig").encode(SharedCommandCandidateGroupStrategy, trace_enabled, trace, allocator, input, commands, stats, wire_options);
+                                                                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/feedback_rounds.zig:78:46: 0x13b0f66 in emit__anon_449968 (test)
+    const candidate = try Api.encodeCandidate(traced, trace, allocator, input, commands.commands, &stats, options);
+                                             ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/feedback_rounds.zig:40:17: 0x13aebe4 in runExtra__anon_449964 (test)
+        try emit(Api, traced, trace, allocator, input, plans[1], wire_options, best);
+                ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5876:59: 0x13ac592 in encodePlannedStreamQualityWithOptionsAllocRecorded__anon_449839 (test)
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, options.binary_command_state, command_state_ceiling, schedule.dictionary)) |candidate| {
+                                                          ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5487:62: 0x13a469e in encodePlannedStreamQualityWithOptionsAlloc (test)
+    return encodePlannedStreamQualityWithOptionsAllocRecorded(false, .{}, allocator, input, options);
+                                                             ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/total_entry.zig:38:24: 0x13a431c in owned__anon_449707 (test)
+    const wire = encode(allocator, input, withoutMemoryOptions(options)) catch |err| {
+                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:17:50: 0x122f8be in encode__anon_33566 (test)
+    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+                                                 ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:330:20: 0x12315b9 in backingFailures__anon_38382 (test)
+        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
+                   ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/compiler/test_runner.zig:291:25: 0x11c5fb9 in mainTerminal (test)
+        if (test_fn.func()) |_| {
+                        ^
+../sysdeps/nptl/libc_start_call_main.h:58:16: 0x7361e7c29d8f in __libc_start_call_main (../sysdeps/x86/libc-start.c)
+../csu/libc-start.c:392:3: 0x7361e7c29e3f in __libc_start_main_impl (../sysdeps/x86/libc-start.c)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S:120: 0x1173729 in ??? (/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S)
+	call *__libc_start_main@GOTPCREL(%rip)
+
+(additional stack frames may have been skipped...)
+assignment_resource stage=backing-unlimited-retry corpus=mozilla limit=null peak=5115910 allocator_peak=5115910 live=0 profile_live=0 active=0 attempts=1362 ordinals=1361 allocated=60994294 freed=60994294 moving_refusals=436
+assignment_resource stage=sampled-OOM-complete corpus=mozilla actual_unique_sites=3 full_sweep_repeated=false
+assignment_resource stage=exactpeak corpus=xray limit=8168439 peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=978 ordinals=978 allocated=55586279 freed=55586279 moving_refusals=486
+assignment_resource stage=peakminus1 corpus=xray limit=8168438 peak=7901911 allocator_peak=7901911 live=0 profile_live=0 active=0 attempts=669 ordinals=669 allocated=46275641 freed=46275641 moving_refusals=328
+assignment_resource stage=quota-unlimited-retry corpus=xray limit=null peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=1647 ordinals=1647 allocated=101861920 freed=101861920 moving_refusals=814
+assignment_resource stage=actual-backing-OOM corpus=xray ordinal=0 semantic_phase_not_assumed=true
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/total_entry.zig:35:44: 0x13a41ff in owned__anon_449707 (test)
+    var lease = try total_budget.Lease.init(backing, options.max_total_working_memory, options.memory_profile, 0);
+                                           ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:17:50: 0x122f8be in encode__anon_33566 (test)
+    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+                                                 ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:330:20: 0x12315b9 in backingFailures__anon_38382 (test)
+        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
+                   ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/compiler/test_runner.zig:291:25: 0x11c5fb9 in mainTerminal (test)
+        if (test_fn.func()) |_| {
+                        ^
+../sysdeps/nptl/libc_start_call_main.h:58:16: 0x7361e7c29d8f in __libc_start_call_main (../sysdeps/x86/libc-start.c)
+../csu/libc-start.c:392:3: 0x7361e7c29e3f in __libc_start_main_impl (../sysdeps/x86/libc-start.c)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S:120: 0x1173729 in ??? (/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S)
+	call *__libc_start_main@GOTPCREL(%rip)
+
+assignment_resource stage=backing-unlimited-retry corpus=xray limit=null peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=979 ordinals=978 allocated=55586279 freed=55586279 moving_refusals=486
+assignment_resource stage=actual-backing-OOM corpus=xray ordinal=669 semantic_phase_not_assumed=true
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/feedback_rounds.zig:33:40: 0x13aeaf7 in runExtra__anon_449964 (test)
+            break :blk try Api.planPair(allocator, input, options, .{ model.lz77Model(), bonus.lz77Model() });
+                                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5876:59: 0x13ac592 in encodePlannedStreamQualityWithOptionsAllocRecorded__anon_449839 (test)
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, options.binary_command_state, command_state_ceiling, schedule.dictionary)) |candidate| {
+                                                          ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5487:62: 0x13a469e in encodePlannedStreamQualityWithOptionsAlloc (test)
+    return encodePlannedStreamQualityWithOptionsAllocRecorded(false, .{}, allocator, input, options);
+                                                             ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/total_entry.zig:38:24: 0x13a431c in owned__anon_449707 (test)
+    const wire = encode(allocator, input, withoutMemoryOptions(options)) catch |err| {
+                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:17:50: 0x122f8be in encode__anon_33566 (test)
+    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+                                                 ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:330:20: 0x12315b9 in backingFailures__anon_38382 (test)
+        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
+                   ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/compiler/test_runner.zig:291:25: 0x11c5fb9 in mainTerminal (test)
+        if (test_fn.func()) |_| {
+                        ^
+../sysdeps/nptl/libc_start_call_main.h:58:16: 0x7361e7c29d8f in __libc_start_call_main (../sysdeps/x86/libc-start.c)
+../csu/libc-start.c:392:3: 0x7361e7c29e3f in __libc_start_main_impl (../sysdeps/x86/libc-start.c)
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S:120: 0x1173729 in ??? (/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/libc/glibc/sysdeps/x86_64/start-2.33.S)
+	call *__libc_start_main@GOTPCREL(%rip)
+
+assignment_resource stage=backing-unlimited-retry corpus=xray limit=null peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=1648 ordinals=1647 allocated=101861920 freed=101861920 moving_refusals=814
+assignment_resource stage=actual-backing-OOM corpus=xray ordinal=977 semantic_phase_not_assumed=true
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/array_list.zig:1211:51: 0x12001e0 in ensureTotalCapacity (test)
+            return self.ensureTotalCapacityPrecise(gpa, growCapacity(new_capacity));
+                                                  ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/bit_writer.zig:113:32: 0x1417ac8 in appendZeroByte (test)
+            try self.out.append(allocator, 0);
+                               ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:13761:55: 0x12482b6 in encodeCommandPlanWithOptionsWrite (test)
+        return encodeCommandPlanWithAdaptiveSplitWrite(
+                                                      ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:13736:42: 0x1247f43 in encodeCommandPlanWithOptionsAppend (test)
+    try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, io, stats, options);
+                                         ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:13102:76: 0x12cea75 in encodeEntropySplitWireCandidateInternalAllocRecorded__anon_383785 (test)
+            const alternate = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &alternate_stats, .{
+                                                                           ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:12684:64: 0x12ca8a2 in encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded__anon_383714 (test)
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+                                                               ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:11057:53: 0x12c4df0 in encodeFinalCommandCandidateGroupRecorded__anon_383424 (test)
+    if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, stats, scoped_options, baseline)) |split_candidate| {
+                                                    ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/command_candidate_group.zig:17:25: 0x12c55d8 in encode__anon_383421 (test)
+    return S.encodeFinal(traced, trace, allocator, input, commands, stats, shared_options);
+                        ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:10883:72: 0x12c472f in encodeLazyCommandPlanAllocRecorded__anon_383169 (test)
+        return @import("br/encoder/command_candidate_group.zig").encode(SharedCommandCandidateGroupStrategy, trace_enabled, trace, allocator, input, commands, stats, wire_options);
+                                                                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/feedback_rounds.zig:78:46: 0x13b0f66 in emit__anon_449968 (test)
+    const candidate = try Api.encodeCandidate(traced, trace, allocator, input, commands.commands, &stats, options);
+                                             ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/feedback_rounds.zig:40:17: 0x13aebe4 in runExtra__anon_449964 (test)
+        try emit(Api, traced, trace, allocator, input, plans[1], wire_options, best);
+                ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5876:59: 0x13ac592 in encodePlannedStreamQualityWithOptionsAllocRecorded__anon_449839 (test)
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, options.binary_command_state, command_state_ceiling, schedule.dictionary)) |candidate| {
+                                                          ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br.zig:5487:62: 0x13a469e in encodePlannedStreamQualityWithOptionsAlloc (test)
+    return encodePlannedStreamQualityWithOptionsAllocRecorded(false, .{}, allocator, input, options);
+                                                             ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/total_entry.zig:38:24: 0x13a431c in owned__anon_449707 (test)
+    const wire = encode(allocator, input, withoutMemoryOptions(options)) catch |err| {
+                       ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:17:50: 0x122f8be in encode__anon_33566 (test)
+    return Br.encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+                                                 ^
+/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE-attempt-1/src/br/encoder/assignment/phase_public_tests.zig:330:20: 0x12315b9 in backingFailures__anon_38382 (test)
+        try failure(Br, fixture, &ledger, &profile, null, error.OutOfMemory);
+                   ^
+(additional stack frames may have been skipped...)
+assignment_resource stage=backing-unlimited-retry corpus=xray limit=null peak=8168439 allocator_peak=8168439 live=0 profile_live=0 active=0 attempts=1956 ordinals=1955 allocated=111123217 freed=111123217 moving_refusals=972
+assignment_resource stage=sampled-OOM-complete corpus=xray actual_unique_sites=3 full_sweep_repeated=false
+OK
+3/35 br.encoder.literal_context_split.test_0...OK
+4/35 br.encoder.total_budget.test_0...OK
+5/35 br.encoder.hq_options.test_0...OK
+6/35 br.encoder.distance.test_0...OK
+7/35 lz77.test_0...OK
+8/35 lz77.test_1...OK
+9/35 br.encoder.literal_context_split.workspace.test_0...OK
+10/35 br.encoder.hq_types.test_0...OK
+11/35 br.encoder.literal_context_policy.test_0...OK
+12/35 br.encoder.code_length_rle.test_0...OK
+13/35 br.encoder.scoped_static_dictionary.test_0...OK
+14/35 br.encoder.static_dictionary_matcher.test_0...OK
+15/35 br.encoder.stored_bit_bound.test_0...OK
+16/35 br.encoder.fixed_split.length_code.test_0...OK
+17/35 br.encoder.histogram_model.log_q8.test_0...OK
+18/35 br.encoder.joint_context.kernels.test_0...OK
+19/35 bitstream.test_0...OK
+20/35 br.encoder.hq_dictionary.test_0...OK
+21/35 br.encoder.hq_tree.test_0...OK
+22/35 br.encoder.hq_codec.alias.test_0...OK
+23/35 br.incremental.stored.encoder.test_0...OK
+24/35 io.requested_heap_budget.test_0...OK
+25/35 br.encoder.hq_parser.test_0...OK
+26/35 br.encoder.hq_parser.command_storage.test_0...OK
+27/35 br.encoder.hq_parser.tests.test_0...OK
+28/35 br.encoder.joint_context.kernels_tests.test_0...OK
+29/35 br.encoder.total_budget.tests.test_0...OK
+30/35 br.incremental.copy_decoder.test_0...OK
+31/35 br.incremental.owned_copy_decoder.test_0...OK
+32/35 tests.br_total_memory_contracts.test_0...OK
+33/35 br.encoder.stored_memory_owner.test_0...OK
+34/35 br.encoder.stored_memory_reuse.test_0...OK
+35/35 br.encoder.hq_tree_oracle_tests.test_0...OK
+All 35 tests passed.

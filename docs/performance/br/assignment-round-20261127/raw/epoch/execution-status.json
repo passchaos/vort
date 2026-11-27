@@ -1,0 +1,10 @@
+{
+  "HEAVY": 0,
+  "build_stages_completed": 4,
+  "external_decode_calls": 84,
+  "owning_warmup_calls": 84,
+  "sampling_released": false,
+  "stage": "untimed-preflight",
+  "terminal": true,
+  "timed_samples": 0
+}

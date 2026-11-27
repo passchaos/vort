@@ -3288,3 +3288,24 @@ This is a supported source improvement under its declared lane, not three-codec
 industry leadership or proof that the historical q8 regression is repaired.
 Full provenance, raw observations and intermediate failures are retained in
 [the evidence package](br/shared-literal-model-20261126/README.md).
+
+## Exact assignment kernel rejected by whole-operation screen (2026-11-27)
+
+The [four-context/eight-tree assignment experiment](br/assignment-round-20261127.md)
+passes independent arithmetic Native/actual WASI11/11, real-price22/22 and
+public Native/actual WASI35/35 gates. Full gold wire, profile behavior and every
+observed allocation request/peak remain equal to the original grouped chooser.
+All84 warm-only preflight processes pass byte comparison and pinned decoding;
+default q10/q11 controls preserve their actual255 KiB command-state setting.
+
+The fixed12-row two-pair public q8/generic/window16 pilot completes24 pairs /
+48 processes with actualexit0. Candidate/baseline throughput GM is
+**0.878150548070644x**; every row is below0.98 (range0.751193--0.947695x).
+Both point-screen gates fail, CI remains null, and the candidate is rejected.
+No formal/control/history/reference sampling or final whole-library gate is
+released; no samples are filtered or retried. Production files are restored
+to46d340ac, while frozen source/patch and original failed-screen data are
+preserved in [the portable package](br/assignment-round-20261127/README.md).
+This candidate contributes no production speedup. Historical q8 recovery and
+three-codec industry leadership remain unresolved; the next priority is a
+measured reduction in repeated search/planning and losing-wire work.

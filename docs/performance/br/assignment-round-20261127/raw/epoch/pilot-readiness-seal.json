@@ -1,0 +1,20 @@
+{
+  "HEAVY": 0,
+  "actual_builds_passed": 4,
+  "actual_untimed_processes_passed": 84,
+  "all_local_build_codec_hash_archive_jobs_terminal_on_return": true,
+  "baseline_ELF_sha256": "963d97be637f36036a829660937c26a80e4bcc7546a44cb7a903de82baf4eb84",
+  "build_preflight_bindings_sha256": "80d52047a1300b9d5fa19ec698727c9098cd197eead665a763acc32fc479031d",
+  "candidate_ELF_sha256": "da2f250642f96491e575be34b2c9f07233392050248f78e127606b5e9cae5667",
+  "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+  "epoch_root": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha",
+  "full_gate_passed": false,
+  "narrow_gates_accepted": true,
+  "protocol_sha256": "cee180bcdeace5b60df5f7d6065426c45dbfa23306b3175331649738ab73eee0",
+  "sampler_sha256": "2506d19b6717dedd7ffd7de4461b3333e853663e8fdb0b4b10fa30264145ffa1",
+  "sampling_released": false,
+  "schema": "vort.brotli.round4ctx.pilot-readiness-seal.v1",
+  "sealed_utc": "2026-11-27T01:41:44.347125+00:00",
+  "timed_samples": 0,
+  "workflow_status_sha256": "d13079bae7a75c08dba3e7e79163eac09eb48d1f3ec8b05294a2ffa49de0c62a"
+}

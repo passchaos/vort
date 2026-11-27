@@ -1,0 +1,1856 @@
+{
+  "attempts": [
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/dickens.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "dickens",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/dickens.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "dickens",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mozilla.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mozilla",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mozilla.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mozilla",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mr.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mr",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mr.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mr",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/nci.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "nci",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/nci.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "nci",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/ooffice.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "ooffice",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/ooffice.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "ooffice",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/osdb.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "osdb",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/osdb.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "osdb",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/reymont.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "reymont",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/reymont.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "reymont",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/samba.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "samba",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/samba.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "samba",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/sao.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "sao",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/sao.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "sao",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/webster.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "webster",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/webster.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "webster",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/x-ray.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "x-ray",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/x-ray.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "x-ray",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/xml.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "xml",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-baseline.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/xml.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "xml",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-candidate.json",
+      "round": 0,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/dickens.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "dickens",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/dickens.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "dickens",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mozilla.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mozilla",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mozilla.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mozilla",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mr.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mr",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/mr.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "mr",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/nci.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "nci",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/nci.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "nci",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/ooffice.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "ooffice",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/ooffice.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "ooffice",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/osdb.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "osdb",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/osdb.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "osdb",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/reymont.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "reymont",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/reymont.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "reymont",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/samba.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "samba",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/samba.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "samba",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/sao.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "sao",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/sao.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "sao",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/webster.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "webster",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/webster.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "webster",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/x-ray.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "x-ray",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/x-ray.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "x-ray",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-baseline.stdout",
+      "variant": "baseline"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/xml.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-candidate.json",
+        "--source-revision",
+        "round4ctx-u32safe:11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "xml",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-candidate.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-candidate.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-candidate.stdout",
+      "variant": "candidate"
+    },
+    {
+      "actual_exit_code": 0,
+      "argv": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+        "--input",
+        "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/fixtures/xml.65536.plain",
+        "--output",
+        "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-baseline.json",
+        "--source-revision",
+        "46d340ac03ab211aa3f745b650e76f0bf530744d",
+        "--iterations",
+        "1",
+        "--window",
+        "16"
+      ],
+      "case": "xml",
+      "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-baseline.json",
+      "round": 1,
+      "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-baseline.stderr",
+      "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-baseline.stdout",
+      "variant": "baseline"
+    }
+  ],
+  "completed": true,
+  "completed_utc": "2026-11-27T01:42:51.570163+00:00",
+  "full_gate_passed": false,
+  "merge_eligible": false,
+  "pairs": [
+    {
+      "case": "dickens",
+      "loadavg": "0.24 0.52 0.57 2/831 3253717",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-baseline.json",
+          "raw_ns": [
+            102798457
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-dickens-candidate.json",
+          "raw_ns": [
+            110126246
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "mozilla",
+      "loadavg": "0.24 0.52 0.57 4/831 3253719",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-baseline.json",
+          "raw_ns": [
+            131627872
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mozilla-candidate.json",
+          "raw_ns": [
+            172713755
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "mr",
+      "loadavg": "0.24 0.52 0.57 3/832 3253749",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-baseline.json",
+          "raw_ns": [
+            152367179
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-mr-candidate.json",
+          "raw_ns": [
+            163453160
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "nci",
+      "loadavg": "0.24 0.52 0.57 1/830 3253832",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-baseline.json",
+          "raw_ns": [
+            75984343
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-nci-candidate.json",
+          "raw_ns": [
+            80776499
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "ooffice",
+      "loadavg": "0.24 0.52 0.57 1/830 3253834",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-baseline.json",
+          "raw_ns": [
+            131382037
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-ooffice-candidate.json",
+          "raw_ns": [
+            167523033
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "osdb",
+      "loadavg": "0.24 0.52 0.57 1/830 3253836",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-baseline.json",
+          "raw_ns": [
+            113272861
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-osdb-candidate.json",
+          "raw_ns": [
+            156546353
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "reymont",
+      "loadavg": "0.24 0.52 0.57 1/830 3253891",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-baseline.json",
+          "raw_ns": [
+            89632341
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-reymont-candidate.json",
+          "raw_ns": [
+            95215474
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "samba",
+      "loadavg": "0.24 0.52 0.57 1/830 3253893",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-baseline.json",
+          "raw_ns": [
+            95590954
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-samba-candidate.json",
+          "raw_ns": [
+            107013609
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "sao",
+      "loadavg": "0.30 0.52 0.57 1/830 3253895",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-baseline.json",
+          "raw_ns": [
+            131834143
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-sao-candidate.json",
+          "raw_ns": [
+            165148683
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "webster",
+      "loadavg": "0.30 0.52 0.57 2/831 3253904",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-baseline.json",
+          "raw_ns": [
+            92861311
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-webster-candidate.json",
+          "raw_ns": [
+            105732713
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "x-ray",
+      "loadavg": "0.30 0.52 0.57 2/831 3253959",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-baseline.json",
+          "raw_ns": [
+            129874654
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-x-ray-candidate.json",
+          "raw_ns": [
+            136314510
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "xml",
+      "loadavg": "0.30 0.52 0.57 2/832 3253962",
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-baseline.json",
+          "raw_ns": [
+            72765589
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/00-xml-candidate.json",
+          "raw_ns": [
+            78824703
+          ]
+        }
+      },
+      "round": 0
+    },
+    {
+      "case": "dickens",
+      "loadavg": "0.30 0.52 0.57 3/832 3253964",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-baseline.json",
+          "raw_ns": [
+            101425931
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-dickens-candidate.json",
+          "raw_ns": [
+            110156797
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "mozilla",
+      "loadavg": "0.30 0.52 0.57 2/832 3253966",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-baseline.json",
+          "raw_ns": [
+            133686235
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mozilla-candidate.json",
+          "raw_ns": [
+            167760887
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "mr",
+      "loadavg": "0.30 0.52 0.57 3/832 3254021",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-baseline.json",
+          "raw_ns": [
+            146782692
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-mr-candidate.json",
+          "raw_ns": [
+            162201352
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "nci",
+      "loadavg": "0.30 0.52 0.57 3/832 3254023",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-baseline.json",
+          "raw_ns": [
+            76822178
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-nci-candidate.json",
+          "raw_ns": [
+            80461613
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "ooffice",
+      "loadavg": "0.30 0.52 0.57 2/832 3254025",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-baseline.json",
+          "raw_ns": [
+            138860071
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-ooffice-candidate.json",
+          "raw_ns": [
+            166298681
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "osdb",
+      "loadavg": "0.44 0.55 0.58 4/833 3254055",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-baseline.json",
+          "raw_ns": [
+            113646291
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-osdb-candidate.json",
+          "raw_ns": [
+            145725461
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "reymont",
+      "loadavg": "0.44 0.55 0.58 3/832 3254082",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-baseline.json",
+          "raw_ns": [
+            86428816
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-reymont-candidate.json",
+          "raw_ns": [
+            92988260
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "samba",
+      "loadavg": "0.44 0.55 0.58 2/832 3254084",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-baseline.json",
+          "raw_ns": [
+            103399417
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-samba-candidate.json",
+          "raw_ns": [
+            106472302
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "sao",
+      "loadavg": "0.44 0.55 0.58 2/831 3254142",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-baseline.json",
+          "raw_ns": [
+            132707115
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-sao-candidate.json",
+          "raw_ns": [
+            161447447
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "webster",
+      "loadavg": "0.44 0.55 0.58 2/831 3254144",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-baseline.json",
+          "raw_ns": [
+            91898009
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-webster-candidate.json",
+          "raw_ns": [
+            101895660
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "x-ray",
+      "loadavg": "0.44 0.55 0.58 2/831 3254146",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-baseline.json",
+          "raw_ns": [
+            125220999
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-x-ray-candidate.json",
+          "raw_ns": [
+            135290556
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "case": "xml",
+      "loadavg": "0.44 0.55 0.58 2/831 3254148",
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "processes": {
+        "baseline": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-baseline.json",
+          "raw_ns": [
+            75298448
+          ]
+        },
+        "candidate": {
+          "path": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/pilot/runs/01-xml-candidate.json",
+          "raw_ns": [
+            79906746
+          ]
+        }
+      },
+      "round": 1
+    }
+  ],
+  "phase": "pilot",
+  "protocol": {
+    "BUILD_SOURCE_READY_required_before_build_or_codec": true,
+    "CI": null,
+    "GM_min": 1.03,
+    "Root_new_phase_release_required_before_sampling": true,
+    "adoption_allowed": false,
+    "all_initial_wires_memcmp_baseline_and_pinned_decode": true,
+    "all_raw_calls_attempts_stdout_stderr_outliers_retained": true,
+    "allocator": "std.process.Init.gpa",
+    "baseline_ELF": "/tmp/vort-br-original-command-split-reuse-ab.egqd38jr/bin/candidate",
+    "baseline_actual_ELF_sha256": "963d97be637f36036a829660937c26a80e4bcc7546a44cb7a903de82baf4eb84",
+    "baseline_actual_old_build": "original-command-split-reuse:371b18cb02745c41f357adcda35fcbafb0b98530233e9e23e4b190d2372c6cc2",
+    "baseline_revision": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+    "baseline_source_proof": "assets/baseline-source-proof.json",
+    "build_mode": "ReleaseFast",
+    "candidate_pending": true,
+    "candidate_phase_contract": "All pruned callers; tile4KiB temporary frequency/no heap; unsafe/light keeps old4xu64; max prices generated from real costs; choose before move",
+    "candidate_revision": "PENDING_ROOT_BUILD_SOURCE_READY",
+    "case_order": [
+      "dickens",
+      "mozilla",
+      "mr",
+      "nci",
+      "ooffice",
+      "osdb",
+      "reymont",
+      "samba",
+      "sao",
+      "webster",
+      "x-ray",
+      "xml"
+    ],
+    "codec_CPU": 2,
+    "codec_threads": 1,
+    "cpu": "skylake+pku+sgx",
+    "every_row_point_floor": 0.98,
+    "explicit_window_bits": 16,
+    "full_gate_passed": false,
+    "iterations_per_process": 1,
+    "merge_acceptance_prerequisites": [
+      "final full test/check/check-wasm accepted",
+      "formal primary common-six GM>=1.03 and CI lower>1 and all common-row point>=.98",
+      "all18 default public +12small point>=.98",
+      "exact byte/ratio/resource/compatibility contracts retained"
+    ],
+    "mode": "generic",
+    "no_default_lane_fallback": true,
+    "no_old_release_or_timed_data_reuse": true,
+    "no_retry_until_pass": true,
+    "order": "AB/BA one each per row",
+    "owning_public_api": "encodePlannedStreamWithOptionsAlloc",
+    "pairs": 24,
+    "phase": "pilot",
+    "pilot_can_diagnose_ROI_before_full_gate": true,
+    "pilot_diagnostic_prerequisites": [
+      "narrow kernel Native11/11 + actualWASI11/11",
+      "public Native35/35 + actualWASI35/35",
+      "exact wire + heap/requested-stream/resource contracts accepted",
+      "this frozen source untimed preflight passed",
+      "all heavy terminal + fresh Root pilot release"
+    ],
+    "processes": 48,
+    "quality": 8,
+    "rounds": 2,
+    "sampling_released": false,
+    "target": "x86_64-linux-gnu",
+    "timed_calls": 48,
+    "timer": "original continuous public allocating encode + lengthmix + free; initial wire SHA/memcmp/libdecode outside timer",
+    "warmup_owned_encode_free_calls": 1,
+    "wire_bytes_and_ratio_regression_budget": 0
+  },
+  "purpose": "diagnostic-only",
+  "release": {
+    "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+    "epoch_root": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha",
+    "full_gate_passed": false,
+    "global_heavy_terminal": true,
+    "issued_by": "/root",
+    "issued_utc": "2026-11-27T01:42:25.994270+00:00",
+    "narrow_gates_accepted": true,
+    "phase": "pilot",
+    "protocol_sha256": "cee180bcdeace5b60df5f7d6065426c45dbfa23306b3175331649738ab73eee0",
+    "purpose": "diagnostic-only",
+    "readiness_seal_sha256": "319586a2de3dda155df34ccf16bf9ae10206c618b9d5d1c9cca8307013e996f2",
+    "release_id": "root-diagnostic-pilot-d7e32b25-43d8-48ef-9a0c-bb3d82fc164a",
+    "released": true,
+    "sampler_sha256": "2506d19b6717dedd7ffd7de4461b3333e853663e8fdb0b4b10fa30264145ffa1",
+    "schema": "vort.brotli.round4ctx.pilot-release.v1"
+  },
+  "release_sha256": "7575d9e6b5e17a325f7590cbe0e4cf59ea8132cd8b57b4907786901c1824c0e1",
+  "source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c",
+  "started_utc": "2026-11-27T01:42:37.931307+00:00",
+  "terminal": true
+}

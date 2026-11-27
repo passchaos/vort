@@ -1,0 +1,12 @@
+{
+  "root": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha",
+  "baseline_revision": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+  "candidate_pending": true,
+  "BUILD_SOURCE_READY": false,
+  "sampling_released": false,
+  "builds": 0,
+  "codec_calls": 0,
+  "timed_samples": 0,
+  "HEAVY": 0,
+  "old_package_modified": false
+}

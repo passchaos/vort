@@ -1,0 +1,10 @@
+--- attempt-0/src/br/encoder/assignment/phase_public_tests.zig
++++ attempt-1/src/br/encoder/assignment/phase_public_tests.zig
+@@ -97,6 +97,7 @@
+ }
+ 
+ fn cachedZeroWork(profile: contexts.Profile) !void {
++    @setEvalBranchQuota(20000);
+     if (profile.proposal_reuses == 0) return;
+     try std.testing.expectEqual(@as(usize, 1), profile.proposal_reuses);
+     inline for (std.meta.fields(contexts.Profile)) |field| {

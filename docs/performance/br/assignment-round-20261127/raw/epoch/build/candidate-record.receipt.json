@@ -1,0 +1,44 @@
+{
+  "actual_exit_code": 0,
+  "argv": [
+    "taskset",
+    "-c",
+    "1",
+    "zig",
+    "build-obj",
+    "-O",
+    "ReleaseFast",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu",
+    "skylake+pku+sgx",
+    "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/sources/candidate/src/br/encoder/record_optimal_object.zig",
+    "-femit-bin=/tmp/vort-br-round4ctx-u32safe-ab.209oijha/build/candidate-record.o"
+  ],
+  "cache_environment": {
+    "ZIG_GLOBAL_CACHE_DIR": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/build/global-cache",
+    "ZIG_LOCAL_CACHE_DIR": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/build/local-cache"
+  },
+  "completed_utc": "2026-11-27T01:31:12.087033+00:00",
+  "elapsed_seconds": 0.6506093910429627,
+  "output": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/build/candidate-record.o",
+  "output_sha256": "f3c89e0ca653b41ec61556726e6aba404d912387a4a8c0abdb8a27c3f2a862f9",
+  "source_after": {
+    "actual_baseline_source_equal": true,
+    "baseline_actual_Git46d_manifest_sha256": "219db0e3a89a8e2c68d23bc8be2d71058da5210acda1d0b62570c11e1edc0b11",
+    "candidate_live_frozen_equal": true,
+    "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c"
+  },
+  "source_before": {
+    "actual_baseline_source_equal": true,
+    "baseline_actual_Git46d_manifest_sha256": "219db0e3a89a8e2c68d23bc8be2d71058da5210acda1d0b62570c11e1edc0b11",
+    "candidate_live_frozen_equal": true,
+    "candidate_source_manifest_sha256": "11ad3e9985241911513dd94089d1b8f4c8cf2cde3e5dd311caabdacb2e120e1c"
+  },
+  "stage": "candidate-record",
+  "started_utc": "2026-11-27T01:31:11.436424+00:00",
+  "stderr": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/build/candidate-record.stderr",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout": "/tmp/vort-br-round4ctx-u32safe-ab.209oijha/build/candidate-record.stdout",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

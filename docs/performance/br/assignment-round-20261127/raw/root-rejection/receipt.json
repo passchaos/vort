@@ -1,0 +1,21 @@
+{
+  "base": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+  "decision": "reject failed fixed diagnostic pilot",
+  "primary_GM": 0.878150548070644,
+  "source_match_frozen": true,
+  "source_sha256": {
+    "src/br.zig": "5129d50b45211dfe7187fbcedf8a674b7b7892349fba7b4d96dce5704dc66678",
+    "src/br/encoder/assignment/phase.zig": "17af683db986bc1468cc56b40a754c225db95e4d2d84e225593154e6e0d22945",
+    "src/br/encoder/assignment/phase_public_tests.zig": "b9faf060d293d1b9fa61b36c1f2ea3e627cd9df236e25ad02d683f8642d68161",
+    "src/br/encoder/assignment/phase_tests.zig": "5c3fac625ed4057285a742611f4d74a4773959f4ddd9f574cbff318f38f1b655",
+    "src/br/encoder/assignment_costs.zig": "649d0ea76ff18322c0656fcf7e384baf5a1e08edc55f23969293de89026bc0d3",
+    "src/br/encoder/literal_context_profile.zig": "d44bf6eb3e7e88e2674532c859f1af6d0411178aeac5a2cec2c9cf461050c697",
+    "src/br/encoder/literal_context_split.zig": "6e5ddbb1caaa6389f3b8b86f408f6db52231bc412f953f5cb93ed5c7722deccc"
+  },
+  "patch_sha256": "ef55849372db6699746473b44585913b49c1eefaf272f5c353c9161833a957cd",
+  "full_gate_passed": false,
+  "restored_compilation_inputs_diff_exit_code": 0,
+  "patch_apply_check_exit_code": 0,
+  "restored_source_revision": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+  "full_library_gate_not_run_for_rejected_candidate": true
+}

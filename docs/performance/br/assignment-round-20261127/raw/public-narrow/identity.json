@@ -1,0 +1,96 @@
+{
+  "utc": "2026-11-27T01:22:40.668458+00:00",
+  "HEAD": "46d340ac03ab211aa3f745b650e76f0bf530744d",
+  "repository": "/home/passchaos/project-z/vort",
+  "SOURCE": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/SOURCE",
+  "source_files": 2226,
+  "selected_sources": {
+    "src/br.zig": "5129d50b45211dfe7187fbcedf8a674b7b7892349fba7b4d96dce5704dc66678",
+    "src/br/encoder/assignment_costs.zig": "649d0ea76ff18322c0656fcf7e384baf5a1e08edc55f23969293de89026bc0d3",
+    "src/br/encoder/literal_context_profile.zig": "d44bf6eb3e7e88e2674532c859f1af6d0411178aeac5a2cec2c9cf461050c697",
+    "src/br/encoder/literal_context_split.zig": "6e5ddbb1caaa6389f3b8b86f408f6db52231bc412f953f5cb93ed5c7722deccc",
+    "src/br/encoder/assignment/phase.zig": "17af683db986bc1468cc56b40a754c225db95e4d2d84e225593154e6e0d22945",
+    "src/br/encoder/assignment/phase_tests.zig": "5c3fac625ed4057285a742611f4d74a4773959f4ddd9f574cbff318f38f1b655",
+    "src/br/encoder/assignment/phase_public_tests.zig": "62065a71dca04fefff72591fb7a6be0ca1d8ae0e3d6aaa1e97f6e3016d5f1cf5"
+  },
+  "test_filter": "br assignment phase public wire profile and resource contracts",
+  "record_objects": {
+    "record-native.o": {
+      "original_path": "/tmp/vort-br-literal-model-validation.6km4y0gx/record-native.o",
+      "path": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/objects/record-native.o",
+      "sha256": "6c39ab0c38565246b751cdd8a3f0b53f0bcff7f24a92bc3fd85e7d6102813891",
+      "bytes": 3922000,
+      "source_closure_current_matches_saved_snapshot": true,
+      "source_closure": {
+        "src/br/encoder/record_classifier.zig": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+        "src/br/encoder/record_optimal_abi.zig": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+        "src/br/encoder/record_optimal_object.zig": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+      },
+      "old_command": {
+        "argv": [
+          "zig",
+          "build-obj",
+          "src/br/encoder/record_optimal_object.zig",
+          "-O",
+          "ReleaseSafe",
+          "-target",
+          "x86_64-linux-gnu",
+          "-mcpu",
+          "skylake+pku+sgx",
+          "-femit-bin=/tmp/vort-br-literal-model-validation.6km4y0gx/record-native.o",
+          "--cache-dir",
+          "/tmp/vort-br-literal-model-validation.6km4y0gx/record-native-cache"
+        ],
+        "cwd": "/home/passchaos/project-z/vort",
+        "source_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+        "started_utc": "2026-11-26T13:37:50.631830+00:00"
+      },
+      "old_actual_exit": {
+        "actual_exit": 0,
+        "completed_utc": "2026-11-26T13:38:01.664313+00:00"
+      },
+      "copied_from": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/objects/record-native.o"
+    },
+    "record-wasi.o": {
+      "original_path": "/tmp/vort-br-literal-model-validation.6km4y0gx/record-wasi.o",
+      "path": "/tmp/vort-br-assignment-phase-public-gate-fe5axeqn/objects/record-wasi.o",
+      "sha256": "3ab39863184209c3ce017cd76a8dd1d69f1d1bd2762680153455677652746845",
+      "bytes": 474525,
+      "source_closure_current_matches_saved_snapshot": true,
+      "source_closure": {
+        "src/br/encoder/record_classifier.zig": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+        "src/br/encoder/record_optimal_abi.zig": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+        "src/br/encoder/record_optimal_object.zig": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+      },
+      "old_command": {
+        "argv": [
+          "zig",
+          "build-obj",
+          "src/br/encoder/record_optimal_object.zig",
+          "-O",
+          "ReleaseSafe",
+          "-target",
+          "wasm32-wasi",
+          "-fsingle-threaded",
+          "-femit-bin=/tmp/vort-br-literal-model-validation.6km4y0gx/record-wasi.o",
+          "--cache-dir",
+          "/tmp/vort-br-literal-model-validation.6km4y0gx/record-wasi-cache"
+        ],
+        "cwd": "/home/passchaos/project-z/vort",
+        "source_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+        "started_utc": "2026-11-26T13:37:50.631834+00:00"
+      },
+      "old_actual_exit": {
+        "actual_exit": 0,
+        "completed_utc": "2026-11-26T13:37:51.464325+00:00"
+      },
+      "copied_from": "/tmp/vort-br-split-plan-public-gate-ydifd4lx/objects/record-wasi.o"
+    }
+  },
+  "runtime_CPU": 9,
+  "native_target": "x86_64-linux-gnu skylake+pku+sgx ReleaseSafe",
+  "wasi_target": "wasm32-wasi ReleaseSafe single-threaded stack16777216 test harness only",
+  "HEAVY": 1,
+  "scope": "same-source grouped-u64 test oracle versus tiled assignment; no benchmark timing; diagnostic ns are ignored",
+  "runner_sha256": "3c17f2a13a31613197a4a727b0f9663ac2d6b51ee2a38da94d06f44c5339f778"
+}

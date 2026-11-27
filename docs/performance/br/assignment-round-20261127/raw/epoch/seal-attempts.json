@@ -1,0 +1,4 @@
+{
+  "first_static_seal_attempt": "Failed on an incorrect32KiB default-cap assumption. Correct actual Git46d/public-options default is255KiB in both baseline/candidate. No probe/source/parameters/raw changes and no codec/build retry.",
+  "corrected_static_seal_passed": true
+}
