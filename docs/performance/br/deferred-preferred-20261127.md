@@ -92,6 +92,16 @@ use CPU6/7 alongside the untimed CPU2 Deflate wire preflight; they collect no
 throughput or RSS samples. Performance/resource matrix releases require the
 subsequent quiet window.
 
+The fresh benchmark epoch subsequently compiled all nine planned stages with
+actual exit0 and unchanged baseline/candidate sources and harness. It completed
+all198 ordinary encoding warmups (primary24, controls126, history24,
+reference24), with a separate pinned libbrotli1.2.0 streaming decoder for every
+wire. Each complete wire/output, source/ELF identity, library version/maps, EOF,
+full consumption and plaintext SHA passed. The original warm session53686
+terminated with exit0 and zero timed samples. Saved-artifact replay and
+versioned readiness promotion are being finalized; no throughput, RSS or
+historical recovery result is inferred from this untimed gate.
+
 ## Remaining gates
 
 Complete integration checks, then obtain independent current-source A/B, direct
